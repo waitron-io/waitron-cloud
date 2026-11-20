@@ -223,6 +223,10 @@ test('the outside signup check retries a failed inbox read', async () => {
     return {Text: 'https://cloud.example.test:3000/signup#token=' + token};
   }, 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000)), token);
   assert.equal(reads, 2);
+  assert.deepEqual(await readOutsideSignupMail(async () => ({
+    Text: 'https://cloud.example.test:3000/signup#token=' + token, worker: 'surviving-mail',
+  }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
+  {token, worker: 'surviving-mail'});
 });
 
 test('the outside backup inspection retries one storage deadline and stops', async () => {

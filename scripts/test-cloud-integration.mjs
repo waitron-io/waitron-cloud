@@ -197,9 +197,12 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-export async function readOutsideSignupMail(readMail, recipient, origin, signal) {
+export async function readOutsideSignupMail(readMail, recipient, origin, signal, recordWorker = false) {
   const message = await untilRemote(limit => readMail(recipient, new Set(), limit), 90_000, signal, 'outside_signup_mail');
-  return readSignupToken(message.Text, origin);
+  const token = readSignupToken(message.Text, origin);
+  if (!recordWorker) return token;
+  assert.ok(message.worker, 'integration.outside_mail_worker');
+  return {token, worker: message.worker};
 }
 
 export async function readOutsideRetainedBackup(read, signal) {
@@ -236,7 +239,7 @@ export async function runTestCloudClients(options = {}) {
     const ownedCluster = baseline && k?.amazon ? k.amazon.cluster === k.cluster : /^d621-[a-f0-9]{32}$/.test(k?.cluster ?? '');
     const accountRoute = baseline ? /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') &&
       k.proxyIp === k.stockholmRemote?.gatewayIp && k.port === 3000 && typeof k.readInbox === 'function' &&
-      (!k.stopServices || !k.amazon && typeof k.stopServices === 'function') :
+      (!k.stopServices || typeof k.stopServices === 'function' && (!k.amazon || k.amazon.measuredStops === true)) :
       /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') && Number.isInteger(k.port) && Number.isInteger(k.mailPort);
     const verifier = ['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
       .every(name => typeof k?.verifier?.[name] === 'function');
@@ -457,7 +460,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
     const mailPort = stockholmBaseline ? undefined :
       kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
-    const budget = kubernetes?.observe ? createP1Budget() : undefined;
+    const measured = Boolean(kubernetes?.stopServices);
+    const budget = kubernetes?.observe || measured ? createP1Budget() : undefined;
     const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path.startsWith('/api/account/signup/')) budget?.attempt('signup', body.email);
@@ -490,7 +494,9 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const readInbox = async (path, signal) => {
       const response = await fetchInbox(path, signal);
       if (services) assert.equal(response.status, 200, 'integration.inbox_read');
-      return parseIntegrationJson(await response.text());
+      const value = parseIntegrationJson(await response.text());
+      const worker = response.headers.get('x-rehearsal-mail-worker');
+      return worker ? {...value, worker} : value;
     };
     if (services) {
       const request = await fetchInbox('messages', undefined, '');
@@ -668,25 +674,6 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             await verify(); await readBackups();
             return publishedSnapshot.workerVerification;
           });
-          if (kubernetes?.stopServices) {
-            proveServiceStops = () => kubernetes.stopServices(signal => cancellation.run({...cancellation.getStore(), signal}, async () => {
-              await untilRemote(async limit =>
-                (await api('/api/account/session', undefined, browser, ca, cloudHostname, limit)).status === 200,
-              90_000, signal, 'retained_account_session');
-              process.stderr.write('Outside Kind account session verified during stop\n');
-              const recipient = 'integration-stop-' + randomUUID() + '@example.test';
-              assert.equal((await api('/api/account/signup/request', {email: recipient}, {}, ca, cloudHostname, signal)).status,
-                202, 'integration.fault_mail_request');
-              await readOutsideSignupMail(readMail, recipient, origin, signal);
-              process.stderr.write('Outside Kind signup mail received during stop\n');
-              const saved = parseIntegrationJson(await readOutsideRetainedBackup(() =>
-                accountPhase('inspect-retained-snapshot', {
-                  points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
-                }), signal));
-              assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
-              return {session: true, mail: true, retainedObject: true};
-            }));
-          }
           if (measureCapacity) {
             const {measureCapacityWindow, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
             const measured = await measureCapacityWindow({
@@ -707,6 +694,38 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', diskMeasurement: 'docker-data-filesystem',
               shippingQualification: false, baseline: hostCapacity.baseline, startup: {samples: startupCapacity.samples}, samples: measured.samples};
           } else await verify();
+          if (measured) {
+            const original = publishedSnapshot;
+            const loginEmail = `integration-observer-${runId}@example.test`, loginPassword = 'Disposable observer ' + randomUUID();
+            await signupAccount(loginEmail, loginPassword, 'Observer café');
+            const login = createObserverLogin({api, mailbox, readMail, email: loginEmail, password: loginPassword, replaceStranded: true});
+            proveServiceStops = (remote, publication) => observeRetainedClients({paid: {id}, browser, api, docker, control, login,
+              remote: signal => remote(signal),
+              signupMail: async signal => {
+                const recipient = 'integration-stop-' + randomUUID() + '@example.test';
+                assert.equal((await api('/api/account/signup/request', {email: recipient}, {}, ca, cloudHostname, signal)).status,
+                  202, 'integration.fault_mail_request');
+                const {worker} = await readOutsideSignupMail(readMail, recipient, origin, signal, true);
+                return {worker};
+              },
+              backup: (signal, stopped) => cancellation.run({...cancellation.getStore(), signal}, async () => {
+                if (stopped) {
+                  captured = await control(id, 'snapshot-publish');
+                  assert.notEqual(captured.pointId, original.pointId, 'integration.fault_backup_not_new');
+                  await accountPhase('inspect-snapshot', captured);
+                  await verify();
+                }
+                const saved = parseIntegrationJson(await readOutsideRetainedBackup(() =>
+                  accountPhase('inspect-retained-snapshot', {
+                    points: [{...original, attemptId: original.workerVerification.attemptId}],
+                  }), signal));
+                assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
+                const evidence = {...publishedSnapshot.workerVerification, retained: true};
+                publishedSnapshot = original;
+                return evidence;
+              }),
+              observe: probes => {budget.requireRoom(loginEmail); return kubernetes.stopServices({...probes, publication});}});
+          }
           if (refused) {
             assert.deepEqual(parseIntegrationJson(await accountPhase('inspect-unpublished', refused)), {unpublished: true});
           }
@@ -878,18 +897,18 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           remote = await proveIntegrationPaidRemote({docker, control, account, image, waitronTunnelImage, runId,
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
-              origin, signal: runSignal(), baseline: stockholmBaseline, machineLoss: stockholmGatewayMachineLoss, revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
+              origin, signal: runSignal(), baseline: stockholmBaseline, machineLoss: stockholmGatewayMachineLoss,
+              measureStops: proveServiceStops, revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
             }, own: id => {owned.push(id); record('container', id);}});
           if (!stockholmBaseline) {
             result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
             return;
           }
         }
-        if (proveServiceStops) journeyStage = 'outside-service-stops';
-        const serviceStops = await proveServiceStops?.();
+        const {serviceStops, ...remoteBaseline} = remote ?? {};
         result = {version: 1, kind: 'stockholm-cloud-services', origin, waitronHead: revision,
           signup: true, signIn: true, emailActionProof: true, inboxRequiresAuthentication: true, pairing: persisted,
-          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote}), ...(serviceStops && {serviceStops})};
+          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote: remoteBaseline}), ...(serviceStops && {serviceStops})};
         return;
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
@@ -1041,13 +1060,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } catch {process.stderr.write('Test Cloud client integration failed\n'); process.exitCode = 1;}
 }
 
-export async function observeRetainedClients({observe, paid, browser, api, login, signup, backup, remote, docker, control}) {
+export async function observeRetainedClients({observe, paid, browser, api, login, signup, signupMail, backup, remote, docker, control}) {
   const before = await control(paid.id, 'evidence');
   const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', paid.id]);
   const result = await observe({
     session: async signal => {assert.equal((await api('/api/account/session', undefined, browser, undefined, undefined, signal)).status, 200, 'p1.session');},
     login: async signal => {assert.equal((await login(signal)).status, 200, 'p1.login');},
-    signup: async signal => {assert.equal((await signup(signal)).status, 201, 'p1.signup');},
+    signup: signupMail ?? (async signal => {assert.equal((await signup(signal)).status, 201, 'p1.signup');}),
     backup, remote,
   });
   assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', paid.id]), started, 'p1.venue_restarted');

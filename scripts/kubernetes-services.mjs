@@ -16,9 +16,11 @@ import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storag
 import {storageBucket, storageClient} from './kubernetes-storage-proof.mjs';
 import {storeNodePort, waitForStore} from './kubernetes-storage.mjs';
 import {meshNodeAddress} from './kubernetes-outside.mjs';
+import {kindHoldMs} from './kubernetes-node-loss.mjs';
 import {startRemoteRehearsal, untilRemote} from './kubernetes-remote.mjs';
 import {createKubernetesVerifier, forwardKubernetesPod, loadVerifierImage} from './kubernetes-check.mjs';
 import {parseIntegrationJson, runTestCloudClients} from './test-cloud-integration.mjs';
+import {observeP1} from './p1-observer.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
 const {CreateBucketCommand} = require('@aws-sdk/client-s3');
@@ -168,7 +170,7 @@ export function readyServicePods(rows, {stopped, containers = []}) {
 
 export async function readServicesInbox(pods, fetch, path, authorization) {
   const completed = await Promise.allSettled(pods.map(pod => fetch(pod, path, authorization)));
-  const replies = completed.filter(row => row.status === 'fulfilled').map(row => row.value);
+  const replies = completed.flatMap((row, index) => row.status === 'fulfilled' ? [{...row.value, worker: pods[index]}] : []);
   if (!replies.length || (!authorization && replies.length !== pods.length)) {
     throw Error('services.inbox_unreachable', {cause: completed.find(row => row.status === 'rejected')?.reason});
   }
@@ -181,12 +183,60 @@ export async function readServicesInbox(pods, fetch, path, authorization) {
     return Response.json({messages: found.flatMap(reply => parseIntegrationJson(reply.text).messages)});
   }
   const response = found[0] ?? replies.find(reply => reply.status !== 404) ?? replies[0];
-  return new Response(response.text, {status: response.status});
+  return new Response(response.text, {status: response.status, headers: {'x-rehearsal-mail-worker': response.worker}});
+}
+
+export async function measureServiceStops({nodes, inventory, stopNode, restore, healthy, reconcile, probes, holdMs,
+  signal, observe = observeP1}) {
+  const uncovered = new Set(['primary', 'gateway', 'operator', 'fluxSource', 'fluxApply']);
+  const remaining = [...nodes], legs = [];
+  while (remaining.length) {
+    const roles = await inventory(signal);
+    const score = node => [...uncovered].filter(role => roles[role] === node).length;
+    const node = remaining.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best);
+    remaining.splice(remaining.indexOf(node), 1);
+    const survivors = nodes.filter(name => name !== node);
+    const stopped = Promise.withResolvers();
+    stopped.promise.catch(() => {});
+    let stopping, fault;
+    const leg = new AbortController();
+    const limit = AbortSignal.any([leg.signal, ...[signal].filter(Boolean)]);
+    const observation = observe({probes, holdMs, signal: limit, stopped: () => stopped.promise, replacement: () => stopped.promise,
+      reconcile: () => reconcile(node, roles, survivors, {...fault, signal: limit}),
+      ready() {
+        stopping = Promise.resolve().then(() => stopNode(node, {measured: true, afterRestart: options => restore(node, options),
+          async whileStopped(details) {
+            fault = details;
+            assert.equal(fault.holdMs, holdMs, 'services.stop_hold');
+            stopped.resolve(fault.stoppedAt);
+            const expire = () => leg.abort(fault.signal.reason);
+            fault.signal?.addEventListener('abort', expire, {once: true});
+            try {return await observation;}
+            finally {fault.signal?.removeEventListener('abort', expire);}
+          }}));
+        stopping.catch(stopped.reject);
+      }});
+    try {await observation;} catch (error) {await stopping?.catch(() => {}); throw error;}
+    const receipt = await stopping;
+    assert.ok(receipt?.stopped === node && receipt.offMs >= holdMs, 'services.stop_missing:' + node);
+    const {signup, backup} = receipt.recovery;
+    const {primary, publication, outsideStore, flux} = receipt.reconciliation;
+    assert.ok(signup.result?.worker, 'services.stop_mail_worker');
+    assert.ok(backup.result?.controllerScope && backup.result.attemptId && backup.result.retained, 'services.stop_backup_worker');
+    assert.ok(survivors.includes(primary) && outsideStore && flux?.appliedRevision, 'services.stop_service_recovery');
+    if (roles.primary === node) assert.ok(publication?.worker && Number.isFinite(publication.completedMs), 'services.stop_publication');
+    for (const role of uncovered) if (roles[role] === node) uncovered.delete(role);
+    await healthy(signal);
+    legs.push({...receipt, roles});
+  }
+  for (const role of uncovered) assert.fail('services.stop_role:' + role);
+  return legs;
 }
 
 export async function runKubernetesServices(context) {
   const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, kubeTarget, signal,
-    remote, stopGatewayNode, stopServiceNodes, stopNode, prepareOutside, baseline, amazon, importVerifierImage} = context;
+    remote, stopGatewayNode, stopServiceNodes, stopNode, prepareOutside, baseline, amazon, importVerifierImage,
+    holdMs = kindHoldMs} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = () => [...(kubeTarget ? kubeTarget() : ['--kubeconfig', kubeconfig]), '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
@@ -279,6 +329,49 @@ export async function runKubernetesServices(context) {
         'Running authenticated signup, box pairing and native backup verification\n');
       const mode = baseline ? {stockholmBaseline: true} :
         remote ? {stockholmRemote: true, stockholmGatewayMachineLoss: stopGatewayNode} : {services: true};
+      const names = nodes.map(row => row.name);
+      const read = async (namespace, args, signal) =>
+        parseIntegrationJson(await context.kube(['-n', namespace, 'get', ...args, '-o', 'json'], {signal}));
+      const list = async (namespace, args, signal) => (await read(namespace, args, signal)).items;
+      const primary = async signal => {
+        const {status} = await read(servicesNamespace, ['cluster', 'cloud-db'], signal);
+        const {metadata, spec} = await read(servicesNamespace, ['pod', status.currentPrimary], signal);
+        return {pod: metadata.name, node: spec.nodeName};
+      };
+      const inventory = limit => untilRemote(async signal => {
+        const [database, gateway, operators, election, flux] = await Promise.all([
+          primary(signal), read(servicesNamespace, ['lease', 'remote-gateway'], signal),
+          list('cnpg-system', ['pods', '-l', 'app.kubernetes.io/name=cloudnative-pg'], signal),
+          list('cnpg-system', ['leases'], signal), list('flux-system', ['pods'], signal),
+        ]);
+        const holder = gateway.spec.holderIdentity?.split(':')[0];
+        const activeGateway = await read(servicesNamespace, ['pod', holder], signal);
+        const leaders = election.map(row => row.spec.holderIdentity?.split('_')[0]);
+        const operator = operators.find(row => leaders.includes(row.metadata.name));
+        const fluxNode = app => flux.find(row => row.metadata.labels?.app === app &&
+          row.status.conditions?.some(condition => condition.type === 'Ready' && condition.status === 'True'))?.spec.nodeName;
+        const roles = {primary: database.node, gateway: activeGateway.spec.nodeName, operator: operator?.spec.nodeName,
+          fluxSource: fluxNode('source-controller'), fluxApply: fluxNode('kustomize-controller')};
+        return Object.values(roles).every(node => names.includes(node)) && roles;
+      }, 30_000, limit, 'stop_role_inventory');
+      const writablePrimary = (expected, limit) => untilRemote(async signal => {
+        const writer = await primary(signal);
+        if (!expected.includes(writer.node)) return false;
+        const [endpoints, pods] = await Promise.all([
+          list(servicesNamespace, ['endpointslices', '-l', 'kubernetes.io/service-name=cloud-db-rw'], signal),
+          list(servicesNamespace, ['pods', '-l', 'cnpg.io/cluster=cloud-db,cnpg.io/podRole=instance'], signal),
+        ]);
+        const destinations = endpoints.flatMap(slice => slice.endpoints)
+          .filter(row => row.conditions.ready).map(row => row.targetRef?.name);
+        if (destinations.length !== 1 || destinations[0] !== writer.pod) return false;
+        const active = pods.filter(row => !row.metadata.deletionTimestamp && expected.includes(row.spec.nodeName));
+        if (new Set(active.map(row => row.spec.nodeName)).size !== expected.length) return false;
+        const states = await Promise.all(active.map(async row => [
+          row.metadata.name, await exec(row.metadata.name, 'postgres', ['psql', '-U', 'postgres', '-Atqc',
+            "SELECT pg_is_in_recovery() || ':' || current_setting('transaction_read_only')"], undefined, signal),
+        ]));
+        return states.every(([pod, state]) => state === (pod === writer.pod ? 'false:off' : 'true:on')) && writer.node;
+      }, expected.length === 3 ? 180_000 : 90_000, limit, 'one_writable_primary');
       const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...mode, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
@@ -289,33 +382,35 @@ export async function runKubernetesServices(context) {
               ['node', '--input-type=module', '-e', inboxRequest], JSON.stringify({path, authorization}), limit)),
             path, authorization);
         }}),
-        ...(stopServiceNodes && {async stopServices(prove) {
-          const legs = [];
-          for (const node of nodes) {
-            stopped = node.name;
-            const evidence = await stopNode(stopped, {
-              whileStopped: async fault => {
-                const evidence = await prove(fault.signal);
-                process.stderr.write('Outside Kind session, mail and stored backup verified during stop\n');
-                await untilRemote(async limit => {
+        ...(stopServiceNodes && {stopServices: probes => measureServiceStops({nodes: names, inventory, signal, probes, holdMs,
+          stopNode: (node, options) => stopNode(node, {...options, whileStopped(fault) {
+            stopped = node;
+            return options.whileStopped(fault);
+          }}),
+          restore: (node, options) => outside.restoreNode(node, options),
+          healthy: async signal => {
+            stopped = undefined;
+            await Promise.all([writablePrimary(names, signal),
+              waitForStore({nodes: names, kube: context.kube, signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)])}),
+              untilRemote(async limit => (await readyServices(limit)).length === names.length, 180_000, signal, 'services_rejoined')]);
+          },
+          async reconcile(node, roles, survivors, fault) {
+            const [primary, outsideStore] = await Promise.all([
+              writablePrimary(survivors, fault.signal),
+              untilRemote(async limit => {
                   await run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
                     servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
                     'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal: limit});
                   return true;
-                }, 15_000, fault.signal, 'outside_store_ready');
-                return {...evidence, outsideStore: true};
-              },
-              afterRestart: options => outside.restoreNode(stopped, options),
-            });
-            stopped = undefined;
-            await waitForStore({nodes: nodes.map(row => row.name), kube: context.kube,
-              signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)])});
-            await untilRemote(async limit => (await readyServices(limit)).length === nodes.length,
-              180_000, signal, 'services_rejoined');
-            legs.push(evidence);
-          }
-          return legs;
-        }}),
+                }, 90_000, fault.signal, 'outside_store_ready'),
+            ]);
+            const publication = roles.primary === node ? await probes.publication(survivors, fault) : undefined;
+            const fluxDeadline = 180_000 - (performance.now() - fault.started);
+            assert.ok(fluxDeadline > 0, 'services.stop_flux_deadline');
+            const flux = await outside.proveSurviving(survivors,
+              AbortSignal.any([fault.signal, AbortSignal.timeout(Math.ceil(fluxDeadline))]));
+            return {primary, publication, outsideStore, flux};
+          }})}),
         exec: async (role, args, input, limit) => {
           assert.deepEqual([role, ...args], ['account', 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs']);
           return command(baseline ? await service('inspect', limit) : 'job/services-inspection', 'inspect', 'CLOUD_STOCKHOLM_REHEARSAL=1 exec ' + args.join(' '), input, limit);

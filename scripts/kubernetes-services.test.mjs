@@ -12,6 +12,41 @@ import {runKubernetesCheck} from './kubernetes-check.mjs';
 import * as servicesScript from './kubernetes-services.mjs';
 const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
 
+test('measured stops cover all three machines and the live roles before returning a receipt', async () => {
+  const nodes = ['a', 'b', 'c'], changes = [];
+  let healthy = true;
+  const run = (role, publication) => (servicesScript.measureServiceStops ?? (() => []))({nodes, holdMs: 360_000,
+    inventory: async () => {
+      assert.ok(healthy, 'inventory must follow a healthy rejoin');
+      return {primary: 'b', gateway: 'a', operator: role, fluxSource: 'c', fluxApply: 'c'};
+    },
+    stopNode: async (node, {whileStopped, afterRestart, measured}) => {
+      assert.ok(measured);
+      healthy = false;
+      changes.push('off:' + node);
+      const result = await whileStopped({started: 1000, stoppedAt: 2000, holdMs: 360_000});
+      await afterRestart();
+      return {...result, stopped: node, offMs: 360_000};
+    },
+    restore: async node => {changes.push('return:' + node);},
+    healthy: async () => {healthy = true;},
+    observe: async ({ready, stopped, replacement, reconcile, holdMs}) => {
+      assert.equal(holdMs, 360_000);
+      ready(); assert.equal(await stopped(), 2000); await replacement();
+      return {recovery: {signup: {result: {worker: 'surviving-mail'}}, backup: {result: {controllerScope: 'verifier', attemptId: 'attempt', retained: true}}},
+        reconciliation: await reconcile()};
+    },
+    reconcile: async (_node, _before, survivors) => ({primary: survivors[0], outsideStore: true,
+      publication, flux: {appliedRevision: 'a'.repeat(40)}}),
+  });
+  const legs = await run('b', {worker: 'publication', completedMs: 1200});
+  assert.deepEqual(legs.map(row => row.stopped), ['b', 'c', 'a']);
+  assert.deepEqual(changes, ['off:b', 'return:b', 'off:c', 'return:c', 'off:a', 'return:a']);
+  assert.equal(legs[0].roles.primary, 'b');
+  await assert.rejects(async () => run('other', {worker: 'publication', completedMs: 1200}), /services\.stop_role:operator/);
+  await assert.rejects(async () => run('b', undefined), /services\.stop_publication/);
+});
+
 test('the migration job follows all three prepared PostgreSQL copies and gates the service startup', async () => {
   const nodes = [1, 2, 3].map(number => ({name: 'node-' + number, id: 'id-' + number}));
   const prepared = [], stages = [];
@@ -161,7 +196,9 @@ test('a mail list combines surviving inboxes and finds a message outside the fir
   };
   const inbox = (path, auth) => servicesScript.readServicesInbox(['unreachable', 'on-b', 'on-c'], fetch, path, auth);
   assert.deepEqual(await (await inbox('messages', 'synthetic')).json(), {messages: [{ID: 'on-b'}, {ID: 'on-c'}]});
-  assert.deepEqual(await (await inbox('message/on-c', 'synthetic')).json(), {ID: 'on-c'});
+  const message = await inbox('message/on-c', 'synthetic');
+  assert.deepEqual(await message.json(), {ID: 'on-c'});
+  assert.equal(message.headers.get('x-rehearsal-mail-worker'), 'on-c');
   assert.equal((await inbox('message/absent', 'synthetic')).status, 404);
 });
 
@@ -198,19 +235,29 @@ test('outside baseline validates its Cloud image before creating a Kind cell', (
 });
 
 test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and restores its encrypted backup', {
-  skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: 40 * 60 * 1000,
+  skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: 48 * 60 * 1000,
 }, async () => {
   assert.equal(process.platform, 'linux');
   const stopServiceNodes = process.env.TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS === '1';
   const {services, nodes} = await runKubernetesCheck('kind-baseline', {stopServiceNodes});
   if (stopServiceNodes) {
-    assert.deepEqual(services.serviceStops.map(leg => leg.stopped), nodes.map(node => node.name));
-    for (const leg of services.serviceStops) {
-      assert.equal(leg.session, true);
-      assert.equal(leg.mail, true);
-      assert.equal(leg.retainedObject, true);
-      assert.equal(leg.outsideStore, true);
+    const legs = services.serviceStops;
+    assert.deepEqual(legs.map(leg => leg.stopped).sort(), nodes.map(node => node.name).sort());
+    assert.equal(services.remote.sameTunnel, true);
+    for (const leg of legs) {
+      assert.ok(leg.offMs >= 360_000);
+      for (const probe of ['session', 'remote', 'login', 'signup', 'backup']) {
+        assert.ok(leg.recovery[probe].withinMs <= (probe === 'backup' ? 300_000 : 90_000));
+        assert.ok(Number.isFinite(leg.recovery[probe].longestGapMs));
+      }
+      assert.ok(leg.recovery.signup.result.worker);
+      assert.equal(leg.recovery.backup.result.retained, true);
+      assert.notEqual(leg.recovery.backup.result.attemptId, services.backup.workerVerification.attemptId);
+      assert.equal(leg.reconciliation.outsideStore, true);
+      assert.match(leg.reconciliation.flux.appliedRevision, /^[a-f0-9]{40}$/);
+      if (leg.roles.primary === leg.stopped) assert.ok(leg.reconciliation.publication.worker.uid);
     }
+    console.log('D621 measured stop receipt ' + JSON.stringify(legs.map(({samples, ...leg}) => ({...leg, probes: samples.length}))));
   }
   assert.equal(services.signup, true);
   assert.equal(services.signIn, true);

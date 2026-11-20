@@ -296,6 +296,13 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
       }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), signal, 'handover_90_seconds');
     }
     return {gatewayIp, host: gatewayIp, port: 30443, ca: tls.root, close, handover,
+      async publicationWorker(survivors, signal) {
+        const [row] = await untilRemote(async limit => {
+          const workers = await readyWorkers(1, limit);
+          return workers && survivors.includes(workers[0].spec.nodeName) && workers;
+        }, 90_000, signal, 'outside_publication_worker');
+        return {uid: row.metadata.uid, pod: row.metadata.name, node: row.spec.nodeName};
+      },
       async peerTraffic(peer, limit) {
         const stats = await peerCounters(call, await active(limit), peer, limit);
         return stats.handshake > 0 && stats.receivedBytes > 0 && stats.sentBytes > 0;

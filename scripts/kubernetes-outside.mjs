@@ -95,6 +95,7 @@ export function outsidePublication({cluster, signal, waitronImage, run, mesh, co
   return {
     get revision() {return flux?.revision;},
     restoreNode: mesh.restoreNode,
+    proveSurviving: (survivors, limit) => flux.proveSurviving(survivors, limit),
     async install({deployment, kube, worker}) {
       flux = await installFlux({name: cluster, image: waitronImage, run, deployment, kube, signal,
         controllersPath, baselineNode: worker,
@@ -144,7 +145,8 @@ export async function prepareKindOutsideBaseline({prepareBundle = prepareFluxBun
   const {cluster, directory, nodes, run, signal} = context;
   const execute = (binary, args, input, cleanup, limit) => run(binary, args,
     {input, signal: cleanup ? null : limit ?? signal, timeout: 180_000});
-  const controllersPath = await prepareBundle(directory, cluster, {run: execute, node: nodes[0].name});
+  const controllersPath = await prepareBundle(directory, cluster,
+    {run: execute, node: context.stopServiceNodes ? nodes.map(row => row.name) : nodes[0].name});
   for (const {upstream, tag} of fluxImages(cluster)) {
     const cached = await run('docker', ['image', 'inspect', upstream]).then(() => true, error => {
       if (!error.message.includes('No such image: ' + upstream)) throw error;

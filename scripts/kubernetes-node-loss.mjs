@@ -19,7 +19,7 @@ const dockerId = /^[a-f0-9]{64}$/;
 const controlPlanes = ['control-plane', 'control-plane2', 'control-plane3'];
 const balancerRole = 'external-load-balancer';
 const outOfService = 'node.kubernetes.io/out-of-service';
-const kindHoldMs = 360_000;
+export const kindHoldMs = 360_000;
 
 function executeCommand(binary, args, {env, input, signal, timeout}) {
   return new Promise((resolve, reject) => {

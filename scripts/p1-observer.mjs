@@ -8,15 +8,15 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
   const finalBackupAfter = holdMs === undefined ? 900_000 : holdMs - 60_000;
   const samples = [], states = Object.fromEntries(names.map(name => [name, {next: 0, count: 0}]));
   for (const name of names.filter(name => name !== 'signup')) {
-    await probes[name](signal);
+    await probes[name](signal, false);
     states[name].lastSuccess = now(); states[name].baselineAt = now();
   }
   signal?.throwIfAborted();
   const faultAt = now();
   ready();
   let stoppedAt, replacementReady = false, signalFailure, repair;
-  Promise.resolve().then(stopped).then(() => {
-    stoppedAt = now();
+  Promise.resolve().then(stopped).then(confirmedAt => {
+    stoppedAt = confirmedAt ?? now();
     process.stderr.write('P1 timing observer stopped-received ' + (stoppedAt - faultAt) + '\n');
     for (const state of Object.values(states)) if (!state.recovered) state.next = 0;
   }, error => {signalFailure = error;});
@@ -25,7 +25,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
     const state = states[name], at = now(), controller = new AbortController();
     state.pending = {at, controller, ended: false};
     const pending = state.pending;
-    (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal))()
+    (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, stoppedAt !== undefined))()
       .then(result => {pending.result = result; pending.ok = true; pending.endedAt = now(); pending.ended = true;}, error => {pending.error = error; pending.endedAt = now(); pending.ended = true;});
   };
   try {
