@@ -77,7 +77,7 @@ try {
       assert.ok(row);
       console.log(JSON.stringify(inspectIntegrationContinuousState(row, {requestId, venueId: rows[0].venue_id,
         organisationId, sourceNodeId, generation, recoverableAt}, desiredStatus)));
-    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback' || phase === 'inspect-retained-snapshot') {
+    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback' || (!services && phase === 'inspect-retained-snapshot')) {
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
       const venueId = rows[0].venue_id, prefix = 'streams/' + venueId + '/';
       // Observation reads must not reconcile IAM while captures are running.
@@ -198,7 +198,7 @@ try {
         EXISTS(SELECT 1 FROM backup_verification_attempts WHERE point_id=$1) AS attempted`, [pointId, installationId]);
       assert.deepEqual(row, {reserved: true, published: false, attempted: false});
       console.log(JSON.stringify({unpublished: true}));
-    } else if (services && ['provision-snapshot', 'inspect-snapshot'].includes(phase)) {
+    } else if (services && ['provision-snapshot', 'inspect-snapshot', 'inspect-retained-snapshot'].includes(phase)) {
       const storage = workerObjects(process.env, await readFile(process.env.CLOUD_BACKUP_CA_FILE, 'utf8'));
       const location = {endpoint: process.env.CLOUD_BACKUP_ENDPOINT, bucket: 'cloud-storage-rehearsal',
         region: process.env.CLOUD_BACKUP_REGION};
@@ -208,12 +208,19 @@ try {
           await new BackupCatalogue(pool, vault, storage.objects, 'existing').provision(installationId, location);
           console.log(JSON.stringify({provisioned: true}));
         } else {
-          const {rows: [point]} = await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3',
-            [pointId, installationId, rows[0].venue_id]);
-          assert.ok(point, 'integration.snapshot_binding');
-          const stored = await storage.objects(location).read(point.object_key);
-          console.log(JSON.stringify(inspectIntegrationSnapshot(point, stored,
-            {pointId, installationId, venueId: rows[0].venue_id, sha256, bytes, sourceNodeId})));
+          const retained = phase === 'inspect-retained-snapshot';
+          const points = retained ? JSON.parse(input).points : [{pointId, sha256, bytes, sourceNodeId}];
+          assert.ok(points.length, 'integration.snapshot_binding');
+          for (const expected of points) {
+            const {rows: [point]} = await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3',
+              [expected.pointId, installationId, rows[0].venue_id]);
+            assert.ok(point, 'integration.snapshot_binding');
+            const stored = await storage.objects(location).read(point.object_key);
+            const inspect = retained ? inspectIntegrationRetainedSnapshot : inspectIntegrationSnapshot;
+            const evidence = inspect(point, stored, {...expected, installationId, venueId: rows[0].venue_id});
+            if (!retained) console.log(JSON.stringify(evidence));
+          }
+          if (retained) console.log(JSON.stringify({retainedSnapshotUnchanged: true}));
         }
       } finally {storage.close();}
     } else if (phase === 'provision-snapshot' || phase === 'inspect-snapshot') {

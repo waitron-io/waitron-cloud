@@ -664,8 +664,10 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               const message = await readMail(recipient, new Set(), signal);
               readSignupToken(message.Text, origin);
               process.stderr.write('Outside Kind signup mail received during stop\n');
-              const saved = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
-              assert.deepEqual(saved, independent, 'integration.fault_snapshot_changed');
+              const saved = parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
+                points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
+              }));
+              assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
               return {session: true, mail: true, retainedObject: true};
             }));
           }
