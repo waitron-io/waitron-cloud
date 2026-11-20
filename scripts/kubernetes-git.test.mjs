@@ -205,19 +205,19 @@ test('outside Flux reads the initial applied revision from its selected Kind nod
   await flux.close();
 });
 
-test('outside Git installs each host rule to completion even when the rehearsal can be cancelled', async () => {
+test('outside Git records its host rules and container even when the rehearsal can be cancelled', async () => {
   const added = [], id = 'c'.repeat(64);
   const mirror = await api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
     async run(binary, args, input, cleanup) {
-      if (args.includes('-I')) added.push(cleanup);
+      if (args.includes('-I') || args[0] === 'create') added.push(cleanup);
       if (args[0] === 'create') return id;
       if (args[0] === 'port') return '10.77.0.4:18000';
     }});
-  assert.deepEqual(added, [true, true]);
+  assert.deepEqual(added, [true, true, true]);
   await mirror.close();
 });
 
-for (const published of [false, true]) {
+for (const published of [false, true, 'unknown']) {
   test('outside Git keeps its firewall on removal failure only if the mirror can still be serving: ' + published, async () => {
     const id = 'c'.repeat(64), removals = [];
     const mirror = await api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
@@ -228,23 +228,30 @@ for (const published of [false, true]) {
         if (args[0] === 'ps') {
           assert.deepEqual(args, ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id]);
           assert.equal(cleanup, true);
+          if (published === 'unknown') throw Error('injected Docker status failure');
           return published ? id : '';
         }
         if (args.includes('-D')) removals.push(args);
       }});
-    await assert.rejects(mirror.close(), /injected Docker removal failure/);
+    await assert.rejects(mirror.close(), error => {
+      assert.match(error.message, /injected Docker removal failure/);
+      if (published === 'unknown') assert.match(error.message, /injected Docker status failure/);
+      return true;
+    });
     assert.equal(removals.length, published ? 0 : 2);
   });
 }
 
-test('outside Git removes its container and both rules when Docker reports the wrong port', async () => {
-  const id = 'd'.repeat(64), cleanup = [];
-  await assert.rejects(api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
-    async run(binary, args) {
-      if (args[0] === 'create') return id;
-      if (args[0] === 'port') return '10.77.0.4:18001';
-      if (args[0] === 'rm' || args.includes('-D')) cleanup.push({binary, args});
-    }}), {message: 'flux.mirror_binding'});
-  assert.deepEqual(cleanup.map(({binary}) => binary), ['docker', 'sudo', 'sudo']);
-  assert.deepEqual(cleanup[0].args, ['rm', '-f', id]);
-});
+for (const binding of ['10.77.0.4:18001', '10.77.0.4:18000:18001']) {
+  test('outside Git cleans up a Docker binding other than the single fixed port: ' + binding, async () => {
+    const id = 'd'.repeat(64), cleanup = [];
+    await assert.rejects(api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
+      async run(binary, args) {
+        if (args[0] === 'create') return id;
+        if (args[0] === 'port') return binding;
+        if (args[0] === 'rm' || args.includes('-D')) cleanup.push({binary, args});
+      }}), {message: 'flux.mirror_binding'});
+    assert.deepEqual(cleanup.map(({binary}) => binary), ['docker', 'sudo', 'sudo']);
+    assert.deepEqual(cleanup[0].args, ['rm', '-f', id]);
+  });
+}

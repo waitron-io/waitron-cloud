@@ -420,7 +420,8 @@ test('the outside Kind network drops traffic to the private API port and carries
       cleaned = true;
     };
     try {
-      assert.equal(await run('curl', ['-fsS', '--max-time', '10', '--cacert', join(directory, 'services-ca.crt'),
+      assert.equal(await run('curl', ['-fsS', '--retry', '4', '--retry-delay', '1', '--retry-max-time', '8', '--max-time', '2',
+        '--cacert', join(directory, 'services-ca.crt'),
         '--resolve', 'cloud.example.test:3000:10.77.0.1', 'https://cloud.example.test:3000/api/health/ready']),
       '{"status":"ready"}');
       for (const [index, node] of nodes.entries()) {
@@ -459,7 +460,7 @@ test('the outside Kind network drops traffic to the private API port and carries
     }
   }});
   assert.equal(checked, true, 'the real mesh carried account, store and Flux traffic');
-  assert.equal(cleaned, true, 'the outside mesh and its mirror closed');
+  assert.equal(cleaned, true, 'the outside host interface was removed');
   assert.equal(remote.staffHttps, true);
   assert.equal(remote.publicHttps, true);
   assert.deepEqual(remote.cleanup.remaining, []);

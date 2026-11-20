@@ -232,7 +232,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       calls.push([binary, ...args]);
       if (['ssh','scp'].includes(binary)) {
         const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
-        transports.push({binary,args,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
+        transports.push({binary,args,input,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
       if (binary === 'uname') return 'x86_64';
       if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(args.indexOf('-o') + 2);
@@ -365,6 +365,14 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
     return;
   }
   assert.deepEqual(metadata, [1, 2, 3]);
+  const meshCalls = transports.filter(row => row.binary === 'ssh' && row.args.at(-1).includes("bootstrap.sh' 'mesh'"));
+  assert.deepEqual(meshCalls.map(row => row.args.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
+  for (const [index, mesh] of meshCalls.entries()) {
+    const address = '10.77.0.' + (index + 1);
+    assert.ok(mesh.args.at(-1).endsWith("'mesh' '" + address + "'"), 'filter address belongs to this machine');
+    assert.ok(mesh.input.startsWith('[Interface]\nAddress=' + address + '/24\n'), 'filter matches the interface address');
+  }
+
   const uploads=transports.filter(row=>row.binary==='scp'&&row.args.at(-2).endsWith('images.tar'));
   assert.equal(uploads.length,1,'the owner uploads the image archive only once');
   assert.equal(uploads[0].args.at(-1),'admin@203.0.113.1:/tmp/d618-images.tar');

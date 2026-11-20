@@ -87,8 +87,12 @@ export async function startFluxMirror({name,image,run,address='10.77.0.1',port='
       try {await run('docker', ['rm', '-f', id], undefined, true);}
       catch (error) {
         // A failed Docker command may leave the mirror reachable. Retain its filter until Docker confirms otherwise.
-        if (removeFirewall && await run('docker', ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id], undefined, true) === '') {
-          await removeFirewall();
+        try {
+          if (removeFirewall && await run('docker', ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id], undefined, true) === '') {
+            await removeFirewall();
+          }
+        } catch (cleanup) {
+          throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);
         }
         throw error;
       }
