@@ -215,6 +215,17 @@ test('the outside backup inspection retries one storage deadline and stops', asy
   assert.equal(calls, 2);
 });
 
+test('the outside backup inspection can retry a fresh database connection timeout', async () => {
+  const {readOutsideRetainedBackup} = await load();
+  const timeout = Error('kubectl exec failed\n  Error: Connection terminated due to connection timeout\ncommand terminated with exit code 1');
+  let calls = 0;
+  assert.equal(await readOutsideRetainedBackup(async () => {
+    if (++calls === 1) throw timeout;
+    return 'retained evidence';
+  }, AbortSignal.timeout(5000)), 'retained evidence');
+  assert.equal(calls, 2);
+});
+
 test('the outside backup inspection immediately reports an integrity failure', async () => {
   const {readOutsideRetainedBackup} = await load();
   assert.equal(typeof readOutsideRetainedBackup, 'function');

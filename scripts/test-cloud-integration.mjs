@@ -206,9 +206,9 @@ export async function readOutsideRetainedBackup(read, signal) {
   signal.throwIfAborted();
   try {return await read();}
   catch (error) {
-    if (!/^\s*Error: backup\.cancelled\s*$/m.test(error.message)) throw error;
+    if (!/^\s*Error: (?:backup\.cancelled|Connection terminated due to connection timeout)\s*$/m.test(error.message)) throw error;
     signal.throwIfAborted();
-    process.stderr.write('Outside Kind stored backup read timed out, retrying once\n');
+    process.stderr.write('Outside Kind retained backup inspection timed out, retrying once\n');
     return read();
   }
 }
