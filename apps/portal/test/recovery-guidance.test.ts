@@ -70,6 +70,20 @@ test('only approval conflicts with a valid recovery expiry retain the deadline',
  }
 });
 
+test('a later approval refusal without an expiry clears the previous deadline',async()=>{
+ const refusal={ok:false as const,status:409,code:'recovery_active',retryAfterMs:0};
+ let includeExpiry=true;
+ const c=new RecoveryController(()=>{},async()=>includeExpiry?{...refusal,recoveryExpiresAt:expiresAt}:refusal);
+ c.open(id);c.account('owner');c.code='00123456';c.view=pending;
+ c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;
+ await c.approve();
+ assert.equal(c.recoveryExpiresAt,expiresAt);
+ includeExpiry=false;
+ await c.approve();
+ assert.equal(c.error,'recoveryActive');
+ assert.equal(c.recoveryExpiresAt,undefined);
+});
+
 for(const action of ['approve','close','replace'] as const)for(const status of [0,400,409,503])test(`recovery ${action}: uncertain ${status} write still checks its request and never repeats the write`,async()=>{
  const calls:string[]=[];
  const c=new RecoveryController(()=>{},async<T>(path:string)=>{calls.push(path);return path.endsWith('/inspect')?{ok:true as const,value:ready as T}:{ok:false as const,status,code:status===0?'network_error':status===503?'temporarily_unavailable':'unexpected_response',retryAfterMs:0};});

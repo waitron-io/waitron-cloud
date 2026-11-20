@@ -108,7 +108,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if (response.status === 403 && code === 'enrollment_required' && !['/session','/session/activity'].includes(path)) globalThis.document?.dispatchEvent?.(new Event(enrollmentRequiredEvent));
     const recoveryExpiresAt=(value as {recoveryExpiresAt?:unknown}|null)?.recoveryExpiresAt;
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs,
-      ...(path==='/recovery/approve'&&response.status===409&&code==='recovery_active'&&validRecoveryDate(recoveryExpiresAt)?{recoveryExpiresAt}:{})};
+      ...(path==='/recovery/approve'&&code==='recovery_active'&&validRecoveryDate(recoveryExpiresAt)?{recoveryExpiresAt}:{})};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
 }
 
