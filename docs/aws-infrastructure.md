@@ -1204,6 +1204,10 @@ local image ID as `TEST_CLOUD_INTEGRATION_IMAGE`. Run
 copies with separate local volumes. The command checks migration startup, a
 synchronously acknowledged write through primary loss, refusal of a direct
 write to the returning replica, and a new write during a standby outage.
+During the primary outage, the command also checks whether the same account
+process stays live and serves a database-backed readiness request within 90
+seconds. It records the old database connection and the time to failure and
+recovery.
 Use the same Linux guest requirements as the control-plane check. The command
 uses `curl` to fetch the pinned operator manifest from GitHub. Kind pulls the
 pinned operator and PostgreSQL images from ghcr.io.
@@ -1217,10 +1221,12 @@ bound volume and PostgreSQL data files. This check needs no Cloud image.
 
 The bounded Stockholm launcher waits for the three control planes, the network
 proxy rollout and the DNS rollout before starting PostgreSQL in the `d621-data`
-namespace. The Kind rehearsal and the launcher put the two CoreDNS replicas on
-separate machines so one stopped machine leaves a DNS replica available. The
-legacy Stockholm journey still uses its own database and the network share on
-A. Switching that journey to the replicated database and checking machine loss
+namespace. The Kind rehearsal and the launcher put a CoreDNS replica on each
+machine and verify that Kubernetes advertises each as preferred for workloads
+on that machine. This lets survivors use their own replicas while Kubernetes
+still advertises the stopped machine’s replica. If the local replica is
+unavailable, the DNS Service can use replicas on other machines. The legacy
+Stockholm journey still uses its own database and the network share on A. Switching that journey to the replicated database and checking machine loss
 in Stockholm remain outside rehearsal steps.
 
 Run `node scripts/kubernetes-check.mjs --storage-loss` in the Linux guest to
@@ -1317,22 +1323,23 @@ gateways to receive it.
 The check starts a second publication worker on a different machine. Both
 workers stay off the account machine so it can accept the owner's revocation.
 The check also keeps the database primary on a remaining machine to measure
-publication separately from database failover. The check records the database and
-DNS endpoints and waits for Kubernetes to withdraw the stopped DNS replica.
-During the 90-second stop window, the surviving worker must complete a new certificate job with
-the same certificate and signing request, then publish a newer signed route
+publication separately from database failover. During the stop, both survivors
+must complete ten lookups, including one missing name, and open verified
+PostgreSQL connections. The check
+requires Kubernetes to still list the stopped machine’s DNS replica as ready
+before and after those probes. In the same 90-second window, the surviving
+worker must complete a new certificate job with the same certificate and
+signing request, then publish a newer signed route
 manifest without the revoked venue. After the machine rejoins, the check makes
 sure all three gateways received the withdrawal, the peer is gone and both HTTPS
 routes refuse the venue. It allows 180 seconds from revocation for those results.
 
-In the 20 November disposable Linux run, the first inspection succeeded after
-40.015 seconds across connection attempts. Kubernetes withdrew the stopped
-DNS replica after 51.613 seconds. The surviving worker reused the certificate
+In the earlier 20 November disposable Linux run with two DNS replicas, the
+first inspection succeeded after 40.015 seconds across connection attempts.
+Kubernetes withdrew the stopped DNS replica after 51.613 seconds. The surviving worker reused the certificate
 and signing request and published signed sequence 4, up from 3, 985 ms after
 revocation. All three gateways received the withdrawal, and both routes refused
-the venue 45.240 seconds after revocation. The launch qualification still
-needs name lookup across machine loss and account recovery across database
-primary failover.
+the venue 45.240 seconds after revocation.
 
 An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.

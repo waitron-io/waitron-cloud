@@ -1815,7 +1815,10 @@ implementation or production evidence.
   signing request and published the owner's revocation. The check waited 51.613 seconds
   for Kubernetes to withdraw the stopped DNS replica. Keep name lookup and fresh
   database connections available across machine loss, and qualify the account process
-  through database primary failover.
+  through database primary failover. In the full-service machine-loss check,
+  measure how long the email worker, remote publication worker and backup verifier
+  take to come back after the primary moves. They exit on idle database connection
+  errors and depend on Kubernetes for a restart.
   The [private Kind machine-stop check](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
   used the Waitron companion's own traffic and restored staff and public HTTPS
   in 52.373 and 52.387 seconds through one private relay address. The former

@@ -24,7 +24,8 @@ stays live and serves a database-backed request once a standby takes over.
    Give ten independent OS lookups per container two seconds each inside a
    ten-second probe window. Include a unique missing Service name and make
    a fresh verified TLS database connection from each container. Record the
-   timings, unchanged primary and dead replica advertised before and after.
+   timings and unchanged primary. Require the dead replica to still be advertised
+   as ready before and after the probes.
    Keep the single renewal and revocation submissions, signed publication
    assertions and deadlines. Extend `scripts/kubernetes-remote.test.mjs`.
 3. Add a PostgreSQL regression in `packages/account-http/test/server.test.ts`.
@@ -34,7 +35,8 @@ stays live and serves a database-backed request once a standby takes over.
    without exiting. Add an 11-second client query timeout alongside the
    existing 10-second PostgreSQL statement timeout. A silent query and its
    queued rollback can take about 22 seconds before the pool discards the
-   connection. Keep schema validation and ordinary request failure handling.
+   connection. Test both timeouts by dropping database responses over an
+   established connection. Keep schema validation and ordinary request failure handling.
 4. In `scripts/kubernetes-database.mjs` and its test, reuse the surviving client
    machine for the account CLI with the existing schema-consumer wrapper,
    synthetic settings and verified TLS. Start sampling before the kill and
@@ -50,6 +52,9 @@ Run the named focused tests, the account regression through `scripts/test-postgr
 and `pnpm typecheck`. In disposable Linux run the existing opt-in publication,
 database, storage and gateway-machine-stop tests with candidate images.
 Record times and remaining checks in `docs/aws-infrastructure.md` and `docs/backlog.md`.
-Estimate 180–250 implementation lines and 145–210 test lines. Cold restart is
-PR 10. Stockholm fault qualification, paid runs and Test Cloud’s separate
-Compose account worker stay outside this slice.
+Estimate 180–250 implementation lines and 145–210 test lines. If the DNS
+steps need more than about 90 minutes to prove, land them first and put account
+recovery before cold restart. Stockholm fault qualification, paid runs and
+Test Cloud’s separate Compose account worker stay outside this slice. The
+email, remote publication and backup worker exit paths remain as they are.
+Measure their Kubernetes restart times in D621’s full-service machine-loss check.
