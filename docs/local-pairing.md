@@ -5,11 +5,12 @@ Cloud's `/connect` page. You need a local manager login with `system.manage` and
 Cloud account permitted to register venues for the chosen business. Enrol a passkey
 or authenticator app in your Cloud account before connecting a box.
 
-1. In Waitron, choose **Connect to Cloud**. Keep the eight-digit code on screen.
-2. Choose **Open Cloud**, sign in and enter that code. Check **Venue name** when
-   the box sends one. Check **Venue identifier** to see **New venue** or the existing
-   Cloud identifier. Choose the business that owns the venue, verify your identity
-   and choose **Approve this venue**.
+1. In Waitron, choose **Connect to Cloud**, then **Open Cloud**.
+2. Sign in to Cloud. It checks the code from the link and shows the venue. If
+   Cloud asks for a code, enter the eight-digit code shown in Waitron.
+   Check **Venue name** when the box sends one. Check **Venue identifier** to see
+   **New venue** or the existing Cloud identifier. Choose the business that owns
+   the venue, verify your identity if Cloud asks, and choose **Approve this venue**.
    One verification covers sensitive actions in that session for ten minutes.
    The approved page repeats the venue, installation type, organisation and legal
    business and links back to your Cloud account.
