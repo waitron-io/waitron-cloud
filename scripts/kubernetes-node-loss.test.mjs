@@ -5,11 +5,11 @@ import test from 'node:test';
 
 import {retryApi, runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
 
-function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined, readTimeout = false, leaseTimeout = false} = {}) {
+function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined, readTimeout = false, leaseTimeout = false, cold = false, cancelWhileDown = false, apiSurvives = false, invalidProbe = false} = {}) {
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
   let label, removed = false, pod, expectStaleLease = leaseTimeout;
-  const starts = new Set();
-  let dnsReads = 0;
+  const starts = new Set(), refreshed = new Set();
+  let dnsReads = 0, outageProbes = 0;
   const names = ['control-plane', 'control-plane2', 'control-plane3'];
   const execute = async (binary, args, options) => {
     calls.push({binary, args, options});
@@ -49,11 +49,28 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
           leaseTimeout = false;
           throw Error('Unable to connect to the server: context deadline exceeded');
         }
+        if (cold) {
+          const fresh = starts.has(id) && refreshed.has(id);
+          if (starts.has(id)) refreshed.add(id);
+          return JSON.stringify({spec: {renewTime: fresh ? '2026-11-18T09:00:03Z' : '2026-11-18T09:00:00Z'}});
+        }
         const fresh = starts.has(id) && !expectStaleLease;
         if (starts.has(id)) expectStaleLease = false;
         return JSON.stringify({spec: {renewTime: fresh ? '2026-11-18T09:00:01Z' : '2026-11-18T09:00:00Z'}});
       }
-      if (verb === 'get' && kind === '--raw=/readyz') return 'ok';
+      if (verb === 'get' && kind === '--raw=/readyz') {
+        if (cold && !apiSurvives && [...containers.values()].filter(row => !row.State.Running).length === 3) {
+          if (cancelWhileDown) {
+            process.emit('SIGTERM');
+            throw Error('kubectl failed (ABORT_ERR, limit 15000ms)');
+          }
+          if (invalidProbe) throw Error('kubectl failed (SIGKILL, limit 15000ms)');
+          const errors = ['Unable to connect to the server: EOF',
+            'The connection to the server 127.0.0.1:59876 was refused - did you specify the right host or port?'];
+          throw Error(errors[outageProbes++ % 2]);
+        }
+        return 'ok';
+      }
       if (verb === 'patch' && kind === 'deployment' && args[5] === 'coredns') return 'deployment.apps/coredns patched';
       if (verb === 'rollout' && kind === 'status' && args[5] === 'deployment/coredns') return 'deployment "coredns" successfully rolled out';
       if (verb === 'patch' && kind === 'service' && args[5] === 'kube-dns') return 'service/kube-dns patched';
@@ -117,6 +134,22 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
     if (verb === 'exec') return args.at(-1) === 'health' ? '127.0.0.1:2379 is healthy' :
       names.map((suffix, i) => `0123456789abcde${rejoin === 'member' && starts.size && i === 0 ? 9 : i}, started, ${label}-${suffix}, https://unused:2380, https://unused:2379, false`).join('\n');
     if (verb === 'logs') return 'synthetic container log';
+    if (cold && ['update', 'kill', 'start'].includes(verb)) {
+      for (const id of args.slice(verb === 'start' ? 1 : 2)) {
+        const row = containers.get(id);
+        assert.ok(row && !row.Name.endsWith('-external-load-balancer'), 'operate only on fixture nodes');
+        if (verb === 'kill') {
+          Object.assign(row.State, {Running: restarts && id.startsWith('3'), FinishedAt: '2026-11-18T09:00:01Z'});
+          if (!row.State.Running) row.NetworkSettings.Networks[label].IPAddress = '';
+        }
+        if (verb === 'start') {
+          assert.ok(!row.State.Running);
+          Object.assign(row.State, {Running: true, StartedAt: '2026-11-18T09:00:02Z'});
+          starts.add(id);
+        }
+      }
+      return '';
+    }
     const node = containers.get(args.at(-1));
     assert.ok(node, args.join(' '));
     if (verb === 'update') assert.equal(second, '--restart=no');
@@ -127,6 +160,7 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
     return '';
   };
   return {calls, execute, removed: () => removed, remaining: () => containers.size,
+    markForeign: id => {containers.get(id).Config.Labels['io.x-k8s.kind.cluster'] = 'foreign';},
     mutations: verb => calls.filter(row => row.binary === 'docker' && row.args[0] === verb).map(row => row.args.at(-1))};
 }
 
@@ -368,3 +402,70 @@ test('a scratch unmount failure preserves the service failure', async t => {
     return true;
   });
 });
+
+test('cold restart sees the full outage before starting the same nodes and waits for fresh leases', async () => {
+  const f = fixture({cold: true});
+  const result = await runCheck({execute: f.execute, coldRestart: ({restartAll}) => restartAll()});
+  const ids = ['1', '2', '3'].map(digit => digit.repeat(64));
+  const stop = f.calls.findIndex(({args}) => args[0] === 'kill');
+  const start = f.calls.findIndex(({args}) => args[0] === 'start');
+  const waits = f.calls.slice(stop + 1, start).filter(({args}) => args.includes('--raw=/readyz'));
+  assert.deepEqual(f.calls[stop].args, ['kill', '--signal=SIGKILL', ...ids]);
+  assert.deepEqual(f.calls[start].args, ['start', ...ids]);
+  assert.equal(waits.length, 2);
+  const addresses = f.calls.slice(stop + 1, start).filter(({args}) => args[0] === 'network' && args[1] === 'connect');
+  assert.deepEqual(addresses.map(({args}) => args.slice(4)), [['172.30.250.2', ids[0]], ['172.30.250.3', ids[1]], ['172.30.250.4', ids[2]]]);
+  const afterStart = f.calls.slice(start + 1);
+  const ready = afterStart.findIndex(({args}) => args.includes('--for=condition=Ready'));
+  assert.ok(ready >= 0);
+  assert.ok(result.coldRestart.recoveryMs >= 0);
+  for (const {name} of result.nodes) {
+    assert.equal(afterStart.slice(0, ready).filter(({args}) => args.includes('lease') && args.includes(name)).length, 2);
+  }
+  assert.equal(f.remaining(), 0);
+  assert.ok(f.removed());
+});
+
+for (const [mode, reason] of [
+  ['restarts', /container_still_running/],
+  ['apiSurvives', /api_still_ready/], ['cancelWhileDown', /aborted/i],
+]) {
+  test(`cold restart refuses to start nodes after ${mode} and cleans up its own resources`, async () => {
+    const f = fixture({cold: true, [mode]: true});
+    await assert.rejects(runCheck({execute: f.execute, coldRestart: ({restartAll}) => restartAll()}), reason);
+    assert.deepEqual(f.mutations('start'), []);
+    assert.equal(f.remaining(), 0);
+    assert.ok(f.removed());
+  });
+}
+
+test('cold restart keeps the original diagnostic when the host probe itself fails', async () => {
+  const f = fixture({cold: true, invalidProbe: true});
+  await assert.rejects(runCheck({execute: f.execute, coldRestart: ({restartAll}) => restartAll()}), {
+    message: 'kubectl failed (SIGKILL, limit 15000ms)',
+  });
+  assert.deepEqual(f.mutations('start'), []);
+  assert.equal(f.remaining(), 0);
+});
+
+test('cold restart verifies ownership again before sending any stop command', async () => {
+  const f = fixture({cold: true});
+  const foreignId = '3'.repeat(64);
+  await assert.rejects(runCheck({execute: f.execute, coldRestart: ({restartAll}) => {
+    f.markForeign(foreignId);
+    return restartAll();
+  }}), /container_ownership/);
+  assert.deepEqual(f.mutations('update'), []);
+  assert.deepEqual(f.mutations('kill'), []);
+  assert.ok(!f.mutations('rm').includes(foreignId));
+  assert.equal(f.remaining(), 1);
+});
+
+for (const [rejoin, reason] of [['node', /node_identity/], ['member', /etcd_identity/]]) {
+  test(`cold restart rejects a changed ${rejoin} identity`, async () => {
+    const f = fixture({cold: true, rejoin});
+    await assert.rejects(runCheck({execute: f.execute, coldRestart: ({restartAll}) => restartAll()}), reason);
+    assert.equal(f.remaining(), 0);
+    assert.ok(f.removed());
+  });
+}
