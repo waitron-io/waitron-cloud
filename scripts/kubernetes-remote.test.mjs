@@ -35,7 +35,7 @@ test('publication workers start away from the account and database primary and u
       if (value.metadata?.name !== 'remote-worker') return;
       assert.equal(value.kind, 'Deployment');
       assert.equal(value.spec.replicas, 1);
-      assert.deepEqual(placement, ['cordon database-node']);
+      assert.deepEqual(placement, ['taint nodes database-node waitron.cloud/publication-primary=held:NoSchedule']);
       const {affinity} = value.spec.template.spec;
       assert.deepEqual(affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
         [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: ['account-node']}]}]);
@@ -44,7 +44,10 @@ test('publication workers start away from the account and database primary and u
       throw placed;
     },
   }), error => error === placed);
-  assert.deepEqual(placement, ['cordon database-node', 'uncordon database-node']);
+  assert.deepEqual(placement, [
+    'taint nodes database-node waitron.cloud/publication-primary=held:NoSchedule',
+    'taint nodes database-node waitron.cloud/publication-primary:NoSchedule-',
+  ]);
 });
 
 test('handover can use the fractional time left after pausing the election', async () => {

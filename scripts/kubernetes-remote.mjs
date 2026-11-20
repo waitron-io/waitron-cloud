@@ -147,9 +147,10 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     return spec.nodeName;
   }
   const primaryAtPlacement = stopGatewayNode ? accountNode : await databasePrimaryNode(signal);
-  // Exclude the primary until the first worker is Ready, then admit the other replica without replacing the first.
-  const cordonPrimary = primaryAtPlacement !== accountNode;
-  if (cordonPrimary) await call(['cordon', primaryAtPlacement], signal);
+  // A cordon asks CloudNativePG to move the primary. Reserve its node with a scheduling taint instead.
+  const primaryPlacementTaint = 'waitron.cloud/publication-primary';
+  const holdPrimary = primaryAtPlacement !== accountNode;
+  if (holdPrimary) await call(['taint', 'nodes', primaryAtPlacement, primaryPlacementTaint + '=held:NoSchedule'], signal);
   let originalWorker;
   try {
     await create({apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'remote-worker'}, spec: {
@@ -162,7 +163,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
     assert.notEqual(originalWorker.spec.nodeName, primaryAtPlacement, 'remote.publication_worker_on_database_primary');
   } finally {
-    if (cordonPrimary) await kube(['uncordon', primaryAtPlacement], undefined, true);
+    if (holdPrimary) await kube(['taint', 'nodes', primaryAtPlacement, primaryPlacementTaint + ':NoSchedule-'], undefined, true);
   }
   const trust = createPublicKey(bootstrap['gateway-issuer.pem']);
   async function readPublication(limit) {
