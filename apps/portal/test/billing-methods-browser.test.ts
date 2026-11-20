@@ -62,8 +62,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
 });
 
 for(const [locale,button,instruction] of [
- ['en','Add or switch test card',/monthly payments.*Save for future payments/i],
- ['es','Añadir o cambiar tarjeta de prueba',/pagos mensuales.*Guardar para pagos futuros/i],
+ ['en','Add or switch test card',/monthly payments.*\bturn on\b.*Save for future payments/i],
+ ['es','Añadir o cambiar tarjeta de prueba',/pagos mensuales.*\bactiva\b.*Guardar para pagos futuros/i],
 ] as const)test(`${locale}: the card consent instruction appears immediately above the open form`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
@@ -75,6 +75,21 @@ for(const [locale,button,instruction] of [
   const guidance=page.getByText(instruction);
   await guidance.waitFor();
   assert.equal(await guidance.evaluate(element=>element.nextElementSibling?.localName),'billing-card');
+ }finally{await browser.close();}
+});
+
+test('a widget refusal keeps the card form and earlier method without verifying',async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage({locale:'en'});page.setDefaultTimeout(5000);
+  const server=await fixture(page);await page.goto('https://portal.test/account/billing');
+  await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();
+  const frame=page.locator('billing-card iframe');await frame.waitFor();
+  await page.evaluate(()=>(window as any).cardReply('invalid',{error_code:'INVALID',message:'Submitted invalid data'}));
+  await page.waitForFunction(() => !(window as any).app.billing.pending);
+  assert.equal(server.verifies,0);
+  assert.ok(await page.getByText('Saved method: Direct debit',{exact:true}).isVisible());
+  assert.ok(await frame.isVisible());
  }finally{await browser.close();}
 });
 
