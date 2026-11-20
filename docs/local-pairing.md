@@ -48,10 +48,11 @@ values when the check is finished.
 
 From a Waitron test build with setup pairing, open **Cloud services** and start
 sign-in. Use an existing Cloud account with a passkey or authenticator app.
-The same tab returns to your box. Saving the venue creates a new Cloud venue
-under the matching business. Cloud compares tax numbers without spaces or
-hyphens and keeps the number as entered. Choose **Back to Waitron** to leave
-sign-in and try again from the box.
+The same tab returns to your box and Cloud files the saved venue under the
+matching business. Cloud ignores spaces and hyphens when it compares tax
+numbers and keeps the number as entered. If your only business still has
+an empty tax number and no venues, Cloud uses it and saves the number from
+your box. Choose **Back to Waitron** to leave sign-in and try again from the box.
 
 ## Run the local integration proof
 

@@ -48,7 +48,10 @@ interface SignIn {
 }
 
 const codeHash = (value: string) => createHash('sha256').update(value).digest('hex');
-const credentialHash = (session: SignIn) => session.password_hash === null ? null : codeHash(session.password_hash);
+type SignInAuthority = Pick<SignIn, 'id' | 'action_security_revision' | 'password_hash'>;
+type AttemptAuthority = Pick<Attempt, 'cloud_session_id' | 'cloud_security_revision' | 'credential_hash'>;
+
+const credentialHash = (session: SignInAuthority) => session.password_hash === null ? null : codeHash(session.password_hash);
 const unavailable = () => new PairingError('pairing_unavailable');
 const now = async (client: PoolClient): Promise<Date> =>
   (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
@@ -79,7 +82,7 @@ function returnToBox(row: Attempt, requestId: string, params: {code: string} | {
   return {returnUrl: callback.href};
 }
 
-function sameAuthority(row: Attempt, session: SignIn) {
+function sameAuthority(row: AttemptAuthority, session: SignInAuthority) {
   return row.cloud_session_id === session.id && row.cloud_security_revision === session.action_security_revision
     && row.credential_hash === credentialHash(session);
 }
@@ -99,7 +102,7 @@ async function boundSession(client: PoolClient, row: Attempt, filing: boolean) {
 const normaliseTaxNumber = (value: string) => value.toUpperCase().replace(/[\s-]/g, '');
 
 async function businessForVenue(client: PoolClient, accountId: string, countryCode: string, taxNumber: string, legalName: string) {
-  // The organisation locks serialize two owners filing venues for the same business.
+  // Keep the organisation and permission stable while filing, in the same lock order as owner transfer.
   const organisations = (await client.query<{id: string}>(`SELECT o.id FROM organisation_memberships m
     JOIN organisations o ON o.id=m.organisation_id
     WHERE m.account_id=$1 AND m.is_owner AND m.can_register_venues AND ${organisationScopeSql('m.account_id','o.id')}
@@ -115,7 +118,20 @@ async function businessForVenue(client: PoolClient, accountId: string, countryCo
   }
   if (organisations.length > 1) throw new RegistrationError('business_match_ambiguous');
   let organisationId = organisations[0]?.id;
-  if (!organisationId) {
+  if (organisationId) {
+    const blank = (await client.query<{id: string}>(`WITH known AS (
+      SELECT b.id FROM legal_businesses b JOIN organisation_memberships m USING (organisation_id)
+      WHERE m.account_id=$1 AND ${organisationScopeSql('m.account_id','b.organisation_id')} LIMIT 2
+    ) SELECT b.id FROM legal_businesses b JOIN known k USING (id)
+      WHERE (SELECT count(*) FROM known)=1 AND b.organisation_id=$2 AND b.country_code=$3 AND b.tax_number IS NULL
+      FOR UPDATE OF b`, [accountId, organisationId, countryCode])).rows[0];
+    if (blank) {
+      // The business lock holds off venue foreign-key checks until filing commits.
+      const updated = await client.query(`UPDATE legal_businesses SET tax_number=$2 WHERE id=$1
+        AND NOT EXISTS (SELECT 1 FROM venues WHERE legal_business_id=$1)`, [blank.id, taxNumber || null]);
+      if (updated.rowCount) return {organisationId, legalBusinessId: blank.id};
+    }
+  } else {
     const hasScope = await client.query(`SELECT 1 FROM cloud_accounts a WHERE a.id=$1
       AND to_jsonb(a)->>'recovery_organisation_id' IS NULL
       AND NOT EXISTS (SELECT 1 FROM organisation_memberships WHERE account_id=a.id)`, [accountId]);
@@ -260,12 +276,23 @@ export class SetupPairingStore {
   }
 
   async status({requestId, publicKey}: PairingV4Claims & {action: 'status'}) {
-    const row = (await this.#pool.query<Pick<Attempt, 'redeemed_at' | 'expires_at' | 'result'>>(`SELECT redeemed_at,expires_at,result
-      FROM setup_pairing_attempts a WHERE id=$1 AND public_key=$2 AND cancelled_at IS NULL
-      AND ((result IS NULL AND expires_at > clock_timestamp()) OR EXISTS (
+    const row = (await this.#pool.query<Pick<Attempt, 'redeemed_at' | 'expires_at' | 'result'> & AttemptAuthority & {
+      session_id: string | null; action_security_revision: number; password_hash: string | null;
+    }>(`SELECT a.redeemed_at,a.expires_at,a.result,a.cloud_session_id,a.cloud_security_revision,a.credential_hash,
+        s.id AS session_id,s.action_security_revision,c.password_hash
+      FROM setup_pairing_attempts a
+      LEFT JOIN cloud_accounts owner ON owner.id=a.cloud_account_id AND owner.disabled_at IS NULL
+      LEFT JOIN cloud_sessions s ON s.id=a.cloud_session_id AND s.account_id=owner.id AND s.ended_at IS NULL
+      LEFT JOIN cloud_credentials c ON c.account_id=owner.id
+      WHERE a.id=$1 AND a.public_key=$2 AND a.cancelled_at IS NULL
+      AND ((a.result IS NULL AND a.expires_at > clock_timestamp()) OR EXISTS (
         SELECT 1 FROM installations i WHERE i.id=(a.result->>'installationId')::uuid AND i.revoked_at IS NULL))`,
     [requestId, publicKey])).rows[0];
     if (!row) throw unavailable();
-    return row.result ? completedView(requestId, row.expires_at, row.result) : statusView(requestId, row);
+    if (row.result) return completedView(requestId, row.expires_at, row.result);
+    if (row.redeemed_at && (!row.session_id || !sameAuthority(row, {
+      id: row.session_id, action_security_revision: row.action_security_revision, password_hash: row.password_hash,
+    }))) throw unavailable();
+    return statusView(requestId, row);
   }
 }

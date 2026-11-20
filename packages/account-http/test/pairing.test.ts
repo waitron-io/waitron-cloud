@@ -96,8 +96,7 @@ test('signed setup pairing status recovers a lost start reply', async () => {
 });
 
 
-async function signInForSetup(target: typeof app, keysForAuthenticator: ReturnType<typeof setupBox>['keysForAuthenticator'],
-  pairing: {requestId: string; state: string; codeChallenge: string}) {
+async function setupFactorChallenge(target: typeof app, keysForAuthenticator: ReturnType<typeof setupBox>['keysForAuthenticator']) {
   const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
   const encrypted = encryptFactorSecret(secret, keysForAuthenticator, {accountId: owner.accountId, version: 1, purpose: 'active'});
   await db.pool.query(`INSERT INTO cloud_authenticator_factors (account_id,version,secret_generation,secret_envelope)
@@ -105,8 +104,13 @@ async function signInForSetup(target: typeof app, keysForAuthenticator: ReturnTy
   const login = await request('/api/account/login', {email: 'owner@example.test', password}, {origin}, target);
   assert.equal(login.status, 202);
   const {challengeToken} = await login.json();
+  return {challengeToken, proof: {kind: 'totp', code: actionTestTotp(secret)}};
+}
+
+async function signInForSetup(target: typeof app, keysForAuthenticator: ReturnType<typeof setupBox>['keysForAuthenticator'],
+  pairing: {requestId: string; state: string; codeChallenge: string}) {
   const fresh = await request('/api/account/login/factor', {
-    challengeToken, proof: {kind: 'totp', code: actionTestTotp(secret)}, setupPairing: pairing,
+    ...await setupFactorChallenge(target, keysForAuthenticator), setupPairing: pairing,
   }, {origin}, target);
   assert.equal(fresh.status, 200, JSON.stringify(await fresh.clone().json()));
   const sessionCookies = fresh.headers.getSetCookie().map(item => item.split(';')[0]!).join('; ');
@@ -114,6 +118,18 @@ async function signInForSetup(target: typeof app, keysForAuthenticator: ReturnTy
 
   return {cookie: sessionCookies, 'x-csrf-token': sessionCsrf};
 }
+
+test('a refused setup sign-in keeps the spent authenticator attempt', async () => {
+  const {target, requestId, state, challenge, keysForAuthenticator} = setupBox();
+  const factor = await setupFactorChallenge(target, keysForAuthenticator);
+  const reply = await request('/api/account/login/factor', {
+    ...factor, setupPairing: {requestId, state, codeChallenge: challenge},
+  }, {origin}, target);
+  assert.equal(reply.status, 400);
+  assert.deepEqual(await reply.json(), {error: 'pairing_unavailable'});
+  assert.deepEqual((await db.pool.query('SELECT attempts, consumed_at FROM cloud_factor_login_challenges')).rows,
+    [{attempts: 1, consumed_at: null}]);
+});
 
 test('setup pairing accepts only the signed-in session and redeems its code once', async () => {
   const {target, start, signed, requestId, redirectUri, state, challenge, verifier, keysForAuthenticator} = setupBox();
@@ -141,6 +157,11 @@ test('setup pairing accepts only the signed-in session and redeems its code once
   const replay = await redeem(verifier);
   assert.equal(replay.status, 400);
   assert.deepEqual(await replay.json(), {error: 'pairing_unavailable'});
+
+  assert.equal((await request('/api/account/logout', {}, {origin, ...browserHeaders}, target)).status, 204);
+  const afterSignOut = await request('/api/pairing/status', signed('status', []), {}, target);
+  assert.equal(afterSignOut.status, 400);
+  assert.deepEqual(await afterSignOut.json(), {error: 'pairing_unavailable'});
 });
 
 
@@ -170,7 +191,8 @@ test('setup pairing accepts the maximum Unicode venue details in a signed body',
 test('setup pairing cancel returns to the bound box without an account', async () => {
   const {target, start, signed, requestId, redirectUri, state} = setupBox();
   assert.equal((await request('/api/pairing/start', start, {}, target)).status, 200);
-  const cancel = await request('/api/account/pairing/cancel', {requestId, state}, {origin}, target);
+  const cancelPairing = () => request('/api/account/pairing/cancel', {requestId, state}, {origin}, target);
+  const cancel = await cancelPairing();
   assert.equal(cancel.status, 200);
   const callback = new URL((await cancel.json()).returnUrl);
   assert.equal(callback.origin + callback.pathname, redirectUri);
@@ -178,6 +200,10 @@ test('setup pairing cancel returns to the bound box without an account', async (
   const status = await request('/api/pairing/status', signed('status', []), {}, target);
   assert.equal(status.status, 400);
   assert.deepEqual(await status.json(), {error: 'pairing_unavailable'});
+  for (let i = 1; i < 60; i++) assert.equal((await cancelPairing()).status, 200);
+  const limited = await cancelPairing();
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
 });
 
 

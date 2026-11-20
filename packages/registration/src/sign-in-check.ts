@@ -1,4 +1,5 @@
 import {createSession, IdentityError} from '@waitron-cloud/identity';
+import {PairingError} from './pairing-proof.ts';
 import type {SetupPairingSignIn} from './setup-pairing.ts';
 import {transaction} from './transaction.ts';
 import {consumeAccountRecoveryCode} from './account-recovery-codes.ts';
@@ -77,11 +78,11 @@ export async function completeSignInCheck(pool: Pool, token: string, code: strin
       if ((await client.query('SELECT clock_timestamp() >= $1::timestamptz AS expired',[check.expires_at])).rows[0].expired) throw new SignInCheckError();
       return {...credentials,...(browserToken ? {browserToken} : {})};
     } catch (error) {
-      if (!(error instanceof SignInCheckError) && !(error instanceof IdentityError)) throw error;
+      if (!(error instanceof SignInCheckError) && !(error instanceof IdentityError) && !(error instanceof PairingError)) throw error;
       await client.query('ROLLBACK TO SAVEPOINT email_sign_in_effects');
-      return new SignInCheckError();
+      return error instanceof PairingError ? error : new SignInCheckError();
     }
   });
-  if (result instanceof SignInCheckError) throw result;
+  if (result instanceof Error) throw result;
   return result;
 }

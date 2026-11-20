@@ -33,37 +33,63 @@ beforeEach(async()=>{
   session=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));
   await prepareConnectionProof(db.pool,owner.accountId,session.token);
 });
+async function boundSetupBox(store: SetupPairingStore, taxNumber: string, venueName: string) {
+  const redirectUri = 'https://box.example.test/cloud/pairing/callback';
+  const {origin, requestId, publicKey, issuedAt} = machine();
+  const base = {origin, requestId, publicKey, issuedAt};
+  const state = randomBytes(32).toString('base64url');
+  const verifier = randomBytes(32).toString('base64url');
+  const codeChallenge = createHash('sha256').update(verifier).digest('base64url');
+  const context = {requestId, state, codeChallenge};
+  const settings = {publicKey, redirectUri};
+  await store.start({...base, action: 'start', args: [redirectUri, state, codeChallenge]});
+  const fresh = await transaction(db.pool, async client => {
+    const credentials = await createSession(client, owner.accountId);
+    await store.signIn(context, settings)(client, credentials);
+    return credentials;
+  });
+  const {returnUrl} = await store.authorize(context, settings, fresh.token, fresh.csrfToken);
+  await store.redeem({...base, action: 'redeem', args: [new URL(returnUrl).searchParams.get('code')!, verifier]}, settings);
+  const complete: PairingV4Claims & {action: 'complete'} = {
+    ...base, action: 'complete', args: ['ES', venueName, ['Calle Sol 9', '', '28001', 'Madrid', 'Madrid'], taxNumber, 'Café Luna SL'],
+  };
+  return {base, complete, settings};
+}
+
+test('setup pairing uses the empty business created at signup and fills its tax number', async () => {
+  const store = new SetupPairingStore(db.pool);
+  const box = await boundSetupBox(store, 'B-1234 5678', 'Café Sol');
+  const result = await store.complete(box.complete, box.settings, 'ES');
+  assert.equal(result.registration.legalBusinessId, owner.legalBusinessId);
+  assert.deepEqual((await db.pool.query('SELECT id, tax_number FROM legal_businesses')).rows,
+    [{id: owner.legalBusinessId, tax_number: 'B-1234 5678'}]);
+});
+
+for (const existing of ['venue', 'different tax number']) {
+  test(`setup pairing creates another business when the sole prior business has a ${existing}`, async () => {
+    const oldTax = existing === 'venue' ? null : 'B98765432';
+    if (oldTax) await db.pool.query('UPDATE legal_businesses SET tax_number=$2 WHERE id=$1', [owner.legalBusinessId, oldTax]);
+    else await db.pool.query(`INSERT INTO venues (id, organisation_id, legal_business_id, environment)
+      VALUES ($1,$2,$3,'test')`, [randomUUID(), owner.organisationId, owner.legalBusinessId]);
+    const store = new SetupPairingStore(db.pool);
+    const box = await boundSetupBox(store, 'B12345678', 'Café Sol');
+    const result = await store.complete(box.complete, box.settings, 'ES');
+    assert.notEqual(result.registration.legalBusinessId, owner.legalBusinessId);
+    const rows = (await db.pool.query('SELECT id, tax_number FROM legal_businesses')).rows;
+    assert.equal(rows.length, 2);
+    assert.equal(rows.find(row => row.id === owner.legalBusinessId)?.tax_number, oldTax);
+  });
+}
+
 test('setup pairing files two new venues under one business and preserves its billing details', async () => {
   const a = new SetupPairingStore(db.pool), b = new SetupPairingStore(db.secondPool);
-  const redirectUri = 'https://box.example.test/cloud/pairing/callback';
   const originalAddress = 'Calle Olivo 11';
   await db.pool.query('UPDATE legal_businesses SET tax_number=$2, billing_address=$3 WHERE id=$1',
     [owner.legalBusinessId, 'B-1234 5678', originalAddress]);
 
-  async function boundBox(taxNumber: string, venueName: string) {
-    const {origin, requestId, publicKey, issuedAt} = machine();
-    const base = {origin, requestId, publicKey, issuedAt};
-    const state = randomBytes(32).toString('base64url');
-    const verifier = randomBytes(32).toString('base64url');
-    const codeChallenge = createHash('sha256').update(verifier).digest('base64url');
-    const context = {requestId, state, codeChallenge};
-    const settings = {publicKey, redirectUri};
-    await a.start({...base, action: 'start', args: [redirectUri, state, codeChallenge]});
-    const fresh = await transaction(db.pool, async client => {
-      const credentials = await createSession(client, owner.accountId);
-      await a.signIn(context, settings)(client, credentials);
-      return credentials;
-    });
-    const {returnUrl} = await a.authorize(context, settings, fresh.token, fresh.csrfToken);
-    await a.redeem({...base, action: 'redeem', args: [new URL(returnUrl).searchParams.get('code')!, verifier]}, settings);
-    const complete: PairingV4Claims & {action: 'complete'} = {
-      ...base, action: 'complete', args: ['ES', venueName, ['Calle Sol 9', '', '28001', 'Madrid', 'Madrid'], taxNumber, 'Café Luna SL'],
-    };
-    return {base, complete, settings};
-  }
 
-  const first = await boundBox('B-1234 5678', 'Café Sol');
-  const second = await boundBox('B12345678', 'Café Luna');
+  const first = await boundSetupBox(a, 'B-1234 5678', 'Café Sol');
+  const second = await boundSetupBox(a, 'B12345678', 'Café Luna');
   const [one, duplicate, two] = await Promise.all([
     a.complete(first.complete, first.settings, 'ES'),
     b.complete(first.complete, first.settings, 'ES'),
@@ -79,12 +105,21 @@ test('setup pairing files two new venues under one business and preserves its bi
     WHERE organisation_id=$1 GROUP BY event_type ORDER BY event_type`, [owner.organisationId])).rows;
   assert.deepEqual(events, [{event_type: 'pairing.cloud_approved', count: 2}, {event_type: 'pairing.local_approved', count: 2}]);
   await db.pool.query("UPDATE setup_pairing_attempts SET expires_at=clock_timestamp() WHERE id=$1", [first.base.requestId]);
+  await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1', [owner.accountId]);
   const status = {...first.base, action: 'status', args: []} as const;
   const recovered = await b.status(status);
   assert.equal(recovered.state, 'complete');
   assert.deepEqual(recovered.registration, one.registration);
   await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1', [one.registration.installationId]);
   await unavailable(b.status(status));
+});
+
+test('setup pairing refuses a venue registrar without business ownership', async () => {
+  const store = new SetupPairingStore(db.pool);
+  const box = await boundSetupBox(store, 'B12345678', 'Café Girasol');
+  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',
+    [owner.accountId, owner.organisationId]);
+  await assert.rejects(() => store.complete(box.complete, box.settings, 'ES'), /permission_denied/);
 });
 
 test('an empty request creates one Cloud venue and keeps its empty binding across concurrent retries',async()=>{

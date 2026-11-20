@@ -61,6 +61,7 @@ export async function pairingResponse(c:Context,options:{pool:Pool;pairingCodeKe
   }
   if(c.req.method==='POST'&&c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
   if (setup && action === 'cancel') {
+    await consume([{scope: 'pairing-cancel-ip', subject: ip, limit: 60, windowSeconds: 60}]);
     const body = await readAccountBody(c.req.raw, ['requestId','state']);
     return c.json(await new SetupPairingStore(pool).cancel(body.requestId!, body.state!, setup));
   }

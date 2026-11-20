@@ -5,6 +5,7 @@ import {createSession, decryptFactorSecret, IdentityError, matchedTotpSteps, req
 import {issueSignInCheck, completeSignInCheck, recognisedBrowser, SignInCheckError, type EmailSignInChallenge} from './sign-in-check.ts';
 import type {EmailOutbox} from './email-outbox.ts';
 import type {AccountLocale} from './account-input.ts';
+import {PairingError} from './pairing-proof.ts';
 import type {SetupPairingSignIn} from './setup-pairing.ts';
 import {transaction} from './transaction.ts';
 import {consumeAccountRecoveryCode} from './account-recovery-codes.ts';
@@ -148,13 +149,13 @@ export class PasswordLoginStore {
         if (await factorNow(client) >= proofDeadline) throw new FactorError();
         return credentials;
       } catch (error) {
-        if (!(error instanceof FactorError) && !(error instanceof IdentityError)) throw error;
+        if (!(error instanceof FactorError) && !(error instanceof IdentityError) && !(error instanceof PairingError)) throw error;
         await client.query('ROLLBACK TO SAVEPOINT factor_effects');
-        return error instanceof FactorError ? error : new FactorError();
+        return error instanceof IdentityError ? new FactorError() : error;
       }
     });
     // Throw outside the transaction: rolling back a refusal would restore its attempt budget.
-    if (result instanceof FactorError) throw result;
+    if (result instanceof Error) throw result;
     return result;
   }
 }
