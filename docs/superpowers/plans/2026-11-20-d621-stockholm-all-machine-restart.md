@@ -13,22 +13,25 @@ The watcher assigned this slice on 20 November at 21:10 in Lane G's `questions.m
   the latter. Reserve 20 minutes of the 145 before deletion. Aim for 4 minutes to confirm
   the stop and outage, 5 to start and reach a live API, 4 for data readiness and 5 for
   client checks and restore. Finish by minute 143 with two minutes to spare. Enforce
-  the deadline on commands. Refuse a late stop and delete on failure or cancellation.
+  the deadline inside the Amazon command wrapper, including active wait commands.
+  Refuse a late stop and delete on failure or cancellation.
   Record individual stop and boot times to compare against the estimate.
 - Save the exact stack's instance IDs, volumes and boot IDs. Stop all three without
   OS shutdown in one request. Confirm all three are stopped, prove the outage, then
-  start the same IDs in one request. Read all new addresses together, refresh the
-  existing SSH and tunnel routes and verify instance identity through the metadata
-  service. Check retained volumes and private addresses, changed boot IDs, fresh node
+  start the same IDs in one request. Read all new addresses together and check their
+  uniqueness. Close old SSH sessions and refresh tunnel routes. Verify identity through
+  the metadata service. Check retained volumes, private addresses, changed boot IDs, fresh node
   leases and API readiness before checking services.
 - Add the missing start permission in `deploy/kubernetes/bounded-amazon/setup/launcher-policy.json`
   under the existing account, region and D618 tag scope. The guide has the owner verify
   stop and start for tagged instances and refusal outside that scope before launch.
   Instance IDs are assigned at launch. All launcher calls use only the exact stack's
-  instances. Independent expiry and failure deletion retain their existing authority.
+  instances. The budget backstop denies new stacks. Restart and both deletion paths
+  keep their existing authority once the start grant is installed.
 - In `deploy/kubernetes/bounded-amazon/bootstrap.sh`, reuse the verifier scratch setup
-  at boot and require its mounts before kubelet. Preserve the existing disk, 1 GiB limit
-  and UID/GID 1000. Check retained files and required mounts. Keep B/C's staging share released.
+  at boot and require its mounts before kubelet. Mount once, preserving the existing
+  disk, 1 GiB limit and UID/GID 1000. Restarts verify the mounts and retained files.
+  Keep B/C's staging share released.
 - First fail `scripts/amazon-run.test.mjs` cases for a live venue past the single-stop
   cutoff, bounded cold commands, exact IDs and ordering, refreshed addresses and disks,
   policy scope and cleanup on start denial or cancellation. First fail
@@ -39,9 +42,10 @@ The watcher assigned this slice on 20 November at 21:10 in Lane G's `questions.m
 
 - Wire the existing Kind restart through `scripts/kubernetes-node-loss.mjs` and
   `scripts/kubernetes-check.mjs` into the existing measured services journey. Keep its
-  standalone identity checks. Restore the mesh after boot. Exercise the full sequence
-  on one disposable Linux venue with verified cleanup. Keep the shortened local holds
-  and do a final timed dry run separately on the landed tree.
+  standalone identity checks. Restore the mesh after boot. On disposable Linux, run
+  `TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test scripts/kubernetes-services.test.mjs`
+  with pinned images, shortened local holds and verified cleanup. Kind uses a host
+  mount. The mocked tests cover Amazon boot mounts, policy and changed addresses.
 - In `scripts/kubernetes-services.mjs`, require the same account, store, staff and public
   probes to work before the stop and show fresh transport failure while all are off.
   Confirm the outside observer can still reach the machine control path while probing.
