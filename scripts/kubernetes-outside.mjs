@@ -135,7 +135,10 @@ export async function prepareKindOutsideBaseline({prepareBundle = prepareFluxBun
     {input, signal: cleanup ? null : limit ?? signal, timeout: 180_000});
   const controllersPath = await prepareBundle(directory, cluster, {run: execute, node: nodes[0].name});
   for (const {upstream, tag} of fluxImages(cluster)) {
-    const cached = await run('docker', ['image', 'inspect', upstream]).then(() => true, () => false);
+    const cached = await run('docker', ['image', 'inspect', upstream]).then(() => true, error => {
+      if (!error.message.includes('No such image: ' + upstream)) throw error;
+      return false;
+    });
     if (!cached) await run('docker', ['pull', upstream], {timeout: 180_000});
     try {
       await run('docker', ['tag', upstream, tag]);

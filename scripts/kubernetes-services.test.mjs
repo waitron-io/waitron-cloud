@@ -92,13 +92,25 @@ test('the Kind baseline keeps a cached controller image and removes the image it
       if (binary !== 'docker') return '';
       if (args[0] === 'inspect') return '123';
       const image = args.at(-1).split('@')[0];
-      if (args[0] === 'image' && args[1] === 'inspect' && image === imageNames.fresh) throw Error('image not cached');
+      if (args[0] === 'image' && args[1] === 'inspect' && image === imageNames.fresh) throw Error('No such image: ' + args.at(-1));
       if (args[0] === 'pull' || args[1] === 'rm') actions.push([args[0], image]);
       return '';
     }});
   await outside.close();
   assert.deepEqual(actions, [['image', 'owned:source-controller'], ['pull', imageNames.fresh],
     ['image', 'owned:kustomize-controller'], ['image', imageNames.fresh]]);
+});
+
+test('the Kind baseline does not pull over a failed image inventory query', async () => {
+  const failure = Error('Docker daemon disconnected');
+  const commands = [];
+  await assert.rejects(prepareKindOutsideBaseline({cluster: 'owned', directory: '/unused',
+    nodes: [{name: 'node-a'}], prepareBundle: async () => 'synthetic-flux.json',
+    run: async (binary, args) => {
+      commands.push([binary, ...args.slice(0, 2)]);
+      throw failure;
+    }}), error => error === failure);
+  assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
 });
 
 test('outside baseline validates its Cloud image before creating a Kind cell', () => {

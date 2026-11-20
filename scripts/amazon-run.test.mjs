@@ -210,6 +210,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       assert.deepEqual(context.nodes.map(node => node.ip), ['10.77.0.1', '10.77.0.2', '10.77.0.3']);
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: 'synthetic-migration'});
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});
+      await context.kube(['-n', 'd621-data', 'exec', '-i', 'pod/service', '--', 'node'], {input: '{"kind":"Secret"}'});
       await context.importVerifierImage('sha256:' + hashes, ['exec', '-i', 'pod/verifier', '--', 'docker', 'load']);
       return {restored: true};
     },
@@ -347,6 +348,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       const removedNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'rm');
       const deletedStack = calls.findIndex(row => row[1] === 'delete-stack');
       assert.ok(removedNetwork >= 0 && removedNetwork < deletedStack, 'one host cleanup failure must not strand the other resource');
+      assert.equal(tunnelCloseAttempts, 2);
+      assert.ok(calls.findIndex(row => row[0] === 'sudo' && row.includes('-X')) > deletedStack);
     }
     if (scenario === 'observer failed after stop') {
       assert.deepEqual(diagnostics.filter(row => row.startsWith('P1 timing ')), [
@@ -400,6 +403,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     const createdNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'create');
     assert.ok(createdNetwork >= 0 && createdNetwork < calls.findIndex(row => row[1] === 'create-stack'));
     assert.match(transports.find(row => row.input === '{"kind": "Secret"}')?.args.at(-1) ?? '', /2>\/dev\/null$/);
+    assert.match(transports.find(row => row.input === '{"kind":"Secret"}')?.args.at(-1) ?? '', /'exec'.*'node'$/);
     assert.equal(calls.some(row => row[1] === 'stop-instances' || row[1] === 'describe-instances'), false);
     assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-storage.mjs')), false);
     assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
@@ -724,7 +728,7 @@ test('the outside baseline installs its host firewall before the tunnel and remo
   await mesh.close();
   assert.equal(calls.filter(args => args[0] === 'wg-quick' && args[1] === 'down').length, 1);
   const removed = calls.slice(calls.findIndex(args => args[0] === 'wg-quick' && args[1] === 'down') + 1);
-  assert.ok(removed.some(args => JSON.stringify(args) === JSON.stringify(inputRule('-D'))));
+  assert.equal(removed.filter(args => JSON.stringify(args) === JSON.stringify(inputRule('-D'))).length, 1);
   assert.deepEqual(removed.filter(args => args.includes('mangle')).at(-3), [...iptables, '-D', ...jump]);
   assert.deepEqual(removed.filter(args => args.includes('mangle')).at(-1), [...iptables, '-X', mesh.interfaceName]);
 });
