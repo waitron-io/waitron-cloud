@@ -2786,9 +2786,13 @@ representation, reserve and permission/commit mappings need E/G engineering acce
 The [guest-menu contract](superpowers/plans/2026-11-14-a670-cloud-guest-menu.md)
 separates stored public pages from live ordering. Its local reader serves
 `GUEST_ORIGIN/m/<venueUuid>`. With `?lang=`, that value alone chooses the page;
-otherwise your phone’s `Accept-Language` preferences apply, in descending positive
-weight and header order on ties. Malformed entries, zero weights and wildcards
-are ignored. For each preference, canonicalize with `Intl.Locale`, strip extensions,
+otherwise your phone’s `Accept-Language` preferences apply. The first 32
+comma-separated entries count, including malformed and repeated entries.
+Malformed entries, zero weights and wildcards are ignored when choosing a page.
+For each lowercase range, the entry with the highest weight wins. At equal
+weights, the earlier entry wins. The remaining preferences are tried by descending
+weight and then by their winning entries’ positions in the header. For each
+preference, canonicalize with `Intl.Locale`, strip extensions,
 try the exact tag, drop trailing parts one at a time, then try the same base language.
 No match, including an empty or invalid explicit `lang`, uses the stored main page.
 Matching ties prefer the main page, then page keys sorted by bytes, because the

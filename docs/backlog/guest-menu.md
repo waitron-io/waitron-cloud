@@ -9,8 +9,7 @@ mobile data. Check the trial or paid-plan gate with Waitron’s preview before r
 it out on the Amazon test Cloud. Qualify production DNS, certificates and rollout
 separately. Generalize publication keys beyond
 the current base-language keys and sole stored variant; keep guest preference
-matching separate from that publication change. Mirror Waitron’s shared 32-entry,
-deduplicated header limit after its release (`ACCEPT-LANGUAGE-CAP`). Keep Norwegian
+matching separate from that publication change. Keep Norwegian
 `no`/`nb` and region/script choices as questions for
 [Waitron’s shared matching rule](https://github.com/clintongormley/waitron/blob/7b5c9643ad4d4060f4783e89fbd3db49cd49e09c/packages/shared/src/language-match.ts). See
 [local deployment](../local-deployment.md#exercise-a-stored-guest-menu-copy)

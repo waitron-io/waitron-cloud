@@ -36,7 +36,7 @@ extend that source; they do not change Waitron's local identity or fiscal flows.
 Cloud's registration `src/password-recovery.ts` and its tests have no Waitron
 identity-package counterpart. Maintain and test that Cloud-owned flow here.
 
-Last reviewed Waitron revision: `0b7f37048f4bc5dff92b0b527d33c7767fbf49eb`.
+Last reviewed Waitron revision: `60dcf75a5132af8878d8a88aee36d78deb125c54`.
 
 When changing authentication in either repository, compare the corresponding source
 and behavioural tests above, record applicable fixes in both backlogs, and port the
