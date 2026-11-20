@@ -7,6 +7,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {bootstrap} from '../deploy/local-stack/bootstrap.mjs';
 import {runtimeEnvironment} from '../deploy/local-stack/runtime.mjs';
 import {storageRuntime} from '../deploy/kubernetes/storage-identity.mjs';
+import {storageNamespace} from '../deploy/kubernetes/secrets.mjs';
 import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, servicesDaemonSet, servicesVerifier, servicesStoreHost, storeCaPath,
   verifierScratchPath, verifierScratchVolume} from '../deploy/kubernetes/services.mjs';
 import {installStockholmDatabase} from './kubernetes-data.mjs';
@@ -89,7 +90,12 @@ export function servicesStorageSettings(custody, {role, accountCredentials, work
   }};
 }
 
-async function configureServices(context, kube, store, custody) {
+export async function configureServices(context, kube, store, custody) {
+  if (context.baseline) {
+    // Each service machine has store copies. A stale endpoint on a stopped machine cannot serve a read.
+    await context.kube(['-n', storageNamespace, 'patch', 'service', 's3', '--type=merge', '-p',
+      JSON.stringify({spec: {internalTrafficPolicy: 'Local'}})]);
+  }
   const node = context.nodes[0], endpoint = 'https://' + node.ip + ':' + storeNodePort;
   const s3 = storageClient(node, store);
   try {await s3.send(CreateBucketCommand, {}, context.signal);}

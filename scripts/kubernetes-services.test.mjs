@@ -122,6 +122,19 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
 });
 
+test('the outside rehearsal routes internal storage requests to the local store copies', async () => {
+  assert.equal(typeof servicesScript.configureServices, 'function');
+  const configured = Error('storage route captured');
+  await assert.rejects(servicesScript.configureServices({
+    baseline: true,
+    async kube(args) {
+      assert.deepEqual(args.slice(0, -1), ['-n', 'd621-store', 'patch', 'service', 's3', '--type=merge', '-p']);
+      assert.deepEqual(JSON.parse(args.at(-1)), {spec: {internalTrafficPolicy: 'Local'}});
+      throw configured;
+    },
+  }), error => error === configured);
+});
+
 test('a surviving inbox stays readable while another service container restarts', () => {
   assert.equal(typeof servicesScript.readyServicePods, 'function');
   const pod = (name, readiness, containers) => ({
