@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 
-// All times belong to A; transport and stop delays count against recovery.
+// Use the observer's clock so transport and stop delays count against recovery.
 export async function observeP1({probes, ready, stopped, replacement, reconcile, signal, holdMs,
   now = () => performance.now(), sleep = ms => delay(ms, undefined, {signal})}) {
   const names = ['session', 'remote', 'login', 'backup', 'signup'];

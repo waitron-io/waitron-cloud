@@ -163,6 +163,18 @@ test('the measured sign-in replaces a stranded challenge after one mail claim wi
   assert.equal(starts, 2);
 });
 
+test('the outside observer can start email sign-in without a recognised browser', async () => {
+  const {createObserverLogin} = await load();
+  const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
+    mailbox: async () => ({messages: []}), readMail: async () => ({Text: '\n123456\n'}),
+    api: async (path, _body, headers) => {
+      assert.deepEqual(headers, {});
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'new-challenge'}};
+      return {status: 200};
+    }});
+  assert.deepEqual(await login(), {status: 200});
+});
+
 test('production rehearsal refuses a remote target even with a valid local Kind binding', async () => {
   const {runTestCloudClients} = await load();
   const cluster = 'd621-' + 'a'.repeat(32);

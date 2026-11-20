@@ -211,7 +211,7 @@ export async function readOutsideRetainedBackup(read, signal) {
   catch (error) {
     if (!/^\s*Error: (?:backup\.cancelled|Connection terminated due to connection timeout)\s*$/m.test(error.message)) throw error;
     signal.throwIfAborted();
-    process.stderr.write('Outside Kind retained backup inspection timed out, retrying once\n');
+    process.stderr.write('Outside rehearsal retained backup inspection timed out, retrying once\n');
     return read();
   }
 }
@@ -696,6 +696,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           } else await verify();
           if (measured) {
             const original = publishedSnapshot;
+            // The venue account uses an authenticator. A separate sign-in exercises email challenge delivery.
             const loginEmail = `integration-observer-${runId}@example.test`, loginPassword = 'Disposable observer ' + randomUUID();
             await signupAccount(loginEmail, loginPassword, 'Observer café');
             const login = createObserverLogin({api, mailbox, readMail, email: loginEmail, password: loginPassword, replaceStranded: true});
@@ -1083,7 +1084,7 @@ export function createObserverLogin({api, mailbox, readMail, email, password, co
     if (replaceStranded && pending && now() - pending.started >= 60_000) pending = undefined;
     if (!pending) {
       const seen = new Set((await mailbox(signal)).messages?.map(message => message.ID));
-      const reply = await api('/api/account/login', {email, password}, {cookie}, undefined, undefined, signal);
+      const reply = await api('/api/account/login', {email, password}, cookie ? {cookie} : {}, undefined, undefined, signal);
       if (reply.status === 200) return reply;
       assert.ok(reply.status === 202 && reply.body.emailRequired, 'p1.password_signin');
       pending = {seen, challengeToken: reply.body.challengeToken, started: now()};
