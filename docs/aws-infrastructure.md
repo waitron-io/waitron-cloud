@@ -1275,9 +1275,10 @@ the original Kubernetes API address from the host, and requires the API outage
 before starting the same containers at their original addresses. It then checks
 fresh node heartbeats, the original etcd membership, and a marker on each
 PostgreSQL disk. PostgreSQL must have both replicas streaming before it returns
-the previously committed row and accepts and returns a fresh write. In the disposable Linux run, Kubernetes recovered
-9.160 seconds after the start request. PostgreSQL returned the old row and the
-fresh write 38.526 seconds later. The full Stockholm check still needs to run
+the previously committed row and accepts and returns a fresh write. In the
+disposable Linux run, Kubernetes recovered 16.134 seconds after the start
+request. PostgreSQL returned the old row and the fresh write 41.072 seconds
+later. The full Stockholm check still needs to run
 from an outside host with the real service clients.
 
 ### Rehearse signup, pairing and backup on a healthy Kind cell

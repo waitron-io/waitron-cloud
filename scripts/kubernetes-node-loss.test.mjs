@@ -9,7 +9,7 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
   let label, removed = false, pod, expectStaleLease = leaseTimeout;
   const starts = new Set(), refreshed = new Set();
-  let dnsReads = 0;
+  let dnsReads = 0, outageProbes = 0;
   const names = ['control-plane', 'control-plane2', 'control-plane3'];
   const execute = async (binary, args, options) => {
     calls.push({binary, args, options});
@@ -65,7 +65,9 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
             throw Error('kubectl failed (ABORT_ERR, limit 15000ms)');
           }
           if (invalidProbe) throw Error('kubectl failed (SIGKILL, limit 15000ms)');
-          throw Error('Unable to connect to the server: EOF');
+          const errors = ['Unable to connect to the server: EOF',
+            'The connection to the server 127.0.0.1:59876 was refused - did you specify the right host or port?'];
+          throw Error(errors[outageProbes++ % 2]);
         }
         return 'ok';
       }

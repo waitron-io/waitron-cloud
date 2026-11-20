@@ -1830,8 +1830,8 @@ implementation or production evidence.
   address changes, replicated publication and shared ingress remain open.
   The [private Kind cold-restart check](aws-infrastructure.md#rehearse-an-all-node-cold-restart-in-private-kind)
   passed in disposable x86-64 Linux with a full API outage, retained PostgreSQL
-  data and a fresh write. Rehearse the Stockholm cold restart from outside the cell with the same
-  service clients before run 9.
+  data and a fresh write. Rehearse the Stockholm cold restart from outside the
+  cell with the same service clients before run 9.
   Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups

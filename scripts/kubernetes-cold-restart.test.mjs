@@ -4,8 +4,8 @@ import {prepareDatabaseWitness} from './kubernetes-cold-restart.mjs';
 
 function databaseFixture({missing = false, recovering = false, staleReadiness = false} = {}) {
   const oldRow = 'before-restart', newRow = 'after-restart';
-  let restarted = false, replicationChecks = 0, wrote = false;
-  const signals = [], created = new Set(), tables = new Set();
+  let restarted = false, wrote = false;
+  const signals = [], replicationQueries = [], created = new Set(), tables = new Set();
   const kube = async ([flag, namespace, verb, resource, ...args], {signal}) => {
     assert.equal(flag, '-n');
     assert.equal(namespace, 'd621-data');
@@ -22,7 +22,10 @@ function databaseFixture({missing = false, recovering = false, staleReadiness = 
     assert.deepEqual(args.slice(0, 4), ['-c', 'postgres', '--', 'psql']);
     const sql = args.at(-1);
     if (sql === 'SELECT NOT pg_is_in_recovery()') return 't';
-    if (sql.includes('pg_stat_replication')) return staleReadiness && ++replicationChecks === 1 ? 'f' : 't';
+    if (sql.includes('pg_stat_replication')) {
+      replicationQueries.push(sql);
+      return staleReadiness && replicationQueries.length === 1 ? 'f' : 't';
+    }
     const createdTable = sql.match(/^CREATE TABLE (\w+)/)?.[1];
     if (createdTable) {
       if (tables.has(createdTable)) throw Error('relation already exists');
@@ -44,7 +47,7 @@ function databaseFixture({missing = false, recovering = false, staleReadiness = 
     return sql.includes(oldRow) ? (missing ? '' : oldRow) : (wrote ? newRow : '');
   };
   return {kube, restart: () => {restarted = true;}, wrote: () => wrote, signals, created, tables,
-    replicationChecks: () => replicationChecks};
+    replicationQueries};
 }
 
 test('the database witness reads the old row and confirms a fresh write on a different primary', async () => {
@@ -57,7 +60,7 @@ test('the database witness reads the old row and confirms a fresh write on a dif
   assert.ok(f.wrote());
 });
 
-test('two database witnesses keep their rows apart and remove their own tables on success', async () => {
+test('two database witnesses use distinct tables and remove them on success', async () => {
   const f = databaseFixture();
   const context = {kube: f.kube, signal: new AbortController().signal};
   const first = await prepareDatabaseWitness(context);
@@ -75,7 +78,8 @@ test('the database witness waits for both streaming standbys even when the saved
   const verify = await prepareDatabaseWitness({kube: f.kube, signal: new AbortController().signal});
   f.restart();
   await verify();
-  assert.equal(f.replicationChecks(), 2);
+  assert.equal(f.replicationQueries.length, 2);
+  for (const query of f.replicationQueries) assert.match(query, /WHERE state = 'streaming'\) = 2$/);
 });
 
 test('the database witness refuses a missing acknowledged row before trying a fresh write', async () => {
