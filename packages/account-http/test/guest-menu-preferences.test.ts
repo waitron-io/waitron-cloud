@@ -12,6 +12,23 @@ test('missing or malformed header entries do not become guest preferences',()=>{
  }
 });
 
+test('the first 32 header entries include malformed entries',()=>{
+ const header=[...Array<string>(30).fill('bad_tag'),'en','fr','es'].join(',');
+ assert.deepEqual(guestMenuPreferences(header),['en','fr']);
+});
+
+test('repeated ranges count toward the 32 header entries',()=>{
+ const header=[...Array<string>(31).fill('en;q=0.5'),'fr;q=0.8','es'].join(',');
+ assert.deepEqual(guestMenuPreferences(header),['fr','en']);
+});
+
+test('a stronger duplicate uses the position of its stronger entry',()=>{
+ assert.deepEqual(guestMenuPreferences('en;q=0.5, fr;q=0.8, en;q=0.8'),['fr','en']);
+});
+
+test('an equal-weight duplicate keeps the first position regardless of case',()=>{
+ assert.deepEqual(guestMenuPreferences('fr, en, FR'),['fr','en']);
+});
 
 test('long malformed ranges keep the landed parser’s bounded whitespace cost',()=>{
  const started=performance.now();

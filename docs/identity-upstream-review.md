@@ -2,7 +2,7 @@
 
 You can reproduce this inventory with the source-report command in [SOURCE.md](../packages/identity/SOURCE.md). The original copy revision stays unchanged; the reviewed revision advances only after every mapped source and behavioural-test change has been considered.
 
-Reviewed through Waitron `0b7f37048f4bc5dff92b0b527d33c7767fbf49eb`. Later commits are outside this review.
+Reviewed through Waitron `60dcf75a5132af8878d8a88aee36d78deb125c54`. Later commits are outside this review.
 
 ## 2026-10-12
 
@@ -41,7 +41,7 @@ The passkey regression uses the real WebAuthn library, generated public keys and
 
 ## 2026-11-10
 
-The source-report command found these 11 mapped commits after the October marker through the fixed revision above. Each decision below comes from its mapped source/test diff; no production or test code changes were needed.
+The source-report command found these 11 mapped commits after the October marker through `0b7f37048f4bc5dff92b0b527d33c7767fbf49eb`. Each decision below comes from its mapped source/test diff; no production or test code changes were needed.
 
 | Waitron commit | Cloud decision and evidence |
 | --- | --- |
@@ -64,3 +64,36 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 ```
 
 The campaign runs that command through `test-box-run.sh G <checkout>`. The upstream-report tests and an empty `commits` array at the fixed target check the inventory, not the source-only decisions.
+
+## 2026-11-20
+
+The source report found 17 commits across 14 mapped source and test files after `0b7f37048f4b`. The decisions below come from reading those diffs alongside Cloud’s source. The review found no identity change to port.
+
+| Waitron commit | Cloud decision and evidence |
+| --- | --- |
+| [`eb2bfdb10864` (#2786)](https://github.com/clintongormley/waitron/commit/eb2bfdb10864b959fc087e5f79eced7216eb4e31) | Cloud already supports session reads that leave the idle deadline alone. The Waitron change serves long-lived box event streams. Cloud session reads use PostgreSQL account and session locks (`packages/identity/src/sessions.ts:89–123`). |
+| [`204951dda0d9` (#3037)](https://github.com/clintongormley/waitron/commit/204951dda0d98c679d3328e9786e94d38ea5e2ef) | The change reads Waitron person permissions. Cloud checks its own platform grants (`packages/identity/src/sessions.ts:174–178`). |
+| [`8fab2694144f` (#3068)](https://github.com/clintongormley/waitron/commit/8fab2694144f5472b0c39e5ce6581aeae40f369e) | The change puts Waitron's local roles in membership rows. Cloud retains its own organisation memberships and platform grants (`packages/identity/src/sessions.ts:174–178`, `packages/identity/src/organisation-scope.ts:5–8`). |
+| [`139916df0dd1` (#3135)](https://github.com/clintongormley/waitron/commit/139916df0dd1ec20a47a5c182ab83716e69a6af9) | Waitron exports its normalised email lookup for joining a spare box. Cloud already folds email before looking up account credentials (`packages/identity/src/sessions.ts:47–64`). |
+| [`737efc2adf19` (#3216)](https://github.com/clintongormley/waitron/commit/737efc2adf19e13607e7c2d3bf796779c8f2f8ae) | Cloud already uses asynchronous scrypt to create and verify password hashes (`packages/identity/src/secret-hash.ts:8–23`). |
+| [`c783bf26a47d` (#3347)](https://github.com/clintongormley/waitron/commit/c783bf26a47d8f0881bd51d1802c3d93ae7a1993) | The change admits Waitron's separate box addresses for passkeys. Cloud pins its configured portal origin for both ceremonies (`packages/registration/src/passkeys.ts:57–73,114–116,185–188`). |
+| [`911d500d3031` (#3364)](https://github.com/clintongormley/waitron/commit/911d500d3031a77da064a450230a6eff61134700) | The change adds a passkey check for Waitron's emergency switch. Cloud login records the credential counter and last use (`packages/registration/src/passkeys.ts:181–200`). |
+| [`f587e672df03` (#3476)](https://github.com/clintongormley/waitron/commit/f587e672df034fb89c7d15ab5906e41d467a3d73) | Waitron adds security notices including passkey enrolment. Cloud already sends password and email change notices. Passkey enrolment mail is a separate product change (`packages/registration/src/account-security.ts:39,72–73`). |
+| [`c3df226914df` (#3490)](https://github.com/clintongormley/waitron/commit/c3df226914dfde5c5601986f2b7c0bc900457d18) | Waitron adds a restricted invoice-inspector sign-in for its local reporting screen. Cloud uses its own account and permission checks (`packages/identity/src/sessions.ts:174–178`). |
+| [`8b60f3e74de0` (#3554)](https://github.com/clintongormley/waitron/commit/8b60f3e74de0621d832ccec3a0834365e25d61b2) | The change ties Waitron sessions to their person rows. Cloud sessions already reference Cloud accounts in the database (`packages/registration/migrations/002_identity.sql:9`). |
+| [`30c1c1c56498` (#3573)](https://github.com/clintongormley/waitron/commit/30c1c1c56498d3adeb7c8065cc6f03eb63dfdfb4) | Waitron consolidates challenge tables and derives passkey display names. Cloud already checks the challenge kind, session and expiry, and its retention job removes old challenges (`packages/registration/src/passkeys.ts:224–244`, `packages/registration/src/history-cleanup.ts:123–131`). |
+| [`ee033c733fc9` (#3586)](https://github.com/clintongormley/waitron/commit/ee033c733fc93e8290face900ca70bac722aa5f8) | Waitron records local sign-ins and stops copying email targets. Cloud retains ended sessions. Before changing email, it checks the pending request against the initiating session, security revision and prior credential (`packages/identity/src/sessions.ts:126–130`, `packages/registration/src/account-security.ts:64–73`). |
+| [`8c549477da71` (#3603)](https://github.com/clintongormley/waitron/commit/8c549477da7153af63d3fd153ff716c0f5bbdb8d) | Waitron changes its folded person-key rules and fixtures. Cloud already stores a unique normalised credential email (`packages/registration/migrations/002_identity.sql:1–5`). |
+| [`285daba145b6` (#3618)](https://github.com/clintongormley/waitron/commit/285daba145b65e623375751efd0abc73eff22af9) | Waitron uses purpose-specific vault keys for authenticator secrets and email codes. Cloud binds factor encryption to account, version and purpose, hashes codes with their challenge, and encrypts queued email payloads (`packages/identity/src/authenticator-crypto.ts:11–27,43–71`, `packages/registration/src/sign-in-check.ts:22,42–47`, `packages/registration/src/email-outbox.ts:96–101`). |
+| [`9abd56cf6949` (#3680)](https://github.com/clintongormley/waitron/commit/9abd56cf6949210f49650b13f38212f3e0102c79) | Waitron exports its recovery-code hash for emergency-copy sign-in. The mapped change leaves the hash itself as it was. Cloud already binds its recovery-code hashes to the account and factor version (`packages/registration/src/account-recovery-codes.ts:16–19`). |
+| [`9f064e293677` (#3712)](https://github.com/clintongormley/waitron/commit/9f064e2936775f86e961945c53cc136b67e791e0) | The mapped change removes references to retired design documents from comments. |
+| [`b30eade710d2` (#3807)](https://github.com/clintongormley/waitron/commit/b30eade710d214635ea65003341f317833223c58) | Waitron's by-ID box join prompts for an authenticator only when the main box requires one. Cloud checks password authority before issuing its email sign-in factor challenge (`packages/registration/src/password-login.ts:81–108`). |
+
+Recheck the inventory with the fixed Waitron revision from the Cloud checkout:
+
+```sh
+node scripts/identity-upstream.mjs ~/workspace/repos/waitron 60dcf75a5132af8878d8a88aee36d78deb125c54
+node --test scripts/identity-upstream.test.mjs
+```
+
+The inventory should report an empty `commits` array. These commands check the inventory. The table records the source comparison.
