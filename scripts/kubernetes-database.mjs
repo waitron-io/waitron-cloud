@@ -3,7 +3,6 @@ import {createHash, randomBytes} from 'node:crypto';
 import {readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
-import {retryApi} from './kubernetes-node-loss.mjs';
 import {separateByHost} from './kubernetes-placement.mjs';
 
 const operatorImage = 'ghcr.io/cloudnative-pg/cloudnative-pg:1.29.2@sha256:4710b10a4897a4f888cbe80bce8b279475315590fb9f2cb0ebb516f2f40ebf06';
@@ -13,6 +12,7 @@ const operatorDigest = '856312bb13e64c5b03861092eac9045e45f7b7d601aafe75a9016260
 const database = 'cloud-db';
 const service = database + '-rw';
 const client = 'cloud-db-client';
+const account = 'cloud-db-account';
 const reader = 'proofreader', writer = 'proofwriter';
 const caPath = '/run/db-ca/ca.crt';
 export const caVolume = {name: 'db-ca', secret: {secretName: database + '-ca', items: [{key: 'ca.crt', path: 'ca.crt'}]}};
@@ -103,6 +103,66 @@ function clientPod(image, nodeName) {
   ]};
 }
 
+function accountPod(image, nodeName, tag) {
+  const container = cloudContainer(image, 'account', database + '-app', ['sh', '-ec', requireTls +
+    'exec node deploy/local-stack/schema-consumer.mjs packages/account-http/src/server-cli.ts']);
+  container.env.push(...Object.entries({NODE_ENV: 'test', CLOUD_PORTAL_ORIGIN: 'http://localhost:3000',
+    CLOUD_EMAIL_ACTIVE_KEY_ID: 'proof', CLOUD_EMAIL_KEYS: JSON.stringify({proof: randomBytes(32).toString('hex')}),
+    CLOUD_HTTP_RATE_KEY: randomBytes(32).toString('hex'), PGAPPNAME: tag}).map(([name, setting]) => value(name, setting)));
+  return {restartPolicy: 'Never', nodeName, automountServiceAccountToken: false, volumes: [caVolume], containers: [container]};
+}
+
+const healthProbe = `
+  import {localHealthFetch} from "./deploy/local-stack/operations-health.mjs";
+  const probe = process.argv[1];
+  const origin = new URL(process.env.CLOUD_PORTAL_ORIGIN);
+  const response = await localHealthFetch(new URL("/api/health/" + probe, "http://127.0.0.1:3000"),
+    {host: origin.host, signal: AbortSignal.timeout(probe === "live" ? 2000 : 25000)});
+  console.log(JSON.stringify({status: response.status, body: await response.json()}));
+`;
+
+export async function measureAccountRecovery({health, logs, identity, before, signal, stopStarted = performance.now()}) {
+  const done = new AbortController();
+  const limit = AbortSignal.any([signal, done.signal]);
+  const elapsed = () => Math.ceil(performance.now() - stopStarted);
+  let livenessFailure, failure, failureMs;
+  const sampleLiveness = (async () => {
+    while (!limit.aborted) {
+      assert.deepEqual(await health('live', limit), {status: 200, body: {status: 'live'}}, 'database_loss.account_not_live');
+      await delay(1000, undefined, {signal: limit});
+    }
+  })().catch(error => {
+    if (!limit.aborted) {livenessFailure = error; done.abort(error);}
+  });
+  try {
+    while (!limit.aborted) {
+      const ready = await health('ready', limit);
+      const output = await logs(limit);
+      if (!failure) {
+        if (ready.status === 503 && ready.body.status === 'unavailable') failure = 'readiness 503';
+        else if (output.includes('Account server database connection failed')) failure = 'connection discarded';
+        if (failure) {
+          failureMs = elapsed();
+          process.stderr.write('Account database failure after ' + failureMs + ' ms: ' + failure + '\n');
+        }
+      }
+      if (failure && ready.status === 200 && ready.body.status === 'ready') {
+        assert.deepEqual(await identity(limit), before, 'database_loss.account_restarted');
+        assert.equal(output.split('\n').filter(line => line.startsWith('{"status":"listening",')).length, 1,
+          'database_loss.account_listening_events');
+        limit.throwIfAborted();
+        return {failure, failureMs, readyMs: elapsed()};
+      }
+      await delay(1000, undefined, {signal: limit}).catch(() => {});
+    }
+    throw livenessFailure ?? Error('database_loss.' +
+      (failure ? 'account_did_not_recover' : 'account_database_failure_not_observed'));
+  } finally {
+    done.abort();
+    await sampleLiveness;
+  }
+}
+
 export function migrationJob(image) {
   const container = cloudContainer(image, 'migrate', database + '-app', ['sh', '-ec',
     requireTls + 'exec node packages/registration/src/migrate-cli.ts']);
@@ -160,11 +220,19 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
   const writeRow = name => `INSERT INTO failover_probe VALUES ('${name}') ON CONFLICT (marker) DO UPDATE SET marker=excluded.marker RETURNING marker`;
   const readRow = name => `SELECT marker FROM failover_probe WHERE marker = '${name}'`;
   async function verifyWrite(name, options) {
-    // The marker is idempotent if the API connection drops after the database commits.
-    const row = await retryApi(() => sql(writeRow(name), options), options.signal, name,
-      error => /psql: error: could not translate host name .*Temporary failure in name resolution/.test(error.message));
-    assert.equal(row, name, 'database_loss.written_row');
+    assert.equal(await sql(writeRow(name), options), name, 'database_loss.written_row');
   }
+
+  const accountTag = 'd621-account-' + randomBytes(8).toString('hex');
+  const health = async (name, signal) => JSON.parse(await exec(account, 'account',
+    ['node', '--input-type=module', '-e', healthProbe, name], {signal, timeout: name === 'live' ? 5_000 : 27_000}));
+  const logs = signal => kube(['logs', account, '-c', 'account'], {signal});
+  const identity = async signal => {
+    const {metadata, status} = await read(['pod', account], {signal});
+    const {containerID: containerId, restartCount} = status.containerStatuses.find(row => row.name === 'account');
+    assert.ok(metadata.uid && containerId, 'database_loss.account_identity');
+    return {uid: metadata.uid, containerId, restartCount};
+  };
 
   async function identities(instances, options) {
     assert.deepEqual(instances.map(pod => pod.spec.nodeName).sort(), [...nodes].sort(), 'database_loss.one_instance_per_node');
@@ -257,6 +325,10 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     await local(oldPrimary, 'CREATE TABLE failover_probe (marker text PRIMARY KEY); ' +
       'GRANT SELECT, INSERT, UPDATE ON failover_probe TO ' + writer, started);
     process.stderr.write('Migration completed and the surviving client read the release ledger\n');
+    await apply('v1', 'Pod', account, {spec: accountPod(imageTag, clientNode, accountTag)});
+    await until('account_warm', started, async () => (await health('ready', started.signal)).status === 200);
+    const originalAccount = await identity(started.signal);
+    assert.equal(originalAccount.restartCount, 0, 'database_loss.account_baseline_restart');
 
     const baseSenderTimeout = await local(oldPrimary, 'SHOW wal_sender_timeout', started);
     await updateSenderTimeout('30s', started);
@@ -287,20 +359,40 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
       const acknowledged = await commit.outcome;
       if (acknowledged.error) throw acknowledged.error;
       assert.equal(acknowledged.row, 'primary-loss', 'database_loss.commit_acknowledged');
+      assert.deepEqual(await health('live', realCommitOptions.signal), {status: 200, body: {status: 'live'}});
+      assert.deepEqual(await health('ready', realCommitOptions.signal), {status: 200, body: {status: 'ready'}});
+      assert.doesNotMatch(await logs(realCommitOptions.signal), /Account server database connection failed/);
+      const backendPid = Number(await local(oldPrimary,
+        "SELECT pid FROM pg_stat_activity WHERE application_name = '" + accountTag + "' AND state = 'idle'", realCommitOptions));
+      assert.ok(Number.isInteger(backendPid) && backendPid > 0, 'database_loss.account_not_warm_on_old_primary');
+      const stopStarted = performance.now();
       return stopNode(primaryNode, {
         async whileStopped(options) {
-          await until('paused_receiver_resumed', options, async () => {
-            await resume(replicas[1].metadata.name, options);
-            return true;
-          });
-          promoted = await until('promoted_primary', options, async () => {
-            const {currentPrimary} = await state(options);
-            return currentPrimary && currentPrimary !== oldPrimary && (await sql('SELECT pg_is_in_recovery()', options)) === 'f' && currentPrimary;
-          });
-          assert.equal(await sql(readRow('primary-loss'), options), 'primary-loss', 'database_loss.acknowledged_row_preserved');
-          await verifyWrite('promoted-write', options);
-          process.stderr.write('Promoted PostgreSQL copy retained the acknowledged row and accepted a new write\n');
-          return {acknowledgedRow: 'primary-loss', promoted};
+          const controller = new AbortController();
+          const signal = AbortSignal.any([options.signal, controller.signal]);
+          const checkOptions = {...options, signal};
+          const stopped = async () => {
+            await until('paused_receiver_resumed', checkOptions, async () => {
+              await resume(replicas[1].metadata.name, checkOptions);
+              return true;
+            });
+            promoted = await until('promoted_primary', checkOptions, async () => {
+              const {currentPrimary} = await state(checkOptions);
+              return currentPrimary && currentPrimary !== oldPrimary &&
+                (await sql('SELECT pg_is_in_recovery()', checkOptions)) === 'f' && currentPrimary;
+            });
+            assert.equal(await sql(readRow('primary-loss'), checkOptions), 'primary-loss', 'database_loss.acknowledged_row_preserved');
+            await verifyWrite('promoted-write', checkOptions);
+            process.stderr.write('Promoted PostgreSQL copy retained the acknowledged row and accepted a new write\n');
+          };
+          const checks = [stopped(), measureAccountRecovery({health, identity, logs, before: originalAccount, signal, stopStarted})];
+          try {
+            const [, recovery] = await Promise.all(checks);
+            return {acknowledgedRow: 'primary-loss', promoted, account: {backendPid, ...recovery}};
+          } finally {
+            controller.abort();
+            await Promise.allSettled(checks);
+          }
         },
         async afterRestart(options) {
           const returning = await until('old_primary_replica', options, async () => {
@@ -354,7 +446,8 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
       ['logs', '-l', 'cnpg.io/cluster=' + database + ',cnpg.io/podRole=instance', '-c', 'postgres', '--prefix', '--tail=15'],
       ['logs', '-n', 'cnpg-system', '-l', 'app.kubernetes.io/name=cloudnative-pg', '--prefix', '--tail=12'],
       ['logs', '-n', 'kube-system', '-l', 'k8s-app=kube-proxy', '--prefix', '--tail=12'],
-      ['logs', 'job/cloud-migrate-' + image.slice(7, 55), '--tail=30'], ['logs', client, '-c', 'schema', '--tail=12']]) {
+      ['logs', 'job/cloud-migrate-' + image.slice(7, 55), '--tail=30'], ['logs', client, '-c', 'schema', '--tail=12'],
+      ['logs', account, '-c', 'account', '--tail=20']]) {
       const output = await kube(args, {signal: null}).catch(String);
       process.stderr.write(output.slice(-8192) + '\n');
     }
