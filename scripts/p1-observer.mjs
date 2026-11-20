@@ -23,9 +23,9 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
   Promise.resolve().then(replacement).then(() => {replacementReady = true;}, error => {signalFailure = error;});
   const launch = name => {
     const state = states[name], at = now(), controller = new AbortController();
-    state.pending = {at, controller, ended: false};
+    state.pending = {at, controller, ended: false, afterStop: stoppedAt !== undefined};
     const pending = state.pending;
-    (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, stoppedAt !== undefined))()
+    (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, pending.afterStop))()
       .then(result => {pending.result = result; pending.ok = true; pending.endedAt = now(); pending.ended = true;}, error => {pending.error = error; pending.endedAt = now(); pending.ended = true;});
   };
   try {
@@ -60,8 +60,8 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
           if (ok) {
             state.longestGapMs = Math.max(state.longestGapMs ?? 0, pending.endedAt - state.lastSuccess || 0);
             state.lastSuccess = pending.endedAt;
-            // An operation started before the stop cannot prove post-stop recovery.
-            if (stoppedAt !== undefined && pending.at >= stoppedAt) {
+            // Backup probes only start fresh verification once the stop is confirmed.
+            if (pending.afterStop && pending.at >= stoppedAt) {
               if (!state.recovered) {
                 assert.ok(pending.endedAt - faultAt <= (name === 'backup' ? 300000 : 90000), 'p1.' + name + '_recovery_timeout');
                 state.withinMs = pending.endedAt - faultAt;
