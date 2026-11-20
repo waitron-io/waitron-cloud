@@ -17,19 +17,20 @@ scratch ready on each node. Use a surviving machine for Kubernetes commands and 
 Verify the same account session, new mail and retained object after stopping each machine in
 the existing private Kind journey. Keep the no-stop baseline mode.
 
-Change `deploy/kubernetes/{services,remote-relay}.mjs`, `bounded-amazon/bootstrap.sh` and
-`scripts/{kubernetes-services,kubernetes-outside,kubernetes-check,amazon-run,test-cloud-integration}.mjs`.
-`services.test.mjs` owns placement, `bootstrap.test.mjs` owns the firewall, and
-`kubernetes-services.test.mjs` owns surviving routes, mail, image import and the opt-in journey.
-Estimate 260–360 implementation and 145–205 test lines.
+Change `deploy/kubernetes/{services,remote-relay}.mjs`, `deploy/kubernetes/bounded-amazon/bootstrap.sh`
+and `scripts/{kubernetes-services,kubernetes-outside,kubernetes-check,kubernetes-remote,amazon-run,test-cloud-integration}.mjs`.
+`services.test.mjs` owns placement, `bootstrap.test.mjs` owns the firewall,
+`kubernetes-remote.test.mjs` owns the relay arguments and survivor selection, and
+`kubernetes-services.test.mjs` owns mail, image import and the opt-in journey.
+Estimate 280–385 implementation and 155–225 test lines.
 
 **12b | Prove complete service recovery.** In `amazon-run.mjs` and `kubernetes-node-loss.mjs`,
-confirm each exact node is off before using the existing out-of-service taint. Restart the same
-machine, restore its private peer route and remove the taint. Drop A's staging mount on B and C
+confirm each exact node is off before marking it out of service in Kubernetes. Restart the same
+machine, restore its private peer route and remove that mark. Drop A's staging mount on B and C
 before stopping A. Require healthy services, one writable primary and healed storage before the
 next leg. Inventory roles before each stop and arrange coverage of the database primary, active
-gateway, database operator and Flux. In `test-cloud-integration.mjs` and its remote fixture,
-retain the venue and reuse `observeP1`. Keep the 90-second account and HTTPS, 300-second backup
+gateway, database operator and Flux. In `scripts/test-cloud-integration.mjs` and
+`deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`, retain the venue and reuse `observeP1`. Keep the 90-second account and HTTPS, 300-second backup
 and 180-second Git bounds, and record probe gaps. Replace a stranded login challenge within the
 existing mail-claim time and rate budgets. Require new real work from email, publication and
 backup after the primary moves, and record when it finishes and which process did it. Keep the
@@ -38,12 +39,15 @@ expose the existing revision and drift checks on surviving nodes. Fail the run o
 role, worker result, retained-state check or cleanup. Replace run 8's two C-only modes on the
 local pass.
 
-`amazon-run.test.mjs` owns scoped stop/start, the 15-minute schedule and the 150-minute expiry
-budget including PR 13 and deletion. `p1-observer.test.mjs` owns bounds and omitted evidence.
-`test-cloud-integration.test.mjs` owns retained clients and probe wiring. Extend the 12a Kind
-journey for all probes, with shorter test-only holds to fit the 55-minute guest window. Keep the
-full holds for Stockholm. Run the named tests and typecheck. Update the AWS guide, sizing and
-backlog with what each branch proves. Estimate 330–455 implementation and 200–275 test lines.
+`amazon-run.test.mjs` owns scoped stop/start, refusal of a shortened hold and the 150-minute
+budget including PR 13 and deletion. `kubernetes-node-loss.test.mjs` owns Kind stop confirmation,
+`kubernetes-git.test.mjs` owns survivor Git repair, `p1-observer.test.mjs` owns bounds and omitted
+evidence, and `test-cloud-integration.test.mjs` owns retained clients and probe wiring. Extend the
+12a Kind journey with three 6-minute holds. Budget 9 minutes for the baseline and 24 for other
+setup, healing and cleanup, leaving 4 minutes in the 55-minute guest. Require all bounded recovery and worker
+evidence while the machine is off. Keep the full 15-minute Stockholm holds. Run the named tests
+and typecheck. Update the AWS guide, sizing and backlog. Estimate 330–455 implementation
+and 210–285 test lines.
 
 The split replaces row 12's 260–380 / 160–240 estimate because both outside service addresses,
 commands and the verifier currently depend on A. The certificate HTTP 500 and unexplained
