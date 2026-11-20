@@ -1809,8 +1809,9 @@ implementation or production evidence.
   checks production-mode signup, pairing and backup against replicated PostgreSQL
   and MinIO. The outside Kind rehearsal checks the retained account session,
   new authenticated mail and the original stored backup during each machine stop.
-  Mail already delivered to a stopped machine's inbox is outside that check.
-  The Stockholm rehearsal still needs to measure worker restarts and recovery times. The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
+  While a machine is down, its private test inbox is unavailable.
+  The Stockholm rehearsal still needs to measure worker restarts and recovery times.
+  The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
   During the worker machine stop, the survivor reused the saved certificate and
   signing request and published the owner's revocation. With local DNS replicas,

@@ -189,7 +189,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
@@ -200,7 +200,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const removalReady=new Promise(resolve=>{markRemoval=resolve;});
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
-  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {time += ms;},
+  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
     prepareFlux: async directory => {calls.push(['flux-prepare']);return directory+'/flux.json';},
     async runBaseline(context) {
       assert.match(scenario, /^baseline/);
@@ -212,7 +212,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});
       await context.kube(['-n', 'd621-data', 'exec', '-i', 'pod/service', '--', 'node'], {input: '{"kind":"Secret"}'});
       await context.importVerifierImage('sha256:' + hashes, ['exec', '-i', 'pod/verifier', '--', 'docker', 'load']);
-      if (scenario === 'baseline') {
+      if (scenario === 'baseline interrupted') {
         stop.abort();
         await context.kube(['-n', 'd621-data', 'logs', 'pod/service'], {signal: null});
       }
@@ -272,7 +272,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'ssh') {
         const script = args.at(-1);
         if (script.includes('--raw=/readyz')) {
-          if (scenario === 'baseline' && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
+          if (['baseline', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
           return 'ok';
         }
         if (script.includes("'get' 'endpointslices'") && script.includes('kubernetes.io/service-name=kube-dns')) {
@@ -353,6 +353,11 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
   }
   if (expectedError) {
+    if (scenario === 'baseline interrupted') {
+      const logs = transports.find(row => row.args.at(-1).includes("'logs' 'pod/service'"));
+      assert.equal(logs?.args.at(-2), 'admin@203.0.113.2');
+      assert.equal(logs.cleanup, true);
+    }
     if (scenario === 'baseline cleanup failure') {
       const removedNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'rm');
       const deletedStack = calls.findIndex(row => row[1] === 'delete-stack');
@@ -420,8 +425,6 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.match(transports.find(row => row.input === 'synthetic-migration')?.args.at(-1) ?? '', /--context/);
     assert.equal(transports.find(row => row.input === 'synthetic-migration')?.args.at(-2), 'admin@203.0.113.2');
     assert.equal(transports.find(row => row.args.at(-1).includes('docker save'))?.args.at(-2), 'admin@203.0.113.2');
-    const logs = transports.find(row => row.args.at(-1).includes("'logs' 'pod/service'"));
-    assert.equal(logs?.args.at(-2), 'admin@203.0.113.2');
     for (const fragment of ['mkfs.ext4', "'docker' 'load'"]) {
       assert.deepEqual(transports.filter(row => row.args.at(-1).includes(fragment)).map(row => row.args.at(-2)),
         ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);

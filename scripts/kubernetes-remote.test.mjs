@@ -408,7 +408,7 @@ test('the next available control plane is selected after an API failure', async 
     /remote\.no_surviving_control_plane/);
 });
 
-test('a service port does not depend on the gateway or the other service port', {timeout: 10000}, async t => {
+test('the account relay switches nodes while storage keeps its route', {timeout: 10000}, async t => {
   const listen = async label => {
     const server = createServer(socket => socket.once('data', () => socket.end(label)));
     server.listen(0, '127.0.0.1');
