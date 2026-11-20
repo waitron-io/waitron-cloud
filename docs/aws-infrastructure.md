@@ -1207,7 +1207,10 @@ write to the returning replica, and a new write during a standby outage.
 During the primary outage, the command also checks whether the same account
 process stays live and serves a database-backed readiness request within 90
 seconds. It records the old database connection and the time to failure and
-recovery.
+recovery. The disposable Linux rehearsal recorded a readiness HTTP 503 at
+16.589 seconds and HTTP 200 at 65.168 seconds from the same account
+process. PostgreSQL preserved the acknowledged row and refused a write to the
+returning former primary.
 Use the same Linux guest requirements as the control-plane check. The command
 uses `curl` to fetch the pinned operator manifest from GitHub. Kind pulls the
 pinned operator and PostgreSQL images from ghcr.io.
@@ -1243,7 +1246,9 @@ checks share a 180-second deadline that starts once the node is Ready and its
 identity and cluster membership checks pass. The JSON output reports outage and
 repair times. This check uses curl with Signature V4. Running the bucket
 repair as part of the Cloud services' consecutive-outage proof remains open for
-run 9.
+run 9. With one DNS replica per machine, the disposable Linux storage check
+measured 52.138 seconds for the stop leg and 33.018 seconds to confirm the
+returned shards.
 
 Run `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
 in the same x86-64 Linux guest to check temporary grants. The rehearsal uses the pinned
@@ -1374,7 +1379,10 @@ handshakes and when staff and public HTTPS respond. If the public cookie gets
 403, the probe records it and completes a new challenge within the same
 90 seconds from the stop request. The restored machine must return with its
 original identity. The former gateway must no longer hold the Lease and
-must have neither the tunnel interface nor a readiness marker.
+must have neither the tunnel interface nor a readiness marker. With one DNS
+replica per machine, the disposable Linux run restored staff HTTPS in 51.889
+seconds. The public cookie received 403, then a new challenge restored public
+HTTPS in 51.977 seconds. The former gateway rejoined as a standby.
 
 You can also run `node scripts/kubernetes-check.mjs --remote --stop-gateway-node`
 with the same image pins.
