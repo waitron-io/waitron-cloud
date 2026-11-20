@@ -136,8 +136,15 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   const cloud = name + ':cloud', waitron = name + ':waitron', store = name + ':store';
   let hosts, mesh, networkId, failure;
   const closeHost = async () => {
-    if (mesh) {await mesh.close(); mesh = undefined;}
-    if (networkId) {await run('docker', ['network', 'rm', networkId], undefined, true); networkId = undefined;}
+    let failure;
+    try {
+      if (mesh) {await mesh.close(); mesh = undefined;}
+    } catch (error) {failure = error; throw error;}
+    finally {
+      await cleanUp(failure, async () => {
+        if (networkId) {await run('docker', ['network', 'rm', networkId], undefined, true); networkId = undefined;}
+      });
+    }
   };
   const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
     '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=yes', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
@@ -190,13 +197,17 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     const parameters = {Image: config.image, Key: config.key, OperatorCidr: config.operatorCidr,
       StackRole: config.stackRole, SchedulerRole: config.schedulerRole, ExpiryTime: new Date(expiry).toISOString().slice(0, 19)};
     let outputs, target;
-    const ssh = (index, args, input, timeout = 600000, request) => run('ssh',
-      [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ') +
-        (input?.includes('"kind":"Secret"') ? ' 2>/dev/null' : '')], input, request === null, timeout, request);
+    const ssh = (index, args, input, timeout = 600000, request, hideStderr = false) => run('ssh',
+      [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ') + (hideStderr ? ' 2>/dev/null' : '')],
+      input, request === null, timeout, request);
     const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
     const kubeArgs = ['kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name];
-    const kube = (args, {input, timeout, signal: request} = {}) => ssh(0, ['sudo', ...kubeArgs, ...args], input, timeout, request);
+    const kube = (args, {input, timeout, signal: request} = {}) => {
+      // kubectl validation errors can quote the submitted Secret.
+      const privateManifest = args.includes('-f') && /"kind"\s*:\s*"Secret"/.test(input ?? '');
+      return ssh(0, ['sudo', ...kubeArgs, ...args], input, timeout, request, privateManifest);
+    };
     const local = (binary, args, {input, signal: request = signal, timeout} = {}) =>
       run(binary, args, input, request === null, timeout, request);
     const waitDeleted = async () => {
@@ -243,8 +254,6 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           }
         };
         if (config.baseline) {
-          networkId = await run('docker', ['network', 'create', '--subnet', '172.30.250.0/24', name]);
-          assert.match(networkId, /^[a-f0-9]{64}$/, 'amazon.outside_network');
           mesh = await startOutsideMesh({directory, peers: hosts.map((endpoint, index) => ({endpoint, publicKey: publicKeys[index]})),
             prepareNodes, run, restrictInbound: true});
         } else await prepareNodes();
@@ -364,6 +373,11 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         }});
       return {...result, stopMs, replacementMs};
     };
+    if (config.baseline) {
+      const id = await run('docker', ['network', 'create', '--subnet', '172.30.250.0/24', name]);
+      assert.match(id, /^[a-f0-9]{64}$/, 'amazon.outside_network');
+      networkId = id;
+    }
     const outcome = await runAmazonExperiment(operations, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
   } catch (error) {
@@ -377,7 +391,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       try {await run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + host], undefined, true);} catch {}
     }
     for (const image of ownedImages) {try {await run('docker', ['image', 'rm', image], undefined, true);} catch {process.stderr.write('Owned image cleanup failed\n');}}
-    if (cleanupFailure && mesh) process.stderr.write('Outside tunnel cleanup needs its private configuration in ' + directory + '\n');
+    if (cleanupFailure && mesh) process.stderr.write('Outside tunnel or firewall cleanup needs its private configuration in ' + directory + '\n');
     else await rm(directory, {recursive: true, force: true});
     if (cleanupFailure) await cleanUp(failure, async () => {throw cleanupFailure;});
   }

@@ -171,11 +171,15 @@ test('outside baseline requires the owned private route, inbox, peer and verifie
     verifier: Object.fromEntries(['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].map(name => [name, noIo]))};
   const run = kubernetes => runTestCloudClients({stockholmBaseline: true, kubernetes});
   await assert.rejects(run(target), /integration\.image_invalid/);
-  for (const changed of [{proxyIp: '127.0.0.1'}, {network: 'other-network'}, {readInbox: undefined},
+  for (const changed of [{proxyIp: '127.0.0.1'}, {port: 3443}, {network: 'other-network'}, {readInbox: undefined},
     {verifier: undefined}, {stockholmRemote: {}}, {amazon: {...amazon, phase: 'before'}}]) {
     await assert.rejects(run({...target, ...changed}), /(?:integration\.stockholm_baseline_binding|kubernetes\.amazon_binding)/);
   }
   await assert.rejects(run({...target, amazon: undefined}), /integration\.stockholm_baseline_binding/);
+  for (const option of ['services', 'paidVerification', 'stockholmRemote']) {
+    await assert.rejects(runTestCloudClients({stockholmBaseline: true, kubernetes: target, [option]: true}),
+      /integration\.stockholm_baseline_scope/);
+  }
 });
 
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {

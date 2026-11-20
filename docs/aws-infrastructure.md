@@ -1354,13 +1354,13 @@ The host's WireGuard filter admits replies and incoming Git traffic.
 The test reads the authenticated mailbox inside the account pod and gives
 the backup verifier 1 GiB of scratch space on A.
 
-The owner-started Stockholm launcher uses `node scripts/amazon-run.mjs baseline`
-with the private `D618_CONFIG` on the test host. It reads Kubernetes and the
+For a separately authorised Amazon baseline, the owner runs
+`node scripts/amazon-run.mjs baseline` with the private `D618_CONFIG` on the test host. It reads Kubernetes and the
 inbox over SSH to A, uses the verifier image already copied to A, and waits
 for scheduled deletion. It leaves all three machines running until that
-deletion. Use the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
-for the gates on a paid run. Amazon routing, the machine-stop sequence and
-recovery after the full restart still need their own checks.
+deletion. The [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
+covers a later full run under its own gates. Amazon routing, the machine-stop sequence
+and recovery after the full restart still need their own checks.
 
 ### Rehearse a gateway handover on a private Kind cell
 

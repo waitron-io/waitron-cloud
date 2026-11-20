@@ -5,6 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {prepareKindOutsideBaseline} from './kubernetes-outside.mjs';
 import {withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 
@@ -75,6 +76,29 @@ test('the approved issuer is ready before the prepared store is installed with O
   }, async store => {calls.push('services'); return store.ca;});
   assert.deepEqual(calls.slice(-3), ['issuer ready', 'store install', 'services']);
   assert.equal(result, 'synthetic store certificate');
+});
+
+test('the Kind baseline keeps a cached controller image and removes the image it pulled', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'service-controller-images-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const key = 'A'.repeat(43) + '=';
+  const imageNames = {kept: 'ghcr.io/fluxcd/source-controller', fresh: 'ghcr.io/fluxcd/kustomize-controller'};
+  const actions = [];
+  const outside = await prepareKindOutsideBaseline({directory, cluster: 'owned',
+    nodes: [1, 2, 3].map(n => ({name: 'node-' + n, ip: '192.0.2.' + n, id: String(n)})),
+    prepareBundle: async () => join(directory, 'synthetic-flux.json'),
+    run: async (binary, args) => {
+      if (binary === 'wg') return key;
+      if (binary !== 'docker') return '';
+      if (args[0] === 'inspect') return '123';
+      const image = args.at(-1).split('@')[0];
+      if (args[0] === 'image' && args[1] === 'inspect' && image === imageNames.fresh) throw Error('image not cached');
+      if (args[0] === 'pull' || args[1] === 'rm') actions.push([args[0], image]);
+      return '';
+    }});
+  await outside.close();
+  assert.deepEqual(actions, [['image', 'owned:source-controller'], ['pull', imageNames.fresh],
+    ['image', 'owned:kustomize-controller'], ['image', imageNames.fresh]]);
 });
 
 test('outside baseline validates its Cloud image before creating a Kind cell', () => {

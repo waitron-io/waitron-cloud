@@ -130,7 +130,7 @@ test('Flux verifies the publication Deployment in the services namespace', async
   const reads = [];
   const values = observed(revision, 'baseline');
   const result = await api.installFlux({name: 'box', image: 'waitron:test', deployment,
-    controllersPath: path, baselineNode: 'box-worker',
+    controllersPath: path, baselineNode: null,
     mirror: async () => ({publish: async text => {
       assert.equal(JSON.parse(text).metadata.namespace, 'd621-data');
       return revision;

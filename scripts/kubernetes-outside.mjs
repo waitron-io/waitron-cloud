@@ -18,9 +18,16 @@ export function outsideNodePeer(publicKey) {
 }
 
 async function installHostFilter(run, name) {
-  const rule = (...args) => run('sudo', ['-n', 'iptables', '-w', '-t', 'mangle', ...args], undefined, true);
+  const iptables = (...args) => run('sudo', ['-n', 'iptables', '-w', ...args], undefined, true);
+  const rule = (...args) => iptables('-t', 'mangle', ...args);
   const jump = ['PREROUTING', '-i', name, '-j', name];
-  const removeChain = async () => {await rule('-F', name); await rule('-X', name);};
+  const input = ['INPUT', '-i', name, '-m', 'conntrack', '!', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'DROP'];
+  let attached = false, local = false, chain = true;
+  const remove = async () => {
+    if (local) {await iptables('-D', ...input); local = false;}
+    if (attached) {await rule('-D', ...jump); attached = false;}
+    if (chain) {await rule('-F', name); await rule('-X', name); chain = false;}
+  };
   await rule('-N', name);
   try {
     await rule('-A', name, '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'RETURN');
@@ -28,11 +35,15 @@ async function installHostFilter(run, name) {
     await rule('-A', name, '-p', 'tcp', '-d', rehearsalAddress, '--dport', '18000', '-j', 'RETURN');
     await rule('-A', name, '-j', 'DROP');
     await rule('-I', ...jump);
+    attached = true;
+    // Before the mirror is published, the same port could reach a host listener.
+    await iptables('-I', ...input);
+    local = true;
   } catch (error) {
-    await cleanUp(error, removeChain);
+    await cleanUp(error, remove);
     throw error;
   }
-  return async () => {await rule('-D', ...jump); await removeChain();};
+  return remove;
 }
 
 export async function startOutsideMesh({directory, peers, prepareNodes, run, restrictInbound = false}) {
@@ -67,10 +78,15 @@ export async function startOutsideMesh({directory, peers, prepareNodes, run, res
     });
     throw error;
   }
+  let active = true;
   return {interfaceName, async close() {
-    await run('sudo', ['-n', 'wg-quick', 'down', path], undefined, true);
-    try {await removeFilter?.();}
-    finally {await rm(path);}
+    if (active) {
+      await run('sudo', ['-n', 'wg-quick', 'down', path], undefined, true);
+      active = false;
+    }
+    await removeFilter?.();
+    removeFilter = undefined;
+    await rm(path);
   }};
 }
 
@@ -113,16 +129,21 @@ export async function startKindOutsideMesh({directory, nodes, run, signal}, {res
   }});
 }
 
-export async function prepareKindOutsideBaseline(context) {
+export async function prepareKindOutsideBaseline({prepareBundle = prepareFluxBundle, ...context}) {
   const {cluster, directory, nodes, run, signal} = context;
   const execute = (binary, args, input, cleanup, limit) => run(binary, args,
     {input, signal: cleanup ? null : limit ?? signal, timeout: 180_000});
-  const controllersPath = await prepareFluxBundle(directory, cluster, {run: execute, node: nodes[0].name});
+  const controllersPath = await prepareBundle(directory, cluster, {run: execute, node: nodes[0].name});
   for (const {upstream, tag} of fluxImages(cluster)) {
-    await run('docker', ['pull', upstream], {timeout: 180_000});
-    await run('docker', ['tag', upstream, tag]);
-    try {await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout: 180_000});}
-    finally {await run('docker', ['image', 'rm', tag], {signal: null});}
+    const cached = await run('docker', ['image', 'inspect', upstream]).then(() => true, () => false);
+    if (!cached) await run('docker', ['pull', upstream], {timeout: 180_000});
+    try {
+      await run('docker', ['tag', upstream, tag]);
+      try {await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout: 180_000});}
+      finally {await run('docker', ['image', 'rm', tag], {signal: null});}
+    } finally {
+      if (!cached) await run('docker', ['image', 'rm', upstream], {signal: null});
+    }
   }
   const mesh = await startKindOutsideMesh(context, {restrictInbound: true});
   return outsidePublication({...context, mesh, run: execute, controllersPath});
