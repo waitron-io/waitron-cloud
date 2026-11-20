@@ -2831,8 +2831,14 @@ The states are `off`, `current` and `blocked`; `publication` is null or
 `{bodySha256,defaultLanguage,receivedAt}`. A matching current publication confirms
 unchanged even if its expected revision is old. Other stale publications return
 409/conflict. Each content or state change increments the venue revision once.
-Withdraw clears current pages and preserves an owner's block; only portal Enable
-removes that block. Every connected venue qualifies without a billing gate.
+Withdraw clears current pages and preserves an owner’s block. **Allow sharing**
+removes that block. In `test-venue-levels`, you need an active Connected or
+Hosted trial or paid level to publish and serve a guest menu. Ineligible
+publication returns 403/`guest_menu_plan_required`. Only signed status adds
+`planRequired: true` while ineligible. It preserves the stored state. Withdrawal
+and portal takedown remain available. Public GET and HEAD return 404 while the
+venue is ineligible. A still-shared copy returns at the same URL when eligibility
+returns. Existing billing modes retain their current guest-menu behaviour.
 
 Malformed bodies return 400/invalid_input, failed installation authority or digest
 binding returns 403/forbidden, excess bytes return 413/too_large, a blocked publish

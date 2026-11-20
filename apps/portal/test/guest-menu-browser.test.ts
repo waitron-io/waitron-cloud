@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {randomUUID} from 'node:crypto';
+import {createSession} from '@waitron-cloud/identity';
+import {RegistrationStore,transaction} from '@waitron-cloud/registration';
 import axe from 'axe-core';
 import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {guestMenuFixture} from '../../../packages/remote-access/test/fixtures/guest-menu.ts';
@@ -50,5 +53,44 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   await page.getByText(c.accessStopped,{exact:true}).waitFor();
   await page.getByRole('button',{name:c.guestMenuTitle,exact:true}).click();
   await enable.waitFor();
+ }finally{await portal.close();}
+});
+
+for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280])test(`guest menu trial guidance ${locale} ${colorScheme} ${width}`,async()=>{
+ const accountId=randomUUID(),orgId=randomUUID(),businessId=randomUUID();
+ const portal=await startPortalFixture(undefined,undefined,undefined,undefined,false,'https://menus.example.test',undefined,{accountIds:[accountId]});
+ try{
+  const session=await transaction(portal.db.pool,async client=>{
+   await client.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);
+   await client.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[accountId,accountId+'@example.test']);
+   await client.query('INSERT INTO organisations(id) VALUES($1)',[orgId]);
+   await client.query("INSERT INTO legal_businesses(id,organisation_id,country_code) VALUES($1,$2,'ES')",[businessId,orgId]);
+   await client.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,true,true)',[accountId,orgId]);
+   return createSession(client,accountId);
+  });
+  const registration=new RegistrationStore(portal.db.pool),binding={operationId:randomUUID(),installationKey:'synthetic-key',venueId:'',environment:'test',organisationId:orgId,legalBusinessId:businessId} as const;
+  await registration.start(binding);await registration.approveCloud(binding,accountId);await registration.approveLocal(binding,randomUUID());
+  const {venueId,installationId}=await registration.complete(binding);
+  await portal.db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",
+   ['00000000-0000-4000-8000-000000000001',orgId,businessId]);
+  await portal.db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
+   VALUES($1,1,'current',$2,$3,'en',clock_timestamp(),$4)`,[venueId,installationId,'a'.repeat(64),{en:'<h1>Menu</h1>'}]);
+  const context=await portal.browser.newContext({locale,colorScheme,viewport:{width,height:900}});
+  await context.addCookies([{name:'cloud_session',value:session.token,url:portal.origin,httpOnly:true},{name:'cloud_csrf',value:session.csrfToken,url:portal.origin}]);
+  const page=await context.newPage();page.setDefaultTimeout(5000);
+  const c=translations[locale];
+  await page.goto(portal.origin+'/account/remote-access');
+  await page.getByRole('button',{name:c.remoteSetup,exact:true}).click().catch(async error=>{
+   console.error(JSON.stringify({trace:portal.trace.slice(-12),text:await page.locator('body').innerText()}));throw error;
+  });
+  const region=page.getByRole('region',{name:c.guestMenuTitle,exact:true});
+  await region.getByRole('status').getByText(locale==='en'?'Guest menus require Connected or Hosted.':'Los menús para clientes requieren Connected o Hosted.',{exact:true}).waitFor();
+  assert.equal(await region.getByRole('link',{name:c.guestMenuLink,exact:true}).count(),0);
+  await region.getByRole('button',{name:c.guestMenuTakedown,exact:true}).waitFor();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await region.screenshot({path:new URL(`../dist/guest-${locale}-${colorScheme}-${width}-trial.png`,import.meta.url).pathname});
+  await region.getByRole('link',{name:c.billingStart,exact:true}).click();
+  await page.getByRole('button',{name:c.billingStart,exact:true}).waitFor();
+  assert.equal(await page.getByLabel(c.billingVenue,{exact:true}).inputValue(),venueId);
  }finally{await portal.close();}
 });

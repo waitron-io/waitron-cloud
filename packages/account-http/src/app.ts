@@ -128,7 +128,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
   const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust,options.planMode,allowances):undefined;
   const billingDisplay=createBillingDisplayMachine({pool,issuer:options.leaseIssuer,origin:config.portalOrigin,display:options.billingDisplay,trusted:options.leaseTrust});
-  const guestMenus=options.guestOrigin&&options.leaseIssuer?new GuestMenuMachine(pool,options.leaseIssuer,config.portalOrigin,options.guestOrigin,options.leaseTrust):undefined;
+  const guestMenus=options.guestOrigin&&options.leaseIssuer?new GuestMenuMachine(pool,options.leaseIssuer,config.portalOrigin,options.guestOrigin,options.leaseTrust,options.planMode):undefined;
   const boxErrors=options.leaseIssuer?new BoxErrorReports(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;

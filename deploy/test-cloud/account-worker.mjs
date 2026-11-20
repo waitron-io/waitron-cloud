@@ -69,7 +69,7 @@ try {
     catch{console.error('Test relay startup failed; restore private keys and check schema');}
     if(guestOrigin&&!stopRequested){
       const key=await readFile(join(directory,'lan/key.pem')),cert=await readFile(join(directory,'lan/cert.pem'));
-      guest=await startGuestMenuServer({pool,rateKey:config.rateKey,origin:guestOrigin,tls:{key,cert},
+      guest=await startGuestMenuServer({pool,rateKey:config.rateKey,origin:guestOrigin,tls:{key,cert},planMode,
         host:process.env.GUEST_HTTP_HOST??'10.79.0.3',port:Number(process.env.GUEST_HTTP_PORT??3443),
         trustedProxyIps:['10.79.0.2']});
     }

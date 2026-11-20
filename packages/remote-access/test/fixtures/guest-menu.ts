@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
+import type {Pool} from 'pg';
+import {BillingStore,RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {database} from '../../../account-http/test/fixtures.ts';
 export async function guestMenuFixture(existing?:Awaited<ReturnType<typeof database>>){
  const db=existing??await database(),email=`menu-${randomUUID()}@example.test`,password='A long synthetic menu password';
@@ -13,4 +14,12 @@ export async function guestMenuFixture(existing?:Awaited<ReturnType<typeof datab
  const seed=async(pages:Record<string,string>={'en':'<h1>Menu</h1>','es':'<h1>Menú</h1>'})=>db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
   VALUES($1,1,'current',$2,$3,'en','2026-11-01T12:00:00Z',$4)`,[installed.venueId,installed.installationId,'a'.repeat(64),pages]);
  return {db,email,password,owner,...installed,seed};
+}
+
+export async function startGuestMenuTrial(pool:Pool,{organisationId,legalBusinessId,venueId}:{organisationId:string;legalBusinessId:string;venueId:string}){
+ const scope={organisationId,legalBusinessId};
+ const billing=new BillingStore(pool),event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+ await billing.execute(scope,event(),{type:'ensure_business'});
+ const {day}=(await pool.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0];
+ await billing.transition(scope,event(),{type:'start_trial',venueId,level:'connected',on:day});
 }

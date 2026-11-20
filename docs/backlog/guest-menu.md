@@ -5,8 +5,9 @@
 Qualify Waitron's signed sender against the
 [Amazon test Cloud guest address](../test-cloud.md#open-the-synthetic-venues-guest-menu)
 and check a fresh publication, withdrawal and republication from a phone on
-mobile data. Qualify production DNS and certificates separately. Every venue
-connected to Cloud qualifies without a billing gate. Generalize publication keys beyond
+mobile data. Check the trial or paid-plan gate with Waitron’s preview before rolling
+it out on the Amazon test Cloud. Qualify production DNS, certificates and rollout
+separately. Generalize publication keys beyond
 the current base-language keys and sole stored variant; keep guest preference
 matching separate from that publication change. Mirror Waitron’s shared 32-entry,
 deduplicated header limit after its release (`ACCEPT-LANGUAGE-CAP`). Keep Norwegian
