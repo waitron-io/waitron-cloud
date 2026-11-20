@@ -4,6 +4,7 @@
 // --node-loss checks three control planes without venue images.
 // --storage-loss uses the pinned private store and needs a Linux Docker host.
 // --remote rehearses gateway handover on private Linux Kind; --stop-gateway-node selects machine loss.
+// --outside-baseline rehearses the complete venue journey through the private tunnel.
 // --services rehearses production-mode signup, pairing and backup on private Linux Kind.
 // --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
@@ -113,15 +114,18 @@ export async function runKubernetesCheck(target = 'kind', {clients = runTestClou
 assert.ok(!stopGatewayNode || target === 'kind-remote', 'kubernetes.target');
 assert.ok(!prepareOutside || target === 'kind-remote', 'kubernetes.outside_network_target');
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
-if (target === 'kind-services' || target === 'kind-remote') {
-  const remote = target === 'kind-remote', stage = remote ? 'remote' : 'services';
+if (target === 'kind-services' || target === 'kind-remote' || target === 'kind-baseline') {
+  const baseline = target === 'kind-baseline', remote = target === 'kind-remote';
+  const stage = baseline ? 'baseline' : remote ? 'remote' : 'services';
   const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage} = process.env;
   assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, stage + '.cloud_image_id');
   assert.match(waitronImage ?? '', /^sha256:[a-f0-9]{64}$/, stage + '.waitron_image_id');
   assert.equal(process.platform, 'linux', stage + '.requires_linux');
   const verificationTarget = await readRehearsalVerificationTarget();
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
-  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget, remote, stopGatewayNode, prepareOutside});
+  const prepare = baseline ? (await import('./kubernetes-outside.mjs')).prepareKindOutsideBaseline : prepareOutside;
+  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget,
+    remote, stopGatewayNode, baseline, prepareOutside: prepare});
   return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse});
 }
 if (target === 'kind-storage-identity') {
@@ -381,7 +385,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const [mode, file, ...extra] = process.argv.slice(2);
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
     ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss'],
-    ['--storage-identity', 'kind-storage-identity'], ['--services', 'kind-services'], ['--remote', 'kind-remote']]);
+    ['--storage-identity', 'kind-storage-identity'], ['--services', 'kind-services'], ['--remote', 'kind-remote'],
+    ['--outside-baseline', 'kind-baseline']]);
   const stopGatewayNode = mode === '--remote' && file === '--stop-gateway-node';
   const target = extra.length ? undefined : file !== undefined && !stopGatewayNode ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);

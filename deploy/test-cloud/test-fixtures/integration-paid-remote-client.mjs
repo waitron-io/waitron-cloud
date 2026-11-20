@@ -38,7 +38,9 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
       body: JSON.stringify(value)});
   const send = async (action, body) => {
     const response = await exchange(action, envelope(action, body));
-    assert.equal(response.status, 200, 'integration.paid_remote_exchange');
+    const step = action === 'staff-certificate-submit' ? 'submit' : 'status';
+    const header = response.headers.get('x-content-type-options') === 'nosniff' ? 'nosniff' : 'no-nosniff';
+    assert.equal(response.status, 200, 'integration.paid_remote_exchange.' + step + '.' + response.status + '.' + header);
     return response.json();
   };
   const remoteService = value => value.services.find(service => service.service === 'remote_access');

@@ -43,7 +43,7 @@ export async function prepareFluxBundle(directory, name, {run, node=name+'-contr
 
 const shaOf=value=>/([a-f0-9]{40})$/.exec(value??'')?.[1];
 const releaseAnnotation='waitron.io/p1-revision';
-export async function waitFluxRevision({kube,sha,applied=sha,value,worker,rejected=false,sourceUid,deadline,
+export async function waitFluxRevision({kube,sha,applied=sha,value,worker,workload='manifest',selector='app=manifest',rejected=false,sourceUid,deadline,
   signal,now=()=>performance.now(),sleep=ms=>delay(ms,undefined,{signal})}) {
   let last={};
   while(now()<deadline) {
@@ -52,7 +52,7 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,reject
       const read=args=>kube(['get',...args,'-o','json','--request-timeout=5s'],undefined,false,
         AbortSignal.any([signal,AbortSignal.timeout(Math.max(1,Math.ceil(deadline-now())))].filter(Boolean))).then(JSON.parse);
       const reads=await Promise.allSettled([
-        read(['gitrepository','p1']),read(['kustomization','p1']),read(['deployment','manifest']),read(['pods','-l','app=manifest']),
+        read(['gitrepository','p1']),read(['kustomization','p1']),read(['deployment',workload]),read(['pods','-l',selector]),
         sourceUid?read(['pods','-n','flux-system','-l','app=source-controller']):undefined,
       ]);
       const [source,root,deployment,pods,controllers]=reads.map(row=>row.status==='fulfilled'?row.value:{});
@@ -64,7 +64,7 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,reject
       const pod=pods.items?.length===1?pods.items[0]:undefined;
       const healthy=!unavailable.length&&deployment.status?.observedGeneration===deployment.metadata.generation&&
         deployment.spec.template.metadata.annotations?.[releaseAnnotation]===value&&pod&&!pod.metadata.deletionTimestamp&&
-        pod.metadata.annotations?.[releaseAnnotation]===value&&pod.spec.nodeName===worker&&
+        pod.metadata.annotations?.[releaseAnnotation]===value&&(!worker||pod.spec.nodeName===worker)&&
         pod.status?.conditions?.some(row=>row.type==='Ready'&&row.status==='True');
       if(now()<=deadline&&last.source===sha&&last.applied===applied&&healthy&&
         root.status.observedGeneration===root.metadata.generation&&
@@ -164,7 +164,7 @@ export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
 
 export async function installFlux({name,image,run,kube,deployment,controllersPath='/tmp/d618-flux.json',baselineNode=name+'-worker2',signal,mirror=startFluxMirror}) {
   const source=await mirror({name,image,run});
-  const managed=structuredClone(deployment);managed.metadata.namespace='default';delete managed.spec.replicas;
+  const managed=structuredClone(deployment);managed.metadata.namespace??='default';delete managed.spec.replicas;
   managed.spec.strategy={type:'RollingUpdate',rollingUpdate:{maxUnavailable:0,maxSurge:1}};
   managed.spec.template.metadata.annotations={...managed.spec.template.metadata.annotations,[releaseAnnotation]:'baseline'};
   try {
@@ -176,8 +176,10 @@ export async function installFlux({name,image,run,kube,deployment,controllersPat
       {apiVersion:'source.toolkit.fluxcd.io/v1',kind:'GitRepository',metadata:{name:'p1'},spec:{interval:'15s',url:source.url,ref:{branch:'main'}}},
       {apiVersion:'kustomize.toolkit.fluxcd.io/v1',kind:'Kustomization',metadata:{name:'p1'},spec:{interval:'15s',path:'./',prune:false,wait:true,timeout:'180s',sourceRef:{kind:'GitRepository',name:'p1'}}},
     ]}));
-    await waitFluxRevision({kube,sha,value:'baseline',worker:baselineNode,deadline:performance.now()+180000,signal});
-    return {close:source.close,reconcile:signal=>reconcileFlux({kube,publish:source.publish,deployment:managed,worker:name+'-worker',signal})};
+    const {name: workload} = managed.metadata;
+    const selector = 'app=' + (managed.spec.selector?.matchLabels?.app ?? workload);
+    await waitFluxRevision({kube,sha,value:'baseline',worker:baselineNode,workload,selector,deadline:performance.now()+180000,signal});
+    return {revision:sha,close:source.close,reconcile:signal=>reconcileFlux({kube,publish:source.publish,deployment:managed,worker:name+'-worker',signal})};
   } catch(error) {await source.close();throw error;}
 }
 

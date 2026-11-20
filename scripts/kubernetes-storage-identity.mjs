@@ -275,9 +275,9 @@ export async function withStockholmStorageIdentity(context, verify) {
   await kube(['apply', '-f', '-'], manifest(resources.filter(row => row.kind !== 'Secret')));
   await kube(['-n', storageNamespace, 'rollout', 'status', 'deployment/storage-identity', '--timeout=180s'],
     {signal, timeout: 185_000});
-  return withStockholmStore(context, account => verify(account, custody, custodyDirectory), {
-    configUrl: issuer + discoveryPath, clientId: audience, rolePolicy: policyName, ca: custody.certificate,
-  });
+  const openId = {configUrl: issuer + discoveryPath, clientId: audience, rolePolicy: policyName, ca: custody.certificate};
+  if (context.installStore) return verify(await context.installStore(openId), custody, custodyDirectory);
+  return withStockholmStore(context, account => verify(account, custody, custodyDirectory), openId);
 }
 
 export function runStorageIdentity(context) {

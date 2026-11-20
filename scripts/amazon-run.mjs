@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fluxImages,prepareFluxBundle} from './kubernetes-git.mjs';
-import {storeBuildArgs} from './kubernetes-storage.mjs';
+import {installStockholmStore, storeBuildArgs} from './kubernetes-storage.mjs';
+import {meshNodeAddress, outsideNodePeer, outsidePublication, startOutsideMesh} from './kubernetes-outside.mjs';
+import {cleanUp} from './kubernetes-database.mjs';
+import {servicesNamespace, verifierScratchPath} from '../deploy/kubernetes/services.mjs';
+import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
 
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
   try {
     await operations.create();
     await operations.prepare();
+    if (operations.baseline) {
+      const baseline = await operations.baseline();
+      await waitExpiry();
+      await operations.waitDeleted();
+      return {baseline, removed: true};
+    }
     let journeys, observation;
     if (operations.observe) observation = await operations.observe();
     else {
@@ -52,7 +62,7 @@ async function command(binary, args, input, signal, timeout = 180000) {
 
 async function main() {
   const [mode, stack] = process.argv.slice(2);
-  assert.ok(['start', 'stop', 'observe'].includes(mode), 'Use start or stop or observe');
+  assert.ok(['start', 'stop', 'observe', 'baseline'].includes(mode), 'Use start or stop or observe or baseline');
   assert.ok(process.env.D618_CONFIG, 'Set D618_CONFIG to your private run configuration JSON file.');
   const config = JSON.parse(await readFile(process.env.D618_CONFIG, 'utf8'));
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
@@ -68,7 +78,9 @@ async function main() {
       await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', stack], true);
       return;
     }
-    process.stdout.write(JSON.stringify(await startAmazon({...config, observer: mode === 'observe'}, {signal: stop.signal, run: (binary, args, input, cleanup, timeout) => command(binary, args, input, cleanup ? undefined : stop.signal, timeout), aws,
+    process.stdout.write(JSON.stringify(await startAmazon({...config, observer: mode === 'observe', baseline: mode === 'baseline'}, {
+      signal: stop.signal, run: (binary, args, input, cleanup, timeout, request) => command(binary, args, input,
+        cleanup ? undefined : AbortSignal.any([stop.signal, request].filter(Boolean)), timeout), aws,
       sleep: ms => delay(ms, undefined, {signal: stop.signal})})) + '\n');
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
@@ -102,7 +114,14 @@ export async function checkAmazonArchive(archive, images, run) {
   }
 }
 
-export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now, signal, observe = observerCommand, prepareFlux = prepareFluxBundle}) {
+async function runOutsideServices(context) {
+  const {runKubernetesServices} = await import('./kubernetes-services.mjs');
+  return runKubernetesServices(context);
+}
+
+export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now, signal,
+  observe = observerCommand, prepareFlux = prepareFluxBundle, runBaseline = runOutsideServices}) {
+  assert.ok(!(config.baseline && config.observer), 'amazon.mode');
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
@@ -115,7 +134,18 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   const name = 'd618-' + randomUUID();
   const directory = await mkdtemp(join(tmpdir(), 'd618-')), ownedImages = [];
   const cloud = name + ':cloud', waitron = name + ':waitron', store = name + ':store';
-  let hosts;
+  let hosts, mesh, networkId, failure;
+  const closeHost = async () => {
+    let failure;
+    try {
+      if (mesh) {await mesh.close(); mesh = undefined;}
+    } catch (error) {failure = error; throw error;}
+    finally {
+      await cleanUp(failure, async () => {
+        if (networkId) {await run('docker', ['network', 'rm', networkId], undefined, true); networkId = undefined;}
+      });
+    }
+  };
   const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
     '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=yes', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
   try {
@@ -125,11 +155,11 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       '-f', 'deploy/local-stack/Dockerfile', '-t', cloud, '.'], undefined, false, 900000);
     ownedImages.push(waitron);
     await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
-      process.execPath, 'scripts/build-backup-verifier.mjs'], undefined, false, 900000);
+      process.execPath, 'scripts/build-backup-verifier.mjs', ...(config.baseline ? ['--amazon-test'] : [])], undefined, false, 900000);
     ownedImages.push(store);
     await run('docker', storeBuildArgs(store, ['--platform', 'linux/amd64']), undefined, false, 900000);
     let fluxBundle;
-    if(config.observer) {
+    if (config.observer || config.baseline) {
       await run('docker',['run','--rm','--entrypoint','sh',waitron,'-ec','git --version && test -x "$(git --exec-path)/git-http-backend"']);
       fluxBundle=await prepareFlux(directory,name,{run});
     }
@@ -139,7 +169,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       try {await run('docker', ['image', 'inspect', image]);} catch {ownedImages.push(image);}
       await run('docker', ['pull', '--platform', 'linux/amd64', image]);
     }
-    if(config.observer)for(const {upstream,tag} of fluxImages(name)) {
+    if(config.observer || config.baseline)for(const {upstream,tag} of fluxImages(name)) {
       try {await run('docker',['image','inspect',upstream]);}catch{ownedImages.push(upstream);}
       await run('docker',['pull','--platform','linux/amd64',upstream]);
       ownedImages.push(tag);await run('docker',['tag',upstream,tag]);images.push(tag);
@@ -167,11 +197,19 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     const parameters = {Image: config.image, Key: config.key, OperatorCidr: config.operatorCidr,
       StackRole: config.stackRole, SchedulerRole: config.schedulerRole, ExpiryTime: new Date(expiry).toISOString().slice(0, 19)};
     let outputs, target;
-    const ssh = (index, args, input, timeout = 600000) => run('ssh', [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ')], input, false, timeout);
+    const ssh = (index, args, input, timeout = 600000, request, hideStderr = false) => run('ssh',
+      [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ') + (hideStderr ? ' 2>/dev/null' : '')],
+      input, request === null, timeout, request);
     const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
-    const kube = (args, {timeout} = {}) => ssh(0, ['sudo', 'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name, ...args],
-      undefined, timeout);
+    const kubeArgs = ['kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name];
+    const kube = (args, {input, timeout, signal: request} = {}) => {
+      // kubectl validation errors can quote the submitted Secret.
+      const privateManifest = args.includes('-f') && /"kind"\s*:\s*"Secret"/.test(input ?? '');
+      return ssh(0, ['sudo', ...kubeArgs, ...args], input, timeout, request, privateManifest);
+    };
+    const local = (binary, args, {input, signal: request = signal, timeout} = {}) =>
+      run(binary, args, input, request === null, timeout, request);
     const waitDeleted = async () => {
       try {await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', name], true);}
       catch (error) {if (error.code === 'ETIMEDOUT') throw Error('amazon.deletion_late'); throw error;}
@@ -203,14 +241,22 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           await copy(index, 'source.tar', '/tmp/d618-source.tar');
           await ssh(index, ['sudo', 'mkdir', '-p', '/opt/d618']);
           await ssh(index, ['sudo', 'tar', '-xf', '/tmp/d618-source.tar', '-C', '/opt/d618']);
-          if(index===0&&fluxBundle)await copy(0,'flux.json','/tmp/d618-flux.json');
+          if(index===0&&config.observer)await copy(0,'flux.json','/tmp/d618-flux.json');
           await bootstrap(index, 'prepare', [target.nodes[index], '10.77.0.' + (index + 1)]);
         }
-        for (let index = 0; index < 3; index++) {
-          const peers = [0, 1, 2].filter(peer => peer !== index).map(peer => '\n[Peer]\nPublicKey=' + publicKeys[peer] + '\nAllowedIPs=10.77.0.' + (peer + 1) + '/32\nEndpoint=' + outputs['Private' + ['A', 'B', 'C'][peer]] + ':51821\nPersistentKeepalive=15\n').join('');
-          const address = '10.77.0.' + (index + 1);
-          await bootstrap(index, 'mesh', [address], '[Interface]\nAddress=' + address + '/24\nListenPort=51821\nPrivateKey=' + privateKeys[index] + '\n' + peers);
-        }
+        const prepareNodes = async outsideKey => {
+          for (let index = 0; index < 3; index++) {
+            const peers = [0, 1, 2].filter(peer => peer !== index).map(peer => '\n[Peer]\nPublicKey=' + publicKeys[peer] +
+              '\nAllowedIPs=' + meshNodeAddress(peer) + '/32\nEndpoint=' + outputs['Private' + ['A', 'B', 'C'][peer]] + ':51821\nPersistentKeepalive=15\n').join('');
+            const address = meshNodeAddress(index);
+            await bootstrap(index, 'mesh', [address], '[Interface]\nAddress=' + address + '/24\nListenPort=51821\nPrivateKey=' +
+              privateKeys[index] + '\n' + peers + (outsideKey ? outsideNodePeer(outsideKey) : ''));
+          }
+        };
+        if (config.baseline) {
+          mesh = await startOutsideMesh({directory, peers: hosts.map((endpoint, index) => ({endpoint, publicKey: publicKeys[index]})),
+            prepareNodes, run, restrictInbound: true});
+        } else await prepareNodes();
         for (let index = 0; index < 3; index++) await bootstrap(index, 'storage', [index === 0 ? 'control' : 'worker']);
         process.stderr.write('Uploading image bundle once to machine 0\n');
         await copy(0, 'images.tar', '/tmp/d618-images.tar', archiveCopyTimeout);
@@ -229,7 +275,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           }
         }
         await ssh(0, ['sudo', 'docker', 'load', '-i', '/tmp/d618-images.tar']);
-        await ssh(0, ['sudo', 'docker', 'network', 'create', '--subnet', '10.79.0.0/24', name]);
+        if (!config.baseline) await ssh(0, ['sudo', 'docker', 'network', 'create', '--subnet', '10.79.0.0/24', name]);
         const certificateKey = await bootstrap(0, 'control', [name]);
         const joinCommand = await ssh(0, ['sudo', 'kubeadm', 'token', 'create', '--ttl', '20m', '--print-join-command']);
         for (const index of [1, 2]) await bootstrap(index, 'join', [name], joinCommand + '\n' + certificateKey + '\n');
@@ -247,7 +293,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-data.mjs',
           '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, ...target.nodes], undefined, 750_000);
         for (let index = 0; index < 3; index++) await bootstrap(index, 'object-storage');
-        await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-storage.mjs',
+        if (!config.baseline) await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-storage.mjs',
           '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, store,
           ...target.nodes, '10.77.0.1', '10.77.0.2', '10.77.0.3'], undefined, 360_000);
       },
@@ -272,6 +318,38 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       waitDeleted,
       deleteStack: () => aws('cloudformation', ['delete-stack', '--stack-name', name], true),
     };
+    if (config.baseline) operations.baseline = async () => {
+      let baselineFailure;
+      try {
+        const nodes = target.nodes.map((node, index) => ({name: node, ip: meshNodeAddress(index)}));
+        const limit = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, expiry - now()))].filter(Boolean));
+        await ssh(0, ['sudo', 'sh', '-ec', `
+          scratch=$(mktemp -d /var/local/d621-verifier.XXXXXX)
+          fallocate -l 1G "$scratch/disk"
+          mkfs.ext4 -q -m 0 "$scratch/disk"
+          mkdir "$scratch/mount"
+          mount -o loop,nodev,nosuid,noexec "$scratch/disk" "$scratch/mount"
+          install -d -m 0700 -o 1000 -g 1000 "$scratch/mount/work"
+          install -d -m 0700 "$1"
+          mount --bind "$scratch/mount/work" "$1"`,
+          'verifier-scratch', verifierScratchPath], undefined, 30_000, limit);
+        const verificationTarget = await readRehearsalVerificationTarget();
+        const context = {cluster: name, nodes, directory, kube, run: local, image: ids[cloud], waitronImage: ids[waitron],
+          signal: limit, verificationTarget, amazon: {...target, phase: 'baseline'}, baseline: true, databasePrepared: true};
+        const execute = (binary, args, input, cleanup, request) =>
+          run(binary, args, input, cleanup, undefined, request ?? limit);
+        const prepareOutside = () => outsidePublication({...context, run: execute, mesh,
+          controllersPath: fluxBundle, close: async () => {}});
+        return await runBaseline({...context, prepareOutside,
+          installStore: openId => installStockholmStore({...context, image: store, nodes: target.nodes,
+            addresses: nodes.map(node => node.ip), openId}),
+          importVerifierImage: (image, args) => ssh(0, ['sudo', 'bash', '-o', 'pipefail', '-c',
+            'docker save "$1" | ' + [...kubeArgs, '-n', servicesNamespace, ...args].map(quote).join(' '),
+            'verifier-image', image], undefined, 180_000, limit),
+        });
+      } catch (error) {baselineFailure = error; throw error;}
+      finally {await cleanUp(baselineFailure, closeHost);}
+    };
     if (config.observer) operations.observe = async () => {
       // Include target transfer in baseline so the one-hour budget leaves forty minutes.
       const baselineStarted = now();
@@ -295,15 +373,27 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         }});
       return {...result, stopMs, replacementMs};
     };
+    if (config.baseline) {
+      const id = await run('docker', ['network', 'create', '--subnet', '172.30.250.0/24', name]);
+      assert.match(id, /^[a-f0-9]{64}$/, 'amazon.outside_network');
+      networkId = id;
+    }
     const outcome = await runAmazonExperiment(operations, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
+    let cleanupFailure;
+    try {await closeHost();} catch (error) {cleanupFailure = error;}
     for (const host of hosts ?? []) {
       // A stopped worker or disconnected master may already have no socket to close.
       try {await run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + host], undefined, true);} catch {}
     }
     for (const image of ownedImages) {try {await run('docker', ['image', 'rm', image], undefined, true);} catch {process.stderr.write('Owned image cleanup failed\n');}}
-    await rm(directory, {recursive: true, force: true});
+    if (cleanupFailure && mesh) process.stderr.write('Outside tunnel or firewall cleanup needs its private configuration in ' + directory + '\n');
+    else await rm(directory, {recursive: true, force: true});
+    if (cleanupFailure) await cleanUp(failure, async () => {throw cleanupFailure;});
   }
 }
 

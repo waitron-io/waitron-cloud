@@ -10,18 +10,21 @@ const fixtureLabels = ['integration.remote_replay_status', 'integration.remote_c
   'integration.remote_replay_state', 'integration.remote_replay_configuration',
   'integration.remote_paid_configuration_required', 'integration.paid_remote_certificate_pending'];
 
+const isFixtureLabel = label => fixtureLabels.includes(label) ||
+  /^integration\.paid_remote_exchange\.(?:submit|status)\.[1-5]\d{2}\.(?:nosniff|no-nosniff)$/.test(label);
+
 export function fixtureFailureDiagnostic(error) {
   const code = fixtureCodes.includes(error?.code) ? error.code : 'unknown';
   // Explicit assertion labels still carry comparisons on later lines; none of those values may leave the venue.
   const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
-  const label = fixtureLabels.includes(first) && (code !== 'ERR_ASSERTION' || error.generatedMessage === false) ? first : 'redacted';
+  const label = isFixtureLabel(first) && (code !== 'ERR_ASSERTION' || error.generatedMessage === false) ? first : 'redacted';
   return 'integration.fixture_error:' + code + ':' + label;
 }
 
 export function fixtureRefusalDiagnostic(text) {
   const found = /integration\.fixture_error:([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/.exec(text);
   return found && (fixtureCodes.includes(found[1]) || found[1] === 'unknown') &&
-    (fixtureLabels.includes(found[2]) || found[2] === 'redacted') ? ':' + found[0] : '';
+    (isFixtureLabel(found[2]) || found[2] === 'redacted') ? ':' + found[0] : '';
 }
 
 export function rollbackRefusalDiagnostic(text) {

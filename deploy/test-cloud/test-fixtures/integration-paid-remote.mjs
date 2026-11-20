@@ -121,6 +121,11 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   await assert.rejects(probe(placement.staffHostname, '/public/availability', {verificationHostname: placement.publicHostname}), /certificate|Hostname/i);
   const peers = signal => stockholm ? target.peers(signal) : docker(['exec', gateway, 'wg', 'show', 'wg-cloud', 'peers']);
   assert.ok((await peers()).split(/\s+/).includes(peer.peerPublicKey));
+  if (stockholm?.baseline) {
+    await untilRemote(signal => target.peerTraffic(peer.peerPublicKey, signal), 30000, stockholm.signal, 'baseline_peer_traffic');
+    return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true,
+      privatePathRefused: true, peerTraffic: true, venueId: paid.venueId};
+  }
   if (stockholm) {
     const check = async (signal, expectedPublic, refreshPublicCookie = false, elapsed) => {
       const route = async (name, hostname, options) => {

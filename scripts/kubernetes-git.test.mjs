@@ -120,6 +120,32 @@ test('bootstrap puts the Deployment only in Git and leaves replica scaling outsi
   assert.equal(closed,2);
 });
 
+test('Flux verifies the publication Deployment in the services namespace', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'flux-publication-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const path = join(directory, 'flux.json');
+  await writeFile(path, '{"items":[]}');
+  const deployment = {metadata: {name: 'remote-worker', namespace: 'd621-data'},
+    spec: {selector: {matchLabels: {app: 'remote-worker'}}, template: {metadata: {}}}};
+  const reads = [];
+  const values = observed(revision, 'baseline');
+  const result = await api.installFlux({name: 'box', image: 'waitron:test', deployment,
+    controllersPath: path, baselineNode: null,
+    mirror: async () => ({publish: async text => {
+      assert.equal(JSON.parse(text).metadata.namespace, 'd621-data');
+      return revision;
+    }, close: async () => {}}),
+    kube: async (args, _, __, limit) => {
+      if (args[0] !== 'get') return '';
+      reads.push(args.slice(1, 5));
+      assert.ok(limit);
+      return JSON.stringify(values[args[1]]);
+    }});
+  assert.ok(reads.some(args => args[0] === 'deployment' && args[1] === 'remote-worker'));
+  assert.ok(reads.some(args => args[0] === 'pods' && args[2] === 'app=remote-worker'));
+  assert.equal(result.revision, revision);
+});
+
 test('repair measures command time, drift, cache refetch and rejected-render retention before restoring Git',async()=>{
   let clock=0,count=0,values=observed('0'.repeat(40),'baseline'),uid='old-controller',repairAt=Infinity,desired='baseline';
   values.pods.items[0].spec.nodeName='box-worker';
