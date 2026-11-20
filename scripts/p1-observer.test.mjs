@@ -25,6 +25,23 @@ test('same clients are sampled through confirmed stop and the second backup afte
   assert.equal(result.backupsAfterStop, 2);
 });
 
+test('the measured Kind leg reports fresh work and checks the retained backup near the end of its six-minute hold', async () => {
+  let clock = 0;
+  const probes = {
+    session: async () => true, remote: async () => true, login: async () => true,
+    backup: async () => ({verifiedAt: clock, verifier: 'verifier-process'}),
+    signup: async () => ({deliveredAt: clock, worker: 'email-process'}),
+  };
+  const result = await api.observeP1({probes, holdMs: 360_000, now: () => clock,
+    sleep: async ms => {clock += ms; await new Promise(setImmediate);},
+    ready: () => {}, stopped: async () => {}, replacement: async () => {}});
+  assert.ok(result.offMs >= 360_000 && result.offMs <= 362_000);
+  assert.equal(result.backupsAfterStop, 2);
+  assert.ok(result.samples.some(sample => sample.name === 'backup' && sample.startedMs === 300_000 && sample.ok));
+  assert.deepEqual(result.recovery.backup.result, {verifiedAt: 0, verifier: 'verifier-process'});
+  assert.deepEqual(result.recovery.signup.result, {deliveredAt: 0, worker: 'email-process'});
+});
+
 // A recovery success cannot excuse a later failure in the same leg.
 test('a scheduled outage after recovery fails the leg', async () => {
   assert.equal(typeof api.observeP1, 'function');

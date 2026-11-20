@@ -9,6 +9,43 @@ import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixture
 import {spreadCoreDns} from './kubernetes-placement.mjs';
 import {selectSurvivingNode} from './kubernetes-remote.mjs';
 
+const stockholmHoldMs = 900_000;
+
+export async function stopAmazonRehearsalNode({instance, node, aws, kube, whileStopped, afterRestart, signal,
+  holdMs = stockholmHoldMs, now = () => performance.now(), sleep = delay}) {
+  assert.equal(holdMs, stockholmHoldMs, 'amazon.rehearsal_hold');
+  assert.match(instance ?? '', /^i-[a-f0-9]{17}$/, 'amazon.rehearsal_instance');
+  const instanceCall = (...args) => {
+    signal?.throwIfAborted();
+    return aws('ec2', [...args, '--instance-ids', instance]);
+  };
+  async function confirm(expected) {
+    const {Reservations} = JSON.parse(await instanceCall('describe-instances'));
+    const rows = Reservations.flatMap(row => row.Instances);
+    assert.ok(rows.length === 1 && rows[0].InstanceId === instance && rows[0].State.Name === expected,
+      'amazon.rehearsal_instance_state');
+    return rows[0];
+  }
+
+  const started = now();
+  await instanceCall('stop-instances', '--skip-os-shutdown');
+  await instanceCall('wait', 'instance-stopped');
+  await confirm('stopped');
+  const stoppedAt = now();
+  const fault = {signal: AbortSignal.any([signal, AbortSignal.timeout(holdMs + 30_000)].filter(Boolean))};
+  const taint = 'node.kubernetes.io/out-of-service';
+  await kube(['taint', 'node', node, taint + '=nodeshutdown:NoExecute'], fault);
+  const result = await whileStopped({...fault, started, stoppedAt, holdMs});
+  await sleep(Math.max(0, stoppedAt + holdMs - now()), undefined, {signal});
+  await confirm('stopped');
+  const offMs = Math.round(now() - stoppedAt);
+  await instanceCall('start-instances');
+  await instanceCall('wait', 'instance-running');
+  await afterRestart(await confirm('running'), {signal});
+  await kube(['taint', 'node', node, taint + ':NoExecute-'], {signal});
+  return {...result, stopped: node, offMs};
+}
+
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
   try {
     await operations.create();

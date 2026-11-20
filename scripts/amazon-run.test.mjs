@@ -95,6 +95,50 @@ test('bootstrap refuses an unsupported phase before touching the host', () => {
 const config = {region: 'eu-north-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
   operatorCidr: '203.0.113.8/32', sshKey: '/synthetic/key', stackRole: 'arn:aws:iam::123456789012:role/d618-stack',
   schedulerRole: 'arn:aws:iam::123456789012:role/d618-expiry', waitronCheckout: '/synthetic/waitron'};
+
+test('the Stockholm stop confirms the owned instance before marking it, holds it down and rejoins the same instance', async () => {
+  const instance = 'i-00000000000000002', node = 'private-node-b';
+  let clock = 10_000, state = 'running';
+  const calls = [];
+  const result = await api.stopAmazonRehearsalNode({instance, node, now: () => clock,
+    sleep: async ms => {calls.push(['hold', ms]); clock += ms;},
+    async aws(service, args) {
+      assert.equal(service, 'ec2');
+      assert.deepEqual(args.slice(-2), ['--instance-ids', instance]);
+      calls.push(args.slice(0, -2));
+      if (args[0] === 'wait') state = args[1] === 'instance-stopped' ? 'stopped' : 'running';
+      if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [
+        {InstanceId: instance, State: {Name: state}, PublicIpAddress: '203.0.113.12'},
+      ]}]});
+    },
+    async kube(args) {calls.push(args);},
+    async whileStopped() {calls.push(['prove']); clock += 41_000; return {observed: true};},
+    async afterRestart(row) {calls.push(['restore', row.InstanceId, row.PublicIpAddress]);},
+  });
+  const taint = 'node.kubernetes.io/out-of-service';
+  assert.deepEqual(calls, [
+    ['stop-instances', '--skip-os-shutdown'], ['wait', 'instance-stopped'], ['describe-instances'],
+    ['taint', 'node', node, taint + '=nodeshutdown:NoExecute'], ['prove'], ['hold', 859_000], ['describe-instances'],
+    ['start-instances'], ['wait', 'instance-running'], ['describe-instances'], ['restore', instance, '203.0.113.12'],
+    ['taint', 'node', node, taint + ':NoExecute-'],
+  ]);
+  assert.deepEqual(result, {stopped: node, offMs: 900_000, observed: true});
+});
+
+test('the Stockholm stop refuses a shortened hold and never marks a running or different instance', async () => {
+  const instance = 'i-00000000000000002';
+  const forbidden = () => assert.fail('a premature fault or Kubernetes write was sent');
+  const common = {instance, node: 'private-node-b', kube: forbidden, whileStopped: forbidden, afterRestart: forbidden};
+  await assert.rejects(async () => api.stopAmazonRehearsalNode({...common, holdMs: 360_000, aws: forbidden}),
+    /amazon.rehearsal_hold/);
+  for (const [id, state] of [['i-00000000000000001', 'stopped'], [instance, 'running']]) {
+    await assert.rejects(async () => api.stopAmazonRehearsalNode({...common,
+      async aws(_service, args) {
+        if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{InstanceId: id, State: {Name: state}}]}]});
+        assert.ok(['stop-instances', 'wait'].includes(args[0]));
+      }}), /amazon.rehearsal_instance_state/);
+  }
+});
 test('failed AWS commands show the provider error without dumping response data', async t => {
   const {mkdtemp, writeFile, rm} = await import('node:fs/promises');
   const {tmpdir} = await import('node:os'); const {join} = await import('node:path');

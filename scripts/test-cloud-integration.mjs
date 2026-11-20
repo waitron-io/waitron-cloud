@@ -1056,15 +1056,18 @@ export async function observeRetainedClients({observe, paid, browser, api, login
   return result;
 }
 
-export function createObserverLogin({api, mailbox, readMail, email, password, cookie}) {
+export function createObserverLogin({api, mailbox, readMail, email, password, cookie, replaceStranded = false,
+  now = () => performance.now()}) {
   let pending;
   return async signal => {
+    // A worker can leave an undelivered challenge claimed for up to sixty seconds.
+    if (replaceStranded && pending && now() - pending.started >= 60_000) pending = undefined;
     if (!pending) {
       const seen = new Set((await mailbox(signal)).messages?.map(message => message.ID));
       const reply = await api('/api/account/login', {email, password}, {cookie}, undefined, undefined, signal);
       if (reply.status === 200) return reply;
       assert.ok(reply.status === 202 && reply.body.emailRequired, 'p1.password_signin');
-      pending = {seen, challengeToken: reply.body.challengeToken};
+      pending = {seen, challengeToken: reply.body.challengeToken, started: now()};
     }
     const message = await readMail(email, pending.seen, signal);
     const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');

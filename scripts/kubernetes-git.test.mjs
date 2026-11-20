@@ -22,6 +22,17 @@ test('rendered controllers use owned offline tags and stay on A', () => {
   assert.equal(api.fluxImages('d618-test')[0].upstream, 'ghcr.io/fluxcd/source-controller@sha256:4d77b2cfa9b0baadfa2b99b11a52ef41f43f968286e37bb7e5b4886b3227438a');
 });
 
+test('measured-stop controllers can move within the three owned machines', () => {
+  const source = JSON.stringify({kind: 'Deployment', metadata: {name: 'source-controller'},
+    spec: {replicas: 1, template: {spec: {nodeSelector: {'kubernetes.io/os': 'linux'},
+      containers: [{name: 'manager', image: 'upstream:mutable'}]}}}});
+  const [row] = api.renderFluxControllers(source, 'private', ['machine-a', 'machine-b', 'machine-c']).items;
+  const spec = row.spec.template.spec;
+  assert.deepEqual(spec.nodeSelector, {'kubernetes.io/os': 'linux'});
+  assert.deepEqual(spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+    [{matchFields: [{key: 'metadata.name', operator: 'In', values: ['machine-a', 'machine-b', 'machine-c']}]}]);
+});
+
 // Corrupt downloaded tools must not execute before stack creation.
 test('preparation refuses a changed Flux archive before running a tool', async t => {
   const directory = await mkdtemp(join(tmpdir(),'flux-archive-test-')); t.after(() => rm(directory,{recursive:true,force:true}));
@@ -171,6 +182,48 @@ test('repair measures command time, drift, cache refetch and rejected-render ret
   assert.deepEqual(result,{revisionMs:2000,driftMs:2000,refetchMs:5000,refusalMs:2000,restoreMs:2000,
     appliedRevision:'4'.repeat(40),attemptedRevision:'3'.repeat(40)});
   assert.equal(publishes.length,4);assert.equal(JSON.parse(publishes.at(-1)).spec.template.metadata.annotations[annotation],'refetched');
+});
+
+test('a surviving Flux controller has one 180-second window to publish and repair the real workload', async () => {
+  const deployment = {metadata: {name: 'remote-worker'}, spec: {selector: {matchLabels: {app: 'remote-copy'}},
+    template: {metadata: {annotations: {[annotation]: 'baseline'}}}}};
+  const published = new Set();
+  for (const scenario of ['survivor', 'second leg', 'stopped', 'late drift']) {
+    let clock = 0, values, candidate, repairAt = Infinity, patches = 0;
+    const result = api.reconcileFlux({deployment, survivors: ['box-worker'], now: () => clock,
+      sleep: async ms => {clock += ms;},
+      publish: async text => {
+        clock += 170_000;
+        assert.ok(!published.has(text), 'another stop needs a fresh commit in the same mirror');
+        published.add(text);
+        candidate = JSON.parse(text).spec.template.metadata.annotations[annotation];
+        values = observed(revision, candidate);
+        if (scenario === 'stopped') values.pods.items[0].spec.nodeName = 'box-primary';
+        return revision;
+      },
+      async kube(args) {
+        if (args[0] === 'patch') {
+          assert.deepEqual(args.slice(1, 3), ['deployment', 'remote-worker']);
+          values.deployment.spec.template.metadata.annotations[annotation] = 'drift';
+          repairAt = clock + (scenario === 'late drift' ? 11_000 : 2_000);
+          patches++;
+          return '';
+        }
+        assert.equal(args[0], 'get');
+        if (args[1] === 'deployment') assert.equal(args[2], 'remote-worker');
+        if (args[1] === 'pods') assert.ok(args.includes('app=remote-copy'));
+        if (clock >= repairAt) values.deployment.spec.template.metadata.annotations[annotation] = candidate;
+        return JSON.stringify(values[args[1]]);
+      }});
+    if (scenario === 'survivor' || scenario === 'second leg') {
+      assert.deepEqual(await result, {revisionMs: 170_000, driftMs: 2_000, appliedRevision: revision});
+      assert.equal(patches, 1);
+    } else {
+      await assert.rejects(result, /flux.revision_timeout/);
+      assert.equal(clock, 180_000);
+      assert.equal(patches, scenario === 'stopped' ? 0 : 1);
+    }
+  }
 });
 
 // A missing workload must not hide the source/controller evidence that explains its absence.

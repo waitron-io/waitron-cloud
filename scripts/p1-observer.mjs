@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // All times belong to A; transport and stop delays count against recovery.
-export async function observeP1({probes, ready, stopped, replacement, reconcile, signal,
+export async function observeP1({probes, ready, stopped, replacement, reconcile, signal, holdMs,
   now = () => performance.now(), sleep = ms => delay(ms, undefined, {signal})}) {
   const names = ['session', 'remote', 'login', 'backup', 'signup'];
+  const finalBackupAfter = holdMs === undefined ? 900_000 : holdMs - 60_000;
   const samples = [], states = Object.fromEntries(names.map(name => [name, {next: 0, count: 0}]));
   for (const name of names.filter(name => name !== 'signup')) {
     await probes[name](signal);
@@ -25,7 +26,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
     state.pending = {at, controller, ended: false};
     const pending = state.pending;
     (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal))()
-      .then(() => {pending.ok = true; pending.endedAt = now(); pending.ended = true;}, error => {pending.error = error; pending.endedAt = now(); pending.ended = true;});
+      .then(result => {pending.result = result; pending.ok = true; pending.endedAt = now(); pending.ended = true;}, error => {pending.error = error; pending.endedAt = now(); pending.ended = true;});
   };
   try {
     await sleep(0);
@@ -64,10 +65,11 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
               if (!state.recovered) {
                 assert.ok(pending.endedAt - faultAt <= (name === 'backup' ? 300000 : 90000), 'p1.' + name + '_recovery_timeout');
                 state.withinMs = pending.endedAt - faultAt;
+                state.result = pending.result;
                 state.longestGapMs = Math.max(state.longestGapMs, pending.endedAt - (state.baselineAt ?? faultAt));
               }
               state.recovered = true; state.count++;
-              if (name === 'backup' && pending.at >= stoppedAt + 900000) state.finalBackup = true;
+              if (name === 'backup' && pending.at >= stoppedAt + finalBackupAfter) state.finalBackup = true;
             }
           }
           state.next = pending.at + (name === 'session' || name === 'remote' ? 5000 : name === 'login' && state.recovered ? 60000 : 15000);
@@ -77,12 +79,17 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
         }
         if ((stoppedAt === undefined && name === 'signup') || state.pending || at < state.next) continue;
         if (name === 'signup' && state.recovered) continue;
-        if (name === 'backup' && state.recovered && (state.finalBackup || at < stoppedAt + 900000)) continue;
+        if (name === 'backup' && state.recovered && (state.finalBackup || at < stoppedAt + finalBackupAfter)) continue;
         launch(name);
       }
-      if (replacementReady && (!reconcile || repair?.done) && states.backup.finalBackup && names.every(name => states[name].recovered && !states[name].pending)) {
+      if (replacementReady && (!reconcile || repair?.done) && states.backup.finalBackup && at >= stoppedAt + (holdMs ?? 0) &&
+          names.every(name => states[name].recovered && !states[name].pending)) {
         return {samples, backupsAfterStop: states.backup.count, reconciliation: reconcile ? repair.result : 'unavailable',
-          stoppedMs: stoppedAt - faultAt, offMs: at - stoppedAt, recovery: Object.fromEntries(names.map(name => [name, {withinMs: states[name].withinMs, longestGapMs: states[name].longestGapMs}]))};
+          stoppedMs: stoppedAt - faultAt, offMs: at - stoppedAt,
+          recovery: Object.fromEntries(names.map(name => {
+            const {withinMs, longestGapMs, result} = states[name];
+            return [name, {withinMs, longestGapMs, ...(holdMs !== undefined && {result})}];
+          }))};
       }
       await sleep(1000);
     }
