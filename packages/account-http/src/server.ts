@@ -41,7 +41,7 @@ export async function startAccountServer(options: {operatorAccountId?:string;gue
         return new Response(null, {status: 403, headers: portalSecurityHeaders(!!options.billingMethods)});
     }
     if (stopping) return unavailable(request, portalRequest,!!options.billingMethods);
-    if (portalRequest) return portalResponse(request, options.portalAssets!,!!options.billingMethods);
+    if (portalRequest) return portalResponse(request, options.portalAssets!, !!options.billingMethods, !!config.setupPairing);
     if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
     // Encoded aliases must use the same admission as the router's decoded submit path.
     if (options.translation && getPath(request) === submitPath) {

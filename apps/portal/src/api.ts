@@ -56,6 +56,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/diagnostics/read')return validDiagnosticExport(value);
   if(path==='/backups/list')return validBackupPage(value);
   if (path === '/pairing/businesses') return validBusinesses(data.businesses);
+  if (path === '/pairing/authorize' || path === '/pairing/cancel') return status === 200 && typeof data.returnUrl === 'string';
   if (path === '/pairing/inspect' || path === '/pairing/approve') return validPairingView(data);
   if(path==='/installations') return Array.isArray(data.installations)&&data.installations.every(v=>validInstallation(v)&&typeof v.canRevoke==='boolean');
   if(path==='/installations/remove') return status===200&&validInstallation(data)&&typeof data.portalRemovedAt==='string';

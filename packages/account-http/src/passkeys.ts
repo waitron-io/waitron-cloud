@@ -8,6 +8,8 @@ import {
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
 } from '@waitron-cloud/registration';
+import {setupPairingSignIn} from './pairing.ts';
+import type {AccountHttpConfig} from './config.ts';
 import { AccountHttpError } from './errors.ts';
 import { readSessionCookie, writeSessionCookies } from './cookies.ts';
 import { readBoundedJsonObject } from './request.ts';
@@ -16,7 +18,7 @@ import type { RateRule } from './rate-limit.ts';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 type Consume = (rules: RateRule[]) => Promise<void>;
-type Options = {pool: Pool; store: PasskeyStore; origin: string; secure: boolean; ip: string; consume: Consume};
+type Options = {pool: Pool; store: PasskeyStore; origin: string; secure: boolean; ip: string; setupPairing: AccountHttpConfig['setupPairing']; consume: Consume};
 
 export async function passkeyResponse(c: Context, options: Options): Promise<Response> {
   const path = c.req.path.slice('/api/account/passkeys'.length);
@@ -36,14 +38,15 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
       return c.json(await options.store.authenticationOptions());
     }
     if (path === '/authentication/verify') {
-      exact(body, ['ceremonyId', 'response']);
+      exact(body, ['ceremonyId', 'response'], options.setupPairing ? ['setupPairing'] : []);
       const ceremonyId = uuid(body.ceremonyId);
       const response = authentication(body.response);
       await options.consume([
         {scope: 'passkey-auth-verify-ip', subject: options.ip, limit: 10, windowSeconds: 60},
         {scope: 'passkey-auth-verify-ceremony', subject: ceremonyId, limit: 5, windowSeconds: 300},
       ]);
-      const session = await options.store.authenticate(ceremonyId, response);
+      const setupSignIn = setupPairingSignIn(options.pool, options.setupPairing, body.setupPairing);
+      const session = await options.store.authenticate(ceremonyId, response, setupSignIn);
       writeSessionCookies(c, options.secure, session);
       return c.json({accountId: session.accountId});
     }

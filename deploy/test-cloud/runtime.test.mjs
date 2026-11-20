@@ -82,6 +82,20 @@ test('only the venue-level account worker receives the automatic gateway and tri
  }
 });
 
+test('setup pairing settings reach only the test venue account worker', async t => {
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-setup-pairing-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir);
+ const settings={CLOUD_SETUP_PAIRING_PUBLIC_KEY:'synthetic-key',CLOUD_SETUP_PAIRING_REDIRECT_URI:'https://box.example.test/cloud/pairing/callback'};
+ const enabled={...settings,CLOUD_VENUE_SERVICE_LEVELS:'test'};
+ for(const [name,value] of Object.entries(settings)){
+  assert.equal(testRuntimeEnvironment('account',config,enabled)[name],value);
+  assert.equal(testRuntimeEnvironment('account',config,settings)[name],undefined);
+  assert.equal(testRuntimeEnvironment('email',config,enabled)[name],undefined);
+  assert.equal(testRuntimeEnvironment('account',config,{...enabled,[name]:''})[name],undefined);
+ }
+});
+
 test('test payment settings reach only the account child',async t=>{
  const {testRuntimeEnvironment}=await import('./runtime.mjs');
  const dir=await mkdtemp(join(tmpdir(),'cloud-payment-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);

@@ -48,7 +48,7 @@ export interface ServiceState {
 }
 export type RegistrationErrorCode = 'invalid_input' | 'binding_conflict' | 'request_not_found'
   | 'request_expired' | 'approval_required' | 'approval_conflict' | 'permission_denied'
-  | 'business_not_found' | 'registration_conflict' | 'installation_unavailable';
+  | 'business_not_found' | 'business_match_ambiguous' | 'registration_conflict' | 'installation_unavailable';
 export class RegistrationError extends Error {
   readonly code: RegistrationErrorCode;
   constructor(code: RegistrationErrorCode) {
@@ -297,7 +297,7 @@ export type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 
 export type { AccountLocale, AccountNotification } from './account-input.ts';
 export {PairingStore,type PairingView} from './pairing.ts';
-export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from './pairing-proof.ts';
+export {PairingError,verifyPairingProof,verifyPairingV4Proof,pairingPayload,type PairingClaims,type PairingV4Claims} from './pairing-proof.ts';
 
 export {InstallationStore,installationView,type InstallationView,type DesiredService} from './installations.ts';
 export {InstallationError,createLeaseIssuer,createLeaseTrust,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
@@ -354,3 +354,4 @@ export {OwnerTransferStore,OwnerTransferError,type OwnerTransferView} from './ow
 export {organisationScopeSql,requireOrganisationScope} from '@waitron-cloud/identity';
 
 export {OwnerRecoveryStore,OwnerRecoveryError,type OwnerRecoveryBinding} from './owner-recovery.ts';
+export {SetupPairingStore,type SetupPairingContext,type SetupPairingSignIn} from './setup-pairing.ts';

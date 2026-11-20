@@ -1730,8 +1730,9 @@ implementation or production evidence.
   flows remain unqualified. Paid-plan tax collection and Spanish tax-number
   validation, paid-plan choices, cancellation, account closure, hosting enrolment,
   supplier qualification and production billing remain open.
-- **Venue and node registration.** The agreed Waitron signup and connection journey uses
-  Waitron's published signing formats locally. Planned handover, diagnostics, retention, key provisioning
+- **Venue and node registration.** Qualify the installed-box sign-in with the released
+  Waitron client. Initial setup still needs sign-in, signup and access to basic services.
+  Planned handover, diagnostics, retention, key provisioning
   and rotation, deployment qualification and production activation remain open.
   Qualify continuous writer withdrawal/rebinding together with the pairing continuous
   restart journey; production replacement setup, box self-service and the A1018

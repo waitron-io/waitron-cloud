@@ -107,7 +107,10 @@ export function screen(app: PortalApp) {
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>
+        ${app.setupPairing && !app.authenticator.challenge ? html`<p class="help">${c.pairSetupMethods}</p>` : nothing}
         ${content}
+        ${app.setupPairing ? html`<button type="button" class="text-button" ?disabled=${app.pending || app.passkeys.pending || app.authenticator.pending}
+          @click=${() => {void app.returnToSetup(true);}}>${c.pairSetupBack}</button>` : nothing}
         ${app.error === 'uncertain' || app.error === 'linkUnavailable' ? html`<nav>${link('/login', c.login)} ${link(retryLink, c.requestLink)}</nav>` : nothing}
         ${app.waiting ? html`<p class="help" role="status">${c.cooldown} ${app.waiting} ${app.waiting===1?c.second:c.seconds}</p>` : nothing}
       </form></wt-card></main>`;

@@ -1,3 +1,4 @@
+import type {SetupPairingLink} from './links.ts';
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
@@ -46,13 +47,13 @@ export class AuthenticatorController {
     if(result.ok){if('challengeToken' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
     this.#failure(result,false,'factorSignIn');if(this.error==='factorUnavailable')this.error=result.status===400?'invalid':'unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
   }
-  async completeLogin():Promise<'authenticated'|'reconcile'|false>{
+  async completeLogin(setupPairing?:SetupPairingLink):Promise<'authenticated'|'reconcile'|false>{
     const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired','proof');
     const email='emailRequired' in this.challenge;
     const recovery='emailRequired' in this.challenge&&!this.challenge.rememberBrowserAllowed&&this.proofKind==='recovery';
     if(!validCode(code,email&&!recovery?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
     const generation=this.#start();if(generation===undefined)return false;
-    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(!recovery&&this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
+    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(!recovery&&this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}}),...(setupPairing && (!email || recovery) ? {setupPairing} : {})};this.#clearInput();
     const result=await this.#request<{accountId:string}>(email?(recovery?'/login/recovery':'/login/email'):'/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}

@@ -130,7 +130,8 @@ export class HistoryCleanup {
           DELETE FROM cloud_webauthn_ceremonies c USING selected s WHERE c.id=s.id
           AND COALESCE(c.consumed_at,c.expires_at)<$1 AND (c.consumed_at IS NOT NULL OR c.expires_at<=clock_timestamp()) RETURNING c.id`,
       });
-      case 'pairingRequests': return this.#simple(client, cutoff, limit, apply, {
+      case 'pairingRequests': {
+        const legacy = await this.#simple(client, cutoff, limit, apply, {
         eligible: `SELECT count(*)::integer AS count FROM pairing_requests
           WHERE expires_at<$1 AND (result IS NOT NULL OR expires_at<=clock_timestamp())`,
         apply: `WITH selected AS(SELECT id FROM pairing_requests
@@ -139,6 +140,15 @@ export class HistoryCleanup {
           DELETE FROM pairing_requests p USING selected s WHERE p.id=s.id
           AND p.expires_at<$1 AND (p.result IS NOT NULL OR p.expires_at<=clock_timestamp()) RETURNING p.id`,
       });
+        const setup = await this.#simple(client, cutoff, limit - legacy.deleted, apply, {
+          eligible: `SELECT count(*)::integer AS count FROM setup_pairing_attempts WHERE expires_at<$1`,
+          apply: `WITH selected AS (SELECT id FROM setup_pairing_attempts WHERE expires_at<$1
+            ORDER BY expires_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)
+            DELETE FROM setup_pairing_attempts a USING selected s WHERE a.id=s.id AND a.expires_at<$1 RETURNING a.id`,
+        });
+        return {cutoff, eligible: legacy.eligible + setup.eligible, blocked: 0, deleted: legacy.deleted + setup.deleted,
+          hasMore: legacy.hasMore || setup.hasMore};
+      }
       case 'registrationOperations': return this.#registrationOperations(client, cutoff, limit, apply);
       case 'emailDeliveries': return this.#emailDeliveries(client, cutoff, limit, apply);
       case 'backupJobs': return this.#simple(client, cutoff, limit, apply, {

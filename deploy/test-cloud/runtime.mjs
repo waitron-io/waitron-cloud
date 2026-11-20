@@ -46,6 +46,8 @@ export function testRuntimeEnvironment(role,config,environment={}){
    result.GUEST_ORIGIN='https://menus.'+origin.hostname;
   }
   result.TEST_CLOUD_TUNNEL_CELL_ID=config.gateway.cellId;
+  for(const name of ['CLOUD_SETUP_PAIRING_PUBLIC_KEY','CLOUD_SETUP_PAIRING_REDIRECT_URI'])
+   if(environment[name])result[name]=environment[name];
   for(const name of ['CLOUD_BACKUP_STAGE_ROOT','CLOUD_BILLING_ACCOUNT_TEST_IDS','CLOUD_BILLING_METHODS_MODE'])if(environment[name]!==undefined)result[name]=environment[name];
   if(result.CLOUD_BILLING_METHODS_MODE==='test'){
    for(const name of ['CLOUD_BILLING_STRIPE_TEST_ACCOUNT','CLOUD_BILLING_STRIPE_TEST_KEY','CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT','CLOUD_BILLING_SUMUP_SANDBOX_KEY']){

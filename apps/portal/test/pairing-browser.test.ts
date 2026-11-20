@@ -1,10 +1,10 @@
 import {prepareConnectionProof} from '../../../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import axe from 'axe-core';
-import {PairingStore,SignupStore} from '@waitron-cloud/registration';
-import {startPortalFixture,completeBrowserEmail} from './fixtures.ts';
+import {PairingStore,SetupPairingStore,SignupStore} from '@waitron-cloud/registration';
+import {addVirtualAuthenticator,startPortalFixture,completeBrowserEmail,prepareBrowserActionWindow} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)test(`${locale} connection requires code, Cloud approval and a separate local completion`,async()=>{
   const f=await startPortalFixture();
@@ -109,5 +109,71 @@ test('a linked code checks the venue once after sign-in and leaves approval to t
     assert.equal(requests.filter(url => url.endsWith('/pairing/approve')).length, 0);
     assert.equal((await f.db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1', [requestId])).rows[0].cloud_account_id, null);
     assert.ok(requests.every(url => !url.includes(requestId) && !url.includes(code)));
+  } finally { await f.close(); }
+});
+
+
+for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing returns in the same tab only after fresh passkey sign-in`, async t => {
+  const publicKey = generateKeyPairSync('ed25519').publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
+  const redirectUri = 'https://box.example.test/cloud/pairing/callback';
+  const f = await startPortalFixture(undefined, undefined, undefined, undefined, false, undefined, undefined,
+    undefined, undefined, {publicKey, redirectUri});
+  try {
+    const email = `paired-${randomUUID()}@example.test`, password = 'A real café owner password';
+    const signup = new SignupStore(f.db.pool, f.db.outbox);
+    await signup.request(email);
+    const payload = f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0]);
+    assert.ok('token' in payload);
+    await signup.complete(payload.token, {password, organisationName: 'Café Sol', legalBusinessName: 'Sol SL', countryCode: 'ES'});
+    const context = await f.browser.newContext({locale});
+    const page = await context.newPage();
+    page.setDefaultTimeout(5000);
+    const authenticator = await addVirtualAuthenticator(context, page);
+    t.after(() => authenticator.close());
+    const c = translations[locale];
+    await page.goto(f.origin + '/login');
+    await page.getByLabel(c.email).fill(email);
+    await page.locator('input[name=password]').fill(password);
+    await page.getByRole('button', {name: c.login, exact: true}).click();
+    await completeBrowserEmail(f, page, email, locale);
+    await page.getByText(c.accountIntro, {exact: true}).waitFor();
+    await prepareBrowserActionWindow(f, page);
+    await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+    await page.getByText(c.passkeyAdded, {exact: true}).waitFor();
+
+    const store = new SetupPairingStore(f.db.pool);
+    const requestId = randomUUID(), state = randomBytes(32).toString('base64url');
+    const verifier = randomBytes(32).toString('base64url');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const base = {origin: f.origin, requestId, publicKey, issuedAt: Date.now()};
+    const start = await store.start({...base, action: 'start', args: [redirectUri, state, challenge]});
+    let authorizeCalls = 0;
+    await context.route('**/api/account/pairing/authorize', route => { authorizeCalls++; return route.continue(); });
+    const forwarded = await context.newPage();
+    assert.equal((await forwarded.goto(start.authorizationUrl))?.status(), 200);
+    await forwarded.getByRole('button', {name: c.passkeySignIn, exact: true}).waitFor();
+    assert.equal((await forwarded.request.get(f.origin + '/api/account/session')).status(), 200);
+    assert.equal(authorizeCalls, 0);
+    await forwarded.close();
+
+    await page.goto(start.authorizationUrl);
+    assert.equal(new URL(page.url()).search, '');
+    const heading = page.getByRole('heading', {name: locale === 'en' ? 'Connect Waitron' : 'Conectar Waitron', exact: true});
+    await heading.waitFor();
+    for (const width of [390, 1280]) for (const colorScheme of ['light', 'dark'] as const) {
+      await page.setViewportSize({width, height: 812});
+      await page.emulateMedia({colorScheme});
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.screenshot({path: new URL(`../dist/setup-pairing-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname});
+    }
+    await page.route('https://box.example.test/**', route => route.fulfill({contentType: 'text/plain', body: 'Waitron'}));
+    await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
+    await page.waitForURL('https://box.example.test/cloud/pairing/callback?**');
+    assert.equal(context.pages().length, 1);
+    assert.equal(authorizeCalls, 1);
+    assert.equal(new URL(page.url()).searchParams.get('state'), state);
+    const code = new URL(page.url()).searchParams.get('code')!;
+    const redeemed = await store.redeem({...base, action: 'redeem', args: [code, verifier]}, {publicKey, redirectUri});
+    assert.equal(redeemed.state, 'account_bound');
   } finally { await f.close(); }
 });
