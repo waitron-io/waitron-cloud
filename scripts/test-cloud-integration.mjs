@@ -436,7 +436,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const ca = kubernetes?.ca ?? await docker(['exec', await compose(['ps', '-q', 'proxy']), 'cat', '/run/local-stack/lan/ca.pem']);
     assert.match(ca, /BEGIN CERTIFICATE/); assert.doesNotMatch(ca, /PRIVATE/);
     let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
-    const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
+    const mailPort = stockholmBaseline ? undefined :
+      kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const budget = kubernetes?.observe ? createP1Budget() : undefined;
     const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
