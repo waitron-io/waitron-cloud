@@ -19,11 +19,12 @@ stays live and serves a database-backed request once a standby takes over.
 2. In `scripts/kubernetes-remote.mjs` and
    `deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`, remove the DNS
    withdrawal wait and the database-connection-timeout retry. In the existing
-   stop, use fresh processes on both survivors for ten independent service
-   lookups each, including an uncached missing Service name, and a new verified
-   TLS database connection per survivor. Give the probes ten seconds within the
-   existing 90-second stop. Record per-machine timing, the unchanged primary,
-   and the dead replica still advertised before and after the probes.
+   stop, probe before the idle-job check. Use one exec each in the surviving
+   `cloud-services` account container and `remote-worker` container, in parallel.
+   Give ten independent OS lookups per container two seconds each inside a
+   ten-second probe window. Include a unique missing Service name and make
+   a fresh verified TLS database connection from each container. Record the
+   timings, unchanged primary and dead replica advertised before and after.
    Keep the single renewal and revocation submissions, signed publication
    assertions and deadlines. Extend `scripts/kubernetes-remote.test.mjs`.
 3. Add a PostgreSQL regression in `packages/account-http/test/server.test.ts`.
@@ -31,21 +32,24 @@ stays live and serves a database-backed request once a standby takes over.
    diagnostic, fresh readiness 200 from the same child and clean SIGTERM exit.
    In `packages/account-http/src/server-cli.ts`, log the discarded connection
    without exiting. Add an 11-second client query timeout alongside the
-   existing 10-second PostgreSQL statement timeout so a silent connection also
-   lets go. Keep startup schema validation and ordinary request failure
-   handling. Test Cloud’s separate Compose worker stays outside this slice.
+   existing 10-second PostgreSQL statement timeout. A silent query and its
+   queued rollback can take about 22 seconds before the pool discards the
+   connection. Keep schema validation and ordinary request failure handling.
 4. In `scripts/kubernetes-database.mjs` and its test, reuse the surviving client
-   machine for one minimal account CLI with synthetic settings and verified TLS.
-   Warm the connection to the old primary just before the kill. Sample liveness
-   and readiness concurrently with the existing stop checks, recording a bounded
-   failed database request or connection-loss diagnostic and the readiness 200
-   after promotion. Require the same pod and container with no restart and one
-   listening event. Remove the SQL proof’s DNS-failure retry. Keep acknowledged
-   commit, promoted write, and old-primary refusal checks.
+   machine for the account CLI with the existing schema-consumer wrapper,
+   synthetic settings and verified TLS. Start sampling before the kill and
+   identify its warm, tagged connection on the old primary. Sample liveness and
+   readiness alongside the stop checks using the portal Host header and at most
+   one readiness request per second. Require a bounded database failure or
+   connection-loss diagnostic, then readiness 200 within the original 90 seconds
+   from the same pod and container with no restart and one listening event.
+   Remove the SQL proof’s DNS-failure retry. Keep the acknowledged commit,
+   promoted write and old-primary refusal checks.
 
 Run the named focused tests, the account regression through `scripts/test-postgres.mjs`,
 and `pnpm typecheck`. In disposable Linux run the existing opt-in publication,
 database, storage and gateway-machine-stop tests with candidate images.
 Record times and remaining checks in `docs/aws-infrastructure.md` and `docs/backlog.md`.
 Estimate 180–250 implementation lines and 145–210 test lines. Cold restart is
-PR 10. Stockholm fault qualification and paid runs remain separate.
+PR 10. Stockholm fault qualification, paid runs and Test Cloud’s separate
+Compose account worker stay outside this slice.
