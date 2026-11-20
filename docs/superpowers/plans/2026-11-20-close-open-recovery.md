@@ -1,0 +1,16 @@
+# Close an open recovery without its link
+
+Account shows the open recoveries for venues you currently own. You can close one without its original link or code, in English or Spanish. This is the R3 follow-up in [the backlog](../../backlog.md), assigned to Lane K by the watcher at 20:54 on 20 November. Expect 180–280 production lines, 200–320 test lines, and 15–25 guide and backlog lines.
+
+## Server
+
+- Add `BackupRecovery.listOpen(token)` in `packages/backups/src/recovery.ts`. Return `{recoveries: [{id, venueId, venueName, status, expiresAt}]}` with nullable name from `venues.display_name`. Current membership must have the same owner and organisation scope as `permission()`. Use its account and membership locks and check the session before and after the passive read. Select unexpired `pending` and `restored` operations, which can block another recovery. Reading performs no cleanup.
+- In `packages/account-http/src/recovery.ts`, add owner POST actions `/api/account/recovery/list` with `{}` and `/api/account/recovery/close-open` with `{id}`. Keep the existing origin, session, CSRF, body and account-rate checks. Reuse `BackupRecovery.close()`, including its venue lock and session rechecks. Reply with `{id,status:'closed'}`. Give absent and unowned IDs the same unavailable response on this action. The link-based actions still use the request code. Approval, replacement, provider access and storage schema stay outside this work.
+- Test first in `packages/backups/test/recovery.test.ts`. Check pending and restored rows for current owners, including another approving owner, with expired, closed and out-of-scope rows omitted. New `packages/account-http/test/open-recovery.test.ts` covers listing and closing without a code, origin and CSRF refusal, and indistinguishable absent and unowned IDs. Reuse existing tests for the close lock and machine-access effects.
+
+## Account
+
+- Wire `apps/portal/src/open-recovery-{controller,screen}.ts` through `app.ts`, `screens.ts`, `api.ts` and `locale.ts`. Use `accountRequest` and the owner-transfer account guards. Validate the replies, discard stale responses and clear rows on session or authority loss. Give each Close button its venue name or ID and restore focus after the row leaves. After an unclear write reply, reread before offering another close. Retain the error if the read fails. Match by operation ID so a newer recovery for that venue stays visible.
+- Test first in `apps/portal/test/open-recovery-controller.test.ts` and `api.test.ts` for stale accounts, invalid replies and close reconciliation. Use `open-recovery-browser.test.ts` and existing browser fixtures for selecting a venue and closing from Account. Inspect both languages and themes at 390 and 1280 pixels. Run the named files through disposable PostgreSQL where needed.
+
+Update the conflict guidance in both languages, the R3 entry of `docs/refusal-self-service-audit.md` and `docs/local-backups.md`. Keep the stopped-server and already-issued credential guidance. Remove only the lost-link follow-up from `docs/backlog.md`. Watch each new check fail before building, then pass. Claude reads the plan before watcher clearance. Use the full branch review for the permission change.
