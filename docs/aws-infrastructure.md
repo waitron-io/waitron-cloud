@@ -1367,9 +1367,12 @@ inbox receives fresh mail, a publication worker completes new work and a new
 backup verification finishes. The publication check starts after Git finishes
 rolling that worker, and its time is measured from the start of the stop.
 Before the next stop, the run checks for one writable PostgreSQL primary and
-six online drives through both returning store peers. It logs how many repair
-attempts each rejoin takes and fails if any reported object shard still needs
-repair after three attempts.
+six online drives through both returning store peers. Each peer must also
+read all six drives through the same path that bucket repair uses. The
+rehearsal checks this on a small synthetic object within the existing
+180-second rejoin deadline. It logs how many repair attempts each rejoin
+takes and fails if any reported object shard still needs repair after three
+attempts.
 
 The same journey then stops all three machines. Fresh account, store, staff and
 public requests must fail at the network while the host can still confirm the

@@ -14,7 +14,7 @@ import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, serv
 import {installStockholmDatabase} from './kubernetes-data.mjs';
 import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
 import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
-import {healRejoinedStore, storageBucket, storageClient, storeMetrics, waitForStoreDrives} from './kubernetes-storage-proof.mjs';
+import {healRejoinedStore, seedStoreRepairProbe, storageBucket, storageClient, storeMetrics, waitForStoreDrives} from './kubernetes-storage-proof.mjs';
 import {storeNodePort, waitForStore} from './kubernetes-storage.mjs';
 import {meshNodeAddress} from './kubernetes-outside.mjs';
 import {kindHoldMs} from './kubernetes-node-loss.mjs';
@@ -102,7 +102,10 @@ export async function configureServices(context, kube, store, custody) {
   }
   const node = context.nodes[0], endpoint = 'https://' + node.ip + ':' + storeNodePort;
   const s3 = storageClient(node, store);
-  try {await s3.send(CreateBucketCommand, {}, context.signal);}
+  try {
+    await s3.send(CreateBucketCommand, {}, context.signal);
+    if (context.stopServiceNodes) await seedStoreRepairProbe(s3, context.signal);
+  }
   finally {s3.close();}
   const roles = await configurePolicy(context, endpoint, store, true);
   const storage = servicesStorageSettings(custody, roles, context.baseline ? 'https://' + servicesStoreHost + ':9000' : endpoint);

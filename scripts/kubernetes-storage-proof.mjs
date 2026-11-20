@@ -15,6 +15,11 @@ const {
 } = require('@aws-sdk/client-s3');
 export const storageBucket = 'cloud-storage-rehearsal';
 const repairProbeObject = 'repair-probe-baseline';
+const repairPeers = Array.from({length: 6}, (_, index) => 'store-' + index);
+
+export function seedStoreRepairProbe({objects}, signal) {
+  return objects.putStaged(repairProbeObject, bufferObject(randomBytes(512)), randomBytes(32).toString('base64'), {signal});
+}
 
 export function storageClient({ip}, {ca, credentials}, bucket = storageBucket) {
   const location = {endpoint: 'https://' + ip + ':' + storeNodePort, region: 'us-east-1', bucket};
@@ -160,6 +165,7 @@ export async function runStoreHeal({node, account, run, signal}, dryRun) {
 }
 
 export async function healRejoinedStore(request) {
+  await waitForStoreRepairReads(repairPeers, request);
   for (let attempt = 1; attempt <= 3; attempt++) {
     const {incomplete} = await runStoreHeal(request, false);
     process.stderr.write('Store rejoin repair attempt ' + attempt + ': ' + incomplete + ' incomplete object reports\n');
@@ -169,8 +175,8 @@ export async function healRejoinedStore(request) {
   throw Error('storage_loss.incomplete_bucket_repair');
 }
 
-export async function healStoreBucket({returnedPeers, ...request}) {
-  const endpoints = returnedPeers.map(storeDiskEndpoint);
+async function waitForStoreRepairReads(peers, request) {
+  const endpoints = peers.map(storeDiskEndpoint);
   let lastProbe = 'no completed probe for ' + endpoints.join(', ');
   try {
     let previousPeer;
@@ -194,6 +200,10 @@ export async function healStoreBucket({returnedPeers, ...request}) {
     throw Error('storage_loss.probe_deadline waiting for two complete reports from different serving peers. Last report: ' + lastProbe,
       {cause: error});
   }
+}
+
+export async function healStoreBucket({returnedPeers, ...request}) {
+  await waitForStoreRepairReads(returnedPeers, request);
   await runStoreHeal(request, false);
 }
 
@@ -275,7 +285,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
       SSECustomerKeyMD5: createHash('md5').update(Buffer.from(key, 'base64')).digest('base64')};
     const baseline = randomBytes(512), bytes = randomBytes(512);
     await first.objects.putStaged('baseline', bufferObject(baseline), key, {signal: ready});
-    await first.objects.putStaged(repairProbeObject, bufferObject(randomBytes(512)), key, {signal: ready});
+    await seedStoreRepairProbe(first, ready);
     const name = 'outage-0', multipart = 'multipart-0';
     const uploadLimit = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
     await waitForDrives(nodes[0], 6, uploadLimit);

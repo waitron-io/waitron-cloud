@@ -57,6 +57,12 @@ The watcher assigned this slice on 20 November at 21:10 in Lane G's `questions.m
   session, venue process and tunnel. Read back the last acknowledged venue capture
   after recovery, verify a distinct capture and new isolated restore, and retain
   the signed-route and response checks. Keep the existing single-stop bounds.
+- Before each measured-stop bucket repair, reuse the existing read-only probe
+  on a small synthetic object. Each serving peer on the returning machine
+  must read all six drives within the existing 180-second rejoin limit. Keep
+  the three repair attempts and require no incomplete object reports. The
+  watcher cleared this correction in Lane G's `questions.md` at 23:43 after
+  the trace showed a returning peer could not read two surviving drives.
 - First fail the lifecycle case in `kubernetes-node-loss.test.mjs`, outage and recovery
   evidence in `kubernetes-services.test.mjs`, and retained clients and backup/route
   evidence in `test-cloud-integration.test.mjs`. Run these and
