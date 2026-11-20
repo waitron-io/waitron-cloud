@@ -36,6 +36,10 @@ export async function measureWithVenuePeer({docker, peerId, peer, waitronTunnelI
     assert.deepEqual(await identity(), before, 'integration.waitron_tunnel_replaced');
     return {...result, fixtureTraffic: false, sameWaitronTunnel: true, waitronTunnelImage};
   }
+  return {...await withFixturePeerTraffic({docker, peerId, peer, signal}, measure), fixtureTraffic: true};
+}
+
+async function withFixturePeerTraffic({docker, peerId, peer, signal}, measure) {
   await docker(['exec', peerId, 'ping', '-V'], '', 'remote-ping-tool');
   const trafficStop = new AbortController();
   const trafficSignal = AbortSignal.any([trafficStop.signal, ...[signal].filter(Boolean)]);
@@ -47,13 +51,13 @@ export async function measureWithVenuePeer({docker, peerId, peer, waitronTunnelI
       await delay(5000, undefined, {signal: trafficSignal}).catch(() => {});
     }
   })();
-  try {return {...await measure(), fixtureTraffic: true};}
+  try {return await measure();}
   finally {trafficStop.abort(); await traffic;}
 }
 
 export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, waitronTunnelImage, runId, own, storageWithdrawal = false, target, observe, stockholm}) {
-  const phase = async (phase, extra = {}) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
-    JSON.stringify({phase, organisationId: paid.organisationId, installationId: paid.installationId, ...extra}), 'remote-' + phase));
+  const phase = async (phase, extra = {}, signal) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
+    JSON.stringify({phase, organisationId: paid.organisationId, installationId: paid.installationId, ...extra}), 'remote-' + phase, signal));
   const gateway = target ? 'kube-gateway' : await compose(['ps', '-q', 'gateway']);
   const gatewayIp = target?.gatewayIp ?? await docker(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', gateway]);
   const port = target?.port ?? Number((await compose(['port', 'gateway', '443'])).split(':').at(-1));
@@ -146,17 +150,25 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
       assert.deepEqual(JSON.parse(publicReply.body), client.availability);
       if (expectedPublic) assert.equal(publicReply.certificateSha256, expectedPublic);
     };
-    const verifyRoutes = signal => check(signal, publicResponse.certificateSha256);
+    const verifyRoutes = (signal, elapsed) => check(signal, publicResponse.certificateSha256, true, elapsed);
+    const pairedPeer = {...peer, gatewayAddress: placement.address.replace(/\.\d+$/, '.1')};
     if (stockholm.machineLoss) {
       const prepareRoutes = signal => check(signal, publicResponse.certificateSha256, true);
       const checkRoutes = (signal, elapsed) => check(signal, publicResponse.certificateSha256, true, elapsed);
       const machineLoss = await measureWithVenuePeer({docker, peerId, waitronTunnelImage, target, checkRoutes, prepareRoutes,
-        peer: {...peer, gatewayAddress: placement.address.replace(/\.\d+$/, '.1')}, signal: stockholm.signal});
+        peer: pairedPeer, signal: stockholm.signal});
       return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true, privatePathRefused: true, machineLoss};
     }
-    const handover = await target.handover(verifyRoutes, peer.peerPublicKey);
+    const handover = await withFixturePeerTraffic({docker, peerId, peer: pairedPeer, signal: stockholm.signal},
+      () => target.handover(verifyRoutes, peer.peerPublicKey));
+    const idleJobs = async signal => {
+      const jobs = await phase('stockholm-remote-publication', {}, signal);
+      assert.ok(jobs.certificate_public?.idle && jobs.route?.idle, 'integration.stockholm_publication_jobs_not_idle');
+      return jobs;
+    };
+    await untilRemote(idleJobs, 180000, stockholm.signal, 'publication_jobs_idle');
     const publication = performance.now();
-    await target.forgetPublicCopy(paid.installationId);
+    await target.forgetPublicCopy(paid.venueId, paid.installationId);
     assert.deepEqual(await phase('stockholm-remote-renew'), {scheduled: true});
     const certificateReplacementMs = await untilRemote(async signal => {
       const rows = await target.projected(paid.venueId, signal), certificate = rows[0].certificate;
@@ -165,19 +177,48 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
       await check(signal, certificate);
       return Math.ceil(performance.now() - publication);
     }, 180000, stockholm.signal, 'certificate_projection');
-    const withdrawal = performance.now(), revoked = await stockholm.revoke();
-    assert.equal(revoked.status, 200, 'integration.stockholm_revoke');
-    assert.ok(revoked.body.revokedAt, 'integration.stockholm_revoke_confirmed');
+    await untilRemote(idleJobs, 180000, stockholm.signal, 'replacement_publication_idle');
+    const original = await target.publication(paid.venueId, stockholm.signal);
+    assert.deepEqual(original.routes.map(route => route.installationId), [paid.installationId]);
+    assert.ok(original.certificate && original.certificate !== publicResponse.certificateSha256);
+    assert.ok(original.request, 'integration.stockholm_public_request_missing');
+    const {retryApi} = await import('../../../scripts/kubernetes-node-loss.mjs');
+    let withdrawalStarted;
+    const publicationMachineLoss = await target.stopPublicationWorker(async ({signal, waitForDns}) => {
+      const inspectionStarted = performance.now();
+      const jobs = await retryApi(() => idleJobs(signal), signal, 'publication jobs before renewal',
+        error => /^Error: Connection terminated due to connection timeout$/m.test(error.message));
+      const inspectionReadyMs = Math.ceil(performance.now() - inspectionStarted);
+      process.stderr.write('D621 publication inspection ready after ' + inspectionReadyMs + ' ms\n');
+      const dnsWithdrawalMs = await waitForDns();
+      assert.deepEqual(await phase('stockholm-remote-renew', {}, signal), {scheduled: true});
+      await untilRemote(async limit => {
+        const {certificate_public: certificate} = await phase('stockholm-remote-publication', {}, limit);
+        return certificate?.idle && certificate.completed > jobs.certificate_public.completed;
+      }, 90000, signal, 'publication_resume');
+      const reused = await target.publication(paid.venueId, signal);
+      assert.equal(reused.certificate, original.certificate, 'integration.stockholm_public_certificate_reissued');
+      assert.equal(reused.request, original.request, 'integration.stockholm_public_request_replaced');
+      withdrawalStarted = performance.now();
+      const revoked = await stockholm.revoke(signal);
+      assert.equal(revoked.status, 200, 'integration.stockholm_revoke');
+      assert.ok(revoked.body.revokedAt, 'integration.stockholm_revoke_confirmed');
+      const withdrawnSequence = await untilRemote(async limit => {
+        const {sequence, routes} = await target.publication(paid.venueId, limit);
+        return sequence > original.sequence && routes.length === 0 && sequence;
+      }, 90000, signal, 'withdrawal_while_worker_stopped');
+      return {originalSequence: original.sequence, withdrawnSequence, inspectionReadyMs, dnsWithdrawalMs, signedWithdrawalMs: Math.ceil(performance.now() - withdrawalStarted)};
+    });
     const withdrawalMs = await untilRemote(async signal => {
       const rows = await target.projected(paid.venueId, signal);
-      if (!rows.every(row => row.routes === 0)) return false;
+      if (!rows.every(row => row.routes === 0 && row.sequence >= publicationMachineLoss.withdrawnSequence)) return false;
       assert.ok(!(await peers(signal)).split(/\s+/).includes(peer.peerPublicKey));
       await assert.rejects(probe(placement.staffHostname, '/public/availability', {signal}));
       await assert.rejects(probe(placement.publicHostname, '/public/availability', {cookie, signal}));
-      return Math.ceil(performance.now() - withdrawal);
-    }, 180000, stockholm.signal, 'route_withdrawal');
+      return Math.ceil(performance.now() - withdrawalStarted);
+    }, Math.max(1, 180000 - (performance.now() - withdrawalStarted)), stockholm.signal, 'route_withdrawal_after_rejoin');
     return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true, privatePathRefused: true,
-      handover, certificateReplacementMs, withdrawalMs};
+      handover, certificateReplacementMs, withdrawalMs, publicationMachineLoss};
   }
   if (observe) await observe(async signal => {
     // The public gate cookie lasts five minutes; renew it before expiry.

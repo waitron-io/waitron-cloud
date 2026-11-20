@@ -85,9 +85,9 @@ export function servicesVerifier(template, image, revision, nodeName) {
   return pod;
 }
 
-export function servicesInspection(image, remoteCell) {
+export function servicesInspection(image, remoteCell, nodeName) {
   return {apiVersion: 'batch/v1', kind: 'Job', metadata: {name: 'services-inspection', namespace: servicesNamespace},
-    spec: {backoffLimit: 0, template: {spec: {restartPolicy: 'Never',
+    spec: {backoffLimit: 0, template: {spec: {restartPolicy: 'Never', ...(nodeName && {nodeName}),
       automountServiceAccountToken: false, volumes: [caVolume, publicStoreCa],
       containers: [service(image, 'inspect', `-e 'const timer = setInterval(() => {if (require("node:fs").existsSync("/tmp/inspection-complete")) clearInterval(timer)}, 250)'`, {
         storage: true, secret: 'services-backup', variables: remoteCell ? {CLOUD_STOCKHOLM_REMOTE_CELL: remoteCell} : {},

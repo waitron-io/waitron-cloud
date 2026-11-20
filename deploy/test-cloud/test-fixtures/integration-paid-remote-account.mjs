@@ -14,6 +14,15 @@ export async function paidRemoteAccount({pool, config, organisationId, installat
   assert.equal(binding.organisation_id, organisationId); assert.equal(binding.environment, 'test');
   const plans = new OrganisationPlanStore(pool);
   if (!stockholm) assert.equal((await plans.show(organisationId)).plan, 'paid');
+  if (phase === 'stockholm-remote-publication') {
+    assert.equal(stockholm, true);
+    const {rows} = await pool.query(`SELECT kind, EXTRACT(EPOCH FROM last_success_at)::double precision AS completed,
+        enabled AND status='pending' AND claim_id IS NULL AND available_at>clock_timestamp()
+          AND applied_digest=desired_digest AND last_error IS NULL AS idle
+      FROM remote_configuration_jobs WHERE (kind='certificate_public' AND target_id=$1)
+        OR (kind='route' AND target_id=$2)`, [installationId, cell]);
+    return Object.fromEntries(rows.map(({kind, completed, idle}) => [kind, {completed, idle}]));
+  }
   if (phase === 'stockholm-remote-renew') {
     assert.equal(stockholm, true);
     const updated = await pool.query(`UPDATE remote_configuration_jobs SET available_at=clock_timestamp()

@@ -273,11 +273,11 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
   const source = sourceProvenance ? await captureIntegrationSource(root) : undefined;
   const runId = randomUUID(), project = fixedProject ?? 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   let cleanupCheckpoint;
-  const docker = async (args, input = '', phase) => {
+  const docker = async (args, input = '', phase, signal) => {
     try {
       if (kubernetes && args[0] === 'exec' && ['kube-account', 'kube-gateway'].includes(args[args[1] === '-i' ? 2 : 1])) {
         const offset = args[1] === '-i' ? 2 : 1;
-        return kubernetes.exec(args[offset].slice(5), args.slice(offset + 1), input, runSignal());
+        return kubernetes.exec(args[offset].slice(5), args.slice(offset + 1), input, AbortSignal.any([runSignal(), signal].filter(Boolean)));
       }
       const creating = ['volume', 'network'].includes(args[0]) && args[1] === 'create';
       if (creating) args = [...args.slice(0, 2), '--label', 'cloud.integration.owner=' + runId, ...args.slice(2)];
@@ -825,7 +825,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           const remote = await proveIntegrationPaidRemote({docker, control, account, image, waitronTunnelImage, runId,
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
-              origin, signal: runSignal(), machineLoss: stockholmGatewayMachineLoss, revoke: () => api('/api/account/installations/revoke', {installationId}, browser),
+              origin, signal: runSignal(), machineLoss: stockholmGatewayMachineLoss, revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
             }, own: id => {owned.push(id); record('container', id);}});
           result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
           return;
