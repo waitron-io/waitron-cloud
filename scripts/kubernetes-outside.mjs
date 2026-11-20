@@ -79,7 +79,10 @@ export async function startOutsideMesh({directory, peers, prepareNodes, run, res
     throw error;
   }
   let active = true;
-  return {interfaceName, async close() {
+  return {interfaceName, refreshEndpoint(index, endpoint) {
+    assert.ok(peers[index] && isIPv4(endpoint) && !endpoint.startsWith('10.77.0.'), 'outside.mesh_endpoint');
+    return run('sudo', ['-n', 'wg', 'set', interfaceName, 'peer', peers[index].publicKey, 'endpoint', endpoint + ':51821'], undefined, true);
+  }, async close() {
     if (active) {
       await run('sudo', ['-n', 'wg-quick', 'down', path], undefined, true);
       active = false;
@@ -95,6 +98,7 @@ export function outsidePublication({cluster, signal, waitronImage, run, mesh, co
   return {
     get revision() {return flux?.revision;},
     restoreNode: mesh.restoreNode,
+    proveSurviving: (survivors, limit) => flux.proveSurviving(survivors, limit),
     async install({deployment, kube, worker}) {
       flux = await installFlux({name: cluster, image: waitronImage, run, deployment, kube, signal,
         controllersPath, baselineNode: worker,
@@ -144,7 +148,8 @@ export async function prepareKindOutsideBaseline({prepareBundle = prepareFluxBun
   const {cluster, directory, nodes, run, signal} = context;
   const execute = (binary, args, input, cleanup, limit) => run(binary, args,
     {input, signal: cleanup ? null : limit ?? signal, timeout: 180_000});
-  const controllersPath = await prepareBundle(directory, cluster, {run: execute, node: nodes[0].name});
+  const controllersPath = await prepareBundle(directory, cluster,
+    {run: execute, node: context.stopServiceNodes ? nodes.map(row => row.name) : nodes[0].name});
   for (const {upstream, tag} of fluxImages(cluster)) {
     const cached = await run('docker', ['image', 'inspect', upstream]).then(() => true, error => {
       if (!error.message.includes('No such image: ' + upstream)) throw error;

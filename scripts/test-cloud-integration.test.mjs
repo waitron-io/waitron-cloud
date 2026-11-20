@@ -138,6 +138,49 @@ test('a lost email-code submission reply starts a fresh sign-in instead of repla
   assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
 });
 
+for (const replacementStatus of [200, 401, undefined]) test(
+  'a replaced sign-in handles late mail with replacement status ' + replacementStatus, async () => {
+  const {createObserverLogin} = await load();
+  let clock = 0, starts = 0, completions = 0;
+  const messages = [{ID: 'stranded', Text: '\n100001\n'}];
+  if (replacementStatus) messages.push({ID: 'replacement', Text: '\n100002\n'}, {ID: 'surplus', Text: '\n100003\n'});
+  const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
+    replaceStranded: true, now: () => clock, mailbox: async () => ({messages: starts ? [{ID: 'already-delivered'}] : []}),
+    async readMail(_email, seen) {
+      if (starts === 1) throw Error('mail stranded');
+      assert.ok(seen.has('already-delivered'));
+      const message = messages.find(message => !seen.has(message.ID));
+      if (!message) throw Error('integration.mail_missing');
+      return message;
+    },
+    async api(path, body) {
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
+      assert.equal(body.challengeToken, 'challenge-2');
+      completions++;
+      return {status: body.code === '100002' ? replacementStatus : 401};
+    }});
+  await assert.rejects(login(), /mail stranded/);
+  clock = 59_999;
+  await assert.rejects(login(), /mail stranded/);
+  assert.equal(starts, 1);
+  clock = 60_000;
+  assert.deepEqual(await login(), {status: replacementStatus ?? 401});
+  assert.equal(completions, replacementStatus ? 2 : 1);
+  assert.equal(starts, 2);
+});
+
+test('the outside observer can start email sign-in without a recognised browser', async () => {
+  const {createObserverLogin} = await load();
+  const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
+    mailbox: async () => ({messages: []}), readMail: async () => ({Text: '\n123456\n'}),
+    api: async (path, _body, headers) => {
+      assert.deepEqual(headers, {});
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'new-challenge'}};
+      return {status: 200};
+    }});
+  assert.deepEqual(await login(), {status: 200});
+});
+
 test('production rehearsal refuses a remote target even with a valid local Kind binding', async () => {
   const {runTestCloudClients} = await load();
   const cluster = 'd621-' + 'a'.repeat(32);
@@ -198,6 +241,14 @@ test('the outside signup check retries a failed inbox read', async () => {
     return {Text: 'https://cloud.example.test:3000/signup#token=' + token};
   }, 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000)), token);
   assert.equal(reads, 2);
+  assert.deepEqual(await readOutsideSignupMail(async () => ({
+    Text: 'https://cloud.example.test:3000/signup#token=' + token, worker: 'surviving-mail',
+  }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
+  {token, worker: 'surviving-mail'});
+  await assert.rejects(readOutsideSignupMail(async () => ({
+    Text: 'https://cloud.example.test:3000/signup#token=' + token,
+  }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
+  /integration\.outside_mail_worker/);
 });
 
 test('the outside backup inspection retries one storage deadline and stops', async () => {
@@ -234,6 +285,24 @@ test('the outside backup inspection immediately reports an integrity failure', a
   await assert.rejects(readOutsideRetainedBackup(async () => {calls++; throw mismatch;}, AbortSignal.timeout(5000)),
     error => error === mismatch);
   assert.equal(calls, 1);
+});
+
+test('a fresh outside backup keeps the original verification bound to its original capture', async () => {
+  const {measureOutsideBackup} = await load();
+  const original = {pointId: 'original', workerVerification: {attemptId: 'first'}};
+  const newPoint = {pointId: 'fresh'};
+  const run = (capture, stopped) => (measureOutsideBackup ?? (() => ({})))({
+    original, capture,
+    verify: async point => {assert.deepEqual(point, newPoint); return {attemptId: 'second'};},
+    inspect: async point => {
+      assert.deepEqual(point, {pointId: 'original', workerVerification: {attemptId: 'first'}});
+      return {retainedSnapshotUnchanged: true};
+    },
+  }, AbortSignal.timeout(5000), stopped);
+  assert.deepEqual(await run(async () => newPoint, true), {attemptId: 'second', retained: true});
+  assert.deepEqual(await run(() => assert.fail('pre-stop read must use the existing capture'), false),
+    {attemptId: 'first', retained: true});
+  await assert.rejects(async () => run(async () => original, true), /integration\.fault_backup_not_new/);
 });
 
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {

@@ -18,6 +18,8 @@ const subnet = '172.30.250.0/24';
 const dockerId = /^[a-f0-9]{64}$/;
 const controlPlanes = ['control-plane', 'control-plane2', 'control-plane3'];
 const balancerRole = 'external-load-balancer';
+const outOfService = 'node.kubernetes.io/out-of-service';
+export const kindHoldMs = 360_000;
 
 function executeCommand(binary, args, {env, input, signal, timeout}) {
   return new Promise((resolve, reject) => {
@@ -72,7 +74,8 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
   --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --command-timeout=5s "$@"
 `;
 
-export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, outsideServices, remote, coldRestart} = {}) {
+export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, outsideServices, remote, coldRestart,
+  now = () => performance.now(), sleep = delay} = {}) {
   // Kind appends its role names to the cluster name, within one DNS label.
   const cluster = 'd621-' + randomUUID().replaceAll('-', '');
   const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
@@ -189,30 +192,36 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], {timeout: 185_000});
     await spreadCoreDns(kube, names);
     const nodeUids = await readNodes(), members = await readEtcd(nodes);
-    async function stopNode(name, {whileStopped, afterRestart} = {}) {
+    async function stopNode(name, {whileStopped, afterRestart, measured = false} = {}) {
       const node = nodes.find(candidate => candidate.name === name);
       assert.ok(node, 'node_loss.unknown_node');
+      assert.ok(!measured || outsideServices, 'node_loss.measured_outside_only');
       const stopped = await verifyContainer(node.id);
       assert.equal(stopped.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_before_stop');
       // Keep the selected node down for the whole leg independently of Docker restart policy.
       await docker(['update', '--restart=no', node.id]);
-      const started = performance.now();
+      const started = now();
       await docker(['kill', '--signal=SIGKILL', node.id]);
-      const limit = outsideServices ? 180_000 : 90_000;
+      const limit = measured ? kindHoldMs + 30_000 : outsideServices ? 180_000 : 90_000;
       const failover = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(limit)]), timeout: limit + 5000};
-      async function expectStopped() {
-        const {State} = await verifyContainer(node.id, failover);
+      async function expectStopped(options) {
+        const {State} = await verifyContainer(node.id, options);
         assert.ok(!State.Running && !State.Restarting, 'node_loss.container_still_running');
       }
-      await expectStopped();
+      await expectStopped(failover);
+      const stoppedAt = now();
       // A healthy reply through Kind's balancer does not prove its next connection will avoid the stopped node.
       if (outsideServices) apiPeer = nodes.find(candidate => candidate !== node);
       process.stderr.write(`Kind node stopped ${node.name}\n`);
       await retry(async () => assert.equal(await kube(['get', '--raw=/readyz'], failover), 'ok'), failover.signal);
-      const result = await whileStopped(failover);
-      await expectStopped();
-      const failoverMs = Math.round(performance.now() - started);
+      if (measured) await kube(['taint', 'node', name, outOfService + '=nodeshutdown:NoExecute'], {signal: failover.signal});
+      const result = await whileStopped(measured ? {...failover, started, stoppedAt, holdMs: kindHoldMs} : failover);
+      await expectStopped(failover);
+      const failoverMs = Math.round(now() - started);
+      if (measured) await sleep(Math.max(0, stoppedAt + kindHoldMs - now()), undefined, {signal: stop.signal});
       const rejoin = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]), timeout: 185_000};
+      if (measured) await expectStopped(rejoin);
+      const offMs = Math.round(now() - stoppedAt);
       const leaseWhileStopped = await retryApi(() => heartbeat(node.name, rejoin), rejoin.signal, 'lease before restart');
       await verifyNetwork(rejoin);
       await docker(['network', 'disconnect', networkId, node.id], rejoin);
@@ -221,6 +230,10 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       if (afterRestart) await afterRestart(rejoin);
       const restarted = await verifyContainer(node.id, rejoin);
       assert.equal(restarted.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_after_restart');
+      if (measured) {
+        assert.ok(restarted.State.Running && !restarted.State.Restarting, 'node_loss.container_not_restarted');
+        await kube(['taint', 'node', name, outOfService + ':NoExecute-'], {signal: rejoin.signal});
+      }
       // Ready can still hold its pre-outage value while the kubelet is absent.
       await retry(async () => assert.ok(await heartbeat(node.name, rejoin) > leaseWhileStopped, 'node_loss.stale_heartbeat'), rejoin.signal);
       await retryApi(() => kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], rejoin), rejoin.signal, 'nodes Ready');
@@ -228,6 +241,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       assert.deepEqual(restartedNodes, nodeUids, 'node_loss.node_identity');
       assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
       apiPeer = undefined;
+      if (measured) return {...result, stopped: node.name, failoverMs, offMs};
       return {stopped: node.name, failoverMs, ...result};
     }
     if (coldRestart) {

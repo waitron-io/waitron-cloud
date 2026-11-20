@@ -37,7 +37,7 @@ export async function readObject({objects}, name, key, signal) {
   }
 }
 
-function storeMetrics(ip, {ca, credentials}, signal) {
+export function storeMetrics(ip, {ca, credentials}, signal) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   const {accessKeyId, secretAccessKey} = credentials;
   const payload = encode({alg: 'HS512', typ: 'JWT'}) + '.' +
@@ -114,7 +114,7 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
-async function runStoreHeal({node, account, run, signal}, dryRun) {
+export async function runStoreHeal({node, account, run, signal}, dryRun) {
   // MinIO can delete a dangling version during a dry run. Probe only the dedicated fixture.
   const path = '/minio/admin/v3/heal/' + storageBucket + (dryRun ? '/' + repairProbeObject : '');
   const url = new URL(path, 'https://' + node.ip + ':' + storeNodePort);
@@ -138,6 +138,7 @@ async function runStoreHeal({node, account, run, signal}, dryRun) {
   if (dryRun) assert.ok(peer, 'storage_loss.probe_peer');
   url.searchParams.set('clientToken', started.clientToken);
   const items = [];
+  let incomplete = 0;
   for (;;) {
     const reply = await post('');
     for (const item of reply?.Items ?? []) {
@@ -145,15 +146,27 @@ async function runStoreHeal({node, account, run, signal}, dryRun) {
       if (dryRun) {
         if (item.object === repairProbeObject) items.push(item);
       } else {
+        const drives = item.after?.drives;
+        if (!drives?.length || drives.some(drive => drive.state !== 'ok')) incomplete++;
         const states = phase => (phase?.drives ?? []).map(drive => drive.state).join(', ');
         process.stderr.write('Store healed ' + item.object + ' (' + states(item.before) + ') to (' + states(item.after) + ')\n');
       }
     }
-    if (reply?.Summary === 'finished') return {peer, items};
+    if (reply?.Summary === 'finished') return {peer, items, incomplete};
     assert.notEqual(reply?.Summary, 'stopped', 'storage_loss.heal_stopped');
     assert.ok(reply?.Summary === 'running' || reply?.Summary === 'not started', 'storage_loss.heal_status');
     await delay(1000, undefined, {signal});
   }
+}
+
+export async function healRejoinedStore(request) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const {incomplete} = await runStoreHeal(request, false);
+    process.stderr.write('Store rejoin repair attempt ' + attempt + ': ' + incomplete + ' incomplete object reports\n');
+    if (incomplete === 0) return attempt;
+    if (attempt < 3) await delay(1000, undefined, {signal: request.signal});
+  }
+  throw Error('storage_loss.incomplete_bucket_repair');
 }
 
 export async function healStoreBucket({returnedPeers, ...request}) {

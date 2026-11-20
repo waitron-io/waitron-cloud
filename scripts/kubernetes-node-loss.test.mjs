@@ -427,6 +427,49 @@ test('the outside stop uses a surviving Kubernetes API and its original TLS iden
   }});
 });
 
+test('a measured Kind stop marks only the confirmed stopped node and keeps it off for six minutes', async () => {
+  const {execute: run, calls} = servicesFixture({outside: true});
+  const execute = (binary, args, options) => run(binary, args.filter(value =>
+    !value.startsWith('--server=') && !value.startsWith('--tls-server-name=')), options);
+  let clock = 10_000;
+  const result = await runCheck({execute, now: () => clock, sleep: async ms => {
+    assert.equal(ms, 310_000);
+    calls.push({binary: 'hold', args: []});
+    clock += ms;
+  }, outsideServices: true, services: async ({nodes, stopNode}) => {
+    const node = nodes[0];
+    return stopNode(node.name, {measured: true, whileStopped: async () => {
+      calls.push({binary: 'proof', args: []});
+      clock += 50_000;
+      return {observed: true, offMs: 42};
+    }});
+  }});
+  const node = result.nodes[0], taint = 'node.kubernetes.io/out-of-service';
+  const kill = calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'kill');
+  const mark = calls.findIndex(({args}) => args.includes(taint + '=nodeshutdown:NoExecute'));
+  const proof = calls.findIndex(({binary}) => binary === 'proof');
+  const hold = calls.findIndex(({binary}) => binary === 'hold');
+  const start = calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'start');
+  const clear = calls.findIndex(({args}) => args.includes(taint + ':NoExecute-'));
+  assert.ok(calls.slice(kill + 1, mark).some(({binary, args}) =>
+    binary === 'docker' && args[0] === 'inspect' && args.at(-1) === node.id));
+  assert.ok(kill < mark && mark < proof && proof < hold && hold < start && start < clear);
+  assert.deepEqual(calls[mark].args.slice(-4), ['taint', 'node', node.name, taint + '=nodeshutdown:NoExecute']);
+  assert.deepEqual(calls[clear].args.slice(-4), ['taint', 'node', node.name, taint + ':NoExecute-']);
+  assert.equal(result.services.offMs, 360_000);
+  assert.equal(result.services.observed, true);
+});
+
+test('a measured Kind stop refuses a running node before tainting it', async () => {
+  const {execute: run, calls} = fixture({restarts: true});
+  const execute = (binary, args, options) => run(binary, args.filter(value =>
+    !value.startsWith('--server=') && !value.startsWith('--tls-server-name=')), options);
+  await assert.rejects(runCheck({execute, outsideServices: true, database: ({nodes, stopNode}) =>
+    stopNode(nodes[0], {measured: true, whileStopped: () => assert.fail('proof ran on a live node')})}),
+  /container_still_running/);
+  assert.ok(calls.every(({args}) => !args.some(arg => arg.startsWith('node.kubernetes.io/out-of-service'))));
+});
+
 test('a scratch unmount failure preserves the service failure', async t => {
   const serviceError = Error('restore failed'), unmountError = Error('scratch busy');
   const {execute, directory} = servicesFixture({unmountError});

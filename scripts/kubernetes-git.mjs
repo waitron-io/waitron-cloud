@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -17,7 +17,16 @@ export function renderFluxControllers(jsonl, name, node) {
   for(const row of items.filter(row=>row.kind==='Deployment')) {
     assert.ok(controllers.some(([role])=>role===row.metadata.name),'flux.controller_inventory');
     row.spec.replicas=1;
-    const spec=row.spec.template.spec;spec.nodeSelector={'kubernetes.io/hostname':node};
+    const spec=row.spec.template.spec;
+    if(Array.isArray(node)) {
+      spec.affinity??={};
+      spec.affinity.nodeAffinity??={};
+      const required=spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution??={nodeSelectorTerms:[{}]};
+      // The API allows a single value per node field. Selector terms are alternatives.
+      required.nodeSelectorTerms=required.nodeSelectorTerms.flatMap(term=>node.map(name=>({...term,
+        matchFields:[...(term.matchFields??[]),{key:'metadata.name',operator:'In',values:[name]}],
+      })));
+    } else spec.nodeSelector={'kubernetes.io/hostname':node};
     spec.containers[0].image=name+':'+row.metadata.name;spec.containers[0].imagePullPolicy='Never';
   }
   return {apiVersion:'v1',kind:'List',items};
@@ -43,7 +52,7 @@ export async function prepareFluxBundle(directory, name, {run, node=name+'-contr
 
 const shaOf=value=>/([a-f0-9]{40})$/.exec(value??'')?.[1];
 const releaseAnnotation='waitron.io/p1-revision';
-export async function waitFluxRevision({kube,sha,applied=sha,value,worker,workload='manifest',selector='app=manifest',rejected=false,sourceUid,deadline,
+export async function waitFluxRevision({kube,sha,applied=sha,value,worker,survivors,workload='manifest',selector='app=manifest',rejected=false,sourceUid,deadline,
   signal,now=()=>performance.now(),sleep=ms=>delay(ms,undefined,{signal})}) {
   let last={};
   while(now()<deadline) {
@@ -65,6 +74,7 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,worklo
       const healthy=!unavailable.length&&deployment.status?.observedGeneration===deployment.metadata.generation&&
         deployment.spec.template.metadata.annotations?.[releaseAnnotation]===value&&pod&&!pod.metadata.deletionTimestamp&&
         pod.metadata.annotations?.[releaseAnnotation]===value&&(!worker||pod.spec.nodeName===worker)&&
+        (!survivors||survivors.includes(pod.spec.nodeName))&&
         pod.status?.conditions?.some(row=>row.type==='Ready'&&row.status==='True');
       if(now()<=deadline&&last.source===sha&&last.applied===applied&&healthy&&
         root.status.observedGeneration===root.metadata.generation&&
@@ -179,28 +189,36 @@ export async function installFlux({name,image,run,kube,deployment,controllersPat
     const {name: workload} = managed.metadata;
     const selector = 'app=' + (managed.spec.selector?.matchLabels?.app ?? workload);
     await waitFluxRevision({kube,sha,value:'baseline',worker:baselineNode,workload,selector,deadline:performance.now()+180000,signal});
-    return {revision:sha,close:source.close,reconcile:signal=>reconcileFlux({kube,publish:source.publish,deployment:managed,worker:name+'-worker',signal})};
+    return {revision:sha,close:source.close,reconcile:signal=>reconcileFlux({kube,publish:source.publish,deployment:managed,worker:name+'-worker',signal}),
+      proveSurviving:(survivors,signal)=>reconcileFlux({kube,publish:source.publish,deployment:managed,survivors,signal})};
   } catch(error) {await source.close();throw error;}
 }
 
-export async function reconcileFlux({kube,publish,deployment,worker,signal,now=()=>performance.now(),sleep}) {
+export async function reconcileFlux({kube,publish,deployment,worker,survivors,signal,now=()=>performance.now(),sleep}) {
   const managed=structuredClone(deployment),report={};
+  const workload=managed.metadata?.name??'manifest';
+  const selector='app='+(managed.spec.selector?.matchLabels?.app??workload);
+  const sharedDeadline=survivors?now()+180000:Infinity;
+  // Repeated stops publish into the same repository and must each produce a new commit.
+  const candidate=survivors?'candidate-'+randomUUID():'candidate';
   const release=value=>{managed.spec.template.metadata.annotations[releaseAnnotation]=value;return JSON.stringify(managed);};
   const phase=async(name,work)=>{
-    const start=now(),deadline=start+180000;
-    const request=AbortSignal.any([signal,AbortSignal.timeout(180000)].filter(Boolean));
-    const wait=options=>waitFluxRevision({kube,worker,deadline,now,sleep,signal:request,...options});
+    const start=now(),deadline=Math.min(start+180000,sharedDeadline);
+    assert.ok(deadline>start,'flux.revision_timeout');
+    const request=AbortSignal.any([signal,AbortSignal.timeout(Math.ceil(deadline-start))].filter(Boolean));
+    const wait=options=>waitFluxRevision({kube,worker,survivors,workload,selector,deadline,now,sleep,signal:request,...options});
     const command=(args,input)=>kube(args,input,false,request);
     const result=await work(wait,command,request);
-    assert.ok(now()-start<=180000,'flux.revision_timeout');report[name]=now()-start;return result;
+    assert.ok(now()<=deadline,'flux.revision_timeout');report[name]=now()-start;return result;
   };
   let sha=await phase('revisionMs',async(wait,command,request)=>{
-    const sha=await publish(release('candidate'),request);await wait({sha,value:'candidate'});return sha;
+    const sha=await publish(release(candidate),request);await wait({sha,value:candidate});return sha;
   });
   await phase('driftMs',async(wait,command)=>{
-    await command(['patch','deployment','manifest','--type=merge','-p',JSON.stringify({spec:{template:{metadata:{annotations:{[releaseAnnotation]:'drift'}}}}})]);
-    await wait({sha,value:'candidate'});
+    await command(['patch','deployment',workload,'--type=merge','-p',JSON.stringify({spec:{template:{metadata:{annotations:{[releaseAnnotation]:'drift'}}}}})]);
+    await wait({sha,value:candidate});
   });
+  if(survivors)return {...report,appliedRevision:sha};
   sha=await phase('refetchMs',async(wait,command,request)=>{
     const pods=JSON.parse(await command(['get','pods','-n','flux-system','-l','app=source-controller','-o','json','--request-timeout=5s']));
     assert.equal(pods.items.length,1,'flux.source_identity');const previous=pods.items[0].metadata;

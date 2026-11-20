@@ -121,11 +121,6 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   await assert.rejects(probe(placement.staffHostname, '/public/availability', {verificationHostname: placement.publicHostname}), /certificate|Hostname/i);
   const peers = signal => stockholm ? target.peers(signal) : docker(['exec', gateway, 'wg', 'show', 'wg-cloud', 'peers']);
   assert.ok((await peers()).split(/\s+/).includes(peer.peerPublicKey));
-  if (stockholm?.baseline) {
-    await untilRemote(signal => target.peerTraffic(peer.peerPublicKey, signal), 30000, stockholm.signal, 'baseline_peer_traffic');
-    return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true,
-      privatePathRefused: true, peerTraffic: true, venueId: paid.venueId};
-  }
   if (stockholm) {
     const check = async (signal, expectedPublic, refreshPublicCookie = false, elapsed) => {
       const route = async (name, hostname, options) => {
@@ -157,6 +152,31 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     };
     const verifyRoutes = (signal, elapsed) => check(signal, publicResponse.certificateSha256, true, elapsed);
     const pairedPeer = {...peer, gatewayAddress: placement.address.replace(/\.\d+$/, '.1')};
+    if (stockholm.baseline) {
+      await untilRemote(signal => target.peerTraffic(peer.peerPublicKey, signal), 30000, stockholm.signal, 'baseline_peer_traffic');
+      let serviceStops;
+      if (stockholm.measureStops) {
+        const tunnel = () => docker(['inspect', '--format', '{{.State.Running}} {{.State.StartedAt}}', peerId]);
+        const started = await tunnel();
+        assert.match(started, /^true /, 'integration.outside_tunnel_running');
+        serviceStops = await withFixturePeerTraffic({docker, peerId, peer: pairedPeer, signal: stockholm.signal},
+          () => stockholm.measureStops(verifyRoutes, async (survivors, {signal, started}) => {
+            const worker = await target.publicationWorker(survivors, signal);
+            const {certificate_public: initial} = await phase('stockholm-remote-publication', {}, signal);
+            assert.ok(initial?.completed, 'integration.outside_original_publication');
+            assert.deepEqual(await phase('stockholm-remote-renew', {}, signal), {scheduled: true});
+            await untilRemote(async limit => {
+              const {certificate_public: completed} = await phase('stockholm-remote-publication', {}, limit);
+              return completed?.idle && completed.completed > initial.completed;
+            }, 90_000, signal, 'outside_publication_completed');
+            assert.deepEqual(await target.publicationWorker(survivors, signal), worker, 'integration.outside_publication_worker_changed');
+            return {worker, completedMs: Math.round(performance.now() - started)};
+          }));
+        assert.equal(await tunnel(), started, 'integration.outside_tunnel_replaced');
+      }
+      return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true,
+        privatePathRefused: true, peerTraffic: true, venueId: paid.venueId, ...(serviceStops && {serviceStops, sameTunnel: true})};
+    }
     if (stockholm.machineLoss) {
       const prepareRoutes = signal => check(signal, publicResponse.certificateSha256, true);
       const checkRoutes = (signal, elapsed) => check(signal, publicResponse.certificateSha256, true, elapsed);

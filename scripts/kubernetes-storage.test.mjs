@@ -121,6 +121,21 @@ test('bucket repair starts once and polls only its returned token', async () => 
   ]);
 });
 
+test('the rejoined store retries reported offline shards and refuses exhausting repair attempts', async () => {
+  const storage = await import('./kubernetes-storage-proof.mjs');
+  for (const reports of [['offline', 'ok'], ['offline', 'offline', 'offline']]) {
+    let attempts = 0;
+    const run = mockRepair([], async (_binary, args) => JSON.stringify(args[args.indexOf('--data-binary') + 1] ?
+      {clientToken: 'fixture:' + ++attempts} : {Summary: 'finished',
+        Items: [{type: 'object', object: 'fixture-object', after: {drives: [{state: reports[attempts - 1]}]}}]}));
+    const repair = () => storage.healRejoinedStore({node: repairEndpoint, account: repairAccount, run,
+      signal: AbortSignal.timeout(5000)});
+    if (reports.length === 2) assert.equal(await repair(), 2);
+    else await assert.rejects(repair, /storage_loss.incomplete_bucket_repair/);
+    assert.equal(attempts, reports.length);
+  }
+});
+
 test('bucket repair exposes a stopped job and an invalid start', async () => {
   const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
   for (const [replies, error] of [
