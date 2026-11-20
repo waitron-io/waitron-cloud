@@ -54,6 +54,27 @@ test('a retained backup read before stop confirmation cannot count as fresh veri
   assert.deepEqual(result.recovery.backup.result, {fresh: true});
 });
 
+test('the final measured backup probe reads retained data without starting another verifier', async () => {
+  let clock = 0;
+  const complete = [];
+  const probes = {session: async () => true, remote: async () => true, login: async () => true,
+    signup: async () => true, backup: async (_signal, fresh) => {
+      if (fresh) await new Promise(resolve => complete.push({at: clock + 100_000, resolve}));
+      return {fresh};
+    }};
+  const result = await api.observeP1({probes, holdMs: 360_000, now: () => clock, ready: () => {},
+    stopped: async () => {}, replacement: async () => {},
+    sleep: async ms => {
+      clock += ms;
+      assert.ok(clock <= 390_000, 'six-minute hold exhausted its 30-second margin');
+      for (const work of complete) if (work.at <= clock) work.resolve();
+      await new Promise(setImmediate);
+    }});
+  assert.equal(complete.length, 1);
+  assert.equal(result.recovery.backup.result.fresh, true);
+  assert.equal(result.backupsAfterStop, 2);
+});
+
 // A recovery success cannot excuse a later failure in the same leg.
 test('a scheduled outage after recovery fails the leg', async () => {
   assert.equal(typeof api.observeP1, 'function');

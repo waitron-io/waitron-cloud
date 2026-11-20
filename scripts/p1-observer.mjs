@@ -25,7 +25,9 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
     const state = states[name], at = now(), controller = new AbortController();
     state.pending = {at, controller, ended: false, afterStop: stoppedAt !== undefined};
     const pending = state.pending;
-    (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, pending.afterStop))()
+    // The measured hold ends with a retained read. Its first successful backup already ran the verifier.
+    const fresh = pending.afterStop && !(holdMs !== undefined && name === 'backup' && state.recovered);
+    (async () => probes[name](signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, fresh))()
       .then(result => {pending.result = result; pending.ok = true; pending.endedAt = now(); pending.ended = true;}, error => {pending.error = error; pending.endedAt = now(); pending.ended = true;});
   };
   try {
