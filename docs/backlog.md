@@ -2868,10 +2868,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   both confirmations. Replacement conflicts first ask you to check for completed
   replacement; source refusals point to setup requirements without assuming the
   snapshot is at fault or that verification guarantees compatibility. An unapproved
-  request can be left to expire. Another open
-  recovery must be closed through its original link if it is no longer needed;
-  this page does not list or close another request. Unknown replies and transport
-  failures retain read-after-uncertain-write reconciliation. Native API/controller
+  request can be left to expire. If another recovery blocks approval, the refusal
+  shows its expiry. Early closure still needs the original link. Unknown replies and
+  transport failures retain read-after-uncertain-write reconciliation. Native API/controller
   and stubbed-browser checks cover these paths; real database authority, locking
   and compatibility checks run in CI. Finding another request without its original
   link, displaying source compatibility before approval, and the box button to set

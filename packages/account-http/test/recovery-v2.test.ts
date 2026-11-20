@@ -36,6 +36,21 @@ for(const admission of ['enrollment','proof'] as const)test(`backup recovery app
  assert.equal((await db.pool.query('SELECT operation_id FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].operation_id,null);
  assert.equal(f.grants(),0);
 });
+test('only an authorised approval refused by an open recovery gets its stored expiry',async()=>{
+ // Each fixture advances the verification policy, so create the point used below last.
+ const unrelated=await fixture(),f=await fixture(),first=machineTarget(),second=machineTarget();
+ const approval=(target:typeof first)=>({requestId:target.id,code:target.code,pointId:f.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'});
+ for(const target of [first,second])assert.equal((await f.post('start',target.envelope('start'))).status,200);
+ const approved=await f.post('approve',approval(first),true);
+ assert.equal(approved.status,200);
+ const {operation}=await approved.json();
+ const denied=await unrelated.post('approve',approval(second),true);
+ assert.equal(denied.status,403);
+ assert.deepEqual(await denied.json(),{error:'permission_denied'});
+ const refused=await f.post('approve',approval(second),true);
+ assert.equal(refused.status,409);
+ assert.deepEqual(await refused.json(),{error:'recovery_active',recoveryExpiresAt:operation.expiresAt});
+});
 test('machine HTTP negotiates v2 and returns the same approved verification on metadata and download',async()=>{
  const f=await fixture(),t=machineTarget();
  const start=await f.post('start',t.envelope('start'));assert.equal(start.status,200);assert.equal((await start.json()).version,2);

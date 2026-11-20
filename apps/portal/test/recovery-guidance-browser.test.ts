@@ -9,6 +9,7 @@ import {portalTrace,failPortalWait} from './portal-trace.ts';
 
 const id='12345678-1234-4234-8234-123456789abc',pointId='22345678-1234-4234-8234-123456789abc',venueId='32345678-1234-4234-8234-123456789abc',second='72345678-1234-4234-8234-123456789abc';
 const expiresAt='2099-01-01T00:00:00.000Z';
+const recoveryExpiresAt='2099-11-20T22:41:37.000Z';
 const pending={requestId:id,state:'awaiting_owner',expiresAt,operationId:null,operation:null};
 const approved={...pending,state:'approved',operationId:id,operation:{id,pointId,venueId,source:{kind:'snapshot',pointId},mode:'failure',status:'pending',expiresAt}};
 const ready={...approved,operation:{...approved.operation,status:'restored'},replacement:{requestId:id,pointId,venueId,source:{kind:'snapshot',pointId},oldInstallationId:'42345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt,organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null}};
@@ -26,6 +27,9 @@ const scenarios=[
  {action:'approve',status:400,code:'invalid_input',key:'recoveryInput',en:/matching code.*source/i,es:/código.*origen/i},
  {action:'approve',status:409,code:'target_not_fresh',key:'recoveryFreshTarget',en:/fresh replacement/i,es:/sustitución nuevo/i},
  {action:'approve',status:409,code:'recovery_active',key:'recoveryActive',en:/original recovery link.*close/i,es:/enlace.*recuperación.*cierra/i},
+ {action:'approve',status:409,code:'recovery_active',key:'recoveryActive',recoveryExpiresAt,
+  en:/open until November 20, 2099.*10:41:37\s*PM.*original link.*close it sooner.*start a new request on the replacement server.*keep the old server stopped/i,
+  es:/abierta hasta 20 de noviembre de 2099.*22:41:37.*enlace original.*cerrarla antes.*inicia otra solicitud en el servidor de sustitución.*mantén detenido el servidor anterior/i},
  {action:'approve',status:409,code:'conflict',key:'recoveryConflict',en:/request status.*authorised source/i,es:/estado.*origen autorizado/i},
  {action:'replace',status:400,code:'confirmation_required',key:'recoveryReplacementConfirmation',en:/installation.*old server/i,es:/instalación.*servidor anterior/i},
  {action:'replace',status:409,code:'conflict',key:'recoveryReplacementConflict',en:/replacement details.*request status.*complete.*connection/i,es:/datos.*sustitución.*estado.*completado.*conexión/i},
@@ -35,8 +39,8 @@ const scenarios=[
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: recovery refusals offer reachable status and source checks without another write`,async t=>{
  const browser=await chromium.launch({headless:true});
  try{
-  for(const scenario of scenarios)await t.test(`${scenario.action}/${scenario.code}`,async t=>{
-   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(4000);
+  for(const scenario of scenarios)await t.test(`${scenario.action}/${scenario.code}${'recoveryExpiresAt'in scenario?'/with-expiry':''}`,async t=>{
+   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000},timezoneId:'UTC'});page.setDefaultTimeout(4000);
    const trace=portalTrace(page);let stage='recovery setup';
    try{
     const calls:{path:string;body:Record<string,unknown>}[]=[];let refused=false,snapshotReads=0;
@@ -49,7 +53,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      if(path.endsWith('/backups/list')){snapshotReads++;return route.fulfill({json:{venueId,points:[pointId,second].map((id,index)=>({id,capturedAt:`2026-10-2${index+3}T10:00:00.000Z`,verification:'verified',retention:'daily',expiresAt,protection:null})),nextCursor:null,defaultPointId:pointId,continuousRecovery:null}});}
      if(path.includes('/recovery/'))calls.push({path,body:route.request().postDataJSON()});
      if(path.endsWith('/recovery/inspect'))return route.fulfill({json:refused?approved:scenario.action==='approve'?pending:scenario.action==='replace'?ready:approved});
-     if(path.endsWith('/recovery/'+scenario.action)){refused=true;return route.fulfill({status:scenario.status,json:{error:scenario.code}});}
+     if(path.endsWith('/recovery/'+scenario.action)){refused=true;return route.fulfill({status:scenario.status,json:{error:scenario.code,...('recoveryExpiresAt'in scenario?{recoveryExpiresAt:scenario.recoveryExpiresAt}:{})}});}
      return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
     });
     stage='recovery navigation and startup';
@@ -67,7 +71,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     stage='recovery refusal message';
     const alert=page.getByRole('alert');await alert.waitFor();const text=await alert.innerText();
     assert.match(text,locale==='en'?scenario.en:scenario.es);assert.doesNotMatch(text,/temporarily unavailable|temporalmente|support|soporte/i);
-    assert.equal(text,c[scenario.key as keyof typeof c]);assert.equal(await page.evaluate(()=>(window as any).app.recovery.uncertain),false);
+    if(!('recoveryExpiresAt'in scenario))assert.equal(text,c[scenario.key as keyof typeof c]);
+    assert.equal(await page.evaluate(()=>(window as any).app.recovery.uncertain),false);
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action]);
     if(scenario.code==='unverified'){
      stage='recovery snapshot refresh';
@@ -79,7 +84,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isDisabled(),true);assert.equal(calls.length,2);
     }
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-    if(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR){await mkdir(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}-${scenario.action}-${scenario.code}.png`,fullPage:true});}
+    if(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR){await mkdir(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}-${scenario.action}-${scenario.code}${'recoveryExpiresAt'in scenario?'-with-expiry':''}.png`,fullPage:true});}
     stage='recovery request status';
     await page.getByRole('button',{name:locale==='en'?'Check request status':'Comprobar estado de la solicitud',exact:true}).click();
     await page.getByText(c.recoveryApprovedSnapshot,{exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
