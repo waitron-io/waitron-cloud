@@ -39,7 +39,9 @@ test('outside services run one restarting copy per cell machine with a scoped in
   assert.equal(pod.nodeName, undefined);
   assert.equal(pod.restartPolicy, 'Always');
   assert.deepEqual(pod.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-    [{matchFields: [{key: 'metadata.name', operator: 'In', values: ['node-a', 'node-b', 'node-c']}]}]);
+    ['node-a', 'node-b', 'node-c'].map(name => ({
+      matchFields: [{key: 'metadata.name', operator: 'In', values: [name]}],
+    })));
   const {env, envFrom} = pod.containers.find(container => container.name === 'inspect');
   assert.equal(env.find(row => row.name === 'CLOUD_STOCKHOLM_REMOTE_CELL').value, 'fixture-cell');
   assert.deepEqual(envFrom, [{secretRef: {name: 'services-backup'}}]);

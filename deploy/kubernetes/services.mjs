@@ -62,7 +62,8 @@ export function servicesPod(image, nodeName, remote) {
 export function servicesDaemonSet(image, nodes, remoteCell) {
   const {metadata, spec} = servicesPod(image, undefined, true);
   const labels = {app: metadata.name};
-  const terms = [{matchFields: [{key: 'metadata.name', operator: 'In', values: nodes}]}];
+  // Each field selector accepts one node name, and Kubernetes matches any term.
+  const terms = nodes.map(name => ({matchFields: [{key: 'metadata.name', operator: 'In', values: [name]}]}));
   const {containers: [inspect]} = servicesInspection(image, remoteCell).spec.template.spec;
   spec.containers.push(inspect);
   return {apiVersion: 'apps/v1', kind: 'DaemonSet', metadata, spec: {
