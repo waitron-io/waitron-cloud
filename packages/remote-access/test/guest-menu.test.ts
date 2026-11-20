@@ -155,13 +155,16 @@ test('a never-trialled test venue with no billing row cannot publish',async()=>{
  }finally{await f.db.close();}
 });
 
-test('a paid test venue can publish without a trial',async()=>{
+test('an enrolled paid test venue can publish without a trial, including after legacy billing',async()=>{
  const f=await delivery('test-venue-levels');try{
   const billing=new BillingStore(f.db.pool),event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
   const {organisationId,legalBusinessId,venueId}=f.box,scope={organisationId,legalBusinessId};
   await billing.execute(scope,event(),{type:'ensure_business'});
-  await billing.transition(scope,event(),{type:'set_venue',venueId,expectedRevision:0,
-   value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+  const connected={type:'set_venue',venueId,expectedRevision:0,
+   value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}} as const;
+  await billing.execute(scope,event(),connected);
+  await assert.rejects(f.publish(),{message:'guest_menu_plan_required'});
+  await billing.transition(scope,event(),{...connected,expectedRevision:1});
   assert.equal((await f.publish()).state,'current');
  }finally{await f.db.close();}
 });
@@ -171,6 +174,10 @@ test('a lapse committed during the venue lock wait prevents republishing but all
  try{
   await startGuestMenuTrial(f.db.pool,f.box);
   assert.equal((await f.publish()).state,'current');
+  const siblingVenueId=randomUUID(),{organisationId,legalBusinessId}=f.box;
+  await f.db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",
+   [siblingVenueId,organisationId,legalBusinessId]);
+  await startGuestMenuTrial(f.db.pool,{organisationId,legalBusinessId,venueId:siblingVenueId});
   const blocker=Number((await lock.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
   await lock.query('BEGIN');
   await lock.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.box.venueId]);

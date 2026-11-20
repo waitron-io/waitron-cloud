@@ -40,8 +40,9 @@ export async function readGuestMenuRelease(client:Pick<Pool,'query'>,venueId:str
  if(mode!=='test-venue-levels'){
   return (await client.query<GuestMenuRelease>('SELECT revision,state,true AS eligible FROM guest_menus WHERE venue_id=$1',[venueId])).rows[0];
  }
- const row=(await client.query<Omit<GuestMenuRelease,'eligible'>&{environment:string;enrolled:boolean;level:BillingLevel;trials:TrialView[];today:string}>(`
-  SELECT m.revision,m.state,v.environment,a.venue_id IS NOT NULL AS enrolled,COALESCE(b.level,'registered') AS level,
+ // Older billing rows grant access only after the venue enrolls in this billing mode.
+ const row=(await client.query<Omit<GuestMenuRelease,'eligible'>&{environment:string;level:BillingLevel;trials:TrialView[];today:string}>(`
+  SELECT m.revision,m.state,v.environment,COALESCE(b.level,'registered') AS level,
    (statement_timestamp() AT TIME ZONE 'UTC')::date::text AS today,
    COALESCE((SELECT jsonb_agg(jsonb_build_object('level',t.level,'startedOn',t.started_on::text,'endsOn',t.ends_on::text,
      'extended',t.extended,'state',t.state)) FROM billing_trials t
@@ -52,8 +53,8 @@ export async function readGuestMenuRelease(client:Pick<Pool,'query'>,venueId:str
   LEFT JOIN guest_menus m ON m.venue_id=v.id
   WHERE v.id=$1`,[venueId])).rows[0];
  if(!row)return undefined;
- const {revision,state,environment,enrolled,level,trials,today}=row;
- return {revision,state,eligible:environment==='test'&&enrolled&&effectiveVenueLevel(level,trials,today)!=='registered'};
+ const {revision,state,environment,level,trials,today}=row;
+ return {revision,state,eligible:environment==='test'&&effectiveVenueLevel(level,trials,today)!=='registered'};
 }
 
 export type GuestMenuAction='guest-menu-publish'|'guest-menu-status'|'guest-menu-withdraw';
