@@ -77,8 +77,8 @@ The source report found 17 commits across 14 mapped source and test files after 
 | [`139916df0dd1` (#3135)](https://github.com/clintongormley/waitron/commit/139916df0dd1ec20a47a5c182ab83716e69a6af9) | Waitron exports its normalised email lookup for joining a spare box. Cloud already folds email before looking up account credentials (`packages/identity/src/sessions.ts:47–64`). |
 | [`737efc2adf19` (#3216)](https://github.com/clintongormley/waitron/commit/737efc2adf19e13607e7c2d3bf796779c8f2f8ae) | Cloud already uses asynchronous scrypt to create and verify password hashes (`packages/identity/src/secret-hash.ts:8–23`). |
 | [`c783bf26a47d` (#3347)](https://github.com/clintongormley/waitron/commit/c783bf26a47d8f0881bd51d1802c3d93ae7a1993) | The change admits Waitron's separate box addresses for passkeys. Cloud pins its configured portal origin for both ceremonies (`packages/registration/src/passkeys.ts:57–73,114–116,185–188`). |
-| [`911d500d3031` (#3364)](https://github.com/clintongormley/waitron/commit/911d500d3031a77da064a450230a6eff61134700) | The change adds a passkey check for Waitron's emergency switch. Cloud login records the credential counter and last use (`packages/registration/src/passkeys.ts:181–200`). |
-| [`f587e672df03` (#3476)](https://github.com/clintongormley/waitron/commit/f587e672df034fb89c7d15ab5906e41d467a3d73) | Waitron adds security notices including passkey enrolment. Cloud already sends password and email change notices. Passkey enrolment mail is a separate product change (`packages/registration/src/account-security.ts:39,72–73`). |
+| [`911d500d3031` (#3364)](https://github.com/clintongormley/waitron/commit/911d500d3031a77da064a450230a6eff61134700) | Waitron adds a passkey check for its emergency switch. That check belongs to the box’s switch action. Cloud uses its own login assertion and records the credential counter and last use (`packages/registration/src/passkeys.ts:181–200`). |
+| [`f587e672df03` (#3476)](https://github.com/clintongormley/waitron/commit/f587e672df034fb89c7d15ab5906e41d467a3d73) | Waitron adds security notices including passkey enrolment. Cloud already sends password and email change notices. Passkey enrolment mail is a separate product change (`packages/registration/src/account-security.ts:37,72`). |
 | [`c3df226914df` (#3490)](https://github.com/clintongormley/waitron/commit/c3df226914dfde5c5601986f2b7c0bc900457d18) | Waitron adds a restricted invoice-inspector sign-in for its local reporting screen. Cloud uses its own account and permission checks (`packages/identity/src/sessions.ts:174–178`). |
 | [`8b60f3e74de0` (#3554)](https://github.com/clintongormley/waitron/commit/8b60f3e74de0621d832ccec3a0834365e25d61b2) | The change ties Waitron sessions to their person rows. Cloud sessions already reference Cloud accounts in the database (`packages/registration/migrations/002_identity.sql:9`). |
 | [`30c1c1c56498` (#3573)](https://github.com/clintongormley/waitron/commit/30c1c1c56498d3adeb7c8065cc6f03eb63dfdfb4) | Waitron consolidates challenge tables and derives passkey display names. Cloud already checks the challenge kind, session and expiry, and its retention job removes old challenges (`packages/registration/src/passkeys.ts:224–244`, `packages/registration/src/history-cleanup.ts:123–131`). |
@@ -89,10 +89,10 @@ The source report found 17 commits across 14 mapped source and test files after 
 | [`9f064e293677` (#3712)](https://github.com/clintongormley/waitron/commit/9f064e2936775f86e961945c53cc136b67e791e0) | The mapped change removes references to retired design documents from comments. |
 | [`b30eade710d2` (#3807)](https://github.com/clintongormley/waitron/commit/b30eade710d214635ea65003341f317833223c58) | Waitron's by-ID box join prompts for an authenticator only when the main box requires one. Cloud checks password authority before issuing its email sign-in factor challenge (`packages/registration/src/password-login.ts:81–108`). |
 
-Recheck the inventory with the fixed Waitron revision from the Cloud checkout:
+Recheck the inventory from the main Cloud checkout with a sibling Waitron checkout.
 
 ```sh
-node scripts/identity-upstream.mjs ~/workspace/repos/waitron 60dcf75a5132af8878d8a88aee36d78deb125c54
+node scripts/identity-upstream.mjs ../waitron 60dcf75a5132af8878d8a88aee36d78deb125c54
 node --test scripts/identity-upstream.test.mjs
 ```
 
