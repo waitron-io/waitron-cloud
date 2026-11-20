@@ -159,3 +159,24 @@ and mandate selection at 00:11:49 UTC on 8 November, with zero policy violations
 and successful fixture cleanup.
 
 Before you send live data, use the [billing-provider inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths) to qualify the SumUp and Stripe supplier records and their country flows. Both remain unqualified; these sandbox results establish no live permission.
+
+## Local SumUp save-card switch, 20 November 2026
+
+To save a card for monthly payments, turn on **Save for future payments**
+(**Guardar para pagos futuros** in Spanish). Billing gives that instruction directly
+above the form. If you submit with the switch off, SumUp marks it as required.
+
+The local Billing probe used a throwaway PostgreSQL database, a synthetic account
+with direct debit already selected, and a fresh SumUp sandbox checkout for each
+submission. Run it from the checkout with
+`node ~/waitron-campaign-k/receipts/d604-sumup-card-consent/sandbox-consent.mjs`.
+The sanitized logs in that directory record these results.
+
+| Switch | SumUp sandbox | Cloud Billing |
+| --- | --- | --- |
+| Off | Shows “This field is required.” or “Este campo es obligatorio.” beside the switch. The checkout stays `PENDING` with no saved card token. | Receives no verification request and keeps the selected direct debit. |
+| On | Completes sandbox authentication. The checkout is `PAID` and its token matches an active saved card for that customer. | Verifies and selects the card. |
+
+The widget reports the same invalid-data event for blank card fields and missing
+consent. Its inline error identifies the switch. Cloud relies on the server's
+existing verification before selecting a card.
