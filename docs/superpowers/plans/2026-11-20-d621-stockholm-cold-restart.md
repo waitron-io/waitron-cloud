@@ -8,12 +8,11 @@ on machine A and stops only C (`scripts/amazon-run.mjs:259,274–296`).
 ## Build and verify
 
 1. Add a `coldRestart` callback in `scripts/kubernetes-node-loss.mjs` using its owned
-   fixture and cleanup. Record container IDs, mounts, addresses, start times, node IDs
+   fixture and cleanup. Record container IDs, addresses, node stop and start times, node IDs
    and etcd member IDs. Verify all three containers, disable their automatic restart
    and kill them with one command. Confirm all are stopped. With the same balancer on
    the same host port, require two fresh host API readiness probes to fail. Reattach
-   the original addresses and start all three exact IDs with one command. Verify mounts,
-   addresses and new start times, heartbeats newer than the container stops, and original
+   the original addresses and start all three exact IDs with one command. Verify addresses and new start times, heartbeats newer than the container stops, and original
    node and etcd identities. Allow the existing 180 seconds from the start request.
 2. In `scripts/kubernetes-cold-restart.mjs`, reuse the `bootstrap.sh database-storage`
    step from `scripts/kubernetes-services.mjs:31–35` and pass node names to
@@ -21,14 +20,15 @@ on machine A and stops only C (`scripts/amazon-run.mjs:259,274–296`).
    verify it after restart. Keep the SQL witness reusable with just Kubernetes commands
    and node names, so PR 13 can use it. In `d621-data`, use `kubectl exec` and `psql`
    as `postgres` to create a probe table and commit a row on the current primary.
-   Once the cluster returns, allow up to 240 seconds to find three ready copies,
-   compare the original PostgreSQL system identifier and volume and claim UIDs, read
-   the old row on the current primary, then write and read a new one. Log recovery
+   Once the cluster returns, allow up to 240 seconds to find three ready copies, read
+   the old row on the current primary, then write and read a new one. The acknowledged
+   row and the three node markers are the disk proof. Log recovery
    times. A new primary is valid.
 3. Write tests first in `scripts/kubernetes-node-loss.test.mjs` and
    `scripts/kubernetes-cold-restart.test.mjs`. Run both named files with `node --test`
-   before and after. Check foreign nodes, full stop before start, stale readiness and
-   cancellation with the API down. Register the new file in `package.json`’s
+   before and after. The node-loss file checks foreign nodes, full stop before start,
+   stale readiness and cancellation with the API down. The cold-restart file checks a
+   missing old row, a different current primary and the 240-second recovery limit. Register the new file in `package.json`’s
    `test:local-stack`. On disposable Linux with access to GitHub and its image
    registry, run `TEST_KUBERNETES_COLD_RESTART=1 node --test scripts/kubernetes-cold-restart.test.mjs`
    with a 30-minute test cap. Require the real outage, retained row, new write and verified
