@@ -543,6 +543,28 @@ a request with no region.
    export SIM_STACK="arn:aws:cloudformation:$REGION:$ACCOUNT_ID:stack/d618-simulation/example"
    ```
 
+   Update the launcher policy before running the single-machine or all-machine
+   restart. The existing single-stop rehearsal also needs the start permission.
+   The grant covers every D618-tagged instance in this account and region.
+   The launcher supplies the exact instance IDs from its own stack.
+
+   Check both stop and start with the expected tag, without it, and outside
+   the selected region. Expect **allowed** for the tagged local instance and
+   a denial for each of the other two cases.
+
+   ```sh
+   simulate_restart() {
+     aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
+       --action-names ec2:StopInstances ec2:StartInstances \
+       --resource-arns "arn:aws:ec2:$1:$ACCOUNT_ID:instance/i-00000000000000001" \
+       --context-entries ContextKeyName=ec2:ResourceTag/cloud.campaign,ContextKeyValues="$2",ContextKeyType=string \
+       ContextKeyName=aws:RequestedRegion,ContextKeyValues="$1",ContextKeyType=string
+   }
+   simulate_restart "$REGION" D618
+   simulate_restart "$REGION" another-campaign
+   simulate_restart eu-central-1 D618
+   ```
+
 2. Check the launcher can create its tagged stack with the stack role. Expect **allowed**:
 
    ```sh

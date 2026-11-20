@@ -13,7 +13,7 @@ The watcher assigned this slice on 20 November at 21:10 in Lane G's `questions.m
   the latter. Reserve 20 minutes of the 145 before deletion. Aim for 4 minutes to confirm
   the stop and outage, 5 to start and reach a live API, 4 for data readiness and 5 for
   client checks and restore. Finish by minute 143 with two minutes to spare. Enforce
-  the deadline inside the Amazon command wrapper, including active wait commands.
+  the deadline inside the Amazon command wrapper, including active wait commands. Cleanup calls can still run after the deadline.
   Refuse a late stop and delete on failure or cancellation.
   Record individual stop and boot times to compare against the estimate.
 - Save the exact stack's instance IDs, volumes and boot IDs. Stop all three without
@@ -25,8 +25,9 @@ The watcher assigned this slice on 20 November at 21:10 in Lane G's `questions.m
 - Add the missing start permission in `deploy/kubernetes/bounded-amazon/setup/launcher-policy.json`
   under the existing account, region and D618 tag scope. The guide has the owner verify
   stop and start for tagged instances and refusal outside that scope before launch.
-  Instance IDs are assigned at launch. All launcher calls use only the exact stack's
-  instances. The budget backstop denies new stacks. Restart and both deletion paths
+  The grant covers every D618-tagged instance in the account and region. It is
+  also required for the landed single stops. All launcher calls use only the
+  exact stack's instance IDs. The budget backstop denies new stacks. Restart and both deletion paths
   keep their existing authority once the start grant is installed.
 - In `deploy/kubernetes/bounded-amazon/bootstrap.sh`, reuse the verifier scratch setup
   at boot and require its mounts before kubelet. Mount once, preserving the existing

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 phase=${1:-}
-case "$phase" in prepare|mesh|mesh-config|outside-filter|control|join|storage|release-staging|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
+case "$phase" in prepare|mesh|mesh-config|outside-filter|control|join|storage|release-staging|database-storage|object-storage|verifier-scratch) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
 
@@ -128,6 +128,49 @@ outside-filter)
   "${filter[@]}" -A D618-OUTSIDE -d "$address" -p udp --dport 31820 -j RETURN
   "${filter[@]}" -A D618-OUTSIDE -j DROP
   "${filter[@]}" -I PREROUTING "${entry[@]}"
+  ;;
+verifier-scratch)
+  scratch=/var/local/d621-verifier
+  work=/var/local/d621-verifier-scratch
+  case "$2" in
+  boot|once)
+    install -d -m 0700 "$scratch"
+    if ! test -f "$scratch/disk"; then
+      fallocate -l 1G "$scratch/disk"
+      mkfs.ext4 -q -m 0 "$scratch/disk"
+    fi
+    if [ "$2" = boot ]; then
+      install -d /etc/systemd/system/kubelet.service.d
+      tee /etc/systemd/system/d618-verifier-scratch.service >/dev/null <<'UNIT'
+[Unit]
+RequiresMountsFor=/var/local/d621-verifier
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh verifier-scratch mount
+UNIT
+      tee /etc/systemd/system/kubelet.service.d/30-d618-verifier-scratch.conf >/dev/null <<'UNIT'
+[Unit]
+Requires=d618-verifier-scratch.service
+After=d618-verifier-scratch.service wg-quick@wg0.service
+Requires=wg-quick@wg0.service
+UNIT
+      systemctl daemon-reload
+    fi
+    ;;
+  check)
+    mountpoint -q "$scratch/mount"
+    mountpoint -q "$work"
+    exit
+    ;;
+  mount) test -f "$scratch/disk" ;;
+  *) exit 1 ;;
+  esac
+  install -d -m 0700 "$scratch/mount"
+  mountpoint -q "$scratch/mount" || mount -o loop,nodev,nosuid,noexec "$scratch/disk" "$scratch/mount"
+  install -d -m 0700 -o 1000 -g 1000 "$scratch/mount/work"
+  install -d -m 0700 "$work"
+  mountpoint -q "$work" || mount --bind "$scratch/mount/work" "$work"
   ;;
 database-storage)
   # The pinned PostgreSQL image runs as UID and GID 26; the local volume starts private.

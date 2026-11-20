@@ -154,12 +154,24 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     const pairedPeer = {...peer, gatewayAddress: placement.address.replace(/\.\d+$/, '.1')};
     if (stockholm.baseline) {
       await untilRemote(signal => target.peerTraffic(peer.peerPublicKey, signal), 30000, stockholm.signal, 'baseline_peer_traffic');
-      let serviceStops;
+      let serviceStops, coldRestart;
       if (stockholm.measureStops) {
         const tunnel = () => docker(['inspect', '--format', '{{.State.Running}} {{.State.StartedAt}}', peerId]);
         const started = await tunnel();
         assert.match(started, /^true /, 'integration.outside_tunnel_running');
-        serviceStops = await withFixturePeerTraffic({docker, peerId, peer: pairedPeer, signal: stockholm.signal},
+        const cold = stockholm.coldRestart && {
+          async healthy(signal) {
+            await verifyRoutes(signal);
+            const signed = await target.publication(paid.venueId, signal);
+            assert.deepEqual(signed.routes.map(route => route.installationId), [paid.installationId]);
+            assert.equal(signed.certificate, publicResponse.certificateSha256, 'integration.cold_signed_certificate');
+          },
+          outage: {
+            staff: signal => probe(placement.staffHostname, '/public/availability', {signal}),
+            public: signal => probe(placement.publicHostname, '/public/availability', {cookie, signal}),
+          },
+        };
+        ({serviceStops, coldRestart} = await withFixturePeerTraffic({docker, peerId, peer: pairedPeer, signal: stockholm.signal},
           () => stockholm.measureStops(verifyRoutes, async (survivors, {signal, started}) => {
             const worker = await target.publicationWorker(survivors, signal);
             const {certificate_public: initial} = await phase('stockholm-remote-publication', {}, signal);
@@ -171,11 +183,11 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
             }, 90_000, signal, 'outside_publication_completed');
             assert.deepEqual(await target.publicationWorker(survivors, signal), worker, 'integration.outside_publication_worker_changed');
             return {worker, completedMs: Math.round(performance.now() - started)};
-          }));
+          }, cold)));
         assert.equal(await tunnel(), started, 'integration.outside_tunnel_replaced');
       }
       return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true,
-        privatePathRefused: true, peerTraffic: true, venueId: paid.venueId, ...(serviceStops && {serviceStops, sameTunnel: true})};
+        privatePathRefused: true, peerTraffic: true, venueId: paid.venueId, ...(serviceStops && {serviceStops, sameTunnel: true}), ...(coldRestart && {coldRestart})};
     }
     if (stockholm.machineLoss) {
       const prepareRoutes = signal => check(signal, publicResponse.certificateSha256, true);

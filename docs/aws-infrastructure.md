@@ -1127,8 +1127,10 @@ spending authority:
    This offline command must print the field; upgrade the CLI if it does not.
    The checked-in `StopExperimentWorker` statement in
    `deploy/kubernetes/bounded-amazon/setup/launcher-policy.json` allows
-   `ec2:StopInstances` on D618-tagged instances, with no shutdown-parameter condition.
-   Reading that policy does not verify the deployed role.
+   `ec2:StopInstances` and `ec2:StartInstances` for every D618-tagged instance
+   in the account and region, with no shutdown-parameter condition. Install the
+   updated grant and check both actions with the setup page's simulations before
+   running the already-built single stops or the all-machine restart.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    An unhandled Kubernetes command failure records its stage, journey phase,
@@ -1369,15 +1371,26 @@ six online drives through both returning store peers. It logs how many repair
 attempts each rejoin takes and fails if any reported object shard still needs
 repair after three attempts.
 
+The same journey then stops all three machines. Fresh account, store, staff and
+public requests must fail at the network while the host can still confirm the
+machines are off. Restart the same machines and check the retained PostgreSQL
+row and a new write, one writable primary and ready storage. The same venue
+process, session and tunnel must recover its signed routes and last verified
+backup, then publish a different capture and complete an isolated restore.
+The receipt shows API, data and client recovery times separately.
+
 For a separately authorised Amazon baseline, run `node scripts/amazon-run.mjs baseline`
 with the private `D618_CONFIG` on the test host. The launcher selects a healthy
 control plane over SSH for Kubernetes commands and verifier image import.
 All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
 holds, refreshes the outside peer's route after each restart and reports how
-long control plane selection took. Its schedule leaves 20 minutes for the
-separate all-machine restart and five minutes for deletion confirmation in the
-150-minute budget. Before starting a paid rehearsal, follow the gates in
+long control plane selection took. It then restarts the same three Stockholm
+instances, checks their boot IDs, volumes and scratch mounts, and refreshes
+the outside routes to their new addresses. The 150-minute budget reserves
+the final 20 minutes before deletion for this step. Ordinary commands end at
+minute 143, scheduled deletion is at 145, and confirmation has five minutes.
+Cleanup commands can still run after the ordinary command deadline. Before starting a paid rehearsal, follow the gates in
 the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
 
 ### Rehearse a gateway handover on a private Kind cell

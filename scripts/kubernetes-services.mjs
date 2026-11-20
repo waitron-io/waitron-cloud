@@ -20,6 +20,7 @@ import {kindHoldMs} from './kubernetes-node-loss.mjs';
 import {startRemoteRehearsal, untilRemote} from './kubernetes-remote.mjs';
 import {createKubernetesVerifier, forwardKubernetesPod, loadVerifierImage} from './kubernetes-check.mjs';
 import {parseIntegrationJson, runTestCloudClients} from './test-cloud-integration.mjs';
+import {prepareDatabaseWitness} from './kubernetes-cold-restart.mjs';
 import {observeP1} from './p1-observer.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
@@ -254,9 +255,41 @@ export async function measureServiceRecovery({node, roles, survivors, fault, wri
   return {...database, publication: renewed, outsideStore, flux};
 }
 
+export async function measureServiceRestart({restartAll, probes, checkStore, storeOutage, restore, prepare, signal}) {
+  const healthy = limit => Promise.all([probes.session(limit), probes.remote(limit), checkStore(limit)]);
+  await untilRemote(async limit => {await healthy(limit); return true;}, 30_000, signal, 'cold_services_before');
+  const witness = await prepare?.();
+  const api = await restartAll(async ({signal, confirmStopped}) => {
+    await confirmStopped(signal);
+    const endpoints = Object.entries({...probes.outage, store: storeOutage});
+    const observed = await Promise.allSettled(endpoints.map(async ([name, request]) => {
+      let failure;
+      await assert.rejects(() => request(signal), error => {
+        signal.throwIfAborted();
+        const code = error.code ?? error.cause?.code;
+        failure = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 7, 28].includes(code) ?
+          code : /^integration\.(?:api_timeout|remote_probe_timeout)$/.test(error.message) ? error.message : undefined;
+        assert.ok(failure !== undefined, 'services.cold_transport:' + name + ': ' + error.message);
+        return true;
+      }, 'services.cold_transport:' + name);
+      return [name, failure];
+    }));
+    const failed = observed.find(row => row.status === 'rejected');
+    if (failed) throw failed.reason;
+    await confirmStopped(signal);
+    return Object.fromEntries(observed.map(row => row.value));
+  });
+  const data = await restore(witness);
+  const clientDeadline = AbortSignal.any([signal, AbortSignal.timeout(300_000)]);
+  const started = performance.now();
+  await untilRemote(async limit => {await healthy(limit); return true;}, 300_000, clientDeadline, 'cold_services_after');
+  const backup = await probes.backupAfterRestart(clientDeadline);
+  return {...api, ...data, backup, clientRecoveryMs: Math.round(performance.now() - started)};
+}
+
 export async function runKubernetesServices(context) {
   const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, kubeTarget, signal,
-    remote, stopGatewayNode, stopServiceNodes, stopNode, prepareOutside, baseline, amazon, importVerifierImage,
+    remote, stopGatewayNode, stopServiceNodes, stopNode, stopSignal = signal, restartAll, prepareOutside, baseline, amazon, importVerifierImage,
     holdMs = kindHoldMs} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = () => [...(kubeTarget ? kubeTarget() : ['--kubeconfig', kubeconfig]), '-n', servicesNamespace];
@@ -393,17 +426,32 @@ export async function runKubernetesServices(context) {
         ]));
         return states.every(([pod, state]) => state === (pod === writer.pod ? 'false:off' : 'true:on')) && writer.node;
       }, expected.length === 3 ? 180_000 : 90_000, limit, 'one_writable_primary');
+      const outsideStore = signal => run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
+        servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
+        'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal});
       const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...mode, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
-        stockholmRemote: remoteTarget, verifier, amazon,
+        stockholmRemote: remoteTarget, verifier, amazon, signal,
+        ...(restartAll && {restartServices: probes => measureServiceRestart({
+          restartAll, probes, checkStore: outsideStore, storeOutage: outsideStore, signal,
+          prepare: () => prepareDatabaseWitness({kube: context.kube, signal}),
+          async restore(witness) {
+            const started = performance.now();
+            const limit = AbortSignal.any([signal, AbortSignal.timeout(240_000)]);
+            for (const name of names) await outside.restoreNode?.(name, {signal: limit});
+            const [database] = await Promise.all([witness(),
+              writablePrimary(names, limit), waitForStore({nodes: names, kube: context.kube, signal: limit})]);
+            return {...database, dataRecoveryMs: Math.round(performance.now() - started)};
+          },
+        })}),
         ...(baseline && {async readInbox(path, authorization, limit) {
           return readServicesInbox((await readyServices(limit, 'account', 'mailpit')).map(row => row.metadata.name),
             async (pod, path, authorization) => parseIntegrationJson(await exec(pod, 'account',
               ['node', '--input-type=module', '-e', inboxRequest], JSON.stringify({path, authorization}), limit)),
             path, authorization);
         }}),
-        ...(stopServiceNodes && {stopServices: probes => measureServiceStops({nodes: names, inventory, signal, probes, holdMs,
+        ...(stopServiceNodes && {stopServices: probes => measureServiceStops({nodes: names, inventory, signal: stopSignal, probes, holdMs,
           stopNode: (node, options) => stopNode(node, {...options, whileStopped(fault) {
             stopped = node;
             return options.whileStopped(fault);
@@ -424,9 +472,7 @@ export async function runKubernetesServices(context) {
           reconcile: (node, roles, survivors, fault) => measureServiceRecovery({
             node, roles, survivors, fault, writablePrimary, proveGit: outside.proveSurviving, publication: probes.publication,
             outsideStoreReady: signal => untilRemote(async limit => {
-              await run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
-                servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
-                'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal: limit});
+              await outsideStore(limit);
               return true;
             }, 90_000, signal, 'outside_store_ready'),
           })})}),

@@ -64,6 +64,45 @@ test('measured stops cover all three machines and the live roles before returnin
   assert.equal(request.aborted, true);
 });
 
+test('the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup', async () => {
+  for (const routeStillResponding of [undefined, 'public', 'bad certificate']) {
+    const seen = [], signal = new AbortController().signal;
+    const down = label => async () => {
+      seen.push(label);
+      if (routeStillResponding === label) return {status: 503};
+      if (routeStillResponding === 'bad certificate') throw Object.assign(Error('TLS'), {code: 'CERT_HAS_EXPIRED'});
+      throw Object.assign(Error('unreachable'), {code: 'ECONNREFUSED'});
+    };
+    const run = servicesScript.measureServiceRestart({
+      signal, checkStore: async () => {seen.push('store');},
+      storeOutage: down('store outage'),
+      restore: async () => {seen.push('data restored'); return {primary: 'original-copy'};},
+      probes: {
+        session: async () => {seen.push('account');}, remote: async () => {seen.push('routes');},
+        outage: {account: down('account outage'), staff: down('staff'), public: down('public')},
+        backupAfterRestart: async () => {seen.push('backup'); return {retainedPointId: 'original', pointId: 'new'};},
+      },
+      async restartAll(outage) {
+        seen.push('stopped');
+        const result = await outage({signal, confirmStopped: async () => {seen.push('confirmed');}});
+        seen.push('restarted');
+        return {outage: result, recoveryMs: 100};
+      },
+    });
+    if (routeStillResponding) {
+      await assert.rejects(run, /services.cold_transport/);
+      assert.ok(!seen.includes('restarted'));
+    } else {
+      const result = await run;
+      assert.deepEqual(result.outage, {account: 'ECONNREFUSED', staff: 'ECONNREFUSED', public: 'ECONNREFUSED', store: 'ECONNREFUSED'});
+      assert.deepEqual(seen, ['account', 'routes', 'store', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
+        'store outage', 'confirmed', 'restarted', 'data restored', 'account', 'routes', 'store', 'backup']);
+      assert.equal(result.primary, 'original-copy');
+      assert.equal(result.backup.pointId, 'new');
+    }
+  }
+});
+
 test('Git recovery starts while the database is moving and finishes before measuring a stable publication worker', async () => {
   const database = Promise.withResolvers(), git = Promise.withResolvers();
   let gitStarted = false, publicationStarted = false;
@@ -298,6 +337,13 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
       assert.ok(Number.isInteger(leg.rejoin.storeRepairAttempts) && leg.rejoin.storeRepairAttempts > 0);
       if (leg.roles.primary === leg.stopped) assert.ok(leg.reconciliation.publication.worker.uid);
     }
+    assert.deepEqual(Object.keys(services.coldRestart.outage).sort(), ['account', 'public', 'staff', 'store']);
+    assert.match(services.coldRestart.primary, /^cloud-db-\d+$/);
+    const {retainedPointId, pointId, status, childAbsent} = services.coldRestart.backup;
+    assert.ok(retainedPointId && pointId && retainedPointId !== pointId);
+    assert.equal(status, 'passed');
+    assert.equal(childAbsent, true);
+    console.log('D621 cold restart receipt ' + JSON.stringify(services.coldRestart));
     console.log('D621 measured stop receipt ' + JSON.stringify(legs.map(({samples, ...leg}) => ({...leg, probes: samples.length}))));
   }
   assert.equal(services.signup, true);

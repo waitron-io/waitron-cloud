@@ -127,7 +127,8 @@ if (target === 'kind-services' || target === 'kind-remote' || target === 'kind-b
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
   const prepare = baseline ? (await import('./kubernetes-outside.mjs')).prepareKindOutsideBaseline : prepareOutside;
   const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget,
-    remote, stopGatewayNode, stopServiceNodes, baseline, prepareOutside: prepare});
+    remote, stopGatewayNode, stopServiceNodes, restartAll: stopServiceNodes ? context.restartAll : undefined,
+    baseline, prepareOutside: prepare});
   return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse, outsideServices: baseline});
 }
 if (target === 'kind-storage-identity') {

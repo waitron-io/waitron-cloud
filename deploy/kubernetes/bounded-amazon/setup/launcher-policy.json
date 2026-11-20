@@ -50,7 +50,7 @@
     {
       "Sid": "StopExperimentWorker",
       "Effect": "Allow",
-      "Action": "ec2:StopInstances",
+      "Action": ["ec2:StopInstances", "ec2:StartInstances"],
       "Resource": "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
       "Condition": {
         "StringEquals": {
