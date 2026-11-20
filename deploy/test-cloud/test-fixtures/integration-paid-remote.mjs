@@ -184,13 +184,11 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     assert.ok(original.request, 'integration.stockholm_public_request_missing');
     const {retryApi} = await import('../../../scripts/kubernetes-node-loss.mjs');
     let withdrawalStarted;
-    const publicationMachineLoss = await target.stopPublicationWorker(async ({signal, waitForDns}) => {
+    const publicationMachineLoss = await target.stopPublicationWorker(async ({signal}) => {
       const inspectionStarted = performance.now();
-      const jobs = await retryApi(() => idleJobs(signal), signal, 'publication jobs before renewal',
-        error => /^Error: Connection terminated due to connection timeout$/m.test(error.message));
+      const jobs = await retryApi(() => idleJobs(signal), signal, 'publication jobs before renewal');
       const inspectionReadyMs = Math.ceil(performance.now() - inspectionStarted);
       process.stderr.write('D621 publication inspection ready after ' + inspectionReadyMs + ' ms\n');
-      const dnsWithdrawalMs = await waitForDns();
       assert.deepEqual(await phase('stockholm-remote-renew', {}, signal), {scheduled: true});
       await untilRemote(async limit => {
         const {certificate_public: certificate} = await phase('stockholm-remote-publication', {}, limit);
@@ -207,7 +205,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
         const {sequence, routes} = await target.publication(paid.venueId, limit);
         return sequence > original.sequence && routes.length === 0 && sequence;
       }, 90000, signal, 'withdrawal_while_worker_stopped');
-      return {originalSequence: original.sequence, withdrawnSequence, inspectionReadyMs, dnsWithdrawalMs, signedWithdrawalMs: Math.ceil(performance.now() - withdrawalStarted)};
+      return {originalSequence: original.sequence, withdrawnSequence, inspectionReadyMs, signedWithdrawalMs: Math.ceil(performance.now() - withdrawalStarted)};
     });
     const withdrawalMs = await untilRemote(async signal => {
       const rows = await target.projected(paid.venueId, signal);

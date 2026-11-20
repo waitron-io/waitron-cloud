@@ -42,9 +42,14 @@ async function retry(check, signal, canRetry = () => true) {
   signal.throwIfAborted();
 }
 
-export function retryApi(check, signal, stage, retryOther = () => false) {
+export function retryApi(check, signal, stage) {
   return retry(check, signal, error => {
-    if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF|^error: EOF$/im.test(error.message) && !retryOther(error)) return false;
+    const {message} = error;
+    // kubectl reports the workload's exit separately from its own transport errors.
+    const workloadExited = /^(?:error: )?command terminated with exit code [1-9]\d*$/im.test(message);
+    const transportFailed = !workloadExited &&
+      /Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF|^error: EOF$/im.test(message);
+    if (!transportFailed) return false;
     process.stderr.write(`Retrying Kind connection during ${stage}\n${error.message.slice(-2048)}\n`);
     return true;
   });
@@ -179,7 +184,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     });
     await kube(['taint', 'node', ...names, 'node-role.kubernetes.io/control-plane:NoSchedule-']);
     await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], {timeout: 185_000});
-    await spreadCoreDns(kube);
+    await spreadCoreDns(kube, names);
     const nodeUids = await readNodes(), members = await readEtcd(nodes);
     async function stopNode(name, {whileStopped, afterRestart} = {}) {
       const node = nodes.find(candidate => candidate.name === name);

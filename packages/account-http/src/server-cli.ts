@@ -55,8 +55,10 @@ try {
   const portText = process.env.CLOUD_HTTP_PORT ?? '3000';
   if (!/^\d+$/.test(portText) || Number(portText) > 65535) throw new Error();
   const outbox = new EmailOutbox({activeKeyId: process.env.CLOUD_EMAIL_ACTIVE_KEY_ID, keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
-  pool = new Pool({connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 5000, statement_timeout: 10000});
-  pool.on('error', () => {console.error('Account server database connection failed'); process.exitCode = 1; stop();});
+  pool = new Pool({connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 5000,
+    statement_timeout: 10000, query_timeout: 11000});
+  // The pool discards idle clients that lose their connection and opens new ones on demand.
+  pool.on('error', () => {console.error('Account server database connection failed');});
   if ((await pool.query('SELECT name FROM schema_migrations WHERE name = ANY($1::text[])', [migrationNames])).rowCount !== migrationNames.length) throw new Error();
   if (!stopRequested) {
     const portalAssets = process.env.CLOUD_PORTAL_ASSETS_DIR ? await loadPortalAssets(process.env.CLOUD_PORTAL_ASSETS_DIR) : undefined;

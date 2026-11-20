@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { request, type ClientRequest } from 'node:http';
-import { connect } from 'node:net';
+import { connect, createServer, type Socket } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -136,8 +136,8 @@ test('real socket proxy configuration rejects ambiguous forwarding and duplicate
     assert.equal((await send(running.port, '/session', undefined, {'x-forwarded-for': '1.2.3.4', cookie: 'cloud_session=one; cloud_session=two'}).result).status, 400);
   } finally {await running.close();}
 });
-function cli(overrides: NodeJS.ProcessEnv = {}) {
-  const url = new URL(process.env.TEST_DATABASE_URL!); url.searchParams.set('options', `-c search_path=${db.schema}`);
+function cli(overrides: NodeJS.ProcessEnv = {}, databaseUrl = process.env.TEST_DATABASE_URL!, lifetimeMs = 20000) {
+  const url = new URL(databaseUrl); url.searchParams.set('options', `-c search_path=${db.schema}`);
   const child = spawn(process.execPath, [new URL('../src/server-cli.ts', import.meta.url).pathname], {env: {...process.env,
     DATABASE_URL: url.href, CLOUD_EMAIL_ACTIVE_KEY_ID: 'test', CLOUD_EMAIL_KEYS: JSON.stringify(db.keys),
     CLOUD_HTTP_RATE_KEY: db.rateKey, CLOUD_PORTAL_ORIGIN: 'http://localhost', CLOUD_HTTP_PORT: '0', CLOUD_HTTP_HOST: '127.0.0.1',
@@ -145,13 +145,80 @@ function cli(overrides: NodeJS.ProcessEnv = {}) {
   let stdout = ''; let stderr = '';
   child.stdout.on('data', chunk => {stdout += chunk;}); child.stderr.on('data', chunk => {stderr += chunk;});
   const exited = once(child, 'exit').then(([code, signal]) => ({code, signal, stdout, stderr}));
-  const deadline = setTimeout(() => child.kill('SIGKILL'), 20000);
+  const deadline = setTimeout(() => child.kill('SIGKILL'), lifetimeMs);
   void exited.finally(() => clearTimeout(deadline));
-  return {child, exited, async ready() {
+  return {child, exited, diagnostics: () => stderr, async ready() {
     await until(async () => stdout.includes('\n') || child.exitCode !== null);
     assert.equal(child.exitCode, null, stderr); return JSON.parse(stdout.trim()).port as number;
   }, async stop() {child.kill('SIGTERM'); return exited;}};
 }
+test('the account CLI replaces a terminated idle database connection without restarting', async () => {
+  const tag = 'account-' + randomUUID();
+  const running = cli({PGAPPNAME: tag});
+  try {
+    const port = await running.ready();
+    const idle = await db.pool.query(
+      "SELECT pid FROM pg_stat_activity WHERE application_name = $1 AND state = 'idle'", [tag]);
+    assert.equal(idle.rowCount, 1);
+    const {rows} = await db.pool.query('SELECT pg_terminate_backend($1) AS terminated', [idle.rows[0].pid]);
+    assert.equal(rows[0].terminated, true);
+    await until(async () => running.diagnostics().includes('Account server database connection failed'));
+    assert.equal((await health(port, '/api/health/ready').result).status, 200);
+    const replacement = await db.pool.query('SELECT pid FROM pg_stat_activity WHERE application_name = $1', [tag]);
+    assert.equal(replacement.rowCount, 1);
+    assert.notEqual(replacement.rows[0].pid, idle.rows[0].pid);
+  } finally {
+    await running.stop();
+  }
+  const outcome = await running.exited;
+  assert.equal(outcome.code, 0, outcome.stderr);
+});
+
+test('account readiness finishes when PostgreSQL stops answering an established connection', async () => {
+  const databaseUrl = new URL(process.env.TEST_DATABASE_URL!);
+  const upstreamPort = Number(databaseUrl.port), upstreamHost = databaseUrl.hostname;
+  const sockets = new Set<Socket>();
+  let unanswered = false, dropped = false;
+  const proxy = createServer(client => {
+    const upstream = connect(upstreamPort, upstreamHost);
+    for (const socket of [client, upstream]) {
+      sockets.add(socket);
+      socket.on('error', () => socket.destroy());
+      socket.once('close', () => {sockets.delete(socket); client.destroy(); upstream.destroy();});
+    }
+    client.pipe(upstream);
+    upstream.on('data', chunk => {
+      if (unanswered) dropped = true;
+      else client.write(chunk);
+    });
+  });
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const address = proxy.address();
+  assert.ok(address && typeof address !== 'string');
+  databaseUrl.hostname = '127.0.0.1';
+  databaseUrl.port = String(address.port);
+  const running = cli({}, databaseUrl.href, 28000);
+  try {
+    const port = await running.ready();
+    assert.equal((await health(port, '/api/health/ready').result).status, 200);
+    unanswered = true;
+    const probe = health(port, '/api/health/ready');
+    const timer = new AbortController();
+    try {
+      const status = await Promise.race([
+        probe.result.then(result => result.status), delay(24000, 'no HTTP response', {signal: timer.signal}),
+      ]);
+      assert.ok(dropped, 'PostgreSQL sent a response that the connection never delivered');
+      assert.equal(status, 503);
+    } finally {timer.abort(); probe.abort();}
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await running.stop();
+    await new Promise<void>(resolve => proxy.close(() => resolve()));
+  }
+});
+
 test('CLI fails closed with fixed diagnostics for invalid settings', async t => {
   const directory=await mkdtemp(join(tmpdir(),'cloud-metrics-cli-'));t.after(()=>rm(directory,{recursive:true,force:true}));
   const corpus=join(directory,'passwords.sha256');await writeFile(corpus,'33'.repeat(32)+'\n');

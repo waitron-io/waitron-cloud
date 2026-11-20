@@ -102,6 +102,63 @@ export async function measureGatewayMachineLoss({kube, accountNode, stopNode, mo
   return {...result, rejoinedStandby: true};
 }
 
+const connectivityProbe = requireTls + `
+  exec env UV_THREADPOOL_SIZE=10 node --input-type=module -e '
+    import assert from "node:assert/strict";
+    import {randomUUID} from "node:crypto";
+    import {lookup} from "node:dns/promises";
+    import {createRequire} from "node:module";
+    const zone = ".d621-data.svc.cluster.local.";
+    const names = Array(9).fill("cloud-db-rw" + zone).concat("missing-" + randomUUID() + zone);
+    const lookupMs = await Promise.all(names.map(async (name, index) => {
+      const start = performance.now();
+      let timer;
+      try {
+        const answer = lookup(name, {family: 4});
+        await Promise.race([index === 9 ? assert.rejects(answer, {code: "ENOTFOUND"}) : answer,
+          new Promise((_, reject) => {timer = setTimeout(() => reject(Error("DNS lookup exceeded 2 seconds: " + name)), 2000);})]);
+        return Math.ceil(performance.now() - start);
+      } finally {clearTimeout(timer);}
+    }));
+    const {Client} = createRequire(new URL("./packages/registration/package.json", import.meta.url))("pg");
+    const client = new Client({connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000, query_timeout: 2000});
+    try {
+      const start = performance.now();
+      await client.connect();
+      const connectionMs = Math.ceil(performance.now() - start);
+      const {rows} = await client.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()");
+      assert.equal(rows[0].ssl, true);
+      console.log(JSON.stringify({lookupMs, connectionMs}));
+    } finally {await client.end();}
+  '
+`;
+
+export async function measurePublicationConnectivity({kube, originalNode, primaryNode, survivingWorker, signal}) {
+  async function endpoints(namespace, service) {
+    const {items} = JSON.parse(await kube(['get', 'endpointslices', '--namespace=' + namespace,
+      '-l', 'kubernetes.io/service-name=' + service, '-o', 'json'], signal));
+    return items.flatMap(slice => slice.endpoints.map(row =>
+      ({pod: row.targetRef?.name, node: row.nodeName, addresses: row.addresses, ready: row.conditions?.ready})));
+  }
+  async function snapshot(phase) {
+    const [dns, database] = await retryApi(() => Promise.all([
+      endpoints('kube-system', 'kube-dns'), endpoints('d621-data', 'cloud-db-rw'),
+    ]), signal, 'publication endpoints ' + phase);
+    process.stderr.write('D621 publication endpoints ' + JSON.stringify({phase, dns, database}) + '\n');
+    assert.ok(dns.some(row => row.ready && row.node === originalNode),
+      'remote.did_not_test_local_dns: stopped DNS replica already withdrawn ' + phase);
+    assert.deepEqual(database.filter(row => row.ready).map(row => row.node), [primaryNode], 'remote.publication_database_changed');
+  }
+  await snapshot('before probes');
+  const limit = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+  const probe = async (pod, container) => JSON.parse(await retryApi(() => kube(
+    ['exec', pod, '-c', container, '--', 'sh', '-ec', connectivityProbe], limit), limit, 'publication connectivity ' + container));
+  const [account, worker] = await Promise.all([probe('cloud-services', 'account'), probe(survivingWorker, 'worker')]);
+  process.stderr.write('D621 publication connectivity ' + JSON.stringify({account, worker}) + '\n');
+  await snapshot('after probes');
+  return {account, worker};
+}
+
 export async function startRemoteRehearsal({context, kube, create, tag, settings}) {
   const {cluster, nodes, run, signal, stopNode, stopGatewayNode} = context;
   const {tls, config: {gateway: {cellId}}, runtimeDirectory} = settings;
@@ -146,16 +203,6 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     const {spec} = JSON.parse(await call(['get', 'pod', status.currentPrimary, '-o', 'json'], limit));
     assert.ok(nodes.some(node => node.name === spec.nodeName), 'remote.database_primary_outside_cell');
     return spec.nodeName;
-  }
-  async function endpoints(namespace, service, limit) {
-    const {items} = JSON.parse(await call(['get', 'endpointslices', '--namespace=' + namespace,
-      '-l', 'kubernetes.io/service-name=' + service, '-o', 'json'], limit));
-    return items.flatMap(slice => slice.endpoints.map(row =>
-      ({pod: row.targetRef?.name, node: row.nodeName, addresses: row.addresses, ready: row.conditions?.ready})));
-  }
-  async function publicationEndpoints(phase, limit) {
-    const [dns, database] = await Promise.all([endpoints('kube-system', 'kube-dns', limit), endpoints('d621-data', 'cloud-db-rw', limit)]);
-    process.stderr.write('D621 publication endpoints ' + JSON.stringify({phase, dns, database}) + '\n');
   }
   const primaryAtPlacement = stopGatewayNode ? accountNode : await databasePrimaryNode(signal);
   // A cordon asks CloudNativePG to move the primary. Reserve its node with a scheduling taint instead.
@@ -252,24 +299,14 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
         const original = rows.find(row => row.metadata.uid === originalWorker.metadata.uid);
         assert.ok(original, 'remote.original_publication_worker_missing');
         const originalNode = original.spec.nodeName;
-        const survivingNode = rows.find(row => row !== original).spec.nodeName;
+        const survivor = rows.find(row => row !== original), survivingNode = survivor.spec.nodeName;
         assert.equal(new Set([accountNode, originalNode, survivingNode]).size, 3, 'remote.publication_worker_placement');
         const primaryNode = await databasePrimaryNode(signal);
         assert.notEqual(originalNode, primaryNode, 'remote.publication_stop_would_kill_database_primary');
-        await publicationEndpoints('before stop', signal);
-        const stopStarted = performance.now();
         const result = await stopNode(originalNode, {async whileStopped(fault) {
-          await retryApi(() => publicationEndpoints('during stop', fault.signal), fault.signal, 'publication endpoints');
-          async function waitForDns() {
-            const ready = await untilRemote(async limit => {
-              const rows = (await endpoints('kube-system', 'kube-dns', limit)).filter(row => row.ready);
-              return rows.length && rows.every(row => row.node && row.node !== originalNode) && rows;
-            }, remoteDeadlineMs, fault.signal, 'publication_dns_withdrawal');
-            const dnsWithdrawalMs = Math.ceil(performance.now() - stopStarted);
-            process.stderr.write('D621 publication DNS withdrawal ' + JSON.stringify({dnsWithdrawalMs, ready}) + '\n');
-            return dnsWithdrawalMs;
-          }
-          return whileStopped({...fault, waitForDns});
+          const connectivity = await measurePublicationConnectivity({kube: call, originalNode, primaryNode,
+            survivingWorker: survivor.metadata.name, signal: fault.signal});
+          return {...await whileStopped(fault), connectivity};
         }});
         return {...result, originalNode, survivingNode, databasePrimaryNode: primaryNode};
       },

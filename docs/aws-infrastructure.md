@@ -1204,6 +1204,13 @@ local image ID as `TEST_CLOUD_INTEGRATION_IMAGE`. Run
 copies with separate local volumes. The command checks migration startup, a
 synchronously acknowledged write through primary loss, refusal of a direct
 write to the returning replica, and a new write during a standby outage.
+During the primary outage, the command also checks whether the same account
+process stays live and serves a database-backed readiness request within 90
+seconds. It records the old database connection and the time to failure and
+recovery. The disposable Linux rehearsal recorded a readiness HTTP 503 at
+16.589 seconds and HTTP 200 at 65.168 seconds from the same account
+process. PostgreSQL preserved the acknowledged row and refused a write to the
+returning former primary.
 Use the same Linux guest requirements as the control-plane check. The command
 uses `curl` to fetch the pinned operator manifest from GitHub. Kind pulls the
 pinned operator and PostgreSQL images from ghcr.io.
@@ -1217,10 +1224,12 @@ bound volume and PostgreSQL data files. This check needs no Cloud image.
 
 The bounded Stockholm launcher waits for the three control planes, the network
 proxy rollout and the DNS rollout before starting PostgreSQL in the `d621-data`
-namespace. The Kind rehearsal and the launcher put the two CoreDNS replicas on
-separate machines so one stopped machine leaves a DNS replica available. The
-legacy Stockholm journey still uses its own database and the network share on
-A. Switching that journey to the replicated database and checking machine loss
+namespace. The Kind rehearsal and the launcher put a CoreDNS replica on each
+machine and verify that Kubernetes advertises each as preferred for workloads
+on that machine. This lets survivors use their own replicas while Kubernetes
+still advertises the stopped machine’s replica. If the local replica is
+unavailable, the DNS Service can use replicas on other machines. The legacy
+Stockholm journey still uses its own database and the network share on A. Switching that journey to the replicated database and checking machine loss
 in Stockholm remain outside rehearsal steps.
 
 Run `node scripts/kubernetes-check.mjs --storage-loss` in the Linux guest to
@@ -1237,7 +1246,9 @@ checks share a 180-second deadline that starts once the node is Ready and its
 identity and cluster membership checks pass. The JSON output reports outage and
 repair times. This check uses curl with Signature V4. Running the bucket
 repair as part of the Cloud services' consecutive-outage proof remains open for
-run 9.
+run 9. With one DNS replica per machine, the disposable Linux storage check
+measured 52.138 seconds for the stop leg and 33.018 seconds to confirm the
+returned shards.
 
 Run `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
 in the same x86-64 Linux guest to check temporary grants. The rehearsal uses the pinned
@@ -1317,22 +1328,29 @@ gateways to receive it.
 The check starts a second publication worker on a different machine. Both
 workers stay off the account machine so it can accept the owner's revocation.
 The check also keeps the database primary on a remaining machine to measure
-publication separately from database failover. The check records the database and
-DNS endpoints and waits for Kubernetes to withdraw the stopped DNS replica.
-During the 90-second stop window, the surviving worker must complete a new certificate job with
-the same certificate and signing request, then publish a newer signed route
+publication separately from database failover. During the stop, both survivors
+must complete ten lookups, including one missing name, and open verified
+PostgreSQL connections. The check
+requires Kubernetes to still list the stopped machine’s DNS replica as ready
+before and after those probes. In the same 90-second window, the surviving
+worker must complete a new certificate job with the same certificate and
+signing request, then publish a newer signed route
 manifest without the revoked venue. After the machine rejoins, the check makes
 sure all three gateways received the withdrawal, the peer is gone and both HTTPS
 routes refuse the venue. It allows 180 seconds from revocation for those results.
 
-In the 20 November disposable Linux run, the first inspection succeeded after
-40.015 seconds across connection attempts. Kubernetes withdrew the stopped
-DNS replica after 51.613 seconds. The surviving worker reused the certificate
+In the earlier 20 November disposable Linux run with two DNS replicas, the
+first inspection succeeded after 40.015 seconds across connection attempts.
+Kubernetes withdrew the stopped DNS replica after 51.613 seconds. The surviving worker reused the certificate
 and signing request and published signed sequence 4, up from 3, 985 ms after
 revocation. All three gateways received the withdrawal, and both routes refused
-the venue 45.240 seconds after revocation. The launch qualification still
-needs name lookup across machine loss and account recovery across database
-primary failover.
+the venue 45.240 seconds after revocation.
+
+With one DNS replica per machine, both survivors finished their lookups within
+5 ms and opened verified PostgreSQL connections in 17 ms and 16 ms. Kubernetes
+still listed the stopped replica as ready after the probes. The job inspection
+took 406 ms and the surviving worker signed the withdrawal in 886 ms. The stop
+leg took 13.821 seconds in disposable Linux.
 
 An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.
@@ -1361,7 +1379,10 @@ handshakes and when staff and public HTTPS respond. If the public cookie gets
 403, the probe records it and completes a new challenge within the same
 90 seconds from the stop request. The restored machine must return with its
 original identity. The former gateway must no longer hold the Lease and
-must have neither the tunnel interface nor a readiness marker.
+must have neither the tunnel interface nor a readiness marker. With one DNS
+replica per machine, the disposable Linux run restored staff HTTPS in 51.889
+seconds. The public cookie received 403, then a new challenge restored public
+HTTPS in 51.977 seconds. The former gateway rejoined as a standby.
 
 You can also run `node scripts/kubernetes-check.mjs --remote --stop-gateway-node`
 with the same image pins.
