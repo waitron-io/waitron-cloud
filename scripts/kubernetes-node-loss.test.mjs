@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {rm, writeFile, truncate} from 'node:fs/promises';
-import {dirname} from 'node:path';
+import {dirname, join} from 'node:path';
 import test from 'node:test';
 
 import {retryApi, runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
@@ -365,7 +365,8 @@ function servicesFixture({unmountError, outside = false} = {}) {
     }
     if (binary === 'sh') {
       assert.equal(remaining(), 0, 'remove the cluster before unmounting scratch');
-      assert.ok(workPaths.every(path => dirname(path) === args.at(-1)));
+      assert.deepEqual(workPaths, (outside ? ['work', 'work-b', 'work-c'] : ['work'])
+        .map(name => join(args.at(-1), name)));
       calls.push({binary, args});
       if (unmountError) throw unmountError;
       return '';

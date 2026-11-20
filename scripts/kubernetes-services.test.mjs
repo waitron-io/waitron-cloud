@@ -135,6 +135,14 @@ test('a mail list combines surviving inboxes and finds a message outside the fir
   assert.equal((await inbox('message/absent', 'synthetic')).status, 404);
 });
 
+test('the unauthenticated check needs a reply from every listed inbox', async () => {
+  const failure = Error('inbox could not be reached');
+  await assert.rejects(servicesScript.readServicesInbox(['protected', 'unavailable'], async pod => {
+    if (pod === 'unavailable') throw failure;
+    return {status: 401, text: 'unauthorized'};
+  }, 'messages', ''), error => error.cause === failure);
+});
+
 test('an unprotected surviving inbox cannot hide behind other inboxes that reject the request', async () => {
   assert.equal(typeof servicesScript.readServicesInbox, 'function');
   const response = await servicesScript.readServicesInbox(['protected', 'open'], async pod =>

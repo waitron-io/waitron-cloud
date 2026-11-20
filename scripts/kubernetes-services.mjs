@@ -153,7 +153,9 @@ const inboxRequest = `
 export async function readServicesInbox(pods, fetch, path, authorization) {
   const completed = await Promise.allSettled(pods.map(pod => fetch(pod, path, authorization)));
   const replies = completed.filter(row => row.status === 'fulfilled').map(row => row.value);
-  if (!replies.length) throw Error('services.inbox_unreachable', {cause: completed[0]?.reason});
+  if (!replies.length || (!authorization && replies.length !== pods.length)) {
+    throw Error('services.inbox_unreachable', {cause: completed.find(row => row.status === 'rejected')?.reason});
+  }
   if (!authorization) {
     const response = replies.find(reply => reply.status !== 401) ?? replies[0];
     return new Response(response.text, {status: response.status});

@@ -416,11 +416,11 @@ test('a service port does not depend on the gateway or the other service port', 
     await once(server, 'listening');
     return server;
   };
-  const [account, storage] = await Promise.all([listen('account on B'), listen('storage on C')]);
+  const [primary, account, storage] = await Promise.all([listen('account on A'), listen('account on B'), listen('storage on C')]);
   const preload = `
     import net from 'node:net';
     import {syncBuiltinESMExports} from 'node:module';
-    const targets = {'192.0.2.2:3000': ${account.address().port}, '192.0.2.3:30900': ${storage.address().port}};
+    const targets = {'192.0.2.1:3000': ${primary.address().port}, '192.0.2.2:3000': ${account.address().port}, '192.0.2.3:30900': ${storage.address().port}};
     const connect = net.createConnection;
     net.createConnection = (options, listener) => {
       const port = targets[options.host + ':' + options.port];
@@ -444,11 +444,13 @@ test('a service port does not depend on the gateway or the other service port', 
     socket.on('error', reject);
     socket.on('end', () => resolve(Buffer.concat(chunks).toString()));
   });
-  await remoteRehearsal.untilRemote(async () => {
-    const result = await Promise.all(ports.map(read));
-    assert.deepEqual(result, ['account on B', 'storage on C']);
+  const expectRoutes = account => remoteRehearsal.untilRemote(async () => {
+    assert.deepEqual(await Promise.all(ports.map(read)), [account, 'storage on C']);
     return true;
   }, 3000, t.signal, 'service_relay');
+  await expectRoutes('account on A');
+  await new Promise(resolve => primary.close(resolve));
+  await expectRoutes('account on B');
 });
 
 test('the outside Kind network drops traffic to the private API port and carries Flux and signed remote HTTPS', {

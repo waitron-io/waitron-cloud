@@ -342,7 +342,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           const preference = [controller, ...[0, 1, 2].filter(index => index !== controller)];
           controller = await selectSurvivingNode(preference, (index, probeSignal) =>
             ssh(index, ['sudo', ...kubeArgs, '--request-timeout=3s', 'get', '--raw=/readyz'], undefined, 5000, probeSignal),
-          request === null ? undefined : request ?? limit);
+          request === null ? null : request ?? limit);
           return controller;
         };
         const outsideKube = async (args, options) => kubeOn(await controlPlane(options?.signal), args, options);
