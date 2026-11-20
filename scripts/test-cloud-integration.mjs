@@ -216,6 +216,18 @@ export async function readOutsideRetainedBackup(read, signal) {
   }
 }
 
+export async function measureOutsideBackup({original, capture, verify, inspect}, signal, stopped) {
+  let evidence = original.workerVerification;
+  if (stopped) {
+    const point = await capture();
+    assert.notEqual(point.pointId, original.pointId, 'integration.fault_backup_not_new');
+    evidence = await verify(point);
+  }
+  const saved = await readOutsideRetainedBackup(() => inspect(original), signal);
+  assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
+  return {...evidence, retained: true};
+}
+
 export async function runTestCloudClients(options = {}) {
   const waitronTunnelImage = options.waitronTunnelImage ??
     (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
@@ -623,10 +635,10 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
         if (paidVerification || paidRecovery) {
           journeyStage = 'verification';
           const acknowledged = []; let verificationConfigured = false;
-          const verify = async () => {
+          const verify = async (point = captured) => {
           const verification = {image: waitronImage, revision, nativeTarget};
           if (!verificationConfigured) {await accountPhase('configure-verification', verification); verificationConfigured = true;}
-          if (kubernetes) {verifierWorker = await kubernetes.verifier.start(captured.pointId, verification); verifierStarted = true;}
+          if (kubernetes) {verifierWorker = await kubernetes.verifier.start(point.pointId, verification); verifierStarted = true;}
           else {
           const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
           const configVolume = accountInfo.Mounts.find(value => value.Destination === '/run/local-stack').Name;
@@ -636,7 +648,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             '--label', 'cloud.integration.owner=' + runId, '--network', network, '--memory', '256m', '--memory-swap', '256m',
             '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,nosuid,nodev,size=96m,mode=1777', '--env', 'CLOUD_TEST_SERVICE_PLANS=1', '--env', 'CLOUD_VERIFIER_IMAGE=' + waitronImage,
-            '--env', 'CLOUD_INTEGRATION_POINT_ID=' + captured.pointId, '--env', 'CLOUD_INTEGRATION_WAITRON_REVISION=' + revision,
+            '--env', 'CLOUD_INTEGRATION_POINT_ID=' + point.pointId, '--env', 'CLOUD_INTEGRATION_WAITRON_REVISION=' + revision,
             '--mount', 'type=volume,src=' + configVolume + ',dst=/run/local-stack,readonly',
             '--mount', 'type=volume,src=' + stateVolume + ',dst=/run/backup-verifier',
             '--mount', 'type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',
@@ -646,7 +658,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           }
           let admission;
           for (let attempt = 0; attempt < 90; attempt++) {
-            try {admission = parseIntegrationJson(await accountPhase('inspect-verification', {...captured, ...verification})); break;}
+            try {admission = parseIntegrationJson(await accountPhase('inspect-verification', {...point, ...verification})); break;}
             catch {
               assert.equal(kubernetes ? String(await kubernetes.verifier.running()) : await docker(['inspect', '--format', '{{.State.Running}}', verifierWorker]), 'true', 'integration.verifier_worker_exited');
               await delay(500);
@@ -660,9 +672,12 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           removed.push(created.find(value => value.kind === 'container' && value.id === admission.childId));
           if (kubernetes) await kubernetes.verifier.stop(); else await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-stop');
           assert.equal(kubernetes ? await kubernetes.verifier.exitCode() : await docker(['inspect', '--format', '{{.State.ExitCode}}', verifierWorker]), '0', 'integration.verifier_forced_shutdown');
-          publishedSnapshot.verification = 'verified';
-          publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
-          if (kubernetes?.observe) acknowledged.push({...captured, attemptId: admission.attemptId});
+          return {...admission, childAbsent: true, workerStoppedNaturally: true};
+          };
+          const verifyPublished = async () => {
+            publishedSnapshot.workerVerification = await verify();
+            publishedSnapshot.verification = 'verified';
+            if (kubernetes?.observe) acknowledged.push({...captured, attemptId: publishedSnapshot.workerVerification.attemptId});
           };
           if (kubernetes?.observe) readBackups = () => accountPhase('inspect-retained-snapshot', {points: acknowledged});
           if (kubernetes?.observe) repeatBackup = signal => cancellation.run({...cancellation.getStore(),
@@ -671,7 +686,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             captured = await control(id, 'snapshot-publish');
             const independent = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
             publishedSnapshot = {...publishedSnapshot, ...captured, ...independent};
-            await verify(); await readBackups();
+            await verifyPublished(); await readBackups();
             return publishedSnapshot.workerVerification;
           });
           if (measureCapacity) {
@@ -688,12 +703,12 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                 return capacityChronology.observe(phase, () => observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker, diskPath: hostCapacity.diskPath, measureVolumes,
                   protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}));
               },
-              verify,
+              verify: verifyPublished,
               stop: async () => {if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'capacity-refusal-stop');},
             });
             capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', diskMeasurement: 'docker-data-filesystem',
               shippingQualification: false, baseline: hostCapacity.baseline, startup: {samples: startupCapacity.samples}, samples: measured.samples};
-          } else await verify();
+          } else await verifyPublished();
           if (measured) {
             const original = publishedSnapshot;
             // The venue account uses an authenticator. A separate sign-in exercises email challenge delivery.
@@ -709,22 +724,13 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                 const {worker} = await readOutsideSignupMail(readMail, recipient, origin, signal, true);
                 return {worker};
               },
-              backup: (signal, stopped) => cancellation.run({...cancellation.getStore(), signal}, async () => {
-                if (stopped) {
-                  captured = await control(id, 'snapshot-publish');
-                  assert.notEqual(captured.pointId, original.pointId, 'integration.fault_backup_not_new');
-                  await accountPhase('inspect-snapshot', captured);
-                  await verify();
-                }
-                const saved = parseIntegrationJson(await readOutsideRetainedBackup(() =>
-                  accountPhase('inspect-retained-snapshot', {
-                    points: [{...original, attemptId: original.workerVerification.attemptId}],
-                  }), signal));
-                assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
-                const evidence = {...publishedSnapshot.workerVerification, retained: true};
-                publishedSnapshot = original;
-                return evidence;
-              }),
+              backup: (signal, stopped) => cancellation.run({...cancellation.getStore(), signal}, () => measureOutsideBackup({
+                original, capture: () => control(id, 'snapshot-publish'),
+                verify: async point => {await accountPhase('inspect-snapshot', point); return verify(point);},
+                inspect: async point => parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
+                  points: [{...point, attemptId: point.workerVerification.attemptId}],
+                })),
+              }, signal, stopped)),
               observe: probes => {budget.requireRoom(loginEmail); return kubernetes.stopServices({...probes, publication});}});
           }
           if (refused) {

@@ -281,6 +281,24 @@ test('the outside backup inspection immediately reports an integrity failure', a
   assert.equal(calls, 1);
 });
 
+test('a fresh outside backup keeps the original verification bound to its original capture', async () => {
+  const {measureOutsideBackup} = await load();
+  const original = {pointId: 'original', workerVerification: {attemptId: 'first'}};
+  const newPoint = {pointId: 'fresh'};
+  const run = (capture, stopped) => (measureOutsideBackup ?? (() => ({})))({
+    original, capture,
+    verify: async point => {assert.deepEqual(point, newPoint); return {attemptId: 'second'};},
+    inspect: async point => {
+      assert.deepEqual(point, {pointId: 'original', workerVerification: {attemptId: 'first'}});
+      return {retainedSnapshotUnchanged: true};
+    },
+  }, AbortSignal.timeout(5000), stopped);
+  assert.deepEqual(await run(async () => newPoint, true), {attemptId: 'second', retained: true});
+  assert.deepEqual(await run(() => assert.fail('pre-stop read must use the existing capture'), false),
+    {attemptId: 'first', retained: true});
+  await assert.rejects(async () => run(async () => original, true), /integration\.fault_backup_not_new/);
+});
+
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {
   const {readSignupToken} = await load();
   assert.equal(typeof readSignupToken, 'function', 'the authenticated rehearsal needs to read the signup link');
