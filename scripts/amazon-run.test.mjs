@@ -244,7 +244,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const removalReady=new Promise(resolve=>{markRemoval=resolve;});
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
-  const measuredStops = scenario === 'baseline measured stops';
+  const measuredStops = scenario === 'baseline measured stops', restartedAddress = '203.0.113.33';
+  let restarted = false, stopClock = 100;
+  if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
   const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
     prepareFlux: async (directory, _name, options) => {calls.push(['flux-prepare', options.node]);return directory+'/flux.json';},
     async runBaseline(context) {
@@ -266,6 +268,19 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});
       await context.kube(['-n', 'd621-data', 'exec', '-i', 'pod/service', '--', 'node'], {input: '{"kind":"Secret"}'});
       await context.importVerifierImage('sha256:' + hashes, ['exec', '-i', 'pod/verifier', '--', 'docker', 'load']);
+      if (measuredStops) {
+        const {name} = context.nodes[2];
+        const resumed = await context.stopNode(name, {
+          async whileStopped({holdMs}) {stopClock += holdMs; return {};},
+          async afterRestart() {
+            assert.ok(calls.some(row => row[0] === 'sudo' && row.includes('wg') && row.includes(restartedAddress + ':51821')));
+            assert.ok(transports.some(row => row.args.at(-2) === 'admin@' + restartedAddress &&
+              row.args.at(-1).includes('verifier-scratch')));
+          },
+        });
+        assert.equal(resumed.offMs, 900_000);
+        assert.equal(resumed.stopped, name);
+      }
       if (scenario === 'baseline interrupted') {
         stop.abort();
         await context.kube(['-n', 'd621-data', 'logs', 'pod/service'], {signal: null});
@@ -295,8 +310,12 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
       if (service === 'service-quotas') return JSON.stringify({Quota: {Value: 12}});
       if (args[0] === 'describe-stacks') return JSON.stringify({Stacks: [{Outputs: Object.entries(output).map(([OutputKey, OutputValue]) => ({OutputKey, OutputValue}))}]});
-      if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{InstanceId: output.C, State: {Name: 'stopped'}}]}]});
-      assert.ok(['create-stack', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);
+      if (args[0] === 'start-instances') restarted = true;
+      if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{
+        InstanceId: output.C, State: {Name: restarted ? 'running' : 'stopped'},
+        PublicIpAddress: restarted ? restartedAddress : output.AddressC, PrivateIpAddress: output.PrivateC,
+      }]}]});
+      assert.ok(['create-stack', 'start-instances', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);
       return '';
     }, run: async (binary, args, input, cleanup, timeout) => {
       if (!cleanup) stop.signal.throwIfAborted();
@@ -325,6 +344,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if (script.includes("'kube-node-lease'")) {
+          return JSON.stringify({spec: {renewTime: restarted ? '2026-11-10T00:16:01Z' : '2026-11-10T00:00:01Z'}});
+        }
         if (script.includes('--raw=/readyz')) {
           if (['baseline', 'baseline measured stops', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
           return 'ok';
@@ -391,7 +413,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const closes = transports.filter(row => row.args.includes('-O'));
   if (scenario === 'failed creation') assert.deepEqual(transports, []);
   else {
-    assert.deepEqual(closes.map(row => row.args.at(-1)), ['admin@203.0.113.1','admin@203.0.113.2','admin@203.0.113.3']);
+    assert.deepEqual(closes.map(row => row.args.at(-1)), measuredStops ?
+      ['admin@203.0.113.3', 'admin@203.0.113.1', 'admin@203.0.113.2', 'admin@' + restartedAddress] :
+      ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
     assert.ok(closes.every(row => row.cleanup === true && row.args.includes('exit')));
     assert.ok(closes.every(row => row.socketDirectoryPresent), 'socket directory remains until every master is closed');
     const paths = new Set();
@@ -466,7 +490,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   if (scenario === 'baseline' || measuredStops) {
     if (measuredStops) {
       assert.equal(result.baseline.restored, true);
-      assert.equal(result.baseline.controlPlaneSelection.calls, 4);
+      assert.equal(result.baseline.controlPlaneSelection.calls, 9);
       assert.ok(Number.isFinite(result.baseline.controlPlaneSelection.totalMs));
       const created = calls.find(row => row[1] === 'create-stack');
       const parameters = JSON.parse(created[created.indexOf('--parameters') + 1]);
@@ -479,7 +503,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.ok(createdNetwork >= 0 && createdNetwork < calls.findIndex(row => row[1] === 'create-stack'));
     assert.match(transports.find(row => row.input === '{"kind": "Secret"}')?.args.at(-1) ?? '', /2>\/dev\/null$/);
     assert.match(transports.find(row => row.input === '{"kind":"Secret"}')?.args.at(-1) ?? '', /'exec'.*'node'$/);
-    assert.equal(calls.some(row => row[1] === 'stop-instances' || row[1] === 'describe-instances'), false);
+    const lifecycle = ['stop-instances', 'describe-instances', 'start-instances'];
+    assert.deepEqual(calls.filter(row => lifecycle.includes(row[1])).map(row => [row[1], row.at(-1)]), measuredStops ?
+      ['stop-instances', 'describe-instances', 'describe-instances', 'start-instances', 'describe-instances'].map(call => [call, output.C]) : []);
     assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-storage.mjs')), false);
     assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
     assert.deepEqual(savedTags.filter(tag => /:(source|kustomize)-controller$/.test(tag)).length, 2);
@@ -488,7 +514,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.equal(transports.find(row => row.args.at(-1).includes('docker save'))?.args.at(-2), 'admin@203.0.113.2');
     for (const fragment of ['mkfs.ext4', "'docker' 'load'"]) {
       assert.deepEqual(transports.filter(row => row.args.at(-1).includes(fragment)).map(row => row.args.at(-2)),
-        ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
+        ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3',
+          ...(measuredStops && fragment === 'mkfs.ext4' ? ['admin@' + restartedAddress] : [])]);
     }
     const removedNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'rm' && row[3] === 'd'.repeat(64));
     const deletedStack = calls.findIndex(row => row[1] === 'wait' && row[2] === 'stack-delete-complete');
