@@ -22,7 +22,7 @@ export function renderFluxControllers(jsonl, name, node) {
   }
   return {apiVersion:'v1',kind:'List',items};
 }
-export async function prepareFluxBundle(directory, name, {run, fetch:download=globalThis.fetch}={}) {
+export async function prepareFluxBundle(directory, name, {run, node=name+'-control-plane', fetch:download=globalThis.fetch}={}) {
   const mac=process.platform==='darwin'&&process.arch==='arm64';
   assert.ok(mac||process.platform==='linux'&&process.arch==='x64','flux.builder_platform');
   const artifact='flux_2.8.0_'+(mac?'darwin_arm64':'linux_amd64')+'.tar.gz';
@@ -37,7 +37,7 @@ export async function prepareFluxBundle(directory, name, {run, fetch:download=gl
   assert.equal(createHash('sha256').update(yaml).digest('hex'),'5018b70a763ce6eaa6c56b117f04a9f7ac8bc72e896f4dbe27e9195897ad8071','flux.export_digest');
   const source=join(directory,'flux.yaml');await writeFile(source,yaml);
   const jsonl=await run('kubectl',['patch','--local','--type=merge','-p','{}','-f',source,'-o','jsonpath={@}{"\\n"}']);
-  const path=join(directory,'flux.json');await writeFile(path,JSON.stringify(renderFluxControllers(jsonl,name,name+'-control-plane')));
+  const path=join(directory,'flux.json');await writeFile(path,JSON.stringify(renderFluxControllers(jsonl,name,node)));
   return path;
 }
 
@@ -77,13 +77,35 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,reject
   throw Error('flux.revision_timeout');
 }
 
-export async function startFluxMirror({name,image,run}) {
-  const id=await run('docker',['run','-d','--name',name+'-git','--user','1000:1000','--entrypoint','node',
-    '-v',fileURLToPath(import.meta.url)+':/proof/kubernetes-git.mjs:ro','-p','10.77.0.1::8000',image,
-    '/proof/kubernetes-git.mjs','--serve-mirror','/tmp/mirror']);
-  assert.match(id,/^[a-f0-9]{64}$/,'flux.mirror_identity');
-  const close=()=>run('docker',['rm','-f',id],undefined,true);
+export async function startFluxMirror({name,image,run,address='10.77.0.1',port='',removeFirewall}) {
+  const container = ['--name',name+'-git','--user','1000:1000','--entrypoint','node',
+    '-v',fileURLToPath(import.meta.url)+':/proof/kubernetes-git.mjs:ro','-p',address+':'+port+':8000',image,
+    '/proof/kubernetes-git.mjs','--serve-mirror','/tmp/mirror'];
+  let id;
+  const close = async () => {
+    if (id) {
+      try {await run('docker', ['rm', '-f', id], undefined, true);}
+      catch (error) {
+        // A failed Docker command may leave the mirror reachable. Retain its filter until Docker confirms otherwise.
+        try {
+          if (removeFirewall && await run('docker', ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id], undefined, true) === '') {
+            await removeFirewall();
+          }
+        } catch (cleanup) {
+          throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);
+        }
+        throw error;
+      }
+    }
+    await removeFirewall?.();
+  };
   try {
+    const created = removeFirewall
+      ? await run('docker', ['create', '--pull=never', ...container], undefined, true)
+      : await run('docker', ['run', '-d', ...container]);
+    assert.match(created, /^[a-f0-9]{64}$/, 'flux.mirror_identity');
+    id = created;
+    if (removeFirewall) await run('docker', ['start', id]);
     await run('docker',['exec',id,'sh','-ec',`mkdir -p /tmp/mirror /tmp/release
 git init --bare --object-format=sha1 /tmp/mirror/run.git
 git --git-dir=/tmp/mirror/run.git config http.receivepack false
@@ -91,9 +113,10 @@ cd /tmp/release
 git init --object-format=sha1
 git config user.name 'Cloud rehearsal'
 git config user.email rehearsal@example.test`]);
-    const port=/^10\.77\.0\.1:(\d+)$/.exec(await run('docker',['port',id,'8000/tcp']));
-    assert.ok(port,'flux.mirror_binding');
-    return {url:'http://10.77.0.1:'+port[1]+'/run.git',close,
+    const binding=await run('docker',['port',id,'8000/tcp']);
+    const [boundAddress,boundPort,...extra]=binding.split(':');
+    assert.ok(!extra.length && boundAddress===address && /^\d+$/.test(boundPort) && (!port || boundPort===port),'flux.mirror_binding');
+    return {url:'http://'+binding+'/run.git',close,
       async publish(text,signal) {
         const sha=await run('docker',['exec','-i',id,'sh','-ec',`cd /tmp/release
 cat > deployment.yaml
@@ -103,10 +126,43 @@ git push /tmp/mirror/run.git HEAD:main >/dev/null
 git rev-parse HEAD`],text,false,signal);
         assert.match(sha,/^[a-f0-9]{40}$/,'flux.published_revision');return sha;
       }};
-  } catch(error) {await close();throw error;}
+  } catch(error) {
+    try {await close();}
+    catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);}
+    throw error;
+  }
 }
 
-export async function installFlux({name,image,run,kube,deployment,controllersPath='/tmp/d618-flux.json',signal,mirror=startFluxMirror}) {
+export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
+  assert.match(interfaceName, /^d621[a-f0-9]{3,11}$/, 'flux.mesh_interface');
+  const address = '10.77.0.4', port = '18000';
+  // Docker has already translated the destination by DOCKER-USER.
+  const original = ['-p', 'tcp', '-m', 'conntrack', '--ctdir', 'ORIGINAL', '--ctorigdst', address, '--ctorigdstport', port];
+  const rules = [
+    [...original, '!', '-i', interfaceName, '-j', 'DROP'],
+    [...original, '-i', interfaceName, '-m', 'iprange', '!', '--src-range', '10.77.0.1-10.77.0.3', '-j', 'DROP'],
+  ];
+  const installed = [];
+  const removeRules = async () => {
+    const results = await Promise.allSettled(installed.reverse().map(rule =>
+      run('sudo', ['-n', 'iptables', '-w', '-D', 'DOCKER-USER', ...rule], undefined, true)));
+    const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (failures.length) throw new AggregateError(failures, 'flux.outside_firewall_cleanup');
+  };
+  try {
+    for (const rule of rules) {
+      await run('sudo', ['-n', 'iptables', '-w', '-I', 'DOCKER-USER', ...rule], undefined, true);
+      installed.push(rule);
+    }
+  } catch (error) {
+    try {await removeRules();}
+    catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);}
+    throw error;
+  }
+  return startFluxMirror({...options, run, address, port, removeFirewall: removeRules});
+}
+
+export async function installFlux({name,image,run,kube,deployment,controllersPath='/tmp/d618-flux.json',baselineNode=name+'-worker2',signal,mirror=startFluxMirror}) {
   const source=await mirror({name,image,run});
   const managed=structuredClone(deployment);managed.metadata.namespace='default';delete managed.spec.replicas;
   managed.spec.strategy={type:'RollingUpdate',rollingUpdate:{maxUnavailable:0,maxSurge:1}};
@@ -120,7 +176,7 @@ export async function installFlux({name,image,run,kube,deployment,controllersPat
       {apiVersion:'source.toolkit.fluxcd.io/v1',kind:'GitRepository',metadata:{name:'p1'},spec:{interval:'15s',url:source.url,ref:{branch:'main'}}},
       {apiVersion:'kustomize.toolkit.fluxcd.io/v1',kind:'Kustomization',metadata:{name:'p1'},spec:{interval:'15s',path:'./',prune:false,wait:true,timeout:'180s',sourceRef:{kind:'GitRepository',name:'p1'}}},
     ]}));
-    await waitFluxRevision({kube,sha,value:'baseline',worker:name+'-worker2',deadline:performance.now()+180000,signal});
+    await waitFluxRevision({kube,sha,value:'baseline',worker:baselineNode,deadline:performance.now()+180000,signal});
     return {close:source.close,reconcile:signal=>reconcileFlux({kube,publish:source.publish,deployment:managed,worker:name+'-worker',signal})};
   } catch(error) {await source.close();throw error;}
 }

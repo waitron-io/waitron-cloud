@@ -7,6 +7,7 @@ import {caVolume, cloudContainer, cleanUp, requireTls} from './kubernetes-databa
 import {verifyManifest} from '../packages/remote-access/src/manifest.ts';
 import {separateByHost} from './kubernetes-placement.mjs';
 import {retryApi} from './kubernetes-node-loss.mjs';
+import {meshNodeAddress} from './kubernetes-outside.mjs';
 
 export async function untilRemote(probe, ms, signal, stage) {
   const end = performance.now() + ms;
@@ -159,7 +160,27 @@ export async function measurePublicationConnectivity({kube, originalNode, primar
   return {account, worker};
 }
 
-export async function startRemoteRehearsal({context, kube, create, tag, settings}) {
+export async function startRemoteRelay({cluster, nodes, run, tag, outside}) {
+  assert.equal(nodes.length, 3, 'remote.relay_nodes');
+  const [primary, ...standbys] = nodes.map((node, index) => outside ? meshNodeAddress(index) : node.name);
+  const relayId = await run('docker', ['create', '--pull=never', '--network', cluster, '--label', 'cloud.kind.node-loss=' + cluster,
+    '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs',
+    primary, '31820', '51820', '0.0.0.0', '30443', ...standbys]);
+  assert.match(relayId, /^[a-f0-9]{64}$/);
+  const close = () => run('docker', ['rm', '-f', relayId], {signal: null});
+  try {
+    await run('docker', ['start', relayId]);
+    const gatewayIp = await run('docker', ['inspect', '--format', '{{(index .NetworkSettings.Networks "' + cluster + '").IPAddress}}', relayId]);
+    assert.match(gatewayIp, /^172\.30\.250\.\d{1,3}$/, 'remote.relay_ip');
+    return {gatewayIp, close};
+  } catch (error) {
+    await cleanUp(error, close);
+    throw error;
+  }
+}
+
+
+export async function startRemoteRehearsal({context, kube, create, tag, settings, outside}) {
   const {cluster, nodes, run, signal, stopNode, stopGatewayNode} = context;
   const {tls, config: {gateway: {cellId}}, runtimeDirectory} = settings;
   const names = ['gateway-issuer.pem', 'gateway-signing-key.pem', 'gateway-wireguard.key', 'gateway-manifest.json'];
@@ -234,16 +255,8 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     return rows.length === 3 && rows.every(row => row.status.phase === 'Running') && new Set(rows.map(row => row.spec.nodeName)).size === 3 &&
       rows.map(row => row.metadata.name);
   }, 180000, signal, 'gateway_candidates');
-  const [primary, ...standbys] = nodes.map(node => node.name);
-  const relayId = await run('docker', ['create', '--pull=never', '--network', cluster, '--label', 'cloud.kind.node-loss=' + cluster,
-    '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs',
-    primary, '31820', '51820', '0.0.0.0', '30443', ...standbys]);
-  assert.match(relayId, /^[a-f0-9]{64}$/);
-  const close = () => run('docker', ['rm', '-f', relayId], {signal: null});
+  const {gatewayIp, close} = await startRemoteRelay({cluster, nodes, run, tag, outside});
   try {
-    await run('docker', ['start', relayId]);
-    const gatewayIp = await run('docker', ['inspect', '--format', '{{(index .NetworkSettings.Networks "' + cluster + '").IPAddress}}', relayId]);
-    assert.match(gatewayIp, /^172\.30\.250\.\d{1,3}$/, 'remote.relay_ip');
     const exec = (pod, cmd, limit) => execGateway(call, pod, cmd, limit);
     const active = async limit => {
       const rows = (await pods(limit)).filter(row => row.status.conditions?.some(condition => condition.type === 'Ready' && condition.status === 'True'));

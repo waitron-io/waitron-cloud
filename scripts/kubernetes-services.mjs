@@ -125,7 +125,7 @@ async function configureServices(context, kube, store, custody) {
 }
 
 export async function runKubernetesServices(context) {
-  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal, remote, stopGatewayNode} = context;
+  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal, remote, stopGatewayNode, prepareOutside} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = ['--kubeconfig', kubeconfig, '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
@@ -133,7 +133,7 @@ export async function runKubernetesServices(context) {
   });
   const create = value => kube(['create', '-f', '-'], JSON.stringify(value));
   const forwards = [];
-  let failure, remoteTarget;
+  let failure, remoteTarget, outside;
   await run('docker', ['tag', image, tag]);
   try {
     await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
@@ -173,7 +173,8 @@ export async function runKubernetesServices(context) {
       const ports = await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
       if (remote) {
         const {startRemoteRehearsal} = await import('./kubernetes-remote.mjs');
-        remoteTarget = await startRemoteRehearsal({context, kube, create, tag, settings});
+        outside = await prepareOutside?.(context, tag);
+        remoteTarget = await startRemoteRehearsal({context, kube, create, tag, settings, outside: Boolean(outside)});
       }
       const manifest = !remote && JSON.parse(await asset('deploy/kubernetes/local-checks.yaml'));
       const template = !remote && servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag,
@@ -238,8 +239,10 @@ export async function runKubernetesServices(context) {
   } finally {
     for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
     await cleanUp(failure, async () => {
-      try {await remoteTarget?.close();}
-      finally {await run('docker', ['image', 'rm', tag], {signal: null});}
+      try {
+        try {await remoteTarget?.close();}
+        finally {await outside?.close();}
+      } finally {await run('docker', ['image', 'rm', tag], {signal: null});}
     });
   }
 }

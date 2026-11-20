@@ -11,7 +11,7 @@ const token = 'abcdef.0123456789abcdef';
 const joinInput = endpoint =>
   `kubeadm join ${endpoint} --token ${token} --discovery-token-ca-cert-hash sha256:${'a'.repeat(64)}\n${key}\n`;
 
-function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key) {
+function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key, phaseArgument = 'synthetic-context', filterAttached = false) {
   const root = process.getuid() === 0;
   const dir = mkdtempSync(join(root ? '/tmp' : tmpdir(), 'd618-bootstrap-'));
   t.after(() => rmSync(dir, {recursive: true, force: true}));
@@ -28,6 +28,7 @@ function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key) 
     if (name === 'sed' && args[0] === '-E') {
       process.stdout.write(require('node:child_process').execFileSync('/usr/bin/sed', args, {input: fs.readFileSync(0)}));
     }
+    if (name === 'iptables' && args.includes('-C') && process.env.FILTER_ATTACHED !== 'true') process.exitCode = 1;
     if (name === 'id') console.log('0');
     if (name === 'ip') console.log('7: wg0 inet ' + process.env.ADDRESS + '/24 scope global wg0');
     if (name === 'hostname') console.log('synthetic-node');
@@ -39,14 +40,15 @@ function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key) 
       process.exitCode = 1;
     }
   `, {mode: 0o755});
-  for (const name of ['id', 'ip', 'hostname', 'kubeadm', 'kubectl', 'curl', 'sleep', 'sed', 'install']) symlinkSync(stub, join(dir, name));
+  for (const name of ['id', 'ip', 'hostname', 'kubeadm', 'kubectl', 'curl', 'sleep', 'sed', 'install', 'iptables']) symlinkSync(stub, join(dir, name));
   symlinkSync('/usr/bin/awk', join(dir, 'awk'));
+  symlinkSync('/bin/cat', join(dir, 'cat'));
   if (root) {
     chmodSync(dir, 0o755);
     for (const path of [hosts, log]) chmodSync(path, 0o666);
   }
-  const result = spawnSync('/bin/bash', [script, phase, 'synthetic-context'], {
-    env: {PATH: dir, D618_HOSTS_FILE: hosts, CALLS: log, ADDRESS: address, FAIL_JOIN: String(failJoin), KEY_OUTPUT: keyOutput},
+  const result = spawnSync('/bin/bash', [script, phase, phaseArgument], {
+    env: {PATH: dir, D618_HOSTS_FILE: hosts, CALLS: log, ADDRESS: address, FAIL_JOIN: String(failJoin), KEY_OUTPUT: keyOutput, FILTER_ATTACHED: String(filterAttached)},
     ...(root ? {uid: 65534, gid: 65534} : {}), input, encoding: 'utf8', timeout: 15000,
   });
   assert.ifError(result.error);
@@ -146,5 +148,41 @@ test('the store bootstrap prepares two private directories with the store proces
   assert.deepEqual(calls.map(({name, args}) => [name, ...args]), [
     ['id', '-u'],
     ['install', '-d', '-m', '0700', '-o', users[1], '-g', users[2], '/var/local/d621-store/0', '/var/local/d621-store/1'],
+  ]);
+});
+
+test('outside filtering applies to new rehearsal-host traffic before port rewriting', async t => {
+  for (const address of ['10.77.0.1', '10.77.0.2', '10.77.0.3']) await t.test(address, t => {
+    const {result, calls} = bootstrap(t, 'outside-filter', address, undefined, false, key, address);
+    assert.equal(result.status, 0, result.stderr);
+    const rules = calls.filter(call => call.name === 'iptables').map(call => call.args);
+    assert.deepEqual(rules.at(-1), ['-w', '-t', 'mangle', '-I', 'PREROUTING', '-i', 'wg0', '-s', '10.77.0.4/32',
+      '-m', 'conntrack', '--ctstate', 'NEW', '-j', 'D618-OUTSIDE']);
+    const ports = rules.filter(rule => rule.at(-1) === 'RETURN').map(rule => [
+      rule[rule.indexOf('-d') + 1], rule[rule.indexOf('-p') + 1], rule[rule.indexOf('--dport') + 1],
+    ]);
+    assert.deepEqual(ports, [
+      ...(address === '10.77.0.1' ? [[address, 'tcp', '3000']] : []),
+      [address, 'tcp', '30443'], [address, 'tcp', '30900'], [address, 'udp', '31820'],
+    ]);
+    assert.deepEqual(rules.at(-2).slice(-4), ['-A', 'D618-OUTSIDE', '-j', 'DROP']);
+  });
+});
+
+test('the saved node mesh config installs the rehearsal filter before bringing the interface up', t => {
+  const input = '[Interface]\nAddress=10.77.0.2/24\nListenPort=51821\n[Peer]\nAllowedIPs=10.77.0.4/32\n';
+  const {result} = bootstrap(t, 'mesh-config', undefined, input, false, key, '10.77.0.2');
+  assert.equal(result.status, 0, result.stderr);
+  const [section, hook, ...rest] = result.stdout.split('\n');
+  assert.equal(section, '[Interface]');
+  assert.match(hook, /^PreUp = bash .+bootstrap\.sh outside-filter 10\.77\.0\.2$/);
+  assert.equal(rest.join('\n'), input.slice('[Interface]\n'.length));
+});
+
+test('restarting WireGuard on the same boot keeps the existing node filter without adding a duplicate', t => {
+  const {result, calls} = bootstrap(t, 'outside-filter', '10.77.0.2', undefined, false, key, '10.77.0.2', true);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls.filter(call => call.name === 'iptables').map(call => call.args), [
+    ['-w', '-t', 'mangle', '-C', 'PREROUTING', '-i', 'wg0', '-s', '10.77.0.4/32', '-m', 'conntrack', '--ctstate', 'NEW', '-j', 'D618-OUTSIDE'],
   ]);
 });

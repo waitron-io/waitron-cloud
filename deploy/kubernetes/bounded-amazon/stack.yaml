@@ -33,8 +33,11 @@
     "Association": {"Type": "AWS::EC2::SubnetRouteTableAssociation", "Properties": {"SubnetId": {"Ref": "Subnet"}, "RouteTableId": {"Ref": "Routes"}}},
     "Firewall": {
       "Type": "AWS::EC2::SecurityGroup",
-      "Properties": {"GroupDescription": "Operator SSH and encrypted in-cell mesh only", "VpcId": {"Ref": "Vpc"},
-        "SecurityGroupIngress": [{"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "CidrIp": {"Ref": "OperatorCidr"}}]}
+      "Properties": {"GroupDescription": "Operator SSH and encrypted WireGuard mesh only", "VpcId": {"Ref": "Vpc"},
+        "SecurityGroupIngress": [
+          {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "CidrIp": {"Ref": "OperatorCidr"}},
+          {"IpProtocol": "udp", "FromPort": 51821, "ToPort": 51821, "CidrIp": {"Ref": "OperatorCidr"}}
+        ]}
     },
     "Mesh": {"Type": "AWS::EC2::SecurityGroupIngress", "Properties": {"GroupId": {"Ref": "Firewall"}, "IpProtocol": "udp", "FromPort": 51821, "ToPort": 51821, "SourceSecurityGroupId": {"Ref": "Firewall"}}},
     "A": {

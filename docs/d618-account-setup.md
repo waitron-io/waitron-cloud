@@ -651,8 +651,9 @@ contain the commit pinned in Cloud's `deploy/backup-verifier/target.json`
 (`runtime.revision`); fetch Waitron first if that commit is missing.
 
 The `curl` command reads this box's public IPv4 address from Amazon's address
-lookup. `/32` allows SSH from just that address, so run it on the x86 box that
-will make the connections. Check the resulting address before continuing.
+lookup. `/32` allows SSH and encrypted WireGuard ingress on UDP 51821 from just
+that address. Run the lookup on the private x86 rehearsal host that will make
+the connections. Check the resulting address before continuing.
 
 ```sh
 (

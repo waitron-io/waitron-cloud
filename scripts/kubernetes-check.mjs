@@ -109,8 +109,9 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
   return {stopped, replacement};
 }
 
-export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux, stopGatewayNode = false} = {}) {
+export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux, stopGatewayNode = false, prepareOutside} = {}) {
 assert.ok(!stopGatewayNode || target === 'kind-remote', 'kubernetes.target');
+assert.ok(!prepareOutside || target === 'kind-remote', 'kubernetes.outside_network_target');
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
 if (target === 'kind-services' || target === 'kind-remote') {
   const remote = target === 'kind-remote', stage = remote ? 'remote' : 'services';
@@ -120,7 +121,7 @@ if (target === 'kind-services' || target === 'kind-remote') {
   assert.equal(process.platform, 'linux', stage + '.requires_linux');
   const verificationTarget = await readRehearsalVerificationTarget();
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
-  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget, remote, stopGatewayNode});
+  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget, remote, stopGatewayNode, prepareOutside});
   return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse});
 }
 if (target === 'kind-storage-identity') {
