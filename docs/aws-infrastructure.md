@@ -1360,9 +1360,12 @@ Kind machine for at least six minutes during the same journey. The test keeps th
 account session, venue and tunnel. It records which machine holds each role
 before the stop, then measures account and HTTPS recovery within 90 seconds,
 backup recovery within 300 seconds, and Git revision and drift repair within
-180 seconds. Read the longest probe gaps and the worker receipts alongside
-those times. The run waits for one writable PostgreSQL primary, all six store
-drives and bucket repair before stopping another machine.
+180 seconds. Read the longest probe gaps alongside the times when a surviving
+inbox receives fresh mail, a publication worker completes new work and a new
+backup verification finishes. The publication check starts after Git finishes
+rolling that worker, and its time is measured from the start of the stop.
+Before the next stop, the run checks for one writable PostgreSQL primary and
+six online drives through both returning store peers, then runs bucket repair.
 
 For a separately authorised Amazon baseline, run `node scripts/amazon-run.mjs baseline`
 with the private `D618_CONFIG` on the test host. The launcher selects a healthy
