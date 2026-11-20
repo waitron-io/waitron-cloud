@@ -248,9 +248,13 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
         });
         await verifyBalancer();
         for (let probe = 0; probe < 2; probe++) {
-          await assert.rejects(kube(['get', '--raw=/readyz']),
-            /Unable to connect to the server:|connection reset by peer|^error: EOF$/im, 'cold_restart.api_still_ready');
-          stop.signal.throwIfAborted();
+          await kube(['get', '--raw=/readyz']).then(
+            () => assert.fail('cold_restart.api_still_ready'),
+            error => {
+              stop.signal.throwIfAborted();
+              if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|^error: EOF$/im.test(error.message)) throw error;
+            },
+          );
         }
         process.stderr.write(`Kind API outage confirmed with all three nodes stopped
 `);

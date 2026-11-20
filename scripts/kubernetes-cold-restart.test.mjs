@@ -2,15 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {prepareDatabaseWitness} from './kubernetes-cold-restart.mjs';
 
-function databaseFixture({missing = false, recovering = false} = {}) {
+function databaseFixture({missing = false, recovering = false, staleReadiness = false} = {}) {
   const oldRow = 'before-restart', newRow = 'after-restart';
-  let restarted = false, elapsed = [], wrote = false;
+  let restarted = false, replicationChecks = 0, wrote = false;
+  const signals = [], created = new Set(), tables = new Set();
   const kube = async ([flag, namespace, verb, resource, ...args], {signal}) => {
     assert.equal(flag, '-n');
     assert.equal(namespace, 'd621-data');
     if (verb === 'get') {
       assert.equal(resource, 'clusters.postgresql.cnpg.io');
-      elapsed.push(signal);
+      signals.push(signal);
       return JSON.stringify({status: {
         readyInstances: restarted && recovering ? 2 : 3,
         currentPrimary: restarted ? 'cloud-db-2' : 'cloud-db-1',
@@ -20,11 +21,19 @@ function databaseFixture({missing = false, recovering = false} = {}) {
     assert.equal(resource, restarted ? 'cloud-db-2' : 'cloud-db-1');
     assert.deepEqual(args.slice(0, 4), ['-c', 'postgres', '--', 'psql']);
     const sql = args.at(-1);
-    if (sql === 'SELECT pg_is_in_recovery()') return 'f';
-    if (!restarted) {
-      assert.ok(sql.includes('CREATE TABLE'));
+    if (sql === 'SELECT NOT pg_is_in_recovery()') return 't';
+    if (sql.includes('pg_stat_replication')) return staleReadiness && ++replicationChecks === 1 ? 'f' : 't';
+    const createdTable = sql.match(/^CREATE TABLE (\w+)/)?.[1];
+    if (createdTable) {
+      if (tables.has(createdTable)) throw Error('relation already exists');
+      tables.add(createdTable);
+      created.add(createdTable);
       assert.ok(sql.includes(oldRow));
       return oldRow;
+    }
+    if (sql.startsWith('DROP TABLE')) {
+      assert.ok(tables.delete(sql.split(' ').at(-1)));
+      return '';
     }
     if (sql.startsWith('INSERT')) {
       assert.ok(sql.includes(newRow));
@@ -34,7 +43,8 @@ function databaseFixture({missing = false, recovering = false} = {}) {
     assert.ok(sql.startsWith('SELECT'));
     return sql.includes(oldRow) ? (missing ? '' : oldRow) : (wrote ? newRow : '');
   };
-  return {kube, restart: () => {restarted = true;}, wrote: () => wrote, signals: elapsed};
+  return {kube, restart: () => {restarted = true;}, wrote: () => wrote, signals, created, tables,
+    replicationChecks: () => replicationChecks};
 }
 
 test('the database witness reads the old row and confirms a fresh write on a different primary', async () => {
@@ -47,6 +57,27 @@ test('the database witness reads the old row and confirms a fresh write on a dif
   assert.ok(f.wrote());
 });
 
+test('two database witnesses keep their rows apart and remove their own tables on success', async () => {
+  const f = databaseFixture();
+  const context = {kube: f.kube, signal: new AbortController().signal};
+  const first = await prepareDatabaseWitness(context);
+  const second = await prepareDatabaseWitness(context);
+  assert.equal(f.created.size, 2);
+  f.restart();
+  await first();
+  assert.equal(f.tables.size, 1);
+  await second();
+  assert.equal(f.tables.size, 0);
+});
+
+test('the database witness waits for both streaming standbys even when the saved status says three are ready', async () => {
+  const f = databaseFixture({staleReadiness: true});
+  const verify = await prepareDatabaseWitness({kube: f.kube, signal: new AbortController().signal});
+  f.restart();
+  await verify();
+  assert.equal(f.replicationChecks(), 2);
+});
+
 test('the database witness refuses a missing acknowledged row before trying a fresh write', async () => {
   const f = databaseFixture({missing: true});
   const verify = await prepareDatabaseWitness({kube: f.kube, signal: new AbortController().signal});
@@ -55,7 +86,7 @@ test('the database witness refuses a missing acknowledged row before trying a fr
   assert.equal(f.wrote(), false);
 });
 
-test('the database witness stops waiting for three copies after 240 seconds', async t => {
+test('the database witness stops waiting for three copies after 240 seconds', {timeout: 3000}, async t => {
   const deadline = new AbortController();
   const timeout = t.mock.method(AbortSignal, 'timeout', ms => {
     assert.equal(ms, 240_000);
