@@ -1317,8 +1317,9 @@ gateways to receive it.
 The check starts a second publication worker on a different machine. Both
 workers stay off the account machine so it can accept the owner's revocation.
 The check also keeps the database primary on a remaining machine to measure
-publication separately from database failover. During the 90-second
-stop window, the surviving worker must complete a new certificate job with
+publication separately from database failover. The check records the database and
+DNS endpoints and waits for Kubernetes to withdraw the stopped DNS replica.
+During the 90-second stop window, the surviving worker must complete a new certificate job with
 the same certificate and signing request, then publish a newer signed route
 manifest without the revoked venue. After the machine rejoins, the check makes
 sure all three gateways received the withdrawal, the peer is gone and both HTTPS

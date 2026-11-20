@@ -147,14 +147,14 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     assert.ok(nodes.some(node => node.name === spec.nodeName), 'remote.database_primary_outside_cell');
     return spec.nodeName;
   }
+  async function endpoints(namespace, service, limit) {
+    const {items} = JSON.parse(await call(['get', 'endpointslices', '--namespace=' + namespace,
+      '-l', 'kubernetes.io/service-name=' + service, '-o', 'json'], limit));
+    return items.flatMap(slice => slice.endpoints.map(row =>
+      ({pod: row.targetRef?.name, node: row.nodeName, addresses: row.addresses, ready: row.conditions?.ready})));
+  }
   async function publicationEndpoints(phase, limit) {
-    const endpoints = async (namespace, service) => {
-      const {items} = JSON.parse(await call(['get', 'endpointslices', '--namespace=' + namespace,
-        '-l', 'kubernetes.io/service-name=' + service, '-o', 'json'], limit));
-      return items.flatMap(slice => slice.endpoints.map(row =>
-        ({pod: row.targetRef?.name, node: row.nodeName, addresses: row.addresses, ready: row.conditions?.ready})));
-    };
-    const [dns, database] = await Promise.all([endpoints('kube-system', 'kube-dns'), endpoints('d621-data', 'cloud-db-rw')]);
+    const [dns, database] = await Promise.all([endpoints('kube-system', 'kube-dns', limit), endpoints('d621-data', 'cloud-db-rw', limit)]);
     process.stderr.write('D621 publication endpoints ' + JSON.stringify({phase, dns, database}) + '\n');
   }
   const primaryAtPlacement = stopGatewayNode ? accountNode : await databasePrimaryNode(signal);
@@ -257,9 +257,19 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
         const primaryNode = await databasePrimaryNode(signal);
         assert.notEqual(originalNode, primaryNode, 'remote.publication_stop_would_kill_database_primary');
         await publicationEndpoints('before stop', signal);
+        const stopStarted = performance.now();
         const result = await stopNode(originalNode, {async whileStopped(fault) {
           await retryApi(() => publicationEndpoints('during stop', fault.signal), fault.signal, 'publication endpoints');
-          return whileStopped(fault);
+          async function waitForDns() {
+            const ready = await untilRemote(async limit => {
+              const rows = (await endpoints('kube-system', 'kube-dns', limit)).filter(row => row.ready);
+              return rows.length && rows.every(row => row.node && row.node !== originalNode) && rows;
+            }, remoteDeadlineMs, fault.signal, 'publication_dns_withdrawal');
+            const dnsWithdrawalMs = Math.ceil(performance.now() - stopStarted);
+            process.stderr.write('D621 publication DNS withdrawal ' + JSON.stringify({dnsWithdrawalMs, ready}) + '\n');
+            return dnsWithdrawalMs;
+          }
+          return whileStopped({...fault, waitForDns});
         }});
         return {...result, originalNode, survivingNode, databasePrimaryNode: primaryNode};
       },
