@@ -62,17 +62,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
 });
 
 for(const [locale,button,instruction] of [
- ['en','Add or switch test card',/monthly payments.*\bturn on\b.*Save for future payments/i],
- ['es','Añadir o cambiar tarjeta de prueba',/pagos mensuales.*\bactiva\b.*Guardar para pagos futuros/i],
+ ['en','Add or switch test card','To save your card for monthly payments, turn on “Save for future payments”.'],
+ ['es','Añadir o cambiar tarjeta de prueba','Para guardar tu tarjeta para los pagos mensuales, activa «Guardar para pagos futuros».'],
 ] as const)test(`${locale}: the card consent instruction appears immediately above the open form`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage({locale,viewport:{width:390,height:1000}});
   page.setDefaultTimeout(3000);await fixture(page);await page.goto('https://portal.test/account/billing');
   const start=page.getByRole('button',{name:button,exact:true});
-  await start.waitFor();assert.equal(await page.getByText(instruction).count(),0);
+  await start.waitFor();assert.equal(await page.getByText(instruction,{exact:true}).count(),0);
   await start.click();await page.locator('billing-card iframe').waitFor();
-  const guidance=page.getByText(instruction);
+  const guidance=page.getByText(instruction,{exact:true});
   await guidance.waitFor();
   assert.equal(await guidance.evaluate(element=>element.nextElementSibling?.localName),'billing-card');
  }finally{await browser.close();}
@@ -86,7 +86,7 @@ test('a widget refusal keeps the card form and earlier method without verifying'
   await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();
   const frame=page.locator('billing-card iframe');await frame.waitFor();
   await page.evaluate(()=>(window as any).cardReply('invalid',{error_code:'INVALID',message:'Submitted invalid data'}));
-  await page.waitForFunction(() => !(window as any).app.billing.pending);
+  await page.waitForLoadState('networkidle');
   assert.equal(server.verifies,0);
   assert.ok(await page.getByText('Saved method: Direct debit',{exact:true}).isVisible());
   assert.ok(await frame.isVisible());
