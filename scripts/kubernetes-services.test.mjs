@@ -114,19 +114,25 @@ test('a silent outside account connection expires as transport loss', async t =>
   t.after(() => {for (const socket of sockets) socket.destroy(); listener.close();});
   await once(listener, 'listening');
   const lost = async () => {throw Object.assign(Error('unreachable'), {code: 'ECONNREFUSED'});};
-  const signal = new AbortController().signal;
-  const result = await servicesScript.measureServiceRestart({
-    signal, checkStore: async () => {}, storeOutage: lost, restore: async () => ({}),
-    probes: {
-      session: async () => {}, remote: async () => {}, backupAfterRestart: async () => ({}),
-      outage: {staff: lost, public: lost, account: signal => new Promise((_, reject) => {
-        const limit = AbortSignal.any([signal, AbortSignal.timeout(100)]);
-        get({host: '127.0.0.1', port: listener.address().port, agent: false, signal: limit}).once('error', reject);
-      })},
-    },
-    async restartAll(outage) {return {outage: await outage({signal, confirmStopped: async () => {}})};},
-  });
-  assert.equal(result.outage.account, 'ETIMEDOUT');
+  for (const parentExpires of [false, true]) {
+    const parent = new AbortController(), {signal} = parent;
+    const reason = new DOMException('parent deadline', 'TimeoutError');
+    const run = servicesScript.measureServiceRestart({
+      signal, checkStore: async () => {}, storeOutage: lost, restore: async () => ({}),
+      probes: {
+        session: async () => {}, remote: async () => {}, backupAfterRestart: async () => ({}),
+        outage: {staff: lost, public: lost, account: signal => new Promise((_, reject) => {
+          const limit = AbortSignal.any([signal, AbortSignal.timeout(100)]);
+          const request = get({host: '127.0.0.1', port: listener.address().port, agent: false, signal: limit});
+          request.once('error', reject);
+          if (parentExpires) parent.abort(reason);
+        })},
+      },
+      async restartAll(outage) {return {outage: await outage({signal, confirmStopped: async () => {}})};},
+    });
+    if (parentExpires) await assert.rejects(run, error => error === reason);
+    else assert.equal((await run).outage.account, 'ETIMEDOUT');
+  }
 });
 
 test('the outside store probe reports a closed connection before TLS can start', async t => {

@@ -227,13 +227,13 @@ test('wrong account or root identity cannot build or create resources', async ()
   assert.equal(typeof api.startAmazon, 'function');
   for (const identity of [{Account: '000000000000', Arn: 'arn:aws:iam::000000000000:user/test'}, {Account: config.account, Arn: 'arn:aws:iam::123456789012:root'}]) {
     await assert.rejects(api.startAmazon(config, {run: () => assert.fail('no build before identity'),
-      aws: async (service, args, cleanup, request) => {assert.equal(service, 'sts'); assert.equal(args[0], 'get-caller-identity'); return JSON.stringify(identity);}}), /amazon.identity/);
+      aws: async (service, args) => {assert.equal(service, 'sts'); assert.equal(args[0], 'get-caller-identity'); return JSON.stringify(identity);}}), /amazon.identity/);
   }
 });
 test('launcher refuses a standard vCPU quota below twelve before building or creating a stack', async () => {
   for (const value of [8, 11, 12]) {
     await assert.rejects(api.startAmazon(config, {
-      aws: async (service, args, cleanup, request) => {
+      aws: async (service, args) => {
         if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
         assert.equal(service, 'service-quotas');
         assert.deepEqual(args, ['get-service-quota', '--service-code', 'ec2', '--quota-code', 'L-1216C47A']);
@@ -246,7 +246,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
 for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
-  ['baseline cold foreign boot', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
+  ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
   ['baseline single stop late', /amazon.measured_stops_expiry/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
@@ -261,9 +261,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const cold = scenario.startsWith('baseline cold');
   const measuredStops = cold || ['baseline measured stops', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
-  if (/ (stale boot|foreign boot|stale lease)$/.test(scenario)) {
+  if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
     const timeout = AbortSignal.timeout;
-    t.mock.method(AbortSignal, 'timeout', ms => timeout(ms === 300_000 ? 75 : ms));
+    t.mock.method(AbortSignal, 'timeout', ms => timeout(ms === 300_000 ? 1000 : ms));
   }
   const roles = ['A', 'B', 'C'], ids = roles.map(role => output[role]);
   const diskMarkers = new Map();
@@ -371,9 +371,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
           }
           return JSON.stringify({Reservations: [{Instances: roles.map((role, index) => ({
             InstanceId: ids[index], State: {Name: allState},
-            PublicIpAddress: restarted ? publicAfter[scenario.endsWith('duplicate public') ? 0 : index] :
-              scenario.endsWith('wrong old address') ? '203.0.113.21' : output['Address' + role],
-            PrivateIpAddress: restarted && scenario.endsWith('private changed') ? '10.78.0.99' : output['Private' + role],
+            PublicIpAddress: restarted ? publicAfter[scenario.endsWith('duplicate public') && index === 2 ? 1 : index] :
+              scenario.endsWith('wrong old address') && index === 2 ? '203.0.113.21' : output['Address' + role],
+            PrivateIpAddress: output['Private' + (restarted && scenario.endsWith('private changed') ? ['A', 'C', 'B'][index] : role)],
             BlockDeviceMappings: [{DeviceName: '/dev/xvda', Ebs: {VolumeId: 'vol-0000000000000000' +
               (restarted && scenario.endsWith('volumes changed') ? 9 : index)}}],
           })).reverse()}]});
@@ -426,14 +426,14 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
           else assert.equal(diskMarkers.get(role), role, 'read the original marker from that machine');
         }
         if (cold && script.includes('/proc/sys/kernel/random/boot_id')) {
-          return '00000000-0000-4000-8000-00000000000' + (restarted && !scenario.endsWith('stale boot') ? '2' : '1');
+          return '00000000-0000-4000-8000-00000000000' + (restarted && !(scenario.endsWith('stale boot') && args.at(-2).endsWith('.13')) ? '2' : '1');
         }
         if (cold && script.includes('169.254.169.254')) {
           const role = args.at(-2).at(-1);
-          return restarted && scenario.endsWith('foreign boot') ? ids[Number(role) % 3] : ids[Number(role) - 1];
+          return restarted && scenario.endsWith('foreign metadata') && role === '3' ? ids[0] : ids[Number(role) - 1];
         }
         if (script.includes("'kube-node-lease'")) {
-          return JSON.stringify({spec: {renewTime: restarted && !scenario.endsWith('stale lease') ? '2026-11-10T00:16:01Z' : '2026-11-10T00:00:01Z'}});
+          return JSON.stringify({spec: {renewTime: restarted && !(scenario.endsWith('stale lease') && args.at(-2).endsWith('.13')) ? '2026-11-10T00:16:01Z' : '2026-11-10T00:00:01Z'}});
         }
         if (script.includes('--raw=/readyz')) {
           if (['baseline', 'baseline measured stops', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
@@ -501,8 +501,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const closes = transports.filter(row => row.args.includes('-O'));
   if (scenario === 'failed creation') assert.deepEqual(transports, []);
   else {
-    const retargeted = calls.some(row => row[0] === 'sudo' && row.includes(publicAfter[0] + ':51821'));
-    assert.deepEqual(closes.map(row => row.args.at(-1)), cold && retargeted ?
+    const retargeted = scenario === 'baseline cold' || / (stale boot|foreign metadata|stale lease)$/.test(scenario);
+    assert.deepEqual(closes.map(row => row.args.at(-1)), retargeted ?
       ['203.0.113.1', '203.0.113.2', '203.0.113.3', ...publicAfter].map(ip => 'admin@' + ip) :
       !cold && restarted && measuredStops ? ['admin@203.0.113.3', 'admin@203.0.113.1', 'admin@203.0.113.2', 'admin@' + restartedAddress] :
       ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
@@ -521,6 +521,16 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
   }
   if (cold) {
+    const lastHost = transports.filter(row => row.args.at(-2) === 'admin@' + publicAfter[2]).map(row => row.args.at(-1));
+    if (scenario.endsWith('foreign metadata')) {
+      assert.ok(lastHost.some(command => command.includes('169.254.169.254')));
+      assert.ok(!lastHost.some(command => command.includes('/proc/sys/kernel/random/boot_id')));
+    }
+    if (scenario.endsWith('stale boot')) {
+      assert.ok(lastHost.some(command => command.includes('/proc/sys/kernel/random/boot_id')));
+      assert.ok(!lastHost.some(command => command.includes("'cold-scratch-witness' 'read'")));
+    }
+    if (scenario.endsWith('stale lease')) assert.ok(lastHost.some(command => command.includes("'kube-node-lease'")));
     const stopped = calls.findIndex(row => row[1] === 'stop-instances');
     const outage = calls.findIndex(row => row[0] === 'outside outage');
     const start = calls.findIndex(row => row[1] === 'start-instances');
