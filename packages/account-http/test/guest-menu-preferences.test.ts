@@ -22,9 +22,10 @@ test('repeated ranges count toward the 32 header entries',()=>{
  assert.deepEqual(guestMenuPreferences(header),['fr','en']);
 });
 
-test('a stronger duplicate uses the position of its stronger entry',()=>{
+test('duplicates keep the strongest weight and its header position',()=>{
  assert.deepEqual(guestMenuPreferences('en;q=0.5, fr;q=0.8, en;q=0.8'),['fr','en']);
  assert.deepEqual(guestMenuPreferences('en;q=0.5, fr;q=0.8, en'),['en','fr']);
+ assert.deepEqual(guestMenuPreferences('en, fr;q=0.8, en;q=0.5'),['en','fr']);
 });
 
 test('an equal-weight duplicate keeps the first position regardless of case',()=>{
