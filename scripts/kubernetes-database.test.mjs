@@ -42,11 +42,17 @@ test('account recovery requires a database failure and readiness from the origin
   ]) {
     let readiness = 0, live = 0, apiDisconnected = false;
     const run = databaseRehearsal.measureAccountRecovery({
-      before, signal: AbortSignal.timeout(2500),
-      async health(path) {
+      before, signal: AbortSignal.timeout(refusal ? 2500 : 5000),
+      async health(path, signal) {
         if (path === 'live') {
           live++;
           return scenario === 'liveness refused' ? {status: 503, body: {}} : {status: 200, body: {status: 'live'}};
+        }
+        if (scenario === 'liveness refused') {
+          await new Promise((_, reject) => {
+            signal.throwIfAborted();
+            signal.addEventListener('abort', () => reject(Error('readiness exec aborted')), {once: true});
+          });
         }
         if (scenario === 'recovers' && !apiDisconnected) {
           apiDisconnected = true;

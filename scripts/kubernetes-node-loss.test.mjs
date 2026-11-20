@@ -3,7 +3,7 @@ import {rm, writeFile, truncate} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import test from 'node:test';
 
-import {runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
+import {retryApi, runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
 
 function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined, readTimeout = false, leaseTimeout = false} = {}) {
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
@@ -129,6 +129,16 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
   return {calls, execute, removed: () => removed, remaining: () => containers.size,
     mutations: verb => calls.filter(row => row.binary === 'docker' && row.args[0] === verb).map(row => row.args.at(-1))};
 }
+
+test('a failed command inside a pod is not retried as a Kubernetes API disconnect', async () => {
+  const failure = Error('kubectl exec failed\npsql: error: SSL error: unexpected eof while reading\ncommand terminated with exit code 2');
+  let attempts = 0;
+  await assert.rejects(retryApi(async () => {
+    if (++attempts === 1) throw failure;
+    return 'the second database attempt answered';
+  }, AbortSignal.timeout(5000), 'promoted write'), error => error === failure);
+  assert.equal(attempts, 1);
+});
 
 test('the Kind fault loop stops each exact container, schedules on a survivor and verifies rejoin', async () => {
   const f = fixture(), result = await runCheck({execute: f.execute});
