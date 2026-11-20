@@ -50,6 +50,43 @@ test('publication workers start away from the account and database primary and u
   ]);
 });
 
+for (const withdrawal of [undefined, 'before probes', 'after probes']) {
+  test(withdrawal ? 'publication connectivity refuses DNS withdrawal ' + withdrawal :
+    'publication connectivity probes both survivors while the dead DNS replica is advertised', async () => {
+    assert.equal(typeof remoteRehearsal.measurePublicationConnectivity, 'function', 'publication must check connectivity during the stop');
+    let snapshots = 0;
+    const probes = [];
+    const check = () => remoteRehearsal.measurePublicationConnectivity({
+      originalNode: 'stopped-node', primaryNode: 'primary-node', survivingWorker: 'survivor', signal: AbortSignal.timeout(3000),
+      async kube(args) {
+        const [verb, resource] = args;
+        if (verb === 'get' && resource === 'endpointslices') {
+          const ready = [{nodeName: 'primary-node', conditions: {ready: true}}];
+          if (args.includes('kubernetes.io/service-name=kube-dns')) {
+            snapshots++;
+            if (withdrawal !== 'before probes' && (withdrawal !== 'after probes' || snapshots === 1)) {
+              ready.push({nodeName: 'stopped-node', conditions: {ready: true}});
+            }
+          }
+          return JSON.stringify({items: [{endpoints: ready}]});
+        }
+        assert.equal(verb, 'exec');
+        assert.equal(snapshots, 1, 'run probes between endpoint snapshots');
+        probes.push([resource, args[3]]);
+        return JSON.stringify({lookupMs: Array(10).fill(2), connectionMs: 5});
+      },
+    });
+    if (withdrawal) {
+      await assert.rejects(check(), /stopped DNS replica already withdrawn/);
+      assert.equal(probes.length, withdrawal === 'before probes' ? 0 : 2);
+    } else {
+      assert.deepEqual(Object.keys(await check()).sort(), ['account', 'worker']);
+      assert.deepEqual(probes, [['cloud-services', 'account'], ['survivor', 'worker']]);
+      assert.equal(snapshots, 2);
+    }
+  });
+}
+
 test('handover can use the fractional time left after pausing the election', async () => {
   assert.equal(await remoteRehearsal.untilRemote(async () => 'standby', 500.5, undefined, 'standby'), 'standby');
 });
@@ -166,6 +203,11 @@ test('the paired venue keeps its endpoint through an elected gateway handover', 
   assert.ok(nodes.some(node => node.name === loss.databasePrimaryNode));
   assert.notEqual(loss.databasePrimaryNode, loss.stopped);
   assert.ok(loss.withdrawnSequence > loss.originalSequence);
+  for (const connectivity of [loss.connectivity.account, loss.connectivity.worker]) {
+    assert.equal(connectivity.lookupMs.length, 10);
+    assert.ok(connectivity.lookupMs.every(ms => ms <= 2000));
+    assert.ok(connectivity.connectionMs <= 5000);
+  }
   assert.ok(loss.failoverMs <= 90000);
   assert.deepEqual(remote.cleanup.remaining, []);
   console.log('D621 gateway timings (ms)', {handover: remote.handover.durationMs,

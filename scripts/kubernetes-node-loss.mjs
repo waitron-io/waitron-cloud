@@ -179,7 +179,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     });
     await kube(['taint', 'node', ...names, 'node-role.kubernetes.io/control-plane:NoSchedule-']);
     await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], {timeout: 185_000});
-    await spreadCoreDns(kube);
+    await spreadCoreDns(kube, names);
     const nodeUids = await readNodes(), members = await readEtcd(nodes);
     async function stopNode(name, {whileStopped, afterRestart} = {}) {
       const node = nodes.find(candidate => candidate.name === name);

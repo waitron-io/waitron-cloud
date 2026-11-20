@@ -9,6 +9,7 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
   let label, removed = false, pod, expectStaleLease = leaseTimeout;
   const starts = new Set();
+  let dnsReads = 0;
   const names = ['control-plane', 'control-plane2', 'control-plane3'];
   const execute = async (binary, args, options) => {
     calls.push({binary, args, options});
@@ -55,6 +56,14 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
       if (verb === 'get' && kind === '--raw=/readyz') return 'ok';
       if (verb === 'patch' && kind === 'deployment' && args[5] === 'coredns') return 'deployment.apps/coredns patched';
       if (verb === 'rollout' && kind === 'status' && args[5] === 'deployment/coredns') return 'deployment "coredns" successfully rolled out';
+      if (verb === 'patch' && kind === 'service' && args[5] === 'kube-dns') return 'service/kube-dns patched';
+      if (verb === 'get' && kind === 'endpointslices') {
+        dnsReads++;
+        return JSON.stringify({items: [{endpoints: names.map((suffix, i) => {
+          const name = label + '-' + suffix;
+          return {nodeName: name, conditions: {ready: true}, hints: {forNodes: [{name: dnsReads === 1 && i === 2 ? 'other-node' : name}]}};
+        })}]});
+      }
       if (verb === 'apply') {
         const manifest = JSON.parse(options.input);
         const stopped = Array.from(containers.values()).find(row => !row.State.Running);
@@ -157,12 +166,22 @@ test('the three-machine rehearsal waits for DNS across machines before starting 
   assert.ok(nodesReady >= 0 && nodesReady < patch, 'place DNS after the three nodes are ready');
   assert.deepEqual(commands[patch].slice(0, -1),
     ['patch', 'deployment', 'coredns', '-n', 'kube-system', '--type=merge', '-p']);
-  const template = JSON.parse(commands[patch].at(-1)).spec.template.spec;
+  const spec = JSON.parse(commands[patch].at(-1)).spec;
+  assert.equal(spec.replicas, 3);
+  assert.deepEqual(spec.strategy, {type: 'RollingUpdate', rollingUpdate: {maxSurge: 0, maxUnavailable: 1}});
+  const template = spec.template.spec;
   assert.deepEqual(template.affinity?.podAntiAffinity?.requiredDuringSchedulingIgnoredDuringExecution, [{
     labelSelector: {matchLabels: {'k8s-app': 'kube-dns'}}, topologyKey: 'kubernetes.io/hostname',
   }]);
   assert.ok(patch < rollout, 'wait for the DNS rollout before handing off to storage');
   assert.deepEqual(commands[rollout], ['rollout', 'status', 'deployment/coredns', '-n', 'kube-system', '--timeout=120s']);
+  const service = commands.findIndex(args => args[0] === 'patch' && args[1] === 'service' && args[2] === 'kube-dns');
+  assert.ok(rollout < service, 'prefer local DNS after the replicas roll out');
+  assert.deepEqual(JSON.parse(commands[service].at(-1)), {spec: {trafficDistribution: 'PreferSameNode'}});
+  const hints = commands.filter(args => args[0] === 'get' && args[1] === 'endpointslices');
+  assert.equal(hints.length, 2, 'wait for the third machine to gain its own routing hint');
+  assert.ok(commands.indexOf(hints[0]) > service);
+  assert.ok(hints.every(args => args.includes('kubernetes.io/service-name=kube-dns')));
 });
 
 test('a container with an unrelated Kind label is never stopped or removed', async () => {
