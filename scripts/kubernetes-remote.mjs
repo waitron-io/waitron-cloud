@@ -194,7 +194,7 @@ export async function startRemoteRelay({cluster, nodes, run, tag, outside, servi
 
 
 export async function startRemoteRehearsal({context, kube, create, tag, settings, outside, installPublication}) {
-  const {cluster, nodes, run, signal, stopNode, stopGatewayNode} = context;
+  const {cluster, nodes, run, signal, stopNode, stopGatewayNode, stopServiceNodes} = context;
   const {tls, config: {gateway: {cellId}}, runtimeDirectory} = settings;
   const names = ['gateway-issuer.pem', 'gateway-signing-key.pem', 'gateway-wireguard.key', 'gateway-manifest.json'];
   const bootstrap = Object.fromEntries(await Promise.all(names.map(async name => [name, await readFile(join(runtimeDirectory, name), 'utf8')])));
@@ -221,9 +221,11 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
   worker.volumeMounts.push({name: 'identity', mountPath: '/identity', readOnly: true}, {name: 'work', mountPath: '/work'});
   worker.readinessProbe = {exec: {command: ['test', '-f', '/tmp/remote-worker-ready']}, periodSeconds: 1};
   const workerLabels = {app: 'remote-worker'}, accountNode = nodes[0].name;
-  const affinity = {...separateByHost(workerLabels), nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {
+  const affinity = separateByHost(workerLabels);
+  // A rolling update needs both surviving machines while the third is stopped.
+  if (!stopServiceNodes) affinity.nodeAffinity = {requiredDuringSchedulingIgnoredDuringExecution: {
     nodeSelectorTerms: [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: [accountNode]}]}],
-  }}};
+  }};
   const call = (args, limit) => kube(args, undefined, false, limit);
   const readyWorkers = async (count, limit) => {
     const {items} = JSON.parse(await call(['get', 'pods', '-l', 'app=remote-worker', '-o', 'json'], limit));
@@ -238,7 +240,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     assert.ok(nodes.some(node => node.name === spec.nodeName), 'remote.database_primary_outside_cell');
     return spec.nodeName;
   }
-  const primaryAtPlacement = stopGatewayNode ? accountNode : await databasePrimaryNode(signal);
+  const primaryAtPlacement = stopGatewayNode || stopServiceNodes ? accountNode : await databasePrimaryNode(signal);
   // A cordon asks CloudNativePG to move the primary. Reserve its node with a scheduling taint instead.
   const primaryPlacementTaint = 'waitron.cloud/publication-primary';
   const holdPrimary = primaryAtPlacement !== accountNode;
@@ -257,8 +259,10 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
       await installPublication({deployment: publication, kube, worker: workerNode});
     } else await create(publication);
     [originalWorker] = await untilRemote(limit => readyWorkers(1, limit), 180000, signal, 'publication_worker');
-    assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
-    assert.notEqual(originalWorker.spec.nodeName, primaryAtPlacement, 'remote.publication_worker_on_database_primary');
+    if (!stopServiceNodes) {
+      assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
+      assert.notEqual(originalWorker.spec.nodeName, primaryAtPlacement, 'remote.publication_worker_on_database_primary');
+    }
   } finally {
     if (holdPrimary) await kube(['taint', 'nodes', primaryAtPlacement, primaryPlacementTaint + ':NoSchedule-'], undefined, true);
   }

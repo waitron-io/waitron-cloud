@@ -79,7 +79,10 @@ export async function startOutsideMesh({directory, peers, prepareNodes, run, res
     throw error;
   }
   let active = true;
-  return {interfaceName, async close() {
+  return {interfaceName, refreshEndpoint(index, endpoint) {
+    assert.ok(peers[index] && isIPv4(endpoint) && !endpoint.startsWith('10.77.0.'), 'outside.mesh_endpoint');
+    return run('sudo', ['-n', 'wg', 'set', interfaceName, 'peer', peers[index].publicKey, 'endpoint', endpoint + ':51821'], undefined, true);
+  }, async close() {
     if (active) {
       await run('sudo', ['-n', 'wg-quick', 'down', path], undefined, true);
       active = false;

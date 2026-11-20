@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 phase=${1:-}
-case "$phase" in prepare|mesh|mesh-config|outside-filter|control|join|storage|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
+case "$phase" in prepare|mesh|mesh-config|outside-filter|control|join|storage|release-staging|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
 
@@ -135,6 +135,13 @@ database-storage)
   ;;
 object-storage)
   install -d -m 0700 -o 10001 -g 10001 /var/local/d621-store/0 /var/local/d621-store/1
+  ;;
+release-staging)
+  [[ "$(mesh_address)" =~ ^10\.77\.0\.[23]$ ]]
+  sed -i '\|^10\.77\.0\.1:/var/local/d620-config /var/local/d620-config nfs4 defaults,_netdev 0 0$|d' /etc/fstab
+  rm /etc/systemd/system/kubelet.service.d/20-d618-storage.conf
+  systemctl daemon-reload
+  umount /var/local/d620-config
   ;;
 storage)
   mkdir -p /var/local/d620-config /etc/exports.d

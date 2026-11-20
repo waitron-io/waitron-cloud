@@ -233,7 +233,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
@@ -244,14 +244,24 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const removalReady=new Promise(resolve=>{markRemoval=resolve;});
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
-  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
-    prepareFlux: async directory => {calls.push(['flux-prepare']);return directory+'/flux.json';},
+  const measuredStops = scenario === 'baseline measured stops';
+  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
+    prepareFlux: async (directory, _name, options) => {calls.push(['flux-prepare', options.node]);return directory+'/flux.json';},
     async runBaseline(context) {
       assert.match(scenario, /^baseline/);
       assert.equal(context.databasePrepared, true);
       assert.deepEqual(context.amazon.instances, [output.A, output.B, output.C]);
       assert.equal(context.amazon.phase, 'baseline');
       assert.deepEqual(context.nodes.map(node => node.ip), ['10.77.0.1', '10.77.0.2', '10.77.0.3']);
+      if (measuredStops) {
+        assert.equal(context.stopServiceNodes, true);
+        assert.equal(context.holdMs, 900_000);
+        assert.deepEqual(calls.find(row => row[0] === 'flux-prepare')[1], context.nodes.map(row => row.name));
+        assert.deepEqual(transports.filter(row => row.args.at(-1).includes("'release-staging'")).map(row => row.args.at(-2)),
+          ['admin@203.0.113.2', 'admin@203.0.113.3']);
+        assert.ok(transports.findIndex(row => row.args.at(-1).includes("'release-staging'")) <
+          transports.findIndex(row => row.args.at(-1).includes("'join'")));
+      }
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: 'synthetic-migration'});
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});
       await context.kube(['-n', 'd621-data', 'exec', '-i', 'pod/service', '--', 'node'], {input: '{"kind":"Secret"}'});
@@ -316,7 +326,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'ssh') {
         const script = args.at(-1);
         if (script.includes('--raw=/readyz')) {
-          if (['baseline', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
+          if (['baseline', 'baseline measured stops', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
           return 'ok';
         }
         if (script.includes("'get' 'endpointslices'") && script.includes('kubernetes.io/service-name=kube-dns')) {
@@ -453,8 +463,15 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.ok(mesh.input.startsWith('[Interface]\nAddress=' + address + '/24\n'), 'filter matches the interface address');
   }
 
-  if (scenario === 'baseline') {
-    assert.deepEqual(result.baseline, {restored: true});
+  if (scenario === 'baseline' || measuredStops) {
+    if (measuredStops) {
+      assert.equal(result.baseline.restored, true);
+      assert.equal(result.baseline.controlPlaneSelection.calls, 4);
+      assert.ok(Number.isFinite(result.baseline.controlPlaneSelection.totalMs));
+      const created = calls.find(row => row[1] === 'create-stack');
+      const parameters = JSON.parse(created[created.indexOf('--parameters') + 1]);
+      assert.equal(parameters.find(row => row.ParameterKey === 'ExpiryTime').ParameterValue, '2026-11-10T02:25:00');
+    } else assert.deepEqual(result.baseline, {restored: true});
     assert.equal(result.removed, true);
     assert.ok(meshCalls.every(row => row.input.includes('AllowedIPs = 10.77.0.4/32')));
     assert.ok(calls.some(row => row[0] === 'sudo' && row.includes('mangle') && row.includes('PREROUTING')));
@@ -750,6 +767,9 @@ test('outside host binds three individual mesh routes and removes only its own i
     '',
   ].join('\n'));
   assert.deepEqual(calls, ['nodes ready', ['sudo', '-n', 'wg-quick', 'up', config]]);
+  await (mesh.refreshEndpoint ?? (() => {}))(1, '192.0.2.24');
+  assert.deepEqual(calls.at(-1), ['sudo', '-n', 'wg', 'set', mesh.interfaceName, 'peer', peers[1].publicKey,
+    'endpoint', '192.0.2.24:51821']);
   await mesh.close();
   assert.deepEqual(calls.at(-1), ['sudo', '-n', 'wg-quick', 'down', config]);
   assert.equal(existsSync(config), false);

@@ -30,7 +30,9 @@ test('measured-stop controllers can move within the three owned machines', () =>
   const spec = row.spec.template.spec;
   assert.deepEqual(spec.nodeSelector, {'kubernetes.io/os': 'linux'});
   assert.deepEqual(spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-    [{matchFields: [{key: 'metadata.name', operator: 'In', values: ['machine-a', 'machine-b', 'machine-c']}]}]);
+    ['machine-a', 'machine-b', 'machine-c'].map(name => ({
+      matchFields: [{key: 'metadata.name', operator: 'In', values: [name]}],
+    })));
 });
 
 // Corrupt downloaded tools must not execute before stack creation.

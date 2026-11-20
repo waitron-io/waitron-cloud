@@ -37,7 +37,7 @@ export async function readObject({objects}, name, key, signal) {
   }
 }
 
-function storeMetrics(ip, {ca, credentials}, signal) {
+export function storeMetrics(ip, {ca, credentials}, signal) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   const {accessKeyId, secretAccessKey} = credentials;
   const payload = encode({alg: 'HS512', typ: 'JWT'}) + '.' +
@@ -114,7 +114,7 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
-async function runStoreHeal({node, account, run, signal}, dryRun) {
+export async function runStoreHeal({node, account, run, signal}, dryRun) {
   // MinIO can delete a dangling version during a dry run. Probe only the dedicated fixture.
   const path = '/minio/admin/v3/heal/' + storageBucket + (dryRun ? '/' + repairProbeObject : '');
   const url = new URL(path, 'https://' + node.ip + ':' + storeNodePort);

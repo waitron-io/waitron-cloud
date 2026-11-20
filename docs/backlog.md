@@ -1809,10 +1809,10 @@ implementation or production evidence.
   through consecutive outages remain open. The
   [healthy Kind services rehearsal](aws-infrastructure.md#rehearse-signup-pairing-and-backup-on-a-healthy-kind-cell)
   checks production-mode signup, pairing and backup against replicated PostgreSQL
-  and MinIO. The outside Kind rehearsal checks the retained account session,
-  new authenticated mail and the original stored backup during each machine stop.
-  While a machine is down, its private test inbox is unavailable.
-  The Stockholm rehearsal still needs to measure worker restarts and recovery times.
+  and MinIO. The [measured outside rehearsal](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
+  checks the same venue, account and tunnel during each stop. It records account,
+  HTTPS, backup and Git recovery times, new work by surviving workers, and repair
+  after each rejoin. Stockholm still needs its own measurements.
   The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
   During the worker machine stop, the survivor reused the saved certificate and
@@ -1821,10 +1821,6 @@ implementation or production evidence.
   connections in 17 ms and 16 ms while the stopped replica was still listed as ready.
   The account process returned database-backed readiness in 65.168 seconds
   during the private PostgreSQL primary stop. Run the same checks in Stockholm.
-  In the full-service machine-loss check,
-  measure how long the email worker, remote publication worker and backup verifier
-  take to come back after the primary moves. They exit on idle database connection
-  errors and depend on Kubernetes for a restart.
   The [private Kind machine-stop check](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
   used the Waitron companion's own traffic and restored staff and public HTTPS
   in 52.373 and 52.387 seconds through one private relay address. The former

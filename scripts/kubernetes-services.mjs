@@ -13,7 +13,7 @@ import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, serv
 import {installStockholmDatabase} from './kubernetes-data.mjs';
 import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
 import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
-import {storageBucket, storageClient} from './kubernetes-storage-proof.mjs';
+import {runStoreHeal, storageBucket, storageClient, storeMetrics, waitForStoreDrives} from './kubernetes-storage-proof.mjs';
 import {storeNodePort, waitForStore} from './kubernetes-storage.mjs';
 import {meshNodeAddress} from './kubernetes-outside.mjs';
 import {kindHoldMs} from './kubernetes-node-loss.mjs';
@@ -188,6 +188,7 @@ export async function readServicesInbox(pods, fetch, path, authorization) {
 
 export async function measureServiceStops({nodes, inventory, stopNode, restore, healthy, reconcile, probes, holdMs,
   signal, observe = observeP1}) {
+  assert.ok(nodes.length === 3 && new Set(nodes).size === 3, 'services.stop_three_nodes');
   const uncovered = new Set(['primary', 'gateway', 'operator', 'fluxSource', 'fluxApply']);
   const remaining = [...nodes], legs = [];
   while (remaining.length) {
@@ -195,6 +196,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     const score = node => [...uncovered].filter(role => roles[role] === node).length;
     const node = remaining.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best);
     remaining.splice(remaining.indexOf(node), 1);
+    process.stderr.write('D621 stop inventory ' + JSON.stringify({node, roles}) + '\n');
     const survivors = nodes.filter(name => name !== node);
     const stopped = Promise.withResolvers();
     stopped.promise.catch(() => {});
@@ -226,8 +228,8 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     assert.ok(survivors.includes(primary) && outsideStore && flux?.appliedRevision, 'services.stop_service_recovery');
     if (roles.primary === node) assert.ok(publication?.worker && Number.isFinite(publication.completedMs), 'services.stop_publication');
     for (const role of uncovered) if (roles[role] === node) uncovered.delete(role);
-    await healthy(signal);
-    legs.push({...receipt, roles});
+    const rejoin = await healthy(node, signal);
+    legs.push({...receipt, roles, rejoin});
   }
   for (const role of uncovered) assert.fail('services.stop_role:' + role);
   return legs;
@@ -387,16 +389,22 @@ export async function runKubernetesServices(context) {
             stopped = node;
             return options.whileStopped(fault);
           }}),
-          restore: (node, options) => outside.restoreNode(node, options),
-          healthy: async signal => {
+          restore: (node, options) => outside.restoreNode?.(node, options),
+          healthy: async (name, signal) => {
             stopped = undefined;
-            await Promise.all([writablePrimary(names, signal),
-              waitForStore({nodes: names, kube: context.kube, signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)])}),
-              untilRemote(async limit => (await readyServices(limit)).length === names.length, 180_000, signal, 'services_rejoined')]);
+            const repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
+            const [primary] = await Promise.all([writablePrimary(names, repair),
+              waitForStore({nodes: names, kube: context.kube, signal: repair}),
+              untilRemote(async limit => (await readyServices(limit)).length === names.length, 180_000, repair, 'services_rejoined')]);
+            const ordinal = names.indexOf(name) * 2, node = context.nodes.find(row => row.name === name);
+            const drives = await waitForStoreDrives(limit => storeMetrics(node.ip, store, limit),
+              ['store-' + ordinal, 'store-' + (ordinal + 1)], repair);
+            await runStoreHeal({node, account: store, run, signal: repair}, false);
+            return {primary, drives, storeRepairedOn: name};
           },
           async reconcile(node, roles, survivors, fault) {
-            const [primary, outsideStore] = await Promise.all([
-              writablePrimary(survivors, fault.signal),
+            const [database, outsideStore] = await Promise.all([
+              writablePrimary(survivors, fault.signal).then(primary => ({primary, recoveredMs: Math.round(performance.now() - fault.started)})),
               untilRemote(async limit => {
                   await run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
                     servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
@@ -409,7 +417,7 @@ export async function runKubernetesServices(context) {
             assert.ok(fluxDeadline > 0, 'services.stop_flux_deadline');
             const flux = await outside.proveSurviving(survivors,
               AbortSignal.any([fault.signal, AbortSignal.timeout(Math.ceil(fluxDeadline))]));
-            return {primary, publication, outsideStore, flux};
+            return {...database, publication, outsideStore, flux};
           }})}),
         exec: async (role, args, input, limit) => {
           assert.deepEqual([role, ...args], ['account', 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs']);

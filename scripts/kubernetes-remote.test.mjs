@@ -13,7 +13,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 import * as remoteRehearsal from './kubernetes-remote.mjs';
 
-test('publication workers start away from the account and database primary and use different machines', async t => {
+for (const stopServiceNodes of [false, true]) test(stopServiceNodes ?
+  'measured publication rollout can place a new worker on either survivor' :
+  'publication workers start away from the account and database primary and use different machines', async t => {
   const runtimeDirectory = await mkdtemp(join(tmpdir(), 'cloud-remote-workers-'));
   t.after(() => rm(runtimeDirectory, {recursive: true, force: true}));
   await mkdir(join(runtimeDirectory, 'public-certs'));
@@ -21,7 +23,7 @@ test('publication workers start away from the account and database primary and u
     'gateway-bot.key', 'public-certs/default.pem']) await writeFile(join(runtimeDirectory, file), 'fixture');
   const placed = Error('worker manifest captured'), placement = [];
   await assert.rejects(remoteRehearsal.startRemoteRehearsal({
-    context: {nodes: ['account-node', 'database-node', 'worker-node'].map(name => ({name}))}, tag: 'owned:cloud',
+    context: {stopServiceNodes, nodes: ['account-node', 'database-node', 'worker-node'].map(name => ({name}))}, tag: 'owned:cloud',
     async kube(args) {
       if (args[1] === 'clusters.postgresql.cnpg.io') return JSON.stringify({status: {currentPrimary: 'cloud-db-1'}});
       if (args[1] === 'pod') {
@@ -35,16 +37,21 @@ test('publication workers start away from the account and database primary and u
       if (value.metadata?.name !== 'remote-worker') return;
       assert.equal(value.kind, 'Deployment');
       assert.equal(value.spec.replicas, 1);
-      assert.deepEqual(placement, ['taint nodes database-node waitron.cloud/publication-primary=held:NoSchedule']);
       const {affinity} = value.spec.template.spec;
-      assert.deepEqual(affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-        [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: ['account-node']}]}]);
+      if (stopServiceNodes) {
+        assert.deepEqual(placement, []);
+        assert.equal(affinity.nodeAffinity, undefined);
+      } else {
+        assert.deepEqual(placement, ['taint nodes database-node waitron.cloud/publication-primary=held:NoSchedule']);
+        assert.deepEqual(affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+          [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: ['account-node']}]}]);
+      }
       assert.deepEqual(affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution,
         [{labelSelector: {matchLabels: {app: 'remote-worker'}}, topologyKey: 'kubernetes.io/hostname'}]);
       throw placed;
     },
   }), error => error === placed);
-  assert.deepEqual(placement, [
+  assert.deepEqual(placement, stopServiceNodes ? [] : [
     'taint nodes database-node waitron.cloud/publication-primary=held:NoSchedule',
     'taint nodes database-node waitron.cloud/publication-primary:NoSchedule-',
   ]);

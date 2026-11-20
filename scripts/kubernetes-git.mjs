@@ -22,10 +22,10 @@ export function renderFluxControllers(jsonl, name, node) {
       spec.affinity??={};
       spec.affinity.nodeAffinity??={};
       const required=spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution??={nodeSelectorTerms:[{}]};
-      for(const term of required.nodeSelectorTerms) {
-        term.matchFields??=[];
-        term.matchFields.push({key:'metadata.name',operator:'In',values:node});
-      }
+      // The API allows a single value per node field. Selector terms are alternatives.
+      required.nodeSelectorTerms=required.nodeSelectorTerms.flatMap(term=>node.map(name=>({...term,
+        matchFields:[...(term.matchFields??[]),{key:'metadata.name',operator:'In',values:[name]}],
+      })));
     } else spec.nodeSelector={'kubernetes.io/hostname':node};
     spec.containers[0].image=name+':'+row.metadata.name;spec.containers[0].imagePullPolicy='Never';
   }

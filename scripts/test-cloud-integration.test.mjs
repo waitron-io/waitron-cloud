@@ -227,6 +227,10 @@ test('the outside signup check retries a failed inbox read', async () => {
     Text: 'https://cloud.example.test:3000/signup#token=' + token, worker: 'surviving-mail',
   }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
   {token, worker: 'surviving-mail'});
+  await assert.rejects(readOutsideSignupMail(async () => ({
+    Text: 'https://cloud.example.test:3000/signup#token=' + token,
+  }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
+  /integration\.outside_mail_worker/);
 });
 
 test('the outside backup inspection retries one storage deadline and stops', async () => {

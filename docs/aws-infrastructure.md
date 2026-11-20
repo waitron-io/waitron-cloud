@@ -1307,9 +1307,9 @@ and scratch bound after it removes the Kind cluster, native client resources
 and scratch filesystem it created.
 
 Use the full-service baseline below to exercise Flux and the venue journey
-from the private host. The machine-loss rehearsal still needs to verify worker
-restarts, durable mail, access to a surviving storage address, returned disks
-and multipart completion through consecutive outages.
+from the private host. The measured outside rehearsal checks new work by
+surviving workers, access to the stored backup and repair after each rejoin.
+Multipart completion through consecutive outages remains a separate check.
 
 If kube-proxy reports `too many open files` in a disposable Linux guest, check
 `sysctl fs.inotify.max_user_instances`. The fault check needs room for file
@@ -1356,16 +1356,24 @@ The test reads available inboxes through Kubernetes. The verifier can start
 on any of the three machines using prepared, bounded scratch space.
 
 Set `TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1` as well to stop and restart each
-Kind machine during the same journey. While each machine is down, the test
-checks the existing account session, delivery of a new message, the
-storage listener and the saved backup's digest.
+Kind machine for at least six minutes during the same journey. The test keeps the same
+account session, venue and tunnel. It records which machine holds each role
+before the stop, then measures account and HTTPS recovery within 90 seconds,
+backup recovery within 300 seconds, and Git revision and drift repair within
+180 seconds. Read the longest probe gaps and the worker receipts alongside
+those times. The run waits for one writable PostgreSQL primary, all six store
+drives and bucket repair before stopping another machine.
 
 For a separately authorised Amazon baseline, run `node scripts/amazon-run.mjs baseline`
 with the private `D618_CONFIG` on the test host. The launcher selects a healthy
 control plane over SSH for Kubernetes commands and verifier image import.
-All three machines keep running until scheduled deletion. The [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
-covers a later full run under its own gates. Amazon routing, the machine-stop sequence
-and recovery after the full restart still need their own checks.
+All three machines keep running until scheduled deletion in `baseline`.
+The `measured-stops` mode runs the individual Stockholm stops with 15-minute
+holds, refreshes the outside peer's route after each restart and reports how
+long control plane selection took. Its schedule leaves 20 minutes for the
+separate all-machine restart and five minutes for deletion confirmation in the
+150-minute budget. Before starting a paid rehearsal, follow the gates in
+the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
 
 ### Rehearse a gateway handover on a private Kind cell
 
