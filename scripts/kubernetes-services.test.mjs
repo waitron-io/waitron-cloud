@@ -70,6 +70,7 @@ test('measured stops cover all three machines and the live roles before returnin
 test('the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup', async () => {
   for (const routeStillResponding of [undefined, 'public', 'bad certificate']) {
     const seen = [], signal = new AbortController().signal;
+    let inspectionChecks = 0;
     const down = label => async () => {
       seen.push(label);
       if (routeStillResponding === label) return {status: 503};
@@ -81,10 +82,18 @@ test('the full restart requires healthy routes, fresh transport failures and rec
       storeOutage: down('store outage'),
       prepare: async () => () => {seen.push('retained row and new write'); return {primary: 'original-copy'};},
       restore: async verify => {seen.push('data restored'); return verify();},
+      inspectionReady: async () => {
+        seen.push('inspect');
+        return ++inspectionChecks === 2;
+      },
       probes: {
         session: async () => {seen.push('account');}, remote: async () => {seen.push('routes');},
         outage: {account: down('account outage'), staff: down('staff'), public: down('public')},
-        backupAfterRestart: async () => {seen.push('backup'); return {retainedPointId: 'original', pointId: 'new'};},
+        backupAfterRestart: async () => {
+          assert.equal(inspectionChecks, 2, 'the backup requires a ready inspector');
+          seen.push('backup');
+          return {retainedPointId: 'original', pointId: 'new'};
+        },
       },
       async restartAll(outage) {
         seen.push('stopped');
@@ -100,7 +109,8 @@ test('the full restart requires healthy routes, fresh transport failures and rec
       const result = await run;
       assert.deepEqual(result.outage, {account: 'ECONNREFUSED', staff: 'ECONNREFUSED', public: 'ECONNREFUSED', store: 'ECONNREFUSED'});
       assert.deepEqual(seen, ['account', 'routes', 'store', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
-        'store outage', 'confirmed', 'restarted', 'data restored', 'retained row and new write', 'account', 'routes', 'store', 'backup']);
+        'store outage', 'confirmed', 'restarted', 'data restored', 'retained row and new write', 'account', 'routes', 'store',
+        'inspect', 'inspect', 'backup']);
       assert.equal(result.primary, 'original-copy');
       assert.equal(result.backup.pointId, 'new');
     }
@@ -118,7 +128,7 @@ test('a silent outside account connection expires as transport loss', async t =>
     const parent = new AbortController(), {signal} = parent;
     const reason = new DOMException('parent deadline', 'TimeoutError');
     const run = servicesScript.measureServiceRestart({
-      signal, checkStore: async () => {}, storeOutage: lost, restore: async () => ({}),
+      signal, checkStore: async () => {}, storeOutage: lost, restore: async () => ({}), inspectionReady: async () => true,
       probes: {
         session: async () => {}, remote: async () => {}, backupAfterRestart: async () => ({}),
         outage: {staff: lost, public: lost, account: signal => new Promise((_, reject) => {

@@ -271,7 +271,7 @@ export function readOutsideStore({host, port = 9000, ca, signal}) {
   });
 }
 
-export async function measureServiceRestart({restartAll, probes, checkStore, storeOutage, restore, prepare, signal}) {
+export async function measureServiceRestart({restartAll, probes, checkStore, storeOutage, restore, prepare, inspectionReady, signal}) {
   const healthy = limit => Promise.all([probes.session(limit), probes.remote(limit), checkStore(limit)]);
   await untilRemote(async limit => {await healthy(limit); return true;}, 30_000, signal, 'cold_services_before');
   const witness = await prepare?.();
@@ -300,6 +300,7 @@ export async function measureServiceRestart({restartAll, probes, checkStore, sto
   const clientDeadline = AbortSignal.any([signal, AbortSignal.timeout(300_000)]);
   const started = performance.now();
   await untilRemote(async limit => {await healthy(limit); return true;}, 300_000, clientDeadline, 'cold_services_after');
+  await untilRemote(inspectionReady, 300_000, clientDeadline, 'cold_inspection_ready');
   const backup = await probes.backupAfterRestart(clientDeadline);
   return {...api, ...data, backup, clientRecoveryMs: Math.round(performance.now() - started)};
 }
@@ -452,6 +453,7 @@ export async function runKubernetesServices(context) {
         stockholmRemote: remoteTarget, verifier, amazon, signal,
         ...(restartAll && {restartServices: probes => measureServiceRestart({
           restartAll, probes, checkStore: outsideStore, signal,
+          async inspectionReady(limit) {return (await readyServices(limit, 'inspect')).length > 0;},
           storeOutage: signal => readOutsideStore({host: remoteTarget.gatewayIp, ca: store.ca, signal}),
           prepare: () => prepareDatabaseWitness({kube: context.kube, signal}),
           async restore(witness) {
