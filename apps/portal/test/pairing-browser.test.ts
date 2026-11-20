@@ -140,6 +140,7 @@ for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing return
     await prepareBrowserActionWindow(f, page);
     await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
     await page.getByText(c.passkeyAdded, {exact: true}).waitFor();
+    const earlierSession = await context.cookies();
 
     const store = new SetupPairingStore(f.db.pool);
     const requestId = randomUUID(), state = randomBytes(32).toString('base64url');
@@ -147,15 +148,6 @@ for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing return
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const base = {origin: f.origin, requestId, publicKey, issuedAt: Date.now()};
     const start = await store.start({...base, action: 'start', args: [redirectUri, state, challenge]});
-    let authorizeCalls = 0;
-    await context.route('**/api/account/pairing/authorize', route => { authorizeCalls++; return route.continue(); });
-    const forwarded = await context.newPage();
-    assert.equal((await forwarded.goto(start.authorizationUrl))?.status(), 200);
-    await forwarded.getByRole('button', {name: c.passkeySignIn, exact: true}).waitFor();
-    assert.equal((await forwarded.request.get(f.origin + '/api/account/session')).status(), 200);
-    assert.equal(authorizeCalls, 0);
-    await forwarded.close();
-
     await page.goto(start.authorizationUrl);
     assert.equal(new URL(page.url()).search, '');
     const heading = page.getByRole('heading', {name: locale === 'en' ? 'Connect Waitron' : 'Conectar Waitron', exact: true});
@@ -170,10 +162,31 @@ for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing return
     await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
     await page.waitForURL('https://box.example.test/cloud/pairing/callback?**');
     assert.equal(context.pages().length, 1);
-    assert.equal(authorizeCalls, 1);
-    assert.equal(new URL(page.url()).searchParams.get('state'), state);
+    const originalReturn = new URL(page.url());
+    assert.equal(originalReturn.searchParams.get('state'), state);
+    const originalCode = originalReturn.searchParams.get('code');
+    assert.ok(originalCode);
+
+    const forwarded = await f.browser.newContext({locale});
+    await forwarded.addCookies(earlierSession);
+    const otherTab = await forwarded.newPage();
+    const denied = otherTab.waitForResponse('**/api/account/pairing/authorize');
+    assert.equal((await otherTab.goto(start.authorizationUrl))?.status(), 200);
+    assert.equal((await denied).status(), 403);
+    await otherTab.getByRole('button', {name: c.passkeySignIn, exact: true}).waitFor();
+    assert.equal(otherTab.url(), f.origin + '/login');
+    await forwarded.close();
+
+    await f.db.pool.query('UPDATE setup_pairing_attempts SET code_expires_at=clock_timestamp() WHERE id=$1', [requestId]);
+    await page.goto(start.authorizationUrl);
+    await page.waitForURL('https://box.example.test/cloud/pairing/callback?**');
     const code = new URL(page.url()).searchParams.get('code')!;
-    const redeemed = await store.redeem({...base, action: 'redeem', args: [code, verifier]}, {publicKey, redirectUri});
+    assert.notEqual(code, originalCode);
+    const setup = {publicKey, redirectUri};
+    const redeemed = await store.redeem({...base, action: 'redeem', args: [code, verifier]}, setup);
     assert.equal(redeemed.state, 'account_bound');
+    const finished = await store.complete({...base, action: 'complete',
+      args: ['ES', 'Café Luna', ['Calle Luna 8', '', '28001', 'Madrid', ''], 'B12345678', 'Luna SL']}, setup, 'ES');
+    assert.equal(finished.state, 'complete');
   } finally { await f.close(); }
 });

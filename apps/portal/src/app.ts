@@ -70,6 +70,7 @@ export class PortalApp {
   #passkeyAddRequest: PasskeyAddRequest | undefined;
   #operatorSignin=false;
   #passkeyOffered = false;
+  #setupResumeAttempted = false;
   #enrollmentRestricted = false;
   #signOutCheck: PortalSession | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -150,6 +151,10 @@ export class PortalApp {
   }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    if (this.setupPairing && state.kind === 'authenticated' && !this.#setupResumeAttempted) {
+      this.#setupResumeAttempted = true;
+      void this.returnToSetup(false, true);
+    }
     if (state.kind !== 'authenticated' || this.#passkeyAddRequest?.accountId !== state.accountId) {
       this.#passkeyAddRequest = undefined;
     }
@@ -254,7 +259,7 @@ export class PortalApp {
   }
   title(): string {
     const c = this.copy;
-    if (this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) return c.enrollmentRequiredTitle;
+    if (!this.setupPairing && this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) return c.enrollmentRequiredTitle;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
     if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?(this.authenticator.proofKind==='recovery'&&!this.authenticator.challenge.rememberBrowserAllowed?c.factorRecovery:c.emailCheckTitle):c.factorTitle;
     if (this.setupPairing) return c.pairSetupSignIn;
@@ -439,7 +444,7 @@ export class PortalApp {
     this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
   }
   #signedInPath(){return this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account';}
-  async returnToSetup(cancel = false) {
+  async returnToSetup(cancel = false, resume = false) {
     const link = this.setupPairing;
     if (!link || this.pending) return;
     const route = this.#route;
@@ -463,9 +468,9 @@ export class PortalApp {
       }
     }
     this.pending = false;
-    this.error = 'pairUnavailable';
+    if (!resume) this.error = 'pairUnavailable';
     this.draw();
-    this.#focusErrors();
+    if (!resume) this.#focusErrors();
   }
   async #factorLoginResult(result:'authenticated'|'factor'|'reconcile'|false,route:number,previouslyAnonymous:boolean) {
     if (this.setupPairing && (result === 'authenticated' || result === 'reconcile')) { await this.returnToSetup(); return; }
