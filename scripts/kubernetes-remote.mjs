@@ -6,6 +6,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {caVolume, cloudContainer, cleanUp, requireTls} from './kubernetes-database.mjs';
 import {verifyManifest} from '../packages/remote-access/src/manifest.ts';
 import {separateByHost} from './kubernetes-placement.mjs';
+import {retryApi} from './kubernetes-node-loss.mjs';
 
 export async function untilRemote(probe, ms, signal, stage) {
   const end = performance.now() + ms;
@@ -146,6 +147,16 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     assert.ok(nodes.some(node => node.name === spec.nodeName), 'remote.database_primary_outside_cell');
     return spec.nodeName;
   }
+  async function publicationEndpoints(phase, limit) {
+    const endpoints = async (namespace, service) => {
+      const {items} = JSON.parse(await call(['get', 'endpointslices', '--namespace=' + namespace,
+        '-l', 'kubernetes.io/service-name=' + service, '-o', 'json'], limit));
+      return items.flatMap(slice => slice.endpoints.map(row =>
+        ({pod: row.targetRef?.name, node: row.nodeName, addresses: row.addresses, ready: row.conditions?.ready})));
+    };
+    const [dns, database] = await Promise.all([endpoints('kube-system', 'kube-dns'), endpoints('d621-data', 'cloud-db-rw')]);
+    process.stderr.write('D621 publication endpoints ' + JSON.stringify({phase, dns, database}) + '\n');
+  }
   const primaryAtPlacement = stopGatewayNode ? accountNode : await databasePrimaryNode(signal);
   // A cordon asks CloudNativePG to move the primary. Reserve its node with a scheduling taint instead.
   const primaryPlacementTaint = 'waitron.cloud/publication-primary';
@@ -245,7 +256,11 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
         assert.equal(new Set([accountNode, originalNode, survivingNode]).size, 3, 'remote.publication_worker_placement');
         const primaryNode = await databasePrimaryNode(signal);
         assert.notEqual(originalNode, primaryNode, 'remote.publication_stop_would_kill_database_primary');
-        const result = await stopNode(originalNode, {whileStopped});
+        await publicationEndpoints('before stop', signal);
+        const result = await stopNode(originalNode, {async whileStopped(fault) {
+          await retryApi(() => publicationEndpoints('during stop', fault.signal), fault.signal, 'publication endpoints');
+          return whileStopped(fault);
+        }});
         return {...result, originalNode, survivingNode, databasePrimaryNode: primaryNode};
       },
     };
