@@ -122,10 +122,7 @@ outside-filter)
   entry=(-i wg0 -s 10.77.0.4/32 -m conntrack --ctstate NEW -j D618-OUTSIDE)
   if "${filter[@]}" -C PREROUTING "${entry[@]}" 2>/dev/null; then exit 0; fi
   "${filter[@]}" -N D618-OUTSIDE
-  if [ "$address" = 10.77.0.1 ]; then
-    "${filter[@]}" -A D618-OUTSIDE -d "$address" -p tcp --dport 3000 -j RETURN
-  fi
-  for port in 30443 30900; do
+  for port in 3000 30443 30900; do
     "${filter[@]}" -A D618-OUTSIDE -d "$address" -p tcp --dport "$port" -j RETURN
   done
   "${filter[@]}" -A D618-OUTSIDE -d "$address" -p udp --dport 31820 -j RETURN

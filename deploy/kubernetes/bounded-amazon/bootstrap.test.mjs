@@ -162,7 +162,7 @@ test('outside filtering applies to new rehearsal-host traffic before port rewrit
       rule[rule.indexOf('-d') + 1], rule[rule.indexOf('-p') + 1], rule[rule.indexOf('--dport') + 1],
     ]);
     assert.deepEqual(ports, [
-      ...(address === '10.77.0.1' ? [[address, 'tcp', '3000']] : []),
+      [address, 'tcp', '3000'],
       [address, 'tcp', '30443'], [address, 'tcp', '30900'], [address, 'udp', '31820'],
     ]);
     assert.deepEqual(rules.at(-2).slice(-4), ['-A', 'D618-OUTSIDE', '-j', 'DROP']);

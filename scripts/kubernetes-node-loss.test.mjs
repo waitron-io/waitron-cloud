@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {rm, writeFile, truncate} from 'node:fs/promises';
-import {dirname} from 'node:path';
+import {dirname, join} from 'node:path';
 import test from 'node:test';
 
 import {retryApi, runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
@@ -343,9 +343,9 @@ test('the fault check retries a bare Kubernetes API EOF while the node stays dow
   assert.deepEqual(f.mutations('start'), f.mutations('kill'));
 });
 
-function servicesFixture({unmountError} = {}) {
+function servicesFixture({unmountError, outside = false} = {}) {
   const {execute: executeKind, calls, remaining} = fixture();
-  let workPath;
+  const workPaths = [];
   const execute = async (binary, args, options) => {
     if (binary === 'fallocate') {
       assert.deepEqual(args.slice(0, 2), ['-l', '1G']);
@@ -360,25 +360,26 @@ function servicesFixture({unmountError} = {}) {
     }
     if (binary === 'install') {
       assert.deepEqual(args.slice(0, -1), ['-d', '-m', '0700', '-o', '1000', '-g', '1000']);
-      workPath = args.at(-1);
+      workPaths.push(args.at(-1));
       return '';
     }
     if (binary === 'sh') {
       assert.equal(remaining(), 0, 'remove the cluster before unmounting scratch');
-      assert.equal(args.at(-1) + '/work', workPath);
+      assert.deepEqual(workPaths, (outside ? ['work', 'work-b', 'work-c'] : ['work'])
+        .map(name => join(args.at(-1), name)));
       calls.push({binary, args});
       if (unmountError) throw unmountError;
       return '';
     }
     if (binary === 'kind' && args[0] === 'create') {
-      assert.ok(workPath, 'prepare the filesystem before creating Kind');
-      assert.deepEqual(JSON.parse(options.input).nodes.map(node => node.extraMounts), [
-        [{hostPath: workPath, containerPath: '/var/local/d621-verifier-scratch'}], undefined, undefined,
-      ]);
+      assert.equal(workPaths.length, outside ? 3 : 1, 'prepare scratch before creating Kind');
+      assert.equal(new Set(workPaths).size, workPaths.length);
+      assert.deepEqual(JSON.parse(options.input).nodes.map(node => node.extraMounts),
+        [0, 1, 2].map(index => workPaths[index] && [{hostPath: workPaths[index], containerPath: '/var/local/d621-verifier-scratch'}]));
     }
     return executeKind(binary, args, options);
   };
-  return {execute, calls, directory: () => dirname(dirname(workPath))};
+  return {execute, calls, directory: () => dirname(dirname(workPaths[0]))};
 }
 
 test('the healthy services rehearsal uses the three owned nodes without stopping them', async () => {
@@ -391,6 +392,39 @@ test('the healthy services rehearsal uses the three owned nodes without stopping
   assert.deepEqual(result.services, {network: result.cluster, verifierScratchBytes: 1024 ** 3});
   assert.equal(calls.filter(({binary, args}) => binary === 'docker' && args[0] === 'kill').length, 0);
   assert.equal(calls.filter(({binary}) => binary === 'sh').length, 1);
+});
+
+test('outside services can run the verifier on any owned machine', async () => {
+  const {execute} = servicesFixture({outside: true});
+  const result = await runCheck({execute, outsideServices: true, services: async ({stopNode}) => {
+    assert.equal(typeof stopNode, 'function');
+    return {};
+  }});
+  assert.equal(result.services.verifierScratchBytes, 1024 ** 3);
+});
+
+test('the outside stop uses a surviving Kubernetes API and its original TLS identity', async () => {
+  const {execute: run, calls} = servicesFixture({outside: true});
+  const execute = (binary, args, options) => run(binary, args.filter(value =>
+    !value.startsWith('--server=') && !value.startsWith('--tls-server-name=')), options);
+  await runCheck({execute: async (binary, args, options) => {
+    const result = await execute(binary, args, options);
+    if (binary === 'kubectl' && args.includes('--selector=service-proof')) {
+      assert.ok(args.includes('--server=https://172.30.250.3:6443'));
+      assert.ok(args.includes('--tls-server-name=127.0.0.1'));
+    }
+    return result;
+  }, outsideServices: true, services: async ({nodes, stopNode, kube, kubeTarget}) => {
+    await stopNode(nodes[0].name, {whileStopped: async options => {
+      assert.equal(options.timeout, 185_000, 'the outside smoke window covers the later reads as well as account recovery');
+      await kube(['get', 'nodes', '-o', 'json', '--selector=service-proof'], options);
+      assert.deepEqual(kubeTarget().slice(2), ['--server=https://172.30.250.3:6443', '--tls-server-name=127.0.0.1']);
+    }});
+    await kube(['get', '--raw=/readyz']);
+    assert.equal(calls.at(-1).binary, 'kubectl');
+    assert.equal(kubeTarget().length, 2, 'the healthy baseline uses the original API address again');
+    return {};
+  }});
 });
 
 test('a scratch unmount failure preserves the service failure', async t => {

@@ -7,6 +7,7 @@ import {cleanUp} from './kubernetes-database.mjs';
 import {servicesNamespace, verifierScratchPath} from '../deploy/kubernetes/services.mjs';
 import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
+import {selectSurvivingNode} from './kubernetes-remote.mjs';
 
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
   try {
@@ -203,11 +204,12 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
     const kubeArgs = ['kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name];
-    const kube = (args, {input, timeout, signal: request} = {}) => {
+    const kubeOn = (index, args, {input, timeout, signal: request} = {}) => {
       // kubectl validation errors can quote the submitted Secret.
       const privateManifest = args.includes('-f') && /"kind"\s*:\s*"Secret"/.test(input ?? '');
-      return ssh(0, ['sudo', ...kubeArgs, ...args], input, timeout, request, privateManifest);
+      return ssh(index, ['sudo', ...kubeArgs, ...args], input, timeout, request, privateManifest);
     };
+    const kube = (args, options) => kubeOn(0, args, options);
     const local = (binary, args, {input, signal: request = signal, timeout} = {}) =>
       run(binary, args, input, request === null, timeout, request);
     const waitDeleted = async () => {
@@ -274,7 +276,9 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
             assert.equal(info.status.id, id, 'amazon.import_digest');
           }
         }
-        await ssh(0, ['sudo', 'docker', 'load', '-i', '/tmp/d618-images.tar']);
+        for (const index of config.baseline ? [0, 1, 2] : [0]) {
+          await ssh(index, ['sudo', 'docker', 'load', '-i', '/tmp/d618-images.tar']);
+        }
         if (!config.baseline) await ssh(0, ['sudo', 'docker', 'network', 'create', '--subnet', '10.79.0.0/24', name]);
         const certificateKey = await bootstrap(0, 'control', [name]);
         const joinCommand = await ssh(0, ['sudo', 'kubeadm', 'token', 'create', '--ttl', '20m', '--print-join-command']);
@@ -323,7 +327,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       try {
         const nodes = target.nodes.map((node, index) => ({name: node, ip: meshNodeAddress(index)}));
         const limit = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, expiry - now()))].filter(Boolean));
-        await ssh(0, ['sudo', 'sh', '-ec', `
+        for (const index of [0, 1, 2]) await ssh(index, ['sudo', 'sh', '-ec', `
           scratch=$(mktemp -d /var/local/d621-verifier.XXXXXX)
           fallocate -l 1G "$scratch/disk"
           mkfs.ext4 -q -m 0 "$scratch/disk"
@@ -333,8 +337,17 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           install -d -m 0700 "$1"
           mount --bind "$scratch/mount/work" "$1"`,
           'verifier-scratch', verifierScratchPath], undefined, 30_000, limit);
+        let controller = 0;
+        const controlPlane = async request => {
+          const preference = [controller, ...[0, 1, 2].filter(index => index !== controller)];
+          controller = await selectSurvivingNode(preference, (index, probeSignal) =>
+            ssh(index, ['sudo', ...kubeArgs, '--request-timeout=3s', 'get', '--raw=/readyz'], undefined, 5000, probeSignal),
+          request === null ? null : request ?? limit);
+          return controller;
+        };
+        const outsideKube = async (args, options) => kubeOn(await controlPlane(options?.signal), args, options);
         const verificationTarget = await readRehearsalVerificationTarget();
-        const context = {cluster: name, nodes, directory, kube, run: local, image: ids[cloud], waitronImage: ids[waitron],
+        const context = {cluster: name, nodes, directory, kube: outsideKube, run: local, image: ids[cloud], waitronImage: ids[waitron],
           signal: limit, verificationTarget, amazon: {...target, phase: 'baseline'}, baseline: true, databasePrepared: true};
         const execute = (binary, args, input, cleanup, request) =>
           run(binary, args, input, cleanup, undefined, request ?? limit);
@@ -343,7 +356,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         return await runBaseline({...context, prepareOutside,
           installStore: openId => installStockholmStore({...context, image: store, nodes: target.nodes,
             addresses: nodes.map(node => node.ip), openId}),
-          importVerifierImage: (image, args) => ssh(0, ['sudo', 'bash', '-o', 'pipefail', '-c',
+          importVerifierImage: async (image, args) => ssh(await controlPlane(limit), ['sudo', 'bash', '-o', 'pipefail', '-c',
             'docker save "$1" | ' + [...kubeArgs, '-n', servicesNamespace, ...args].map(quote).join(' '),
             'verifier-image', image], undefined, 180_000, limit),
         });

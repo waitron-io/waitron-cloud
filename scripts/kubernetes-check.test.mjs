@@ -410,9 +410,9 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   const point = '12345678-1234-4234-8234-123456789abc', image = 'sha256:' + 'b'.repeat(64), revision = 'c'.repeat(40);
   const statuses = [{name: 'docker', state: {running: {}}}, {name: 'verifier', state: {running: {}}}];
   const identity = {version: 1, owner: 'waitron-cloud-test-backup', image, scope: point};
-  let applied, loaded, importing, finishLoad; const calls = [];
+  let applied, loaded, importing, finishLoad, node = 'surviving-a'; const calls = [];
   const entered = new Promise(resolve => {importing = resolve;}), transfer = new Promise(resolve => {finishLoad = resolve;});
-  const adapter = api.createKubernetesVerifier({template,
+  const adapter = api.createKubernetesVerifier({template, selectNode: async () => node,
     pod: async role => {assert.ok(['cloud', 'verifier'].includes(role)); return {status: {podIP: '10.244.0.5', containerStatuses: statuses}};},
     loadImage: async id => {loaded = id; assert.ok(applied); importing(); await transfer;},
     kube: async (args, input) => {
@@ -440,13 +440,16 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   assert.equal(environment.CLOUD_INTEGRATION_POINT_ID, point); assert.equal(environment.CLOUD_VERIFIER_IMAGE, image);
   assert.equal(environment.CLOUD_INTEGRATION_WAITRON_REVISION, revision); assert.equal(environment.CLOUD_TEST_SERVICE_PLANS, '1');
   assert.equal(loaded, image); assert.equal(applied.spec.restartPolicy, 'Never');
+  assert.equal(applied.spec.nodeName, 'surviving-a');
   assert.deepEqual(applied.spec.hostAliases, [{ip: '10.244.0.5', hostnames: ['waitron.local']}]);
   assert.deepEqual(await adapter.identity(), identity); assert.equal(await adapter.running(), true);
   assert.equal(await adapter.docker(['ps', '-aq']), 'nested-daemon-output');
   await adapter.stop(); assert.equal(await adapter.running(), false); assert.equal(await adapter.exitCode(), '0');
   calls.length = 0;
   const nextPoint = '87654321-4321-4321-8321-cba987654321';
+  node = 'surviving-c';
   await adapter.start(nextPoint, {image, revision});
+  assert.equal(applied.spec.nodeName, 'surviving-c');
   assert.equal(calls.filter(args => args[0] === 'delete').length, 1);
   assert.equal(applied.spec.containers.find(row => row.name === 'verifier').env.find(row => row.name === 'CLOUD_INTEGRATION_POINT_ID').value, nextPoint);
   assert.notEqual(template.spec.containers.find(row => row.name === 'verifier').env.find(row => row.name === 'CLOUD_INTEGRATION_POINT_ID').value, point);

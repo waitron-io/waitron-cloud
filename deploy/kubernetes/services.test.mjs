@@ -31,6 +31,22 @@ test('Cloud roles start through the TLS schema gate with production service plan
   assert.deepEqual(spec.containers.find(row => row.name === 'proxy').ports, [{containerPort: 3443, hostPort: 3000}]);
 });
 
+test('outside services run one restarting copy per cell machine with a scoped inspector', () => {
+  const {kind, spec} = deployment.servicesDaemonSet('owned:cloud', ['node-a', 'node-b', 'node-c'], 'fixture-cell');
+  assert.equal(kind, 'DaemonSet');
+  assert.deepEqual(spec.selector.matchLabels, spec.template.metadata.labels);
+  const pod = spec.template.spec;
+  assert.equal(pod.nodeName, undefined);
+  assert.equal(pod.restartPolicy, 'Always');
+  assert.deepEqual(pod.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+    ['node-a', 'node-b', 'node-c'].map(name => ({
+      matchFields: [{key: 'metadata.name', operator: 'In', values: [name]}],
+    })));
+  const {env, envFrom} = pod.containers.find(container => container.name === 'inspect');
+  assert.equal(env.find(row => row.name === 'CLOUD_STOCKHOLM_REMOTE_CELL').value, 'fixture-cell');
+  assert.deepEqual(envFrom, [{secretRef: {name: 'services-backup'}}]);
+});
+
 test('Mailpit accepts only authenticated TLS mail to synthetic addresses', () => {
   const {spec} = deployment.servicesPod('owned:cloud', 'owned-control-plane');
   const mail = spec.containers.find(row => row.name === 'mailpit');

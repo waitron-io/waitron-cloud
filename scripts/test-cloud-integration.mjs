@@ -22,8 +22,9 @@ import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integrati
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
 import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
 import {selectIntegrationVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
-import {servicesOrigin, servicesNamespace} from '../deploy/kubernetes/services.mjs';
+import {servicesOrigin, servicesNamespace, servicesStoreHost} from '../deploy/kubernetes/services.mjs';
 import {createP1Budget} from './p1-observer.mjs';
+import {untilRemote} from './kubernetes-remote.mjs';
 import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride} from './test-cloud-cleanup.mjs';
 export {completeCleanup};
 
@@ -196,6 +197,22 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
+export async function readOutsideSignupMail(readMail, recipient, origin, signal) {
+  const message = await untilRemote(limit => readMail(recipient, new Set(), limit), 90_000, signal, 'outside_signup_mail');
+  return readSignupToken(message.Text, origin);
+}
+
+export async function readOutsideRetainedBackup(read, signal) {
+  signal.throwIfAborted();
+  try {return await read();}
+  catch (error) {
+    if (!/^\s*Error: (?:backup\.cancelled|Connection terminated due to connection timeout)\s*$/m.test(error.message)) throw error;
+    signal.throwIfAborted();
+    process.stderr.write('Outside Kind retained backup inspection timed out, retrying once\n');
+    return read();
+  }
+}
+
 export async function runTestCloudClients(options = {}) {
   const waitronTunnelImage = options.waitronTunnelImage ??
     (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
@@ -210,14 +227,16 @@ export async function runTestCloudClients(options = {}) {
       'integration.stockholm_machine_loss_binding');
     const k = options.kubernetes, remote = options.stockholmRemote, baseline = options.stockholmBaseline;
     const mode = baseline ? 'stockholm_baseline' : remote ? 'stockholm_remote' : 'services';
-    assert.ok(baseline || !k?.readInbox, 'integration.services_binding');
+    assert.ok(baseline || (!k?.readInbox && !k?.stopServices), 'integration.services_binding');
     assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery',
       'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
       'schemaRollback', 'pairedExpiry', 'fixedProject'].some(key => options[key]) && !(remote && (options.services || options.paidVerification)) &&
       !(baseline && (remote || options.services || options.paidVerification)), 'integration.' + mode + '_scope');
     if (baseline && k?.amazon) assertAmazonBinding(k.amazon, ['baseline']);
     const ownedCluster = baseline && k?.amazon ? k.amazon.cluster === k.cluster : /^d621-[a-f0-9]{32}$/.test(k?.cluster ?? '');
-    const accountRoute = baseline ? k?.proxyIp === '10.77.0.1' && k.port === 3000 && typeof k.readInbox === 'function' :
+    const accountRoute = baseline ? /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') &&
+      k.proxyIp === k.stockholmRemote?.gatewayIp && k.port === 3000 && typeof k.readInbox === 'function' &&
+      (!k.stopServices || !k.amazon && typeof k.stopServices === 'function') :
       /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') && Number.isInteger(k.port) && Number.isInteger(k.mailPort);
     const verifier = ['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
       .every(name => typeof k?.verifier?.[name] === 'function');
@@ -455,7 +474,10 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       req.end(body === undefined ? undefined : JSON.stringify(body));
     });
     };
-    assert.equal((await api('/api/health/ready')).status, 200);
+    if (stockholmBaseline) await untilRemote(async signal =>
+      (await api('/api/health/ready', undefined, {}, ca, cloudHostname, signal)).status === 200,
+    30_000, runSignal(), 'baseline_account_ready');
+    else assert.equal((await api('/api/health/ready')).status, 200);
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
     const organisations = [], restarts = [], remoteClients = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence, paidRemoteEvidence;
@@ -494,7 +516,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       assert.equal(signup.status, 201, 'integration.signup');
       return signup;
     };
-    let repeatBackup, readBackups, observation;
+    let repeatBackup, readBackups, observation, proveServiceStops;
     for (const plan of services ? ['paid'] : ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       const signup = await signupAccount(email, password, plan + ' café');
@@ -516,6 +538,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
         ...(kubernetes && !services ? ['--add-host', 'storage:' + kubernetes.proxyIp] : []),
+        ...(stockholmBaseline ? ['--add-host', servicesStoreHost + ':' + kubernetes.proxyIp] : []),
         ...(waitronTunnelImage ? ['--add-host', 'host.docker.internal:127.0.0.1'] : []),
         '--add-host', cloudHostname + ':' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', captureSnapshot ? '2240m' : '1024m', '--memory-swap', captureSnapshot ? '2240m' : '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
@@ -645,6 +668,25 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             await verify(); await readBackups();
             return publishedSnapshot.workerVerification;
           });
+          if (kubernetes?.stopServices) {
+            proveServiceStops = () => kubernetes.stopServices(signal => cancellation.run({...cancellation.getStore(), signal}, async () => {
+              await untilRemote(async limit =>
+                (await api('/api/account/session', undefined, browser, ca, cloudHostname, limit)).status === 200,
+              90_000, signal, 'retained_account_session');
+              process.stderr.write('Outside Kind account session verified during stop\n');
+              const recipient = 'integration-stop-' + randomUUID() + '@example.test';
+              assert.equal((await api('/api/account/signup/request', {email: recipient}, {}, ca, cloudHostname, signal)).status,
+                202, 'integration.fault_mail_request');
+              await readOutsideSignupMail(readMail, recipient, origin, signal);
+              process.stderr.write('Outside Kind signup mail received during stop\n');
+              const saved = parseIntegrationJson(await readOutsideRetainedBackup(() =>
+                accountPhase('inspect-retained-snapshot', {
+                  points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
+                }), signal));
+              assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
+              return {session: true, mail: true, retainedObject: true};
+            }));
+          }
           if (measureCapacity) {
             const {measureCapacityWindow, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
             const measured = await measureCapacityWindow({
@@ -843,9 +885,11 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             return;
           }
         }
+        if (proveServiceStops) journeyStage = 'outside-service-stops';
+        const serviceStops = await proveServiceStops?.();
         result = {version: 1, kind: 'stockholm-cloud-services', origin, waitronHead: revision,
           signup: true, signIn: true, emailActionProof: true, inboxRequiresAuthentication: true, pairing: persisted,
-          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote})};
+          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote}), ...(serviceStops && {serviceStops})};
         return;
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);

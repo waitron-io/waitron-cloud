@@ -1807,9 +1807,11 @@ implementation or production evidence.
   through consecutive outages remain open. The
   [healthy Kind services rehearsal](aws-infrastructure.md#rehearse-signup-pairing-and-backup-on-a-healthy-kind-cell)
   checks production-mode signup, pairing and backup against replicated PostgreSQL
-  and MinIO. Stockholm and Flux startup with the real services, worker redundancy,
-  durable mail and a storage address that survives machine loss remain outside
-  rehearsal checks. The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
+  and MinIO. The outside Kind rehearsal checks the retained account session,
+  new authenticated mail and the original stored backup during each machine stop.
+  While a machine is down, its private test inbox is unavailable.
+  The Stockholm rehearsal still needs to measure worker restarts and recovery times.
+  The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
   During the worker machine stop, the survivor reused the saved certificate and
   signing request and published the owner's revocation. With local DNS replicas,

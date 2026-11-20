@@ -1328,10 +1328,9 @@ namespaces.
 TEST_KUBERNETES_OUTSIDE_NETWORK=1 node --test --test-name-pattern='outside Kind network' scripts/kubernetes-remote.test.mjs
 ```
 
-The test host uses `10.77.0.4` with a 1420-byte packet size cap. Machine A
-(`10.77.0.1`) accepts TCP 3000 for the account. A, B (`10.77.0.2`) and C
-(`10.77.0.3`) accept TCP 30443 and 30900 and UDP 31820 for the gateway and
-store. The host checks account and store HTTPS and tries the Kubernetes API
+The test host uses `10.77.0.4` with a 1420-byte packet size cap. Each of the
+three machines accepts TCP 3000 for the account, TCP 30900 for the store,
+and TCP 30443 and UDP 31820 for the gateway from the test host. The host checks account and store HTTPS and tries the Kubernetes API
 port. The test reads the firewall's drop counter to confirm the private API
 request reached the filter. Flux fetches a synthetic
 deployment through the host's read-only Git mirror on TCP 18000. The venue's
@@ -1351,14 +1350,20 @@ One venue signs up, pairs, reaches signed staff and public HTTPS, uploads
 an encrypted backup and completes an isolated restore. Flux applies the
 remote publication Deployment from the test host's read-only Git mirror.
 The host's WireGuard filter admits replies and incoming Git traffic.
-The test reads the authenticated mailbox inside the account pod and gives
-the backup verifier 1 GiB of scratch space on A.
+The private relay gives the outside venue stable account and storage addresses.
+Each machine runs its own account service and authenticated Mailpit inbox.
+The test reads available inboxes through Kubernetes. The verifier can start
+on any of the three machines using prepared, bounded scratch space.
 
-For a separately authorised Amazon baseline, the owner runs
-`node scripts/amazon-run.mjs baseline` with the private `D618_CONFIG` on the test host. It reads Kubernetes and the
-inbox over SSH to A, uses the verifier image already copied to A, and waits
-for scheduled deletion. It leaves all three machines running until that
-deletion. The [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
+Set `TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1` as well to stop and restart each
+Kind machine during the same journey. While each machine is down, the test
+checks the existing account session, delivery of a new message, the
+storage listener and the saved backup's digest.
+
+For a separately authorised Amazon baseline, run `node scripts/amazon-run.mjs baseline`
+with the private `D618_CONFIG` on the test host. The launcher selects a healthy
+control plane over SSH for Kubernetes commands and verifier image import.
+All three machines keep running until scheduled deletion. The [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
 covers a later full run under its own gates. Amazon routing, the machine-stop sequence
 and recovery after the full restart still need their own checks.
 

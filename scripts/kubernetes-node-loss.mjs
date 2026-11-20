@@ -72,13 +72,13 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
   --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --command-timeout=5s "$@"
 `;
 
-export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, remote, coldRestart} = {}) {
+export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, outsideServices, remote, coldRestart} = {}) {
   // Kind appends its role names to the cluster name, within one DNS label.
   const cluster = 'd621-' + randomUUID().replaceAll('-', '');
   const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
   const scratchMount = join(directory, 'verifier-mount');
   const scratchDisk = join(directory, 'verifier.ext4');
-  const scratchWork = join(scratchMount, 'work');
+  const scratchPaths = (outsideServices ? ['work', 'work-b', 'work-c'] : ['work']).map(name => join(scratchMount, name));
   const kubeconfig = join(directory, 'kubeconfig');
   const env = {...process.env, KUBECONFIG: kubeconfig, DOCKER_CONTEXT: 'default', KIND_EXPERIMENTAL_PROVIDER: 'docker',
     KIND_EXPERIMENTAL_DOCKER_NETWORK: cluster};
@@ -88,7 +88,10 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
   const run = (binary, args, {input, signal = stop.signal, timeout = 15_000} = {}) =>
     execute(binary, args, {env, input, signal, timeout});
   const docker = (args, options) => run('docker', args, options);
-  const kube = (args, options) => run('kubectl', ['--kubeconfig', kubeconfig, '--request-timeout=10s', ...args], options);
+  let apiPeer;
+  const kubeTarget = () => ['--kubeconfig', kubeconfig,
+    ...(apiPeer ? ['--server=https://' + apiPeer.ip + ':6443', '--tls-server-name=127.0.0.1'] : [])];
+  const kube = (args, options) => run('kubectl', [...kubeTarget(), '--request-timeout=10s', ...args], options);
   const names = controlPlanes.map(suffix => `${cluster}-${suffix}`), balancerName = `${cluster}-${balancerRole}`;
   const list = (options) => docker(['ps', '--all', '--quiet', '--no-trunc', '--filter', `label=${clusterLabel}=${cluster}`], options);
   const networks = (options) => docker(['network', 'ls', '--quiet', '--no-trunc', '--filter', `name=^${cluster}$`], options);
@@ -152,7 +155,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       await run('mkfs.ext4', ['-q', '-m', '0', scratchDisk]);
       scratchMountAttempted = true;
       await run('mount', ['-o', 'loop,nodev,nosuid,noexec', scratchDisk, scratchMount]);
-      await run('install', ['-d', '-m', '0700', '-o', '1000', '-g', '1000', scratchWork]);
+      for (const path of scratchPaths) await run('install', ['-d', '-m', '0700', '-o', '1000', '-g', '1000', path]);
     }
     networkId = await docker(['network', 'create', '--driver', 'bridge', '--subnet', subnet, '--label', `${networkLabel}=${cluster}`, cluster]);
     assert.match(networkId, dockerId, 'node_loss.network_id');
@@ -162,7 +165,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     const input = JSON.stringify({kind: 'Cluster', apiVersion: 'kind.x-k8s.io/v1alpha4',
       networking: {apiServerAddress: '127.0.0.1', ipFamily: 'ipv4'}, nodes: names.map((_, index) => ({
         role: 'control-plane',
-        ...(services && index === 0 ? {extraMounts: [{hostPath: scratchWork, containerPath: verifierScratchPath}]} : {}),
+        ...(services && scratchPaths[index] ? {extraMounts: [{hostPath: scratchPaths[index], containerPath: verifierScratchPath}]} : {}),
       }))});
     // Retain a partial create so cleanup can check container IDs before removing anything.
     await run('kind', ['create', 'cluster', '--name', cluster, '--image', kindNodeImage, '--wait', '180s', '--retain', '--config', '-'],
@@ -195,12 +198,15 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       await docker(['update', '--restart=no', node.id]);
       const started = performance.now();
       await docker(['kill', '--signal=SIGKILL', node.id]);
-      const failover = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(90_000)]), timeout: 95_000};
+      const limit = outsideServices ? 180_000 : 90_000;
+      const failover = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(limit)]), timeout: limit + 5000};
       async function expectStopped() {
         const {State} = await verifyContainer(node.id, failover);
         assert.ok(!State.Running && !State.Restarting, 'node_loss.container_still_running');
       }
       await expectStopped();
+      // A healthy reply through Kind's balancer does not prove its next connection will avoid the stopped node.
+      if (outsideServices) apiPeer = nodes.find(candidate => candidate !== node);
       process.stderr.write(`Kind node stopped ${node.name}\n`);
       await retry(async () => assert.equal(await kube(['get', '--raw=/readyz'], failover), 'ok'), failover.signal);
       const result = await whileStopped(failover);
@@ -221,6 +227,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       const restartedNodes = await retryApi(() => readNodes(rejoin), rejoin.signal, 'node identity');
       assert.deepEqual(restartedNodes, nodeUids, 'node_loss.node_identity');
       assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
+      apiPeer = undefined;
       return {stopped: node.name, failoverMs, ...result};
     }
     if (coldRestart) {
@@ -296,7 +303,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, remote: result};
     }
     if (services) {
-      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, signal: stop.signal});
+      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, kubeTarget, stopNode, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members,
         services: {...result, verifierScratchBytes: (await stat(scratchDisk)).size}};
     }
