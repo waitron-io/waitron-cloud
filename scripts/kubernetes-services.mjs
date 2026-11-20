@@ -240,6 +240,20 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
   return legs;
 }
 
+export async function measureServiceRecovery({node, roles, survivors, fault, writablePrimary, outsideStoreReady,
+  proveGit, publication}) {
+  const fluxDeadline = 180_000 - (performance.now() - fault.started);
+  assert.ok(fluxDeadline > 0, 'services.stop_flux_deadline');
+  const gitSignal = AbortSignal.any([fault.signal, AbortSignal.timeout(Math.ceil(fluxDeadline))].filter(Boolean));
+  const [database, outsideStore, flux] = await Promise.all([
+    writablePrimary(survivors, fault.signal).then(primary => ({primary, recoveredMs: Math.round(performance.now() - fault.started)})),
+    outsideStoreReady(fault.signal), proveGit(survivors, gitSignal),
+  ]);
+  // Flux rolls the publication deployment. Measure new work once its worker is stable.
+  const renewed = roles.primary === node ? await publication(survivors, fault) : undefined;
+  return {...database, publication: renewed, outsideStore, flux};
+}
+
 export async function runKubernetesServices(context) {
   const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, kubeTarget, signal,
     remote, stopGatewayNode, stopServiceNodes, stopNode, prepareOutside, baseline, amazon, importVerifierImage,
@@ -407,23 +421,15 @@ export async function runKubernetesServices(context) {
             await runStoreHeal({node, account: store, run, signal: repair}, false);
             return {primary, drives, storeRepairedOn: name};
           },
-          async reconcile(node, roles, survivors, fault) {
-            const [database, outsideStore] = await Promise.all([
-              writablePrimary(survivors, fault.signal).then(primary => ({primary, recoveredMs: Math.round(performance.now() - fault.started)})),
-              untilRemote(async limit => {
-                  await run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
-                    servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
-                    'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal: limit});
-                  return true;
-                }, 90_000, fault.signal, 'outside_store_ready'),
-            ]);
-            const publication = roles.primary === node ? await probes.publication(survivors, fault) : undefined;
-            const fluxDeadline = 180_000 - (performance.now() - fault.started);
-            assert.ok(fluxDeadline > 0, 'services.stop_flux_deadline');
-            const flux = await outside.proveSurviving(survivors,
-              AbortSignal.any([fault.signal, AbortSignal.timeout(Math.ceil(fluxDeadline))]));
-            return {...database, publication, outsideStore, flux};
-          }})}),
+          reconcile: (node, roles, survivors, fault) => measureServiceRecovery({
+            node, roles, survivors, fault, writablePrimary, proveGit: outside.proveSurviving, publication: probes.publication,
+            outsideStoreReady: signal => untilRemote(async limit => {
+              await run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
+                servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
+                'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal: limit});
+              return true;
+            }, 90_000, signal, 'outside_store_ready'),
+          })})}),
         exec: async (role, args, input, limit) => {
           assert.deepEqual([role, ...args], ['account', 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs']);
           return command(baseline ? await service('inspect', limit) : 'job/services-inspection', 'inspect', 'CLOUD_STOCKHOLM_REHEARSAL=1 exec ' + args.join(' '), input, limit);

@@ -521,7 +521,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       for (let attempt = 0; attempt < 100; attempt++) {
         const inbox = await mailbox(signal);
         const found = inbox.messages?.find(value => !seen.has(value.ID) && value.To.some(to => to.Address === email));
-        if (found) {message = await readInbox('message/' + found.ID, signal); break;}
+        if (found) {message = {...await readInbox('message/' + found.ID, signal), ID: found.ID}; break;}
         await delay(100);
       }
       assert.ok(message, 'integration.mail_missing'); return message;
@@ -1087,17 +1087,25 @@ export function createObserverLogin({api, mailbox, readMail, email, password, co
   let pending;
   return async signal => {
     // A worker can leave an undelivered challenge claimed for up to sixty seconds.
-    if (replaceStranded && pending && now() - pending.started >= 60_000) pending = undefined;
+    const replacing = replaceStranded && pending && now() - pending.started >= 60_000;
+    if (replacing) pending = undefined;
     if (!pending) {
       const seen = new Set((await mailbox(signal)).messages?.map(message => message.ID));
       const reply = await api('/api/account/login', {email, password}, cookie ? {cookie} : {}, undefined, undefined, signal);
       if (reply.status === 200) return reply;
       assert.ok(reply.status === 202 && reply.body.emailRequired, 'p1.password_signin');
-      pending = {seen, challengeToken: reply.body.challengeToken, started: now()};
+      pending = {seen, challengeToken: reply.body.challengeToken, started: now(), replacing: Boolean(replacing)};
     }
-    const message = await readMail(email, pending.seen, signal);
-    const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
-    const {challengeToken} = pending; pending = undefined;
-    return api('/api/account/login/email', {challengeToken, code}, {}, undefined, undefined, signal);
+    for (;;) {
+      const challenge = pending;
+      const message = await readMail(email, challenge.seen, signal);
+      const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
+      pending = undefined;
+      const reply = await api('/api/account/login/email', {challengeToken: challenge.challengeToken, code}, {}, undefined, undefined, signal);
+      if (reply.status !== 401 || !challenge.replacing || !message.ID) return reply;
+      // Once per replacement, discard mail that arrived after its original challenge was replaced.
+      challenge.seen.add(message.ID);
+      pending = {...challenge, replacing: false};
+    }
   };
 }

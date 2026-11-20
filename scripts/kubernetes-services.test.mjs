@@ -64,6 +64,28 @@ test('measured stops cover all three machines and the live roles before returnin
   assert.equal(request.aborted, true);
 });
 
+test('Git recovery starts while the database is moving and finishes before measuring a stable publication worker', async () => {
+  const database = Promise.withResolvers(), git = Promise.withResolvers();
+  let gitStarted = false, publicationStarted = false;
+  const started = performance.now();
+  const recovery = servicesScript.measureServiceRecovery({
+    node: 'a', roles: {primary: 'a'}, survivors: ['b', 'c'], fault: {started},
+    writablePrimary: () => database.promise, outsideStoreReady: async () => true,
+    async proveGit() {gitStarted = true; return git.promise;},
+    async publication() {publicationStarted = true; return {worker: 'survivor'};},
+  });
+  const ranWhileDatabaseMoved = gitStarted;
+  database.resolve('b');
+  await new Promise(setImmediate);
+  const ranBeforeGitFinished = publicationStarted;
+  git.resolve({appliedRevision: 'a'.repeat(40)});
+  const result = await recovery;
+  assert.equal(ranWhileDatabaseMoved, true);
+  assert.equal(ranBeforeGitFinished, false);
+  assert.equal(result.primary, 'b');
+  assert.deepEqual(result.publication, {worker: 'survivor'});
+});
+
 test('the migration job follows all three prepared PostgreSQL copies and gates the service startup', async () => {
   const nodes = [1, 2, 3].map(number => ({name: 'node-' + number, id: 'id-' + number}));
   const prepared = [], stages = [];
