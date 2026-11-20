@@ -77,13 +77,31 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,reject
   throw Error('flux.revision_timeout');
 }
 
-export async function startFluxMirror({name,image,run,address='10.77.0.1',port=''}) {
-  const id=await run('docker',['run','-d','--name',name+'-git','--user','1000:1000','--entrypoint','node',
+export async function startFluxMirror({name,image,run,address='10.77.0.1',port='',removeFirewall}) {
+  const container = ['--name',name+'-git','--user','1000:1000','--entrypoint','node',
     '-v',fileURLToPath(import.meta.url)+':/proof/kubernetes-git.mjs:ro','-p',address+':'+port+':8000',image,
-    '/proof/kubernetes-git.mjs','--serve-mirror','/tmp/mirror']);
-  assert.match(id,/^[a-f0-9]{64}$/,'flux.mirror_identity');
-  const close=()=>run('docker',['rm','-f',id],undefined,true);
+    '/proof/kubernetes-git.mjs','--serve-mirror','/tmp/mirror'];
+  let id;
+  const close = async () => {
+    if (id) {
+      try {await run('docker', ['rm', '-f', id], undefined, true);}
+      catch (error) {
+        // A failed Docker command may leave the mirror reachable. Retain its filter until Docker confirms otherwise.
+        if (removeFirewall && await run('docker', ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id], undefined, true) === '') {
+          await removeFirewall();
+        }
+        throw error;
+      }
+    }
+    await removeFirewall?.();
+  };
   try {
+    const created = removeFirewall
+      ? await run('docker', ['create', '--pull=never', ...container], undefined, true)
+      : await run('docker', ['run', '-d', ...container]);
+    assert.match(created, /^[a-f0-9]{64}$/, 'flux.mirror_identity');
+    id = created;
+    if (removeFirewall) await run('docker', ['start', id]);
     await run('docker',['exec',id,'sh','-ec',`mkdir -p /tmp/mirror /tmp/release
 git init --bare --object-format=sha1 /tmp/mirror/run.git
 git --git-dir=/tmp/mirror/run.git config http.receivepack false
@@ -92,8 +110,8 @@ git init --object-format=sha1
 git config user.name 'Cloud rehearsal'
 git config user.email rehearsal@example.test`]);
     const binding=await run('docker',['port',id,'8000/tcp']);
-    const [boundAddress,boundPort]=binding.split(':');
-    assert.ok(boundAddress===address && /^\d+$/.test(boundPort) && (!port || boundPort===port),'flux.mirror_binding');
+    const [boundAddress,boundPort,...extra]=binding.split(':');
+    assert.ok(!extra.length && boundAddress===address && /^\d+$/.test(boundPort) && (!port || boundPort===port),'flux.mirror_binding');
     return {url:'http://'+binding+'/run.git',close,
       async publish(text,signal) {
         const sha=await run('docker',['exec','-i',id,'sh','-ec',`cd /tmp/release
@@ -104,7 +122,11 @@ git push /tmp/mirror/run.git HEAD:main >/dev/null
 git rev-parse HEAD`],text,false,signal);
         assert.match(sha,/^[a-f0-9]{40}$/,'flux.published_revision');return sha;
       }};
-  } catch(error) {await close();throw error;}
+  } catch(error) {
+    try {await close();}
+    catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);}
+    throw error;
+  }
 }
 
 export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
@@ -125,19 +147,15 @@ export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
   };
   try {
     for (const rule of rules) {
-      await run('sudo', ['-n', 'iptables', '-w', '-I', 'DOCKER-USER', ...rule]);
+      await run('sudo', ['-n', 'iptables', '-w', '-I', 'DOCKER-USER', ...rule], undefined, true);
       installed.push(rule);
     }
-    const mirror = await startFluxMirror({...options, run, address, port});
-    return {...mirror, async close() {
-      await mirror.close();
-      await removeRules();
-    }};
   } catch (error) {
     try {await removeRules();}
     catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);}
     throw error;
   }
+  return startFluxMirror({...options, run, address, port, removeFirewall: removeRules});
 }
 
 export async function installFlux({name,image,run,kube,deployment,controllersPath='/tmp/d618-flux.json',baselineNode=name+'-worker2',signal,mirror=startFluxMirror}) {

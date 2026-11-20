@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 phase=${1:-}
-case "$phase" in prepare|mesh|outside-filter|control|join|storage|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
+case "$phase" in prepare|mesh|mesh-config|outside-filter|control|join|storage|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
 
@@ -12,6 +12,16 @@ mesh_address() {
   local address
   read -r _ _ _ address _ < <(ip -4 -o address show dev wg0 scope global)
   printf '%s\n' "${address%/*}"
+}
+
+mesh_config() {
+  local address=$1 header
+  [[ "$address" =~ ^10\.77\.0\.[123]$ ]]
+  IFS= read -r header
+  [ "$header" = '[Interface]' ]
+  # Install the filter before a saved WireGuard peer can accept traffic after a restart.
+  printf '%s\nPreUp = bash %q outside-filter %s\n' "$header" "${BASH_SOURCE[0]}" "$address"
+  cat
 }
 
 set_api_address() {
@@ -98,14 +108,19 @@ prepare)
   ;;
 mesh)
   umask 077
-  cat > /etc/wireguard/wg0.conf
+  mesh_config "$2" > /etc/wireguard/wg0.conf
   systemctl enable --now wg-quick@wg0
   ;;
+mesh-config)
+  mesh_config "$2"
+  ;;
 outside-filter)
-  address=$(mesh_address)
+  address=$2
   [[ "$address" =~ ^10\.77\.0\.[123]$ ]]
   # Judge the original destination before Kubernetes rewrites host ports and NodePorts.
   filter=(iptables -w -t mangle)
+  entry=(-i wg0 -s 10.77.0.4/32 -m conntrack --ctstate NEW -j D618-OUTSIDE)
+  if "${filter[@]}" -C PREROUTING "${entry[@]}" 2>/dev/null; then exit 0; fi
   "${filter[@]}" -N D618-OUTSIDE
   if [ "$address" = 10.77.0.1 ]; then
     "${filter[@]}" -A D618-OUTSIDE -d "$address" -p tcp --dport 3000 -j RETURN
@@ -115,7 +130,7 @@ outside-filter)
   done
   "${filter[@]}" -A D618-OUTSIDE -d "$address" -p udp --dport 31820 -j RETURN
   "${filter[@]}" -A D618-OUTSIDE -j DROP
-  "${filter[@]}" -I PREROUTING -i wg0 -s 10.77.0.4/32 -m conntrack --ctstate NEW -j D618-OUTSIDE
+  "${filter[@]}" -I PREROUTING "${entry[@]}"
   ;;
 database-storage)
   # The pinned PostgreSQL image runs as UID and GID 26; the local volume starts private.

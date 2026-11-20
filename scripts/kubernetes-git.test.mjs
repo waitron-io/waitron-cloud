@@ -168,11 +168,11 @@ test('outside Git publishes at the fixed mesh address only after installing the 
   const mirror = await api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
     run: async (binary, args, input, cleanup) => {
       calls.push({binary, args, cleanup});
-      if (args[0] === 'run') return id;
+      if (args[0] === 'create') return id;
       if (args[0] === 'port') return '10.77.0.4:18000';
     }});
   assert.equal(mirror.url, 'http://10.77.0.4:18000/run.git');
-  const publish = calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'run');
+  const publish = calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'create');
   assert.ok(publish > 0 && calls[publish].args.includes('10.77.0.4:18000:8000'));
   const filters = calls.slice(0, publish).map(({args}) => args);
   assert.equal(filters.length, 2);
@@ -203,4 +203,48 @@ test('outside Flux reads the initial applied revision from its selected Kind nod
     mirror: async () => ({url: 'http://10.77.0.4:18000/run.git', publish: async () => revision, close: async () => {}}),
     kube: async args => args[0] === 'get' ? JSON.stringify(values[args[1]]) : ''});
   await flux.close();
+});
+
+test('outside Git installs each host rule to completion even when the rehearsal can be cancelled', async () => {
+  const added = [], id = 'c'.repeat(64);
+  const mirror = await api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
+    async run(binary, args, input, cleanup) {
+      if (args.includes('-I')) added.push(cleanup);
+      if (args[0] === 'create') return id;
+      if (args[0] === 'port') return '10.77.0.4:18000';
+    }});
+  assert.deepEqual(added, [true, true]);
+  await mirror.close();
+});
+
+for (const published of [false, true]) {
+  test('outside Git keeps its firewall on removal failure only if the mirror can still be serving: ' + published, async () => {
+    const id = 'c'.repeat(64), removals = [];
+    const mirror = await api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
+      async run(binary, args, input, cleanup) {
+        if (args[0] === 'create') return id;
+        if (args[0] === 'port') return '10.77.0.4:18000';
+        if (args[0] === 'rm') throw Error('injected Docker removal failure');
+        if (args[0] === 'ps') {
+          assert.deepEqual(args, ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id]);
+          assert.equal(cleanup, true);
+          return published ? id : '';
+        }
+        if (args.includes('-D')) removals.push(args);
+      }});
+    await assert.rejects(mirror.close(), /injected Docker removal failure/);
+    assert.equal(removals.length, published ? 0 : 2);
+  });
+}
+
+test('outside Git removes its container and both rules when Docker reports the wrong port', async () => {
+  const id = 'd'.repeat(64), cleanup = [];
+  await assert.rejects(api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
+    async run(binary, args) {
+      if (args[0] === 'create') return id;
+      if (args[0] === 'port') return '10.77.0.4:18001';
+      if (args[0] === 'rm' || args.includes('-D')) cleanup.push({binary, args});
+    }}), {message: 'flux.mirror_binding'});
+  assert.deepEqual(cleanup.map(({binary}) => binary), ['docker', 'sudo', 'sudo']);
+  assert.deepEqual(cleanup[0].args, ['rm', '-f', id]);
 });

@@ -1330,8 +1330,9 @@ TEST_KUBERNETES_OUTSIDE_NETWORK=1 node --test --test-name-pattern='outside Kind 
 The test host uses `10.77.0.4` with a 1420-byte packet size cap. Machine A
 (`10.77.0.1`) accepts TCP 3000 for the account. A, B (`10.77.0.2`) and C
 (`10.77.0.3`) accept TCP 30443 and 30900 and UDP 31820 for the gateway and
-store. The host checks account HTTPS and tries the Kubernetes API port, which
-is live inside the cell and refused from the host. Flux fetches a synthetic
+store. The host checks account and store HTTPS and tries the Kubernetes API
+port. The test reads the firewall's drop counter to confirm the private API
+request reached the filter. Flux fetches a synthetic
 deployment through the host's read-only Git mirror on TCP 18000. The venue's
 existing remote-access check sends signed staff and public HTTPS through the
 relay, whose upstreams are the three private addresses. The full Stockholm

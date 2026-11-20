@@ -5,7 +5,7 @@ import {createSocket} from 'node:dgram';
 import {EventEmitter, once} from 'node:events';
 import {createConnection, createServer} from 'node:net';
 import {createInterface} from 'node:readline';
-import {appendFile, mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -382,48 +382,60 @@ test('outside relay keeps the client-facing address and uses only the three mesh
   assert.deepEqual(calls.at(-1), ['docker', ['rm', '-f', id], {signal: null}]);
 });
 
-test('the outside Kind network refuses an unrelated node port and carries Flux and signed remote HTTPS', {
+test('the outside Kind network drops traffic to the private API port and carries Flux and signed remote HTTPS', {
   skip: process.env.TEST_KUBERNETES_OUTSIDE_NETWORK !== '1', timeout: 40 * 60 * 1000,
 }, async () => {
   assert.equal(process.platform, 'linux');
   const {installFlux, fluxImages, prepareFluxBundle, startOutsideFluxMirror} = await import('./kubernetes-git.mjs');
   const {meshNodeAddress, outsideNodePeer, rehearsalMtu, startOutsideMesh} = await import('./kubernetes-outside.mjs');
-  let checked;
+  let checked, cleaned;
   const {remote} = await runKubernetesCheck('kind-remote', {stopGatewayNode: true, async prepareOutside(context, tag) {
     const {cluster, directory, nodes, run, kube, signal, waitronImage} = context;
     const execute = (binary, args, input, cleanup) => run(binary, args, {input, signal: cleanup ? null : signal, timeout: 180000});
-    const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
+    const bootstrap = fileURLToPath(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url));
+    const namespace = (pid, ...args) => run('nsenter', ['-t', pid, '-n', ...args]);
     const peers = [];
     for (const [index, node] of nodes.entries()) {
       const privateKey = await run('wg', ['genkey']);
       const publicKey = await execute('wg', ['pubkey'], privateKey + '\n');
       const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id]);
       assert.match(pid, /^[1-9][0-9]*$/);
-      const path = join(directory, 'mesh-node-' + index, 'wg0.conf');
-      await mkdir(join(directory, 'mesh-node-' + index));
-      await writeFile(path, `[Interface]
-Address = ${meshNodeAddress(index)}/32
-ListenPort = 51821
-MTU = ${rehearsalMtu}
-PrivateKey = ${privateKey}
-`, {mode: 0o600});
-      peers.push({endpoint: node.ip, publicKey, pid, path, id: node.id});
+      peers.push({endpoint: node.ip, publicKey, privateKey, pid});
     }
     let flux;
     const mesh = await startOutsideMesh({directory, peers, run: execute, async prepareNodes(publicKey) {
-      for (const {id, pid, path} of peers) {
-        await appendFile(path, outsideNodePeer(publicKey));
-        await run('nsenter', ['-t', pid, '-n', 'wg-quick', 'up', path]);
-        await execute('docker', ['exec', '-i', id, 'bash', '-s', '--', 'outside-filter'], bootstrap);
+      for (const [index, {pid, privateKey}] of peers.entries()) {
+        const nodePath = join(directory, 'mesh-node-' + index), address = meshNodeAddress(index);
+        const path = join(nodePath, 'wg0.conf');
+        await mkdir(nodePath);
+        const input = `[Interface]\nAddress = ${address}/32\nListenPort = 51821\nMTU = ${rehearsalMtu}\nPrivateKey = ${privateKey}\n` + outsideNodePeer(publicKey);
+        await run('bash', ['-c', 'umask 077; bash "$1" mesh-config "$2" > "$3"', 'mesh-config', bootstrap, address, path], {input});
+        await namespace(pid, 'wg-quick', 'up', path);
       }
     }});
-    const close = async () => {try {await flux?.close();} finally {await mesh.close();}};
+    const close = async () => {
+      try {await flux?.close();}
+      finally {await mesh.close();}
+      await assert.rejects(run('ip', ['link', 'show', 'dev', mesh.interfaceName], {signal: null}), /does not exist/);
+      cleaned = true;
+    };
     try {
       assert.equal(await run('curl', ['-fsS', '--max-time', '10', '--cacert', join(directory, 'services-ca.crt'),
         '--resolve', 'cloud.example.test:3000:10.77.0.1', 'https://cloud.example.test:3000/api/health/ready']),
       '{"status":"ready"}');
+      for (const [index, node] of nodes.entries()) {
+        await run('curl', ['-fsS', '--max-time', '10', '--cacert', join(directory, 'store.crt'),
+          '--connect-to', node.ip + ':30900:' + meshNodeAddress(index) + ':30900',
+          'https://' + node.ip + ':30900/minio/health/cluster']);
+      }
       await kube(['get', '--raw=/readyz']);
+      const countDrops = async () => {
+        const rules = await namespace(peers[0].pid, 'iptables', '-t', 'mangle', '-nvxL', 'D618-OUTSIDE');
+        return Number(rules.match(/^\s*(\d+)\s+\d+\s+DROP\s/m)?.[1]);
+      };
+      const before = await countDrops();
       await assert.rejects(run('curl', ['-kfsS', '--connect-timeout', '2', 'https://10.77.0.1:6443/readyz']), /failed \(28,/);
+      assert.ok(await countDrops() > before, 'the node filter dropped the private API request');
       const path = await prepareFluxBundle(directory, cluster, {run: execute, node: nodes[0].name});
       for (const {upstream, tag: name} of fluxImages(cluster)) {
         await run('docker', ['pull', upstream], {timeout: 180000});
@@ -446,7 +458,8 @@ PrivateKey = ${privateKey}
       throw error;
     }
   }});
-  assert.equal(checked, true, 'the real mesh carried account and Flux traffic');
+  assert.equal(checked, true, 'the real mesh carried account, store and Flux traffic');
+  assert.equal(cleaned, true, 'the outside mesh and its mirror closed');
   assert.equal(remote.staffHttps, true);
   assert.equal(remote.publicHttps, true);
   assert.deepEqual(remote.cleanup.remaining, []);

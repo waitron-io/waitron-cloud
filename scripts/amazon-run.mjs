@@ -208,7 +208,8 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         }
         for (let index = 0; index < 3; index++) {
           const peers = [0, 1, 2].filter(peer => peer !== index).map(peer => '\n[Peer]\nPublicKey=' + publicKeys[peer] + '\nAllowedIPs=10.77.0.' + (peer + 1) + '/32\nEndpoint=' + outputs['Private' + ['A', 'B', 'C'][peer]] + ':51821\nPersistentKeepalive=15\n').join('');
-          await bootstrap(index, 'mesh', [], '[Interface]\nAddress=10.77.0.' + (index + 1) + '/24\nListenPort=51821\nPrivateKey=' + privateKeys[index] + '\n' + peers);
+          const address = '10.77.0.' + (index + 1);
+          await bootstrap(index, 'mesh', [address], '[Interface]\nAddress=' + address + '/24\nListenPort=51821\nPrivateKey=' + privateKeys[index] + '\n' + peers);
         }
         for (let index = 0; index < 3; index++) await bootstrap(index, 'storage', [index === 0 ? 'control' : 'worker']);
         process.stderr.write('Uploading image bundle once to machine 0\n');
