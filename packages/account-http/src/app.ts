@@ -87,7 +87,8 @@ function publicError(error: unknown): AccountHttpError {
   }
   if (error instanceof InstallationError) return new AccountHttpError(error.code==='invalid_proof'?401:error.code==='revoked'||error.code==='permission_denied'?403:error.code==='unavailable'?503:400,error.code);
   if (error instanceof PairingError) return new AccountHttpError(error.code === 'invalid_proof' ? 401 : error.code === 'permission_denied' ? 403 : 400, error.code);
-  if (error instanceof RegistrationError) return new AccountHttpError(error.code === 'permission_denied' ? 403 : 400, error.code);
+  if (error instanceof RegistrationError) return new AccountHttpError(
+    error.code === 'permission_denied' ? 403 : error.code === 'business_match_ambiguous' ? 409 : 400, error.code);
   if (error instanceof SecurityAuditError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='security_audit_conflict'?'conflict':error.code);
   if (error instanceof UsageError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='usage_conflict'?'conflict':error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
@@ -102,6 +103,7 @@ function publicError(error: unknown): AccountHttpError {
 export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
+  if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
   if(options.guestOrigin){validateGuestOrigin(options.guestOrigin);if(options.guestOrigin===config.portalOrigin)throw Error('guest_origin_invalid');}
   const billingAccount=validateBillingAccountOptions(options.billingAccount,options.planMode??'existing');
   const billingMethods=validateBillingMethodsOptions(options.billingMethods,options.planMode??'existing',billingAccount);
@@ -186,9 +188,9 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path==='/api/account/owner-transfers'||c.req.path.startsWith('/api/account/owner-transfers/'))return ownerTransferResponse(c,{pool,store:ownerTransfers,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/account/security/'))return accountSecurityResponse(c,{pool,store:accountSecurity,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/action-proof'||c.req.path.startsWith('/api/account/action-proof/'))return accountActionProofResponse(c,{pool,store:actionProof,passkeys,origin:config.portalOrigin,secure,ip,consume});
-    if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
+    if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume,setupPairing:config.setupPairing});
     if(c.req.path==='/api/account/login/recovery'||c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/login/email'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
-      return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
+      return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume,setupPairing:config.setupPairing});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});
     if(['/api/installations/error-report','/api/installations/release-held','/api/installations/staff-report','/api/installations/staff-description'].includes(c.req.path))return boxErrorResponse(c,{machine:boxErrors,ip,consume});
@@ -206,7 +208,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/installations/billing-display')return billingDisplayResponse(c,{machine:billingDisplay,ip,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
-    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys});
+    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys,setupPairing:config.setupPairing,country:config.countryCode??'ES'});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
     const fields = paths[path];
     if (path !== '/session' && !fields) throw new AccountHttpError(404, 'not_found');

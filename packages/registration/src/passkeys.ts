@@ -19,6 +19,7 @@ import type {
   VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
 import { createSession, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
+import type {SetupPairingSignIn} from './setup-pairing.ts';
 import { transaction } from './transaction.ts';
 import type {EmailOutbox} from './email-outbox.ts';
 import {accountActionSession,markAccountActionProof,requireAccountActionProof,invalidateAccountActionProof} from './account-action-proof.ts';
@@ -152,13 +153,13 @@ export class PasskeyStore {
     });
   }
 
-  async authenticate(ceremonyId:string,response:AuthenticationResponseJSON):Promise<SessionCredentials>{
-    return (await this.#authenticate(ceremonyId,response))!;
+  async authenticate(ceremonyId:string,response:AuthenticationResponseJSON,setupSignIn?:SetupPairingSignIn):Promise<SessionCredentials>{
+    return (await this.#authenticate(ceremonyId,response,undefined,setupSignIn))!;
   }
   async reprove(token:string,csrfToken:string,ceremonyId:string,response:AuthenticationResponseJSON):Promise<void>{
     await this.#authenticate(ceremonyId,response,{token,csrfToken});
   }
-  async #authenticate(ceremonyId:string,response:AuthenticationResponseJSON,authority?:{token:string;csrfToken:string}):Promise<SessionCredentials|undefined>{
+  async #authenticate(ceremonyId:string,response:AuthenticationResponseJSON,authority?:{token:string;csrfToken:string},setupSignIn?:SetupPairingSignIn):Promise<SessionCredentials|undefined>{
     const challenge = await transaction(this.#pool, async client => {
       const actor=authority?await accountActionSession(client,authority.token,authority.csrfToken):undefined;
       return {challenge:await this.#consumeAuthentication(client,ceremonyId,authority?.token),revision:actor?.securityRevision};
@@ -194,7 +195,9 @@ export class PasskeyStore {
         last_used_at = clock_timestamp() WHERE id = $1`,
       [row.id, info.newCounter, info.credentialDeviceType, info.credentialBackedUp]);
       if(authority){const actor=await accountActionSession(client,authority.token,authority.csrfToken);if(actor.securityRevision!==challenge.revision)throw new PasskeyError();await markAccountActionProof(client,authority.token,authority.csrfToken,'passkey');return;}
-      return createSession(client, row.account_id);
+      const session = await createSession(client, row.account_id);
+      await setupSignIn?.(client, session);
+      return session;
     });
   }
 

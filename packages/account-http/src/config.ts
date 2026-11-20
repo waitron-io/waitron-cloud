@@ -1,4 +1,5 @@
 import { canonicalIp } from './client-address.ts';
+import { createPublicKey } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { LocalPasswordCorpus, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import type {FactorKeys} from '@waitron-cloud/identity';
@@ -43,7 +44,19 @@ export function factorConfigFromEnv(env: NodeJS.ProcessEnv): FactorConfig {
   // An authenticator-app configuration outage leaves recognised password-only browsers and passkey sign-in available; country enrollment requirements still apply.
   return validateFactorConfig({keys,policy});
 }
-export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; countryCode?: string; }
+interface SetupPairingConfig { publicKey: string; redirectUri: string }
+export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; countryCode?: string; setupPairing?: Readonly<SetupPairingConfig>; }
+
+function validateSetupPairing(config: SetupPairingConfig): Readonly<SetupPairingConfig> {
+  const {publicKey, redirectUri} = config;
+  if (typeof publicKey !== 'string' || publicKey.length > 128 || typeof redirectUri !== 'string') throw new Error();
+  const key = createPublicKey({key: Buffer.from(publicKey, 'base64url'), type: 'spki', format: 'der'});
+  const callback = new URL(redirectUri);
+  if (key.asymmetricKeyType !== 'ed25519' || key.export({type: 'spki', format: 'der'}).toString('base64url') !== publicKey
+    || callback.protocol !== 'https:' || redirectUri !== `${callback.origin}/cloud/pairing/callback`) throw new Error();
+  return Object.freeze({publicKey, redirectUri});
+}
+
 export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpConfig> {
   try {
     const origin = new URL(config.portalOrigin);
@@ -56,13 +69,18 @@ export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpC
       || (origin.protocol === 'http:' && (config.production || !['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)))
       || !Array.isArray(config.trustedProxyIps)) throw new Error();
     const trustedProxyIps = Object.freeze(config.trustedProxyIps.map(canonicalIp));
-    return Object.freeze({countryCode, portalOrigin: origin.origin, production: config.production, rateKey: config.rateKey, trustedProxyIps, ...(config.requireEnrollment ? {requireEnrollment: true} : {})});
+    const setupPairing = config.setupPairing === undefined ? undefined : validateSetupPairing(config.setupPairing);
+    return Object.freeze({countryCode, portalOrigin: origin.origin, production: config.production, rateKey: config.rateKey, trustedProxyIps,
+      ...(config.requireEnrollment ? {requireEnrollment: true} : {}), ...(setupPairing ? {setupPairing} : {})});
   } catch { throw new Error('Invalid account HTTP configuration'); }
 }
 export function accountHttpConfig(env: NodeJS.ProcessEnv): AccountHttpConfig {
   if (env.CLOUD_REQUIRE_ENROLLMENT !== undefined && !['true', 'false'].includes(env.CLOUD_REQUIRE_ENROLLMENT)) throw new Error('Invalid enrollment requirement');
+  const {CLOUD_SETUP_PAIRING_PUBLIC_KEY: publicKey, CLOUD_SETUP_PAIRING_REDIRECT_URI: redirectUri} = env;
+  const setupPairing = publicKey === undefined && redirectUri === undefined ? undefined : {publicKey: publicKey ?? '', redirectUri: redirectUri ?? ''};
   return validateConfig({countryCode: env.CLOUD_COUNTRY_CODE, portalOrigin: env.CLOUD_PORTAL_ORIGIN ?? '', production: env.NODE_ENV === 'production',
-    rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', requireEnrollment: env.CLOUD_REQUIRE_ENROLLMENT === 'true', trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : []});
+    rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', requireEnrollment: env.CLOUD_REQUIRE_ENROLLMENT === 'true',
+    trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : [], setupPairing});
 }
 
 export function passwordCorpusPath(env: NodeJS.ProcessEnv): string | undefined {

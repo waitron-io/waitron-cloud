@@ -146,6 +146,15 @@ test('a retained code cannot replace a method when no enrolled method remains',a
  assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'10');
 });
 
+test('a refused setup sign-in keeps the spent recovery attempt', async () => {
+ const [code] = await codes(); assert.ok(code);
+ const bind = new registration.SetupPairingStore(pool).signIn(
+   {requestId: randomUUID(), state: '', codeChallenge: ''}, {publicKey: '', redirectUri: ''});
+ await assert.rejects(login().completeRecoveryCheck(await challenge(), code, bind), /pairing_unavailable/);
+ assert.deepEqual((await pool.query('SELECT attempts, consumed_at FROM cloud_sign_in_checks')).rows,
+   [{attempts: 1, consumed_at: null}]);
+});
+
 test('expiry during session insertion rolls back recovery-code consumption while keeping its attempt',async t=>{
  const [code]=await codes();assert.ok(code);const token=await challenge(),blocker=await pool.connect();let completion:Promise<void>|undefined;
  try{

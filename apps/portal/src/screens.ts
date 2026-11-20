@@ -53,7 +53,7 @@ export function screen(app: PortalApp) {
           @click=${(event: MouseEvent) => app.follow(event, path, true)}>${c[page === 'account' ? 'accountLink' : page]}</a></li>`)}
       </ul></nav>` : nothing;
   let content;
-  if (app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
+  if (!app.setupPairing && app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
   else if(app.path==='/operator/actions')content=cloudActionsScreen(app);
   else if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
@@ -107,7 +107,10 @@ export function screen(app: PortalApp) {
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>
+        ${app.setupPairing && !app.authenticator.challenge ? html`<p class="help">${c.pairSetupMethods}</p>` : nothing}
         ${content}
+        ${app.setupPairing ? html`<button type="button" class="text-button" ?disabled=${app.pending || app.passkeys.pending || app.authenticator.pending}
+          @click=${() => {void app.returnToSetup(true);}}>${c.pairSetupBack}</button>` : nothing}
         ${app.error === 'uncertain' || app.error === 'linkUnavailable' ? html`<nav>${link('/login', c.login)} ${link(retryLink, c.requestLink)}</nav>` : nothing}
         ${app.waiting ? html`<p class="help" role="status">${c.cooldown} ${app.waiting} ${app.waiting===1?c.second:c.seconds}</p>` : nothing}
       </form></wt-card></main>`;

@@ -5,6 +5,8 @@ import {createSession, decryptFactorSecret, IdentityError, matchedTotpSteps, req
 import {issueSignInCheck, completeSignInCheck, recognisedBrowser, SignInCheckError, type EmailSignInChallenge} from './sign-in-check.ts';
 import type {EmailOutbox} from './email-outbox.ts';
 import type {AccountLocale} from './account-input.ts';
+import {PairingError} from './pairing-proof.ts';
+import type {SetupPairingSignIn} from './setup-pairing.ts';
 import {transaction} from './transaction.ts';
 import {consumeAccountRecoveryCode} from './account-recovery-codes.ts';
 
@@ -116,8 +118,8 @@ export class PasswordLoginStore {
     return result;
   }
   completeEmailCheck(token: string, code: string, remember = false) { return completeSignInCheck(this.#pool,token,code,remember); }
-  completeRecoveryCheck(token:string,code:string) { return completeSignInCheck(this.#pool,token,code,false,'recovery'); }
-  async complete(token: string, proof: FactorProof): Promise<SessionCredentials> {
+  completeRecoveryCheck(token:string,code:string,setupSignIn?:SetupPairingSignIn) { return completeSignInCheck(this.#pool,token,code,false,'recovery',setupSignIn); }
+  async complete(token: string, proof: FactorProof, setupSignIn?: SetupPairingSignIn): Promise<SessionCredentials> {
     if (typeof token !== 'string' || !TOKEN.test(token)) throw new FactorError();
     requirePolicy(this.#policy);
     const result = await transaction(this.#pool, async client => {
@@ -143,16 +145,17 @@ export class PasswordLoginStore {
         if (!proofDeadline) throw new FactorError();
         await client.query('UPDATE cloud_factor_login_challenges SET consumed_at=clock_timestamp() WHERE token_hash=$1', [hash]);
         const credentials = await createSession(client, candidate.account_id);
+        await setupSignIn?.(client, credentials);
         if (await factorNow(client) >= proofDeadline) throw new FactorError();
         return credentials;
       } catch (error) {
-        if (!(error instanceof FactorError) && !(error instanceof IdentityError)) throw error;
+        if (!(error instanceof FactorError) && !(error instanceof IdentityError) && !(error instanceof PairingError)) throw error;
         await client.query('ROLLBACK TO SAVEPOINT factor_effects');
-        return error instanceof FactorError ? error : new FactorError();
+        return error instanceof IdentityError ? new FactorError() : error;
       }
     });
     // Throw outside the transaction: rolling back a refusal would restore its attempt budget.
-    if (result instanceof FactorError) throw result;
+    if (result instanceof Error) throw result;
     return result;
   }
 }

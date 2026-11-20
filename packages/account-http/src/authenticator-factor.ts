@@ -3,14 +3,15 @@ import type {Pool} from 'pg';
 import {createHash} from 'node:crypto';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError,FactorManagementError,transaction,type FactorProof} from '@waitron-cloud/registration';
+import {setupPairingSignIn} from './pairing.ts';
 import {AccountHttpError} from './errors.ts';
 import {readSessionCookie,writeSessionCookies,writeBrowserCookie} from './cookies.ts';
 import {readBoundedJsonObject} from './request.ts';
-import type {FactorPolicy} from './config.ts';
+import type {AccountHttpConfig,FactorPolicy} from './config.ts';
 import type {RateRule} from './rate-limit.ts';
 
 type Options = {pool:Pool;login:PasswordLoginStore;store:AuthenticatorFactorStore;policy:FactorPolicy|null;
-  origin:string;secure:boolean;ip:string;consume:(rules:RateRule[])=>Promise<void>};
+  origin:string;secure:boolean;ip:string;setupPairing:AccountHttpConfig['setupPairing'];consume:(rules:RateRule[])=>Promise<void>};
 const TOKEN=/^[A-Za-z0-9_-]{43}$/;
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 function exact(body:Record<string,unknown>,fields:string[],optional:string[]=[]):void {
@@ -44,7 +45,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     if(action==='')return c.json(await options.store.status(sessionToken));
     const body=await readBoundedJsonObject(c.req.raw);
     if(completion) {
-      exact(body,['challengeToken',email||recovery?'code':'proof'],email?['rememberBrowser']:[]);
+      exact(body,['challengeToken',email||recovery?'code':'proof'],email?['rememberBrowser']:options.setupPairing?['setupPairing']:[]);
       if(body.rememberBrowser!==undefined&&typeof body.rememberBrowser!=='boolean')throw new AccountHttpError(400,'invalid_input');const challengeToken=token(body.challengeToken),parsed=email?code(body.code):recovery?proof({kind:'recovery',code:body.code}).code:proof(body.proof);
       const p=options.policy;if(!p)unavailable();
       // IP rejection precedes derived account/challenge counters, so a blocked source cannot spend them.
@@ -52,7 +53,8 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
       const candidate=(await options.pool.query(`SELECT account_id FROM ${email||recovery?'cloud_sign_in_checks':'cloud_factor_login_challenges'} WHERE token_hash=$1`,[digest(challengeToken)])).rows[0];
       await options.consume([{scope:'factor-complete-challenge',subject:challengeToken,...p.completeChallenge},
         {scope:'factor-complete-account',subject:candidate?.account_id??`unknown:${digest(challengeToken)}`,...p.completeAccount}]);
-      const credentials=await (recovery?options.login.completeRecoveryCheck(challengeToken,parsed as string):email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
+      const setupSignIn = setupPairingSignIn(options.pool, options.setupPairing, body.setupPairing);
+      const credentials=await (recovery?options.login.completeRecoveryCheck(challengeToken,parsed as string,setupSignIn):email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof,setupSignIn));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
     }
     exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['pendingToken','code']:[]);
     const pendingToken=['/activate','/cancel'].includes(action)?token(body.pendingToken):undefined;

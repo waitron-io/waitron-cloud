@@ -60,6 +60,22 @@ function cliDatabaseUrl() {
   return databaseUrl.href;
 }
 
+test('pairing cleanup includes expired setup attempts in its existing batch budget', async () => {
+  const legacy = randomUUID(), expired = randomUUID(), recent = randomUUID();
+  await pool.query(`INSERT INTO pairing_requests(id,public_key,environment,code_hash,expires_at)
+    VALUES($1,'legacy-key','test',$2,$3)`, [legacy, hash('a'), old]);
+  await pool.query(`INSERT INTO setup_pairing_attempts(id,public_key,redirect_uri,state,code_challenge,expires_at)
+    VALUES($1,'setup-key','https://box.example.test/cloud/pairing/callback','state','challenge',$3),
+          ($2,'setup-key','https://box.example.test/cloud/pairing/callback','state','challenge',$4)`,
+  [expired, recent, older, future]);
+  const policy = parseHistoryCleanupPolicy({cutoffs: {pairingRequests: cutoff}, chunkSize: 1});
+  assert.deepEqual((await cleanup.run(policy, {apply: false})).categories.pairingRequests,
+    {cutoff, eligible: 2, blocked: 0, deleted: 0, hasMore: true});
+  assert.equal((await cleanup.run(policy, {apply: true})).categories.pairingRequests?.deleted, 1);
+  assert.equal((await cleanup.run(policy, {apply: true})).categories.pairingRequests?.hasMore, false);
+  assert.deepEqual((await pool.query('SELECT id FROM setup_pairing_attempts')).rows, [{id: recent}]);
+});
+
 test('history cleanup policy accepts only explicit timezone-bearing category cutoffs', () => {
   const policy = parseHistoryCleanupPolicy({
     cutoffs: {

@@ -117,6 +117,18 @@ Cloud owns permission to use its services. Waitron owns permission to become the
 active primary. A Cloud login, restore grant or fresh machine credential alone
 must not activate trading or change fiscal identity.
 
+### Installed test-box setup pairing
+
+Use pairing version 4 for a configured, installed and unpaired test box with
+an existing Cloud account. The [setup pairing contract](superpowers/plans/2026-11-20-cloud-setup-pairing.md#1-connect-an-installed-test-box)
+sets the signed request formats and the same-tab sign-in round trip. The box
+sends its signed venue details after redeeming a short-lived Cloud code. Cloud
+files a new venue and preserves the matching business's billing address. If the
+account has one business in the venue's country with no tax number and no
+venues, Cloud uses that business and saves the signed tax number. Use
+[the test configuration](local-pairing.md#connect-an-installed-test-box-with-cloud-sign-in)
+to enable the account service for the box you are testing.
+
 ### Pairing version 3 and managed-stream version 2
 
 Use the shared `@waitron-io/contract` pairing encoder and verifier. A new request signs

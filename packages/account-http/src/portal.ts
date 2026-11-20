@@ -58,10 +58,13 @@ export function portalErrorResponse(request: Request, status: 400 | 404 | 405 | 
     ...(status === 503 ? {'Retry-After': '1'} : {}),
   }});
 }
-export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false): Response {
+export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false, setupPairing=false): Response {
   const url = new URL(request.url);
   const failure = (status: 400 | 404 | 405) => portalErrorResponse(request, status, testBillingMethods);
-  if (url.search && !['/signup', '/reset-password'].includes(url.pathname)) return failure(400);
+  const pairingLink = setupPairing && url.pathname === '/login' && url.searchParams.size === 4
+    && ['request_id', 'state', 'code_challenge'].every(key => url.searchParams.getAll(key).length === 1)
+    && url.searchParams.get('code_challenge_method') === 'S256';
+  if (url.search && !pairingLink && !['/signup', '/reset-password'].includes(url.pathname)) return failure(400);
   if (!['GET', 'HEAD'].includes(request.method)) return failure(405);
   const key = documents.has(url.pathname) ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
   const asset = assets.get(key);

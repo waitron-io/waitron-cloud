@@ -1,10 +1,11 @@
-import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
+import {actionTestTotp,prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
-import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
+import {encryptFactorSecret} from '@waitron-cloud/identity';
 import {SignupStore,createLeaseIssuer} from '@waitron-cloud/registration';
 import {pairingPayload,type PairingClaims} from '../../registration/src/pairing-proof.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -33,6 +34,179 @@ beforeEach(async()=>{
   cookie=logged.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
   await prepareConnectionProof(db.pool,owner.accountId,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!);
 });
+function setupBox() {
+  const keys = generateKeyPairSync('ed25519');
+  const publicKey = keys.publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
+  const redirectUri = 'https://box.example.test/cloud/pairing/callback';
+  const requestId = randomUUID();
+  const state = randomBytes(32).toString('base64url');
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const keysForAuthenticator = {activeKeyId: 'fixture', keys: {fixture: '13'.repeat(32)}};
+  function signed(action: string, args: readonly unknown[], privateKey = keys.privateKey, key = publicKey) {
+    const bytes = Buffer.from(JSON.stringify([
+      'waitron-cloud-pair-v4', origin, action, requestId, key, 'test', Date.now(), args,
+    ]));
+    return {payload: bytes.toString('base64url'), signature: sign(null, bytes, privateKey).toString('base64url')};
+  }
+  const target = createAccountApp({
+    pool: db.pool, outbox: db.outbox, planMode: 'test-venue-levels',
+    factor: {keys: keysForAuthenticator, policy: emailLoginPolicy},
+    config: {...settings(), setupPairing: {publicKey, redirectUri}},
+  });
+  const start = signed('start', [redirectUri, state, challenge]);
+  return {target, start, signed, requestId, redirectUri, state, challenge, verifier, keysForAuthenticator};
+}
+
+test('setup pairing starts a signed attempt for the configured test box', async () => {
+  const {target, start, signed, requestId, redirectUri, state, challenge} = setupBox();
+  const response = await request('/api/pairing/start', start, {}, target);
+  const attempt = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(attempt));
+  const query = new URLSearchParams({request_id: requestId, state, code_challenge: challenge, code_challenge_method: 'S256'});
+  assert.equal(attempt.authorizationUrl, origin + '/login?' + query);
+  assert.equal(attempt.requestId, requestId);
+  assert.equal(attempt.state, 'awaiting_cloud');
+  assert.deepEqual(await (await request('/api/pairing/start', start, {}, target)).json(), attempt);
+  const foreign = generateKeyPairSync('ed25519');
+  const foreignKey = foreign.publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
+  for (const refused of [
+    signed('start', [redirectUri, state, challenge], foreign.privateKey, foreignKey),
+    signed('start', ['https://other.example.test/cloud/pairing/callback', state, challenge]),
+  ]) {
+    const reply = await request('/api/pairing/start', refused, {}, target);
+    assert.equal(reply.status, 401);
+    assert.deepEqual(await reply.json(), {error: 'invalid_proof'});
+  }
+
+});
+
+test('signed setup pairing status recovers a lost start reply', async () => {
+  const {target, start, signed, requestId} = setupBox();
+  const started = await (await request('/api/pairing/start', start, {}, target)).json();
+  const status = await request('/api/pairing/status', signed('status', []), {}, target);
+  const pending = await status.json();
+  assert.equal(status.status, 200, JSON.stringify(pending));
+  assert.deepEqual(pending, {requestId, state: 'awaiting_cloud', expiresAt: started.expiresAt});
+
+  await db.pool.query("UPDATE setup_pairing_attempts SET expires_at=clock_timestamp() WHERE id=$1", [requestId]);
+  const expired = await request('/api/pairing/status', signed('status', []), {}, target);
+  assert.equal(expired.status, 400);
+  assert.deepEqual(await expired.json(), {error: 'pairing_unavailable'});
+});
+
+
+async function setupFactorChallenge(target: typeof app, keysForAuthenticator: ReturnType<typeof setupBox>['keysForAuthenticator']) {
+  const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  const encrypted = encryptFactorSecret(secret, keysForAuthenticator, {accountId: owner.accountId, version: 1, purpose: 'active'});
+  await db.pool.query(`INSERT INTO cloud_authenticator_factors (account_id,version,secret_generation,secret_envelope)
+    VALUES ($1,1,$2,$3)`, [owner.accountId, randomUUID(), encrypted]);
+  const login = await request('/api/account/login', {email: 'owner@example.test', password}, {origin}, target);
+  assert.equal(login.status, 202);
+  const {challengeToken} = await login.json();
+  return {challengeToken, proof: {kind: 'totp', code: actionTestTotp(secret)}};
+}
+
+async function signInForSetup(target: typeof app, keysForAuthenticator: ReturnType<typeof setupBox>['keysForAuthenticator'],
+  pairing: {requestId: string; state: string; codeChallenge: string}) {
+  const fresh = await request('/api/account/login/factor', {
+    ...await setupFactorChallenge(target, keysForAuthenticator), setupPairing: pairing,
+  }, {origin}, target);
+  assert.equal(fresh.status, 200, JSON.stringify(await fresh.clone().json()));
+  const sessionCookies = fresh.headers.getSetCookie().map(item => item.split(';')[0]!).join('; ');
+  const sessionCsrf = /__Host-cloud_csrf=([^;]+)/.exec(sessionCookies)![1]!;
+
+  return {cookie: sessionCookies, 'x-csrf-token': sessionCsrf};
+}
+
+test('a refused setup sign-in keeps the spent authenticator attempt', async () => {
+  const {target, requestId, state, challenge, keysForAuthenticator} = setupBox();
+  const factor = await setupFactorChallenge(target, keysForAuthenticator);
+  const reply = await request('/api/account/login/factor', {
+    ...factor, setupPairing: {requestId, state, codeChallenge: challenge},
+  }, {origin}, target);
+  assert.equal(reply.status, 400);
+  assert.deepEqual(await reply.json(), {error: 'pairing_unavailable'});
+  assert.deepEqual((await db.pool.query('SELECT attempts, consumed_at FROM cloud_factor_login_challenges')).rows,
+    [{attempts: 1, consumed_at: null}]);
+});
+
+test('setup pairing accepts only the signed-in session and redeems its code once', async () => {
+  const {target, start, signed, requestId, redirectUri, state, challenge, verifier, keysForAuthenticator} = setupBox();
+  assert.equal((await request('/api/pairing/start', start, {}, target)).status, 200);
+  const pairing = {requestId, state, codeChallenge: challenge};
+  const authorize = (headers: Record<string, string>) => request('/api/account/pairing/authorize', pairing, {origin, ...headers}, target);
+
+  const browserHeaders = await signInForSetup(target, keysForAuthenticator, pairing);
+
+  assert.equal((await authorize({cookie, 'x-csrf-token': csrf})).status, 403);
+  const authorized = await authorize(browserHeaders);
+  assert.equal(authorized.status, 200);
+  const callback = new URL((await authorized.json()).returnUrl);
+  assert.equal(callback.origin + callback.pathname, redirectUri);
+  assert.equal(callback.searchParams.get('request_id'), requestId);
+  assert.equal(callback.searchParams.get('state'), state);
+  const code = callback.searchParams.get('code')!;
+  assert.match(code, /^[A-Za-z0-9_-]{43}$/);
+
+  const redeem = (codeVerifier: string) => request('/api/pairing/redeem', signed('redeem', [code, codeVerifier]), {}, target);
+  assert.equal((await redeem(randomBytes(32).toString('base64url'))).status, 400);
+  const redeemed = await redeem(verifier);
+  assert.equal(redeemed.status, 200);
+  assert.equal((await redeemed.json()).state, 'account_bound');
+  const replay = await redeem(verifier);
+  assert.equal(replay.status, 400);
+  assert.deepEqual(await replay.json(), {error: 'pairing_unavailable'});
+
+  assert.equal((await request('/api/account/logout', {}, {origin, ...browserHeaders}, target)).status, 204);
+  const afterSignOut = await request('/api/pairing/status', signed('status', []), {}, target);
+  assert.equal(afterSignOut.status, 400);
+  assert.deepEqual(await afterSignOut.json(), {error: 'pairing_unavailable'});
+});
+
+
+test('setup pairing accepts the maximum Unicode venue details in a signed body', async () => {
+  const {target, start, signed, requestId, state, challenge, verifier, keysForAuthenticator} = setupBox();
+  assert.equal((await request('/api/pairing/start', start, {}, target)).status, 200);
+  const pairing = {requestId, state, codeChallenge: challenge};
+  const headers = await signInForSetup(target, keysForAuthenticator, pairing);
+  const authorize = await request('/api/account/pairing/authorize', pairing, {origin, ...headers}, target);
+  assert.equal(authorize.status, 200);
+  const code = new URL((await authorize.json()).returnUrl).searchParams.get('code')!;
+  assert.equal((await request('/api/pairing/redeem', signed('redeem', [code, verifier]), {}, target)).status, 200);
+
+  const venueName = '🥐'.repeat(120);
+  const address = [200, 200, 20, 200, 100].map(length => '🥐'.repeat(length));
+  const envelope = signed('complete', ['ES', venueName, address, '🥐'.repeat(16), '🥐'.repeat(100)]);
+  assert.ok(envelope.payload.length > 4096);
+  const completed = await request('/api/pairing/complete', envelope, {}, target);
+  const result = await completed.json();
+  assert.equal(completed.status, 200, JSON.stringify(result));
+  assert.equal(result.state, 'complete');
+  assert.ok(result.registration.venueId);
+  const venue = (await db.pool.query('SELECT display_name, setup_address FROM venues WHERE id=$1', [result.registration.venueId])).rows[0];
+  assert.deepEqual(venue, {display_name: venueName, setup_address: address});
+});
+
+test('setup pairing cancel returns to the bound box without an account', async () => {
+  const {target, start, signed, requestId, redirectUri, state} = setupBox();
+  assert.equal((await request('/api/pairing/start', start, {}, target)).status, 200);
+  const cancelPairing = () => request('/api/account/pairing/cancel', {requestId, state}, {origin}, target);
+  const cancel = await cancelPairing();
+  assert.equal(cancel.status, 200);
+  const callback = new URL((await cancel.json()).returnUrl);
+  assert.equal(callback.origin + callback.pathname, redirectUri);
+  assert.deepEqual(Object.fromEntries(callback.searchParams), {request_id: requestId, state, error: 'access_denied'});
+  const status = await request('/api/pairing/status', signed('status', []), {}, target);
+  assert.equal(status.status, 400);
+  assert.deepEqual(await status.json(), {error: 'pairing_unavailable'});
+  for (let i = 1; i < 60; i++) assert.equal((await cancelPairing()).status, 200);
+  const limited = await cancelPairing();
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
+});
+
+
 test('signed machines and browser approval link two distinct venues with durable retry',async()=>{
   const a=machine(),b=machine();assert.equal((await browser('businesses')).status,200);
   for(const m of [a,b]) {

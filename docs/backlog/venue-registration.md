@@ -6,6 +6,11 @@ and first legal business. Signed matching-code pairing requires current Cloud ap
 to add venues and current local administrator approval, supports one person holding both
 permissions, enforces one organisation per venue, and handles existing links, renewable
 installation credentials, replacement and revocation.
+Qualify setup pairing version 4 with the released Waitron client on a
+fresh installed test box. Sign-in and signup during initial setup, address
+lookup, and test relay use during setup remain open. The
+[setup pairing plan](../superpowers/plans/2026-11-20-cloud-setup-pairing.md)
+tracks that slice.
 Keep pairing, machine-proof and access-lease formats in Waitron's published
 `@waitron-io/contract`; Cloud keeps its configured trust and fixed wire vectors.
 Keep venue identity stable across replacement and issue fresh installation credentials.

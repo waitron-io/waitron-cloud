@@ -1,3 +1,4 @@
+import type {SetupPairingLink} from './links.ts';
 import {
   browserSupportsPasskeys,
   browserSupportsWebAuthnAutofill,
@@ -140,7 +141,7 @@ export class PasskeyController {
     await this.load();
   }
 
-  async signIn(autofill = false,actionProof=false): Promise<'authenticated' | 'reconcile' | false> {
+  async signIn(autofill = false,actionProof=false,setupPairing?:SetupPairingLink): Promise<'authenticated' | 'reconcile' | false> {
     if (this.pending || this.waiting || (autofill && this.#autofill)) return false;
     if (!autofill && this.#autofill) this.fence();
     const generation = this.#generation;
@@ -171,7 +172,7 @@ export class PasskeyController {
     }
     if (generation !== this.#generation) return false;
     this.#autofill = false; this.pending = true; this.#changed();
-    const result = await this.#request<{accountId: string}>(`${proofPath}/verify`, {ceremonyId: options.value.ceremonyId, response});
+    const result = await this.#request<{accountId: string}>(`${proofPath}/verify`, {ceremonyId: options.value.ceremonyId, response, ...(setupPairing && !actionProof ? {setupPairing} : {})});
     if (generation !== this.#generation) return false;
     this.pending = false;
     if (result.ok) {

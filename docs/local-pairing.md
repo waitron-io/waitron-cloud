@@ -37,6 +37,23 @@ Cloud has no name, it shows **Venue** and a short identifier. Open **Details**
 for the full identifier, connection times, service health and snapshot status.
 To add a venue, start in Cloud services on that venue's Waitron box.
 
+## Connect an installed test box with Cloud sign-in
+
+On a test Cloud using venue service levels, configure the account service with
+`CLOUD_SETUP_PAIRING_PUBLIC_KEY` for the box's Ed25519 public key and
+`CLOUD_SETUP_PAIRING_REDIRECT_URI` for its exact HTTPS
+`/cloud/pairing/callback` URL. For the Amazon test configuration, set both
+values in the deployment environment for the account service. Remove both
+values when the check is finished.
+
+From a Waitron test build with setup pairing, open **Cloud services** and start
+sign-in. Use an existing Cloud account with a passkey or authenticator app.
+The same tab returns to your box and Cloud files the saved venue under the
+matching business. Cloud ignores spaces and hyphens when it compares tax
+numbers and keeps the number as entered. If your only business still has
+an empty tax number and no venues, Cloud uses it and saves the number from
+your box. Choose **Back to Waitron** to leave sign-in and try again from the box.
+
 ## Run the local integration proof
 
 Build the Cloud portal and the dashboard in your Waitron checkout first. Use a Waitron checkout containing the installation lifecycle adapter and
