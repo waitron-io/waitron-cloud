@@ -430,7 +430,7 @@ you choose Enable. Connecting Waitron’s sender and a public deployment remain
 separate. You can exercise a synthetic stored copy with:
 
 ```sh
-node scripts/test-postgres.mjs exec node --test packages/remote-access/test/guest-menu.test.ts packages/account-http/test/guest-menu-runtime.test.ts packages/account-http/test/guest-menu.test.ts
+node scripts/test-postgres.mjs exec node --test packages/remote-access/test/guest-menu.test.ts packages/account-http/test/guest-menu-runtime.test.ts packages/account-http/test/guest-menu.test.ts packages/account-http/test/guest-menu-server.test.ts
 pnpm --dir apps/portal build
 node scripts/test-postgres.mjs exec node --test apps/portal/test/guest-menu-browser.test.ts
 ```
@@ -438,7 +438,10 @@ node scripts/test-postgres.mjs exec node --test apps/portal/test/guest-menu-brow
 The runtime test starts the account command with a separate HTTPS listener and a
 temporary local certificate. The browser test opens Remote access, stops
 sharing, reloads the account, then allows sharing again. The copy stays absent
-until another publish; allowing sharing does not restore deleted pages.
+until the box publishes a new menu. With `CLOUD_VENUE_SERVICE_LEVELS=test`,
+start a Connected trial or use a paid test venue before publishing. If eligibility
+ends, the guest link returns 404. The same link serves the stored menu again
+when eligibility returns, provided it is still shared.
 
 To start the reader alongside your account process, provide `GUEST_ORIGIN`,
 `GUEST_TLS_KEY_FILE` and `GUEST_TLS_CERT_FILE` in your local environment, then run

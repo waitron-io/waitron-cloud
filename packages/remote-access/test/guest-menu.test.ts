@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
-import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
+import {BillingStore,createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {waitLock} from '../../registration/test/fixtures/relay-stop-barrier.ts';
 import {setTimeout as delay} from 'node:timers/promises';
 import * as guest from '../src/guest-menu.ts';
-import {guestMenuFixture} from './fixtures/guest-menu.ts';
+import {guestMenuFixture,startGuestMenuTrial} from './fixtures/guest-menu.ts';
 import {guestMenuStatus,setGuestMenuBlocked,readGuestMenu} from '../src/guest-menu.ts';
 
 const origin='https://menus.example.test';
@@ -53,10 +53,10 @@ test('stored pages match regional strings and ordered phone preferences with the
 });
 
 const cloud='https://cloud.example.test';
-async function delivery(){
+async function delivery(mode?:'test-venue-levels'){
  const db=await database(),issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
  try{
- const box=await connectedVenue(db,issuer,cloud),machine=new guest.GuestMenuMachine(db.pool,issuer,cloud,origin);
+ const box=await connectedVenue(db,issuer,cloud),machine=new guest.GuestMenuMachine(db.pool,issuer,cloud,origin,undefined,mode);
  const proof=(action:guest.GuestMenuAction,body:unknown={version:1},who=box,lease=who.lease)=>who.proof(action,body,randomUUID(),lease);
  const text=(html='<h1>Menú</h1>')=>JSON.stringify({defaultLanguage:'es',pages:{es:html}});
  const publish=(body=text(),revision=0,who=box)=>machine.execute('guest-menu-publish',proof('guest-menu-publish',{version:1,expectedRevision:revision,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},who),body);
@@ -144,6 +144,43 @@ for(const mode of ['takedown','revocation','expiry after insert wait'] as const)
   if(mode==='revocation')await lock.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.box.installationId]);
   if(mode.startsWith('expiry'))await delay(Math.max(0,issuedAt+60010-Date.now()));
   await lock.query('COMMIT');await assert.rejects(pending,mode==='takedown'?/blocked/:mode==='revocation'?/revoked/:/invalid_proof/);
+  assert.equal(await readGuestMenu(f.db.pool,f.box.venueId),null);
+ }finally{await lock.query('ROLLBACK');lock.release();await pending?.catch(()=>{});await f.db.close();}
+});
+
+test('a never-trialled test venue with no billing row cannot publish',async()=>{
+ const f=await delivery('test-venue-levels');try{
+  await assert.rejects(f.publish(),{message:'guest_menu_plan_required'});
+  assert.equal(await readGuestMenu(f.db.pool,f.box.venueId),null);
+ }finally{await f.db.close();}
+});
+
+test('a paid test venue can publish without a trial',async()=>{
+ const f=await delivery('test-venue-levels');try{
+  const billing=new BillingStore(f.db.pool),event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+  const {organisationId,legalBusinessId,venueId}=f.box,scope={organisationId,legalBusinessId};
+  await billing.execute(scope,event(),{type:'ensure_business'});
+  await billing.transition(scope,event(),{type:'set_venue',venueId,expectedRevision:0,
+   value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+  assert.equal((await f.publish()).state,'current');
+ }finally{await f.db.close();}
+});
+
+test('a lapse committed during the venue lock wait prevents republishing but allows withdrawal',async()=>{
+ const f=await delivery('test-venue-levels'),lock=await f.db.secondPool.connect();let pending:Promise<guest.GuestMenuView>|undefined;
+ try{
+  await startGuestMenuTrial(f.db.pool,f.box);
+  assert.equal((await f.publish()).state,'current');
+  const blocker=Number((await lock.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+  await lock.query('BEGIN');
+  await lock.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.box.venueId]);
+  await lock.query("UPDATE billing_trials SET state='lapsed' WHERE venue_id=$1",[f.box.venueId]);
+  pending=f.publish(f.text('<h1>Updated menu</h1>'),1);void pending.catch(()=>{});
+  await waitLock(f.db.pool,f.db.schema,'SELECT environment',blocker);
+  await lock.query('COMMIT');
+  await assert.rejects(pending,{message:'guest_menu_plan_required'});
+  assert.equal((await readGuestMenu(f.db.pool,f.box.venueId))?.html,'<h1>Menú</h1>');
+  assert.equal((await f.machine.execute('guest-menu-withdraw',f.proof('guest-menu-withdraw'))).state,'off');
   assert.equal(await readGuestMenu(f.db.pool,f.box.venueId),null);
  }finally{await lock.query('ROLLBACK');lock.release();await pending?.catch(()=>{});await f.db.close();}
 });

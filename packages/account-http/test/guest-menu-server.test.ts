@@ -5,6 +5,7 @@ import {once} from 'node:events';
 import {transaction} from '@waitron-cloud/registration';
 import {setGuestMenuBlocked} from '@waitron-cloud/remote-access/guest-menu';
 import {guestTlsFixture} from './fixtures/guest-menu.ts';
+import {startGuestMenuTrial} from '../../remote-access/test/fixtures/guest-menu.ts';
 import {startGuestMenuServer} from '../src/guest-menu-server.ts';
 const host='menus.example.test',origin=`https://${host}`;
 
@@ -141,6 +142,31 @@ test('a takedown committed while the copy is buffered prevents HTML from being r
  try{
   await buffered;await transaction(f.db.pool,c=>setGuestMenuBlocked(c,f.venueId,true,origin));release();
   const response=await reply;assert.equal(response.body.includes('<h1>'),false);assert.equal(response.status,404);
+ }finally{release();await reply.catch(()=>{});await running.close();await f.close();}
+});
+
+test('a test venue that expires while its menu is buffered releases no guest HTML',async t=>{
+ const f=await guestTlsFixture(),options={...f.options,planMode:'test-venue-levels' as const};
+ await f.seed();await startGuestMenuTrial(f.db.pool,{...f.owner,venueId:f.venueId});
+ const running=await startGuestMenuServer(options),address=running.server.address();assert(address&&typeof address!=='string');
+ let release!:()=>void,observed!:()=>void;const gate=new Promise<void>(r=>release=r),buffered=new Promise<void>(r=>observed=r);
+ const query=f.db.pool.query.bind(f.db.pool);let held=false;
+ t.mock.method(f.db.pool,'query',async(...args:any[])=>{
+  const result=await (query as (...args:any[])=>Promise<any>)(...args);
+  if(!held&&String(args[0]).startsWith('SELECT revision,default_language,pages')){held=true;observed();await gate;}
+  return result;
+ });
+ const path='/m/'+f.venueId,reply=f.send(address.port,path);
+ try{
+  await buffered;
+  const trial=(await f.db.pool.query(`UPDATE billing_trials SET started_on=(clock_timestamp() AT TIME ZONE 'UTC')::date-1,
+   ends_on=(clock_timestamp() AT TIME ZONE 'UTC')::date WHERE venue_id=$1 RETURNING ends_on::text`,[f.venueId])).rows[0];
+  release();
+  const refused=await reply;assert.equal(refused.status,404);assert.equal(refused.body.includes('<h1>Menu</h1>'),false);
+  const head=await f.send(address.port,path,'HEAD');assert.equal(head.status,404);assert.equal(head.body,'');
+  await f.db.pool.query('UPDATE billing_trials SET ends_on=$2::date+1 WHERE venue_id=$1',[f.venueId,trial.ends_on]);
+  const restored=await f.send(address.port,path);
+  assert.equal(restored.status,200);assert.equal(restored.body,'<h1>Menu</h1>');
  }finally{release();await reply.catch(()=>{});await running.close();await f.close();}
 });
 

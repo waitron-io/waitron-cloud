@@ -2,9 +2,10 @@ import {matchGuestMenuLanguage} from './guest-menu-match.ts';
 import {isGuestMenuLanguage} from './guest-menu-language.ts';
 import type {Pool,PoolClient} from 'pg';
 import {createHash} from 'node:crypto';
-import {createLeaseTrust,InstallationError,readMachineClaims,transaction,verifyMachine,verifyLease,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,effectiveVenueLevel,InstallationError,readMachineClaims,transaction,verifyMachine,verifyLease,type BillingLevel,type LeaseIssuer,type PlanMode,type TrialView} from '@waitron-cloud/registration';
 export interface GuestMenuView {
  version:1;url:string;revision:number;state:'off'|'current'|'blocked';
+ planRequired?:true;
  publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};
 }
 export async function guestMenuStatus(client:PoolClient,venueId:string,origin:string):Promise<GuestMenuView>{
@@ -34,9 +35,30 @@ export async function readGuestMenu(client:Pick<Pool,'query'>,venueId:string,lan
  return {html,revision:Number(row.revision),language:selected};
 }
 
+type GuestMenuRelease={revision:string|null;state:GuestMenuView['state']|null;eligible:boolean};
+export async function readGuestMenuRelease(client:Pick<Pool,'query'>,venueId:string,mode?:PlanMode):Promise<GuestMenuRelease|undefined>{
+ if(mode!=='test-venue-levels'){
+  return (await client.query<GuestMenuRelease>('SELECT revision,state,true AS eligible FROM guest_menus WHERE venue_id=$1',[venueId])).rows[0];
+ }
+ const row=(await client.query<Omit<GuestMenuRelease,'eligible'>&{environment:string;enrolled:boolean;level:BillingLevel;trials:TrialView[];today:string}>(`
+  SELECT m.revision,m.state,v.environment,a.venue_id IS NOT NULL AS enrolled,COALESCE(b.level,'registered') AS level,
+   (statement_timestamp() AT TIME ZONE 'UTC')::date::text AS today,
+   COALESCE((SELECT jsonb_agg(jsonb_build_object('level',t.level,'startedOn',t.started_on::text,'endsOn',t.ends_on::text,
+     'extended',t.extended,'state',t.state)) FROM billing_trials t
+     WHERE (t.organisation_id,t.legal_business_id,t.venue_id)=(a.organisation_id,a.legal_business_id,a.venue_id)),'[]'::jsonb) AS trials
+  FROM venues v
+  LEFT JOIN billing_service_authority a ON (a.organisation_id,a.legal_business_id,a.venue_id)=(v.organisation_id,v.legal_business_id,v.id)
+  LEFT JOIN billing_venues b ON (b.organisation_id,b.legal_business_id,b.venue_id)=(a.organisation_id,a.legal_business_id,a.venue_id)
+  LEFT JOIN guest_menus m ON m.venue_id=v.id
+  WHERE v.id=$1`,[venueId])).rows[0];
+ if(!row)return undefined;
+ const {revision,state,environment,enrolled,level,trials,today}=row;
+ return {revision,state,eligible:environment==='test'&&enrolled&&effectiveVenueLevel(level,trials,today)!=='registered'};
+}
+
 export type GuestMenuAction='guest-menu-publish'|'guest-menu-status'|'guest-menu-withdraw';
 export class GuestMenuError extends Error {
- readonly code:'invalid_input'|'forbidden'|'too_large'|'conflict'|'blocked';
+ readonly code:'invalid_input'|'forbidden'|'too_large'|'conflict'|'blocked'|'guest_menu_plan_required';
  constructor(code:GuestMenuError['code']){super(code);this.code=code;}
 }
 function fail(code:GuestMenuError['code']):never{throw new GuestMenuError(code);}
@@ -59,9 +81,9 @@ function publication(signed:string,body:string|undefined){
  return {revision:Number(value.expectedRevision),digest:value.bodySha256,defaultLanguage:menu.defaultLanguage,pages};
 }
 export class GuestMenuMachine {
- readonly #pool:Pool;readonly #origin:string;readonly #guestOrigin:string;readonly #trusted:ReadonlyMap<string,string>;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,guestOrigin:string,trusted=createLeaseTrust(issuer)){
-  this.#pool=pool;this.#origin=origin;this.#guestOrigin=guestOrigin;this.#trusted=trusted;
+ readonly #pool:Pool;readonly #origin:string;readonly #guestOrigin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #planMode?:PlanMode;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,guestOrigin:string,trusted=createLeaseTrust(issuer),planMode?:PlanMode){
+  this.#pool=pool;this.#origin=origin;this.#guestOrigin=guestOrigin;this.#trusted=trusted;this.#planMode=planMode;
  }
  async execute(action:GuestMenuAction,envelope:unknown,body?:string):Promise<GuestMenuView>{
   const routing=readMachineClaims(envelope);
@@ -82,10 +104,13 @@ export class GuestMenuMachine {
     return claims;
    };
    const claims=verify();
+   const planRequired=this.#planMode==='test-venue-levels'&&action!=='guest-menu-withdraw'
+    &&!(await readGuestMenuRelease(client,row.venue_id,this.#planMode))?.eligible;
    let current=await guestMenuStatus(client,row.venue_id,this.#guestOrigin);
    if(action==='guest-menu-publish'){
     const menu=publication(claims.body,body);
     if(current.state==='blocked')return fail('blocked');
+    if(planRequired)return fail('guest_menu_plan_required');
     if(current.state!=='current'||current.publication?.bodySha256!==menu.digest||current.publication.defaultLanguage!==menu.defaultLanguage){
      if(current.revision!==menu.revision)return fail('conflict');
      await client.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
@@ -99,7 +124,8 @@ export class GuestMenuMachine {
     if(action==='guest-menu-withdraw')await client.query(`UPDATE guest_menus SET revision=revision+1,state='off',source_installation_id=NULL,
      body_sha256=NULL,default_language=NULL,received_at=NULL,pages=NULL WHERE venue_id=$1 AND state='current'`,[row.venue_id]);
    }
-   current=await guestMenuStatus(client,row.venue_id,this.#guestOrigin);verify();return current;
+   current=await guestMenuStatus(client,row.venue_id,this.#guestOrigin);verify();
+   return planRequired?{...current,planRequired:true}:current;
   });
  }
 }

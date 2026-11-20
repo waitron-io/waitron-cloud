@@ -7,7 +7,7 @@ import {request,type ClientRequest} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startAccountServer} from '../src/server.ts';
 import type {HttpBindings} from '@hono/node-server';
-import {guestMenuFixture} from '../../remote-access/test/fixtures/guest-menu.ts';
+import {guestMenuFixture,startGuestMenuTrial} from '../../remote-access/test/fixtures/guest-menu.ts';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {readGuestMenu,setGuestMenuBlocked} from '@waitron-cloud/remote-access/guest-menu';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
@@ -42,11 +42,11 @@ test('only the venue owner with exact Origin and CSRF can stop and re-enable gue
 });
 
 const cloudOrigin='https://cloud.example.test',menuOrigin='https://menus.example.test';
-async function deliveryFixture(){
+async function deliveryFixture(planMode:'existing'|'test-venue-levels'='test-venue-levels'){
  const db=await database();
  const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
  const box=await connectedVenue(db,issuer,cloudOrigin);
- const options={pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,guestOrigin:menuOrigin,planMode:'test-venue-levels' as const,config:{portalOrigin:cloudOrigin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}};
+ const options={pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,guestOrigin:menuOrigin,planMode,config:{portalOrigin:cloudOrigin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}};
  const app=createAccountApp(options),bindings={incoming:{socket:{remoteAddress:'192.0.2.91'}}} as HttpBindings;
  const send=(action:string,envelope:unknown,headers:Record<string,string>={},method='POST')=>app.request(cloudOrigin+'/api/installations/guest-menu-'+action,{method,headers:{'content-type':'application/json',...headers},...(method==='GET'?{}:{body:JSON.stringify(envelope)})},bindings);
  const proof=(action:string,body:unknown={version:1})=>box.proof('guest-menu-'+action,body,randomUUID(),box.lease);
@@ -54,8 +54,8 @@ async function deliveryFixture(){
  return {db,issuer,box,options,app,send,proof,publish};
 }
 
-test('a free connected box delivers a durable copy and confirms the permanent link through signed routes',async()=>{
- const f=await deliveryFixture();try{
+test('a free connected box in legacy mode delivers a durable copy and confirms the permanent link through signed routes',async()=>{
+ const f=await deliveryFixture('existing');try{
   const body=JSON.stringify({defaultLanguage:'es',pages:{es:'<h1>Menú</h1>'}});
   const r=await f.send('publish',f.publish(body));assert.equal(r.status,200,await r.clone().text());
   const value=await r.json();assert.equal(value.url,menuOrigin+'/m/'+f.box.venueId);assert.equal(value.revision,1);assert.equal(value.state,'current');
@@ -65,6 +65,22 @@ test('a free connected box delivers a durable copy and confirms the permanent li
   assert.equal(r.headers.get('cache-control'),'no-store');
   const withdrawn=await f.send('withdraw',f.proof('withdraw'));assert.equal(withdrawn.status,200);assert.equal((await withdrawn.json()).state,'off');
   assert.equal(await readGuestMenu(f.db.pool,f.box.venueId),null);
+ }finally{await f.db.close();}
+});
+
+test('signed routes tell a box that its venue needs a trial or paid plan',async()=>{
+ const f=await deliveryFixture();try{
+  const body=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1>Menu</h1>'}});
+  const refused=await f.send('publish',f.publish(body));
+  assert.equal(refused.status,403);
+  assert.deepEqual(await refused.json(),{error:'guest_menu_plan_required'});
+  const status=await f.send('status',f.proof('status'));
+  assert.equal(status.status,200);
+  assert.deepEqual(await status.json(),{version:1,url:menuOrigin+'/m/'+f.box.venueId,revision:0,state:'off',publication:null,planRequired:true});
+  await startGuestMenuTrial(f.db.pool,f.box);
+  const eligible=await f.send('status',f.proof('status'));
+  assert.equal(eligible.status,200);
+  assert.equal((await eligible.json()).planRequired,undefined);
  }finally{await f.db.close();}
 });
 
@@ -79,6 +95,7 @@ test('delivery routes expose bounded, non-browser errors without changing the st
   assert.deepEqual(await error(await f.send('status',{payload:'x'.repeat(16385),signature:'y'})),[413,{error:'too_large'}]);
   assert.deepEqual(await error(await f.send('status',f.proof('status',{}))),[400,{error:'invalid_input'}]);
   const body=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1>Menu</h1>'}});
+  await startGuestMenuTrial(f.db.pool,f.box);
   assert.equal((await f.send('publish',f.publish(body))).status,200);
   assert.deepEqual(await error(await f.send('publish',f.publish(body+' '))),[409,{error:'conflict'}]);
   await transaction(f.db.pool,c=>setGuestMenuBlocked(c,f.box.venueId,true,menuOrigin));
@@ -109,6 +126,7 @@ test('four publish slots keep one per source, including encoded aliases, while a
   assert.deepEqual(await wire(address.port,'/api/installations/guest-menu-publish','{}',true,'192.0.2.10').result,{status:503,body:'{"error":"unavailable"}'});
   assert.equal((await wire(address.port,'/api/installations/guest-menu-%70ublish','{}',true,'192.0.2.10').result).status,503);
   const body=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1>Menu</h1>'}}),now=Date.now();
+  await startGuestMenuTrial(f.db.pool,f.box);
   const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.box.installationId,venueId:f.box.venueId,publicKey:f.box.installationKey,environment:'test',issuedAt:now,expiresAt:now+3600000});
   const proof=f.box.proof('guest-menu-publish',{version:1,expectedRevision:0,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},randomUUID(),lease,undefined,now,{origin});
   assert.equal((await wire(address.port,'/api/installations/guest-menu-publish',JSON.stringify({...proof,body}),true,'192.0.2.20').result).status,200);
@@ -137,6 +155,7 @@ test('the real HTTP server accepts an exact 2 MiB escaped publication and refuse
  const address=running.server.address();assert(address&&typeof address!=='string');
  const send=(envelope:unknown)=>wire(address.port,'/api/installations/guest-menu-publish',JSON.stringify(envelope),true,undefined,new URL(cloudOrigin).host).result;
  try{
+  await startGuestMenuTrial(f.db.pool,f.box);
   const empty=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1></h1>'}}),quotes='"'.repeat(Math.floor((2097152-Buffer.byteLength(empty))/2));
   let body=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1>'+quotes+'</h1>'}});body+=' '.repeat(2097152-Buffer.byteLength(body));
   assert.equal(Buffer.byteLength(body),2097152);assert(Buffer.byteLength(JSON.stringify(f.publish(body)))>3*1048576);

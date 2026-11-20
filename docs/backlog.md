@@ -707,9 +707,10 @@ The Amazon test proxy returns a retry response when the browser reuses the accou
 connection for the guest menu, or the reverse. The proxy fixture checks both
 directions over HTTP/2. After rollout, recheck the two pages and a fresh phone
 visit to the menu immediately after sharing starts.
-Production DNS and certificates remain open. Every venue connected to Cloud
-qualifies without a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
-cover variant publication. Live forwarding belongs to Waitron A509 online ordering.
+Qualify the Connected or Hosted trial and paid-plan gate with the box preview on the
+Amazon test Cloud. Production DNS, certificates and rollout remain open. The
+[remaining work](backlog/guest-menu.md) covers variant publication. Live forwarding
+belongs to Waitron A509 online ordering.
 
 ## Custom domains with one record, and names that follow the venue
 

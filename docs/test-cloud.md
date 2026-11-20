@@ -391,13 +391,15 @@ proxy with the new setting and updates the recorded container IDs. If `up`
 fails, it stops the recorded project containers. Unset the switch and rerun
 `up` with the same image to restore the account and gateway.
 
-After pairing Juniper Test Cafe, open **Guest menu preview** on the box and
-choose **Turn sharing on**. Open the published address on a phone using mobile
+After pairing Juniper Test Cafe, open **Billing** in Cloud and start its Connected
+trial. Then open **Guest menu preview** on the box and choose **Turn sharing on**. Open the published address on a phone using mobile
 data. In the Cloud portal, turn the guest menu off for the venue and confirm
 the same address returns 404. Turn sharing back on and immediately open the
 menu over mobile data in a fresh phone browser session that has opened neither
 site. Record the browser, first response and seconds until the menu opens.
-A 404 can persist until the box publishes. Record any 403 separately.
+A 404 can persist until the box publishes. Record any 403 separately. If the trial
+ends without a paid plan, the guest link returns 404. It opens again when the
+venue is eligible and the publication is still shared.
 
 In Chromium, open the account and then the published menu in one tab. Repeat in
 a fresh browser profile starting with the menu. Both pages should open in both

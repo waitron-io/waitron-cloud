@@ -2,7 +2,8 @@ import {guestMenuPreferences} from './guest-menu-preferences.ts';
 import {createServer} from 'node:https';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {Pool} from 'pg';
-import {readGuestMenu} from '@waitron-cloud/remote-access/guest-menu';
+import type {PlanMode} from '@waitron-cloud/registration';
+import {readGuestMenu,readGuestMenuRelease} from '@waitron-cloud/remote-access/guest-menu';
 import {isUuid} from '@waitron-cloud/remote-access/manifest';
 import {AccountRateLimiter} from './rate-limit.ts';
 import {clientAddress} from './client-address.ts';
@@ -13,7 +14,7 @@ export function validateGuestOrigin(value:string):string{
 }
 const headers={'cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
  'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};
-export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;origin:string;tls:{key:Buffer;cert:Buffer};port?:number;host?:string;trustedProxyIps?:readonly string[]}){
+export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;origin:string;tls:{key:Buffer;cert:Buffer};port?:number;host?:string;planMode?:PlanMode;trustedProxyIps?:readonly string[]}){
  const origin=validateGuestOrigin(options.origin),limiter=new AccountRateLimiter(options.pool,options.rateKey);let active=0;
  const respond=(res:ServerResponse,status:number,code:string)=>{
   if(res.destroyed)return;
@@ -39,9 +40,9 @@ export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;ori
    if(!rate.allowed){res.setHeader('retry-after',rate.retryAfterSeconds);respond(res,429,'limited');return;}
    const menu=await readGuestMenu(options.pool,id,language===undefined?guestMenuPreferences(req.headers['accept-language']):language);
    if(!menu){respond(res,404,'not_found');return;}
-   // A takedown that commits while the copy is buffered must be seen before releasing bytes.
-   const current=(await options.pool.query('SELECT revision,state FROM guest_menus WHERE venue_id=$1',[id])).rows[0];
-   if(current?.state!=='current'){respond(res,404,'not_found');return;}
+   // Recheck the publication and its eligibility together after buffering the bytes.
+   const current=await readGuestMenuRelease(options.pool,id,options.planMode);
+   if(current?.state!=='current'||!current.eligible){respond(res,404,'not_found');return;}
    if(Number(current.revision)!==menu.revision){respond(res,503,'unavailable');return;}
    if(!res.destroyed){res.writeHead(200,{...headers,'vary':'Accept-Language','content-type':'text/html; charset=utf-8','content-language':menu.language,'content-length':Buffer.byteLength(menu.html)});res.end(req.method==='HEAD'?undefined:menu.html);}
   }catch(error){respond(res,error instanceof AccountHttpError?error.status:503,error instanceof AccountHttpError?error.message:'unavailable');}

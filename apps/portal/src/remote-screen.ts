@@ -22,7 +22,11 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
  if(r.installationId!==id)return html`${trial}<wt-button id=${triggerId} .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${revokedAt?c.guestMenuTitle:c.remoteSetup}</wt-button>`;
  const disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  const menu=v?.guestMenu,menuStatusId='guest-menu-status-'+id;
- return html`${trial}<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
+ const menuPlanRequired=!!menu&&v?.connectedRequired===true;
+ const session=app.session.state;
+ const billingLink=session.kind==='authenticated'&&session.billingTrialAvailable
+  ?html`<p><a href="/account/billing" @click=${(event:MouseEvent)=>app.follow(event,'/account/billing')}>${c.billing}</a></p>`:nothing;
+ return html`${menuPlanRequired?nothing:trial}<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
   ${r.error?html`<p role=${r.error==='remoteProofRequired'?'status':'alert'}>${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
   ${r.error==='pairEnrollment'?html`<a href="/account" @click=${(event: MouseEvent) => app.openAccountSecurity(event)}>${c.accountSecurity}</a>`:r.error==='actionProofUnavailable'||r.error==='remoteProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
   ${r.error&&['remotePlanRequired','remoteSetupRequired','remoteTestOnly','remoteRevoked'].includes(r.error)?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.permissionBack}</a>`:nothing}
@@ -30,9 +34,10 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${v?html`<p role="status">${v.revoked?c.remoteRevoked:v.connectedRequired?c.remoteConnectedRequired:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
   ${menu?html`<section aria-label=${c.guestMenuTitle}><h5>${c.guestMenuTitle}</h5>
-   <p role="status" tabindex="-1" id=${menuStatusId}>${menu.state==='current'?c.guestMenuCurrent:menu.state==='blocked'?c.guestMenuBlocked:c.guestMenuOff}</p>
-   <p><a href=${menu.url} target="_blank" rel="noopener noreferrer">${c.guestMenuLink}</a></p>
-   ${menu.publication?html`<p><time datetime=${menu.publication.receivedAt}>${new Date(menu.publication.receivedAt).toLocaleString(app.locale)}</time></p>`:nothing}
+   <p role="status" tabindex="-1" id=${menuStatusId}>${menu.state==='blocked'?c.guestMenuBlocked:menuPlanRequired?c.guestMenuPlanRequired:menu.state==='current'?c.guestMenuCurrent:c.guestMenuOff}</p>
+   ${menuPlanRequired?html`${menu.state==='blocked'?html`<p>${c.guestMenuPlanRequired}</p>`:nothing}${canStart?trial:billingLink}`
+    :html`<p><a href=${menu.url} target="_blank" rel="noopener noreferrer">${c.guestMenuLink}</a></p>`}
+   ${menu.publication&&!menuPlanRequired?html`<p><time datetime=${menu.publication.receivedAt}>${new Date(menu.publication.receivedAt).toLocaleString(app.locale)}</time></p>`:nothing}
    ${menu.state==='off'?nothing:html`<wt-button .disabled=${disabled} @click=${async()=>{
      const block=menu.state==='current';
      await r.setGuestMenuBlocked(block);

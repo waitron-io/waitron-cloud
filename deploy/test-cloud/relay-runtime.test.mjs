@@ -12,6 +12,7 @@ import {createSession} from '../../packages/identity/src/index.ts';
 import {createLeaseIssuer,InstallationStore,transaction} from '../../packages/registration/src/index.ts';
 import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
 import {connectedVenue,database} from '../../packages/translation/test/fixtures.ts';
+import {startGuestMenuTrial} from '../../packages/remote-access/test/fixtures/guest-menu.ts';
 import {bootstrapTestCloudIdentity} from './bootstrap.mjs';
 import {bootstrapStorageIssuer} from './storage-issuer.mjs';
 import {loadRuntime} from '../local-stack/runtime.mjs';
@@ -113,7 +114,7 @@ test('the Amazon test account accepts a signed publication and closes its privat
  await prepareAccount(t,context);
  const host='menus.cloud.example.test',path='/m/'+box.venueId,html='<h1>Juniper test menu</h1>';
  const body=JSON.stringify({defaultLanguage:'en',pages:{en:html}});
- const signed=box.proof('guest-menu-publish',{version:1,expectedRevision:0,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},randomUUID(),box.lease);
+ const signed=box.proof('guest-menu-publish',{version:1,expectedRevision:1,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},randomUUID(),box.lease);
  const publish=running=>accountRequest(running,'/api/installations/guest-menu-publish',{...signed,body});
  const existing=await startAccount(db,context,{CLOUD_VENUE_SERVICE_LEVELS:'0'});
  assert.equal(await existing.close(),0);
@@ -127,9 +128,6 @@ test('the Amazon test account accepts a signed publication and closes its privat
  finally{await off.close();}
  const running=await startAccount(db,context,{GUEST_ORIGIN:'https://'+host,GUEST_HTTP_HOST:'127.0.0.1',GUEST_HTTP_PORT:'0'});
  try{
-  const result=await publish(running);
-  assert.equal(result.status,200,JSON.stringify(result.body));
-  assert.equal(result.body.url,'https://'+host+path);
   const ca=await readFile(join(context.directory,'lan/ca.pem'));
   const read=()=>new Promise((resolve,reject)=>{
    const req=requestHttps({host:'127.0.0.1',port:running.guestPort,servername:'waitron.local',ca,path,headers:{host}},res=>{
@@ -137,6 +135,13 @@ test('the Amazon test account accepts a signed publication and closes its privat
    req.on('error',reject);req.end();
   });
   assert.ok(running.guestPort>0);
+  await db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
+   VALUES($1,1,'current',$2,$3,'en',clock_timestamp(),$4)`,[box.venueId,box.installationId,'a'.repeat(64),{en:'<h1>Saved menu</h1>'}]);
+  assert.equal((await read()).status,404);
+  await startGuestMenuTrial(db.pool,box);
+  const result=await publish(running);
+  assert.equal(result.status,200,JSON.stringify(result.body));
+  assert.equal(result.body.url,'https://'+host+path);
   assert.deepEqual(await read(),{status:200,body:html});
   await running.close();
   await assert.rejects(read(),{code:'ECONNREFUSED'});

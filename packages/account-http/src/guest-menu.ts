@@ -40,7 +40,7 @@ export async function guestMenuDeliveryResponse(c:Context,machine?:GuestMenuMach
   if(Object.keys(parsed).sort().join(',')!==fields.join(',')||fields.some(k=>typeof parsed[k]!=='string'))throw new AccountHttpError(400,'invalid_input');
   return c.json(await machine.execute(action,{payload:parsed.payload,signature:parsed.signature},publish?parsed.body as string:undefined));
  }catch(error){
-  if(error instanceof GuestMenuError)throw new AccountHttpError(error.code==='blocked'?423:error.code==='conflict'?409:error.code==='forbidden'?403:error.code==='too_large'?413:400,error.code);
+  if(error instanceof GuestMenuError)throw new AccountHttpError(error.code==='blocked'?423:error.code==='conflict'?409:error.code==='forbidden'||error.code==='guest_menu_plan_required'?403:error.code==='too_large'?413:400,error.code);
   if(error instanceof InstallationError)throw new AccountHttpError(403,'forbidden');
   if(error instanceof AccountHttpError){if(error.status===413)throw new AccountHttpError(413,'too_large');throw error;}
   throw new AccountHttpError(503,'unavailable');
