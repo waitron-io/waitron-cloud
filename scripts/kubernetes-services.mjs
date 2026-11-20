@@ -282,7 +282,8 @@ export async function measureServiceRestart({restartAll, probes, checkStore, sto
       let failure;
       await assert.rejects(() => request(signal), error => {
         signal.throwIfAborted();
-        const code = error.code ?? error.cause?.code;
+        const code = error.code === 'ABORT_ERR' && error.cause?.name === 'TimeoutError' ?
+          'ETIMEDOUT' : error.code ?? error.cause?.code;
         failure = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH'].includes(code) ?
           code : /^integration\.(?:api_timeout|remote_probe_timeout)$/.test(error.message) ? error.message : undefined;
         assert.ok(failure !== undefined, 'services.cold_transport:' + name + ': ' + error.message);

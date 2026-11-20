@@ -174,9 +174,9 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
     limit.throwIfAborted();
     return limit;
   };
-  const run = (binary, args, input, cleanup, timeout, request) =>
+  const run = async (binary, args, input, cleanup, timeout, request) =>
     execute(binary, args, input, cleanup, timeout, active(cleanup, request));
-  const aws = (service, args, cleanup, request) => provider(service, args, cleanup, active(cleanup, request));
+  const aws = async (service, args, cleanup, request) => provider(service, args, cleanup, active(cleanup, request));
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
   assert.match(config.image, /^ami-[a-f0-9]{17}$/);
