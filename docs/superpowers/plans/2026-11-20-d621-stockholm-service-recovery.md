@@ -1,52 +1,51 @@
 # D621 run 9, PR 9 — Keep name lookups and the account process working through machine loss
 
-In disposable Linux Kind, repeat #1333’s publication-worker stop without waiting
-for DNS endpoint withdrawal. While Kubernetes still marks the stopped DNS
-replica ready, both survivors resolve the database Service name and open a fresh
-verified TLS connection to the unchanged primary. In the database-loss rehearsal,
-the same account process stays live during promotion and serves a database-backed
-request before the old primary’s machine rejoins.
+In disposable Linux Kind, both survivors resolve names and open new PostgreSQL
+connections while Kubernetes still lists the stopped machine’s DNS replica as
+ready. While the database primary’s machine is stopped, the account process
+stays live and serves a database-backed request once a standby takes over.
 
-1. Extend `spreadCoreDns` in `scripts/kubernetes-placement.mjs`, used by Kind
-   and the Stockholm launcher, to run three replicas with its existing hard
-   separation by machine. Allow one unavailable with no extra pod during rollout
-   so replacement can fit. Confirm a ready DNS endpoint on each of the three
-   expected machines before setting the DNS Service’s `internalTrafficPolicy` to
-   `Local`. This keeps traffic on the caller’s machine, even while the stopped
-   machine’s endpoint is advertised. A machine can lose DNS until its own DNS
-   pod recovers. Add failing placement, missing-endpoint and setup-order checks in
-   `scripts/kubernetes-node-loss.test.mjs` and update the mocked launcher in
-   `scripts/amazon-run.test.mjs`.
+1. In `scripts/kubernetes-placement.mjs`, extend `spreadCoreDns` to three
+   replicas with the existing hard separation by machine. Allow one unavailable
+   and no extra pod during rollout. Pass the expected machine names from
+   `scripts/kubernetes-node-loss.mjs` and `scripts/amazon-run.mjs`. After rollout,
+   set the DNS Service’s `trafficDistribution` to `PreferSameNode` and wait for a
+   ready endpoint with its own machine’s routing hint on each expected machine.
+   Kubernetes 1.34.3 enables this preference by default. Each survivor uses its
+   local replica during the stop. If a DNS pod is unavailable on a live machine,
+   its workloads can use ready replicas elsewhere. Add failing replica, routing
+   hint and setup-order checks in `scripts/kubernetes-node-loss.test.mjs`.
+   Update the mocked launcher in `scripts/amazon-run.test.mjs`.
 2. In `scripts/kubernetes-remote.mjs` and
-   `deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`, drop the DNS
-   withdrawal waiter. At the start of the existing stop, measure fresh lookups
-   and connections in parallel from the surviving account and worker pods,
-   with a ten-second limit inside the existing 90-second stop window. Record
-   DNS endpoint and primary samples around the probes. Require the dead replica
-   to be advertised across the probes so a late probe cannot qualify. Keep the
-   single renewal and revocation submissions, the signed publication checks and
-   their deadlines. Extend `scripts/kubernetes-remote.test.mjs` to check the
-   new result.
-3. In `packages/account-http/test/server.test.ts`, terminate the CLI child’s
-   uniquely tagged idle PostgreSQL connection. Require the same child to log
-   the fixed diagnostic, answer a fresh `/api/health/ready` with 200 and exit
-   cleanly on SIGTERM. Then change the idle-pool error handler in
-   `packages/account-http/src/server-cli.ts` to log and keep serving. The pool
-   has already discarded the failed client. Startup still checks the schema.
-   In-flight requests retain their normal failure handling.
-4. Extend the existing primary-stop leg in `scripts/kubernetes-database.mjs`
-   and its test. After migration, start the account CLI with synthetic settings
-   and verified database TLS on the surviving client’s machine. Warm its pool.
-   Sample `/api/health/live` across the stop and measure recovery of
-   `/api/health/ready` before rejoin, within the existing stop budget. Require
-   the same pod and container with no restart. Readiness can briefly return 503
-   during promotion. Keep the database commit and old-primary refusal checks.
+   `deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`, remove the DNS
+   withdrawal wait and the database-connection-timeout retry. In the existing
+   stop, use fresh processes on both survivors for ten independent service
+   lookups each, including an uncached missing Service name, and a new verified
+   TLS database connection per survivor. Give the probes ten seconds within the
+   existing 90-second stop. Record per-machine timing, the unchanged primary,
+   and the dead replica still advertised before and after the probes.
+   Keep the single renewal and revocation submissions, signed publication
+   assertions and deadlines. Extend `scripts/kubernetes-remote.test.mjs`.
+3. Add a PostgreSQL regression in `packages/account-http/test/server.test.ts`.
+   Terminate the uniquely tagged CLI child’s idle connection and require the
+   diagnostic, fresh readiness 200 from the same child and clean SIGTERM exit.
+   In `packages/account-http/src/server-cli.ts`, log the discarded connection
+   without exiting. Add an 11-second client query timeout alongside the
+   existing 10-second PostgreSQL statement timeout so a silent connection also
+   lets go. Keep startup schema validation and ordinary request failure
+   handling. Test Cloud’s separate Compose worker stays outside this slice.
+4. In `scripts/kubernetes-database.mjs` and its test, reuse the surviving client
+   machine for one minimal account CLI with synthetic settings and verified TLS.
+   Warm the connection to the old primary just before the kill. Sample liveness
+   and readiness concurrently with the existing stop checks, recording a bounded
+   failed database request or connection-loss diagnostic and the readiness 200
+   after promotion. Require the same pod and container with no restart and one
+   listening event. Remove the SQL proof’s DNS-failure retry. Keep acknowledged
+   commit, promoted write, and old-primary refusal checks.
 
 Run the named focused tests, the account regression through `scripts/test-postgres.mjs`,
-and `pnpm typecheck`. In disposable Linux with the candidate image IDs, run
-`TEST_KUBERNETES_REMOTE=1 node --test scripts/kubernetes-remote.test.mjs` and
-`TEST_KUBERNETES_DATABASE_LOSS=1 node --test scripts/kubernetes-database.test.mjs`.
-Record the measured results in `docs/aws-infrastructure.md` and `docs/backlog.md`.
-
-Estimate 150–220 implementation lines and 120–180 test lines. Cold restart stays
-in PR 10. Stockholm fault qualification and paid runs remain separate.
+and `pnpm typecheck`. In disposable Linux run the existing opt-in publication,
+database, storage and gateway-machine-stop tests with candidate images.
+Record times and remaining checks in `docs/aws-infrastructure.md` and `docs/backlog.md`.
+Estimate 180–250 implementation lines and 145–210 test lines. Cold restart is
+PR 10. Stockholm fault qualification and paid runs remain separate.
