@@ -138,31 +138,6 @@ test('a lost email-code submission reply starts a fresh sign-in instead of repla
   assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
 });
 
-test('the measured sign-in replaces a stranded challenge after one mail claim window', async () => {
-  const {createObserverLogin} = await load();
-  let clock = 0, starts = 0;
-  const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic', cookie: 'recognised',
-    replaceStranded: true, now: () => clock,
-    mailbox: async () => ({messages: starts ? [{ID: 'old-delivery'}] : []}),
-    readMail: async (_email, seen) => {
-      if (starts === 1) throw Error('mail stranded');
-      assert.ok(seen.has('old-delivery'));
-      return {Text: '\n123456\n'};
-    },
-    api: async (path, body) => {
-      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
-      assert.equal(body.challengeToken, 'challenge-2');
-      return {status: 200};
-    }});
-  await assert.rejects(login(), /mail stranded/);
-  clock = 59_999;
-  await assert.rejects(login(), /mail stranded/);
-  assert.equal(starts, 1);
-  clock = 60_000;
-  assert.deepEqual(await login(), {status: 200});
-  assert.equal(starts, 2);
-});
-
 for (const replacementStatus of [200, 401, undefined]) test(
   'a replaced sign-in handles late mail with replacement status ' + replacementStatus, async () => {
   const {createObserverLogin} = await load();
@@ -170,9 +145,10 @@ for (const replacementStatus of [200, 401, undefined]) test(
   const messages = [{ID: 'stranded', Text: '\n100001\n'}];
   if (replacementStatus) messages.push({ID: 'replacement', Text: '\n100002\n'}, {ID: 'surplus', Text: '\n100003\n'});
   const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
-    replaceStranded: true, now: () => clock, mailbox: async () => ({messages: []}),
+    replaceStranded: true, now: () => clock, mailbox: async () => ({messages: starts ? [{ID: 'already-delivered'}] : []}),
     async readMail(_email, seen) {
       if (starts === 1) throw Error('mail stranded');
+      assert.ok(seen.has('already-delivered'));
       const message = messages.find(message => !seen.has(message.ID));
       if (!message) throw Error('integration.mail_missing');
       return message;
@@ -184,6 +160,9 @@ for (const replacementStatus of [200, 401, undefined]) test(
       return {status: body.code === '100002' ? replacementStatus : 401};
     }});
   await assert.rejects(login(), /mail stranded/);
+  clock = 59_999;
+  await assert.rejects(login(), /mail stranded/);
+  assert.equal(starts, 1);
   clock = 60_000;
   assert.deepEqual(await login(), {status: replacementStatus ?? 401});
   assert.equal(completions, replacementStatus ? 2 : 1);

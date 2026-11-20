@@ -13,7 +13,7 @@ import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, serv
 import {installStockholmDatabase} from './kubernetes-data.mjs';
 import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
 import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
-import {runStoreHeal, storageBucket, storageClient, storeMetrics, waitForStoreDrives} from './kubernetes-storage-proof.mjs';
+import {healRejoinedStore, storageBucket, storageClient, storeMetrics, waitForStoreDrives} from './kubernetes-storage-proof.mjs';
 import {storeNodePort, waitForStore} from './kubernetes-storage.mjs';
 import {meshNodeAddress} from './kubernetes-outside.mjs';
 import {kindHoldMs} from './kubernetes-node-loss.mjs';
@@ -418,8 +418,8 @@ export async function runKubernetesServices(context) {
             const ordinal = names.indexOf(name) * 2, node = context.nodes.find(row => row.name === name);
             const drives = await waitForStoreDrives(limit => storeMetrics(node.ip, store, limit),
               ['store-' + ordinal, 'store-' + (ordinal + 1)], repair);
-            await runStoreHeal({node, account: store, run, signal: repair}, false);
-            return {primary, drives, storeRepairedOn: name};
+            const storeRepairAttempts = await healRejoinedStore({node, account: store, run, signal: repair});
+            return {primary, drives, storeRepairedOn: name, storeRepairAttempts};
           },
           reconcile: (node, roles, survivors, fault) => measureServiceRecovery({
             node, roles, survivors, fault, writablePrimary, proveGit: outside.proveSurviving, publication: probes.publication,

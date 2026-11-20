@@ -295,6 +295,7 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
       assert.equal(leg.reconciliation.outsideStore, true);
       assert.match(leg.reconciliation.flux.appliedRevision, /^[a-f0-9]{40}$/);
       assert.equal(leg.rejoin.storeRepairedOn, leg.stopped);
+      assert.ok(Number.isInteger(leg.rejoin.storeRepairAttempts) && leg.rejoin.storeRepairAttempts > 0);
       if (leg.roles.primary === leg.stopped) assert.ok(leg.reconciliation.publication.worker.uid);
     }
     console.log('D621 measured stop receipt ' + JSON.stringify(legs.map(({samples, ...leg}) => ({...leg, probes: samples.length}))));
