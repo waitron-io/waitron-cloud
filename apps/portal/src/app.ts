@@ -448,7 +448,7 @@ export class PortalApp {
     const link = this.setupPairing;
     if (!link || this.pending) return;
     const route = this.#route;
-    this.error = undefined;
+    if (!resume) this.error = undefined;
     this.pending = true;
     this.draw();
     const {requestId, state} = link;

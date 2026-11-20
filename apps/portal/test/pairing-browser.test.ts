@@ -141,6 +141,7 @@ for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing return
     await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
     await page.getByText(c.passkeyAdded, {exact: true}).waitFor();
     const earlierSession = await context.cookies();
+    await context.clearCookies();
 
     const store = new SetupPairingStore(f.db.pool);
     const requestId = randomUUID(), state = randomBytes(32).toString('base64url');
@@ -159,7 +160,18 @@ for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing return
       await page.screenshot({path: new URL(`../dist/setup-pairing-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname});
     }
     await page.route('https://box.example.test/**', route => route.fulfill({contentType: 'text/plain', body: 'Waitron'}));
+    const authorizePath = '**/api/account/pairing/authorize';
+    await page.route(authorizePath, route => route.fulfill({status: 403, json: {error: 'permission_denied'}}));
     await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
+    const refusal = page.getByText(c.pairUnavailable, {exact: true});
+    await refusal.waitFor();
+    const refreshed = page.waitForResponse('**/api/account/session');
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await (await refreshed).finished();
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    assert.ok(await refusal.isVisible());
+    await page.unroute(authorizePath);
+    await page.goto(start.authorizationUrl);
     await page.waitForURL('https://box.example.test/cloud/pairing/callback?**');
     assert.equal(context.pages().length, 1);
     const originalReturn = new URL(page.url());
