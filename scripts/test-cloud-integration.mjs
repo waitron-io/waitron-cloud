@@ -507,7 +507,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       const response = await fetchInbox(path, signal);
       if (services) assert.equal(response.status, 200, 'integration.inbox_read');
       const value = parseIntegrationJson(await response.text());
-      const worker = response.headers.get('x-rehearsal-mail-worker');
+      const worker = measured ? response.headers.get('x-rehearsal-mail-worker') : undefined;
       return worker ? {...value, worker} : value;
     };
     if (services) {
