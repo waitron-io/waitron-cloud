@@ -186,6 +186,20 @@ test('outside baseline requires the owned private route, inbox, peer and verifie
   }
 });
 
+test('the outside signup check retries a failed inbox read', async () => {
+  const {readOutsideSignupMail} = await load();
+  assert.equal(typeof readOutsideSignupMail, 'function');
+  let reads = 0;
+  const token = 'a'.repeat(43);
+  assert.equal(await readOutsideSignupMail(async (_email, seen, signal) => {
+    assert.equal(seen.size, 0);
+    assert.ok(!signal.aborted);
+    if (++reads === 1) throw new DOMException('mailbox read timed out', 'TimeoutError');
+    return {Text: 'https://cloud.example.test:3000/signup#token=' + token};
+  }, 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000)), token);
+  assert.equal(reads, 2);
+});
+
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {
   const {readSignupToken} = await load();
   assert.equal(typeof readSignupToken, 'function', 'the authenticated rehearsal needs to read the signup link');

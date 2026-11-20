@@ -416,6 +416,7 @@ test('the outside stop uses a surviving Kubernetes API and its original TLS iden
     return result;
   }, outsideServices: true, services: async ({nodes, stopNode, kube, kubeTarget}) => {
     await stopNode(nodes[0].name, {whileStopped: async options => {
+      assert.equal(options.timeout, 185_000, 'the outside smoke window covers the later reads as well as account recovery');
       await kube(['get', 'nodes', '-o', 'json', '--selector=service-proof'], options);
       assert.deepEqual(kubeTarget().slice(2), ['--server=https://172.30.250.3:6443', '--tls-server-name=127.0.0.1']);
     }});

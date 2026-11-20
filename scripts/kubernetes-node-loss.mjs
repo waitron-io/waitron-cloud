@@ -198,7 +198,8 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       await docker(['update', '--restart=no', node.id]);
       const started = performance.now();
       await docker(['kill', '--signal=SIGKILL', node.id]);
-      const failover = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(90_000)]), timeout: 95_000};
+      const limit = outsideServices ? 180_000 : 90_000;
+      const failover = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(limit)]), timeout: limit + 5000};
       async function expectStopped() {
         const {State} = await verifyContainer(node.id, failover);
         assert.ok(!State.Running && !State.Restarting, 'node_loss.container_still_running');

@@ -197,6 +197,11 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
+export async function readOutsideSignupMail(readMail, recipient, origin, signal) {
+  const message = await untilRemote(limit => readMail(recipient, new Set(), limit), 90_000, signal, 'outside_signup_mail');
+  return readSignupToken(message.Text, origin);
+}
+
 export async function runTestCloudClients(options = {}) {
   const waitronTunnelImage = options.waitronTunnelImage ??
     (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
@@ -661,8 +666,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               const recipient = 'integration-stop-' + randomUUID() + '@example.test';
               assert.equal((await api('/api/account/signup/request', {email: recipient}, {}, ca, cloudHostname, signal)).status,
                 202, 'integration.fault_mail_request');
-              const message = await readMail(recipient, new Set(), signal);
-              readSignupToken(message.Text, origin);
+              await readOutsideSignupMail(readMail, recipient, origin, signal);
               process.stderr.write('Outside Kind signup mail received during stop\n');
               const saved = parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
                 points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
