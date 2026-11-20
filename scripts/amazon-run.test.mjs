@@ -243,7 +243,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
@@ -258,6 +258,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const measuredStops = cold || ['baseline measured stops', 'baseline deadline'].includes(scenario), restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100;
   const roles = ['A', 'B', 'C'], ids = roles.map(role => output[role]);
+  const diskMarkers = new Map();
   const publicAfter = ['203.0.113.11', '203.0.113.12', '203.0.113.13'];
   if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
   const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
@@ -358,7 +359,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
             InstanceId: ids[index], State: {Name: allState},
             PublicIpAddress: restarted ? publicAfter[index] : output['Address' + role],
             PrivateIpAddress: output['Private' + role],
-            BlockDeviceMappings: [{DeviceName: '/dev/xvda', Ebs: {VolumeId: 'vol-0000000000000000' + index}}],
+            BlockDeviceMappings: [{DeviceName: '/dev/xvda', Ebs: {VolumeId: 'vol-0000000000000000' +
+              (restarted && scenario.endsWith('volumes changed') ? 9 : index)}}],
           })).reverse()}]});
         }
         return '';
@@ -370,8 +372,12 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       }]}]});
       assert.ok(['create-stack', 'start-instances', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);
       return '';
-    }, run: async (binary, args, input, cleanup, timeout) => {
+    }, run: async (binary, args, input, cleanup, timeout, request) => {
       if (!cleanup) stop.signal.throwIfAborted();
+      if (cold && binary === 'sudo' && args.includes('wg') && args.includes('set')) {
+        assert.equal(cleanup, false, 'refreshing a live route is bounded ordinary work');
+        assert.equal(request?.aborted, false);
+      }
       calls.push([binary, ...args]);
       if (['ssh','scp'].includes(binary)) {
         const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
@@ -397,6 +403,13 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if (cold && script.includes("'cold-scratch-witness'")) {
+          const index = Number(args.at(-2).at(-1)) - 1;
+          const role = ids[index];
+          assert.ok(script.endsWith("'" + role + "'"));
+          if (script.includes("'cold-scratch-witness' 'write'")) diskMarkers.set(role, script.split("'").at(-2));
+          else assert.equal(diskMarkers.get(role), role, 'read the original marker from that machine');
+        }
         if (cold && script.includes('/proc/sys/kernel/random/boot_id')) {
           return '00000000-0000-4000-8000-00000000000' + (restarted ? '2' : '1');
         }
@@ -473,9 +486,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const closes = transports.filter(row => row.args.includes('-O'));
   if (scenario === 'failed creation') assert.deepEqual(transports, []);
   else {
-    assert.deepEqual(closes.map(row => row.args.at(-1)), cold && restarted ?
+    assert.deepEqual(closes.map(row => row.args.at(-1)), cold && restarted && !expectedError ?
       ['203.0.113.1', '203.0.113.2', '203.0.113.3', ...publicAfter].map(ip => 'admin@' + ip) :
-      restarted && measuredStops ? ['admin@203.0.113.3', 'admin@203.0.113.1', 'admin@203.0.113.2', 'admin@' + restartedAddress] :
+      !cold && restarted && measuredStops ? ['admin@203.0.113.3', 'admin@203.0.113.1', 'admin@203.0.113.2', 'admin@' + restartedAddress] :
       ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
     assert.ok(closes.every(row => row.cleanup === true && row.args.includes('exit')));
     assert.ok(closes.every(row => row.socketDirectoryPresent), 'socket directory remains until every master is closed');
@@ -501,6 +514,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     if (start >= 0) assert.ok(stopped < outage && outage < start);
     if (!expectedError) {
       assert.equal(result.removed, true);
+      assert.deepEqual([...diskMarkers.values()].sort(), ids);
+      assert.deepEqual(transports.filter(row => row.args.at(-1).includes("'cold-scratch-witness' 'read'"))
+        .map(row => row.args.at(-2)).sort(), publicAfter.map(ip => 'admin@' + ip));
       for (const ip of publicAfter) {
         assert.ok(calls.some(row => row[0] === 'sudo' && row.includes('wg') && row.includes(ip + ':51821')));
         assert.ok(transports.some(row => row.args.at(-2) === 'admin@' + ip && row.args.at(-1).includes("'verifier-scratch' 'check'")));
@@ -860,14 +876,19 @@ test('outside host binds three individual mesh routes and removes only its own i
   const publicKey = Buffer.alloc(32, 2).toString('base64');
   const peers = [3, 4, 5].map(value => ({endpoint: '192.0.2.' + value,
     publicKey: Buffer.alloc(32, value).toString('base64')}));
-  const calls = [];
+  const calls = [], signal = new AbortController().signal;
   const mesh = await outside.startOutsideMesh({directory, peers, async prepareNodes(key) {
     assert.equal(key, publicKey);
     calls.push('nodes ready');
-  }, async run(binary, args, input, cleanup) {
+  }, async run(binary, args, input, cleanup, timeout, request) {
     if (binary === 'wg') return args[0] === 'genkey' ? privateKey : publicKey;
     calls.push([binary, ...args]);
-    assert.equal(cleanup, true, 'an interrupted command must not strand an interface');
+    if (args[1] === 'wg') {
+      assert.equal(cleanup, false, 'a live route refresh must follow its own deadline');
+      assert.equal(request, signal);
+    } else {
+      assert.equal(cleanup, true, 'an interrupted command must not strand an interface');
+    }
   }});
   assert.match(mesh.interfaceName, /^d621[a-f0-9]{11}$/);
   const config = join(directory, mesh.interfaceName + '.conf');
@@ -878,7 +899,7 @@ test('outside host binds three individual mesh routes and removes only its own i
     '',
   ].join('\n'));
   assert.deepEqual(calls, ['nodes ready', ['sudo', '-n', 'wg-quick', 'up', config]]);
-  await (mesh.refreshEndpoint ?? (() => {}))(1, '192.0.2.24');
+  await mesh.refreshEndpoint(1, '192.0.2.24', signal);
   assert.deepEqual(calls.at(-1), ['sudo', '-n', 'wg', 'set', mesh.interfaceName, 'peer', peers[1].publicKey,
     'endpoint', '192.0.2.24:51821']);
   await mesh.close();

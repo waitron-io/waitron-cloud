@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync} from 'node:crypto';
 import test from 'node:test';
+import {once} from 'node:events';
+import {createServer} from 'node:net';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -101,6 +103,16 @@ test('the full restart requires healthy routes, fresh transport failures and rec
       assert.equal(result.backup.pointId, 'new');
     }
   }
+});
+
+test('the outside store probe reports a closed connection before TLS can start', async t => {
+  const listener = createServer(socket => socket.destroy());
+  listener.listen(0, '127.0.0.1');
+  t.after(() => listener.close());
+  await once(listener, 'listening');
+  await assert.rejects(async () => servicesScript.readOutsideStore({
+    host: '127.0.0.1', port: listener.address().port, signal: t.signal,
+  }), {code: 'ECONNRESET'});
 });
 
 test('Git recovery starts while the database is moving and finishes before measuring a stable publication worker', async () => {

@@ -4,7 +4,7 @@ import {fluxImages,prepareFluxBundle} from './kubernetes-git.mjs';
 import {installStockholmStore, storeBuildArgs} from './kubernetes-storage.mjs';
 import {meshNodeAddress, outsideNodePeer, outsidePublication, startOutsideMesh} from './kubernetes-outside.mjs';
 import {cleanUp} from './kubernetes-database.mjs';
-import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
+import {servicesNamespace, verifierScratchPath} from '../deploy/kubernetes/services.mjs';
 import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
 import {selectSurvivingNode, untilRemote} from './kubernetes-remote.mjs';
@@ -438,7 +438,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
                 await run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + hosts[index]], undefined, true).catch(() => {});
                 hosts[index] = endpoint;
               }
-              await mesh.refreshEndpoint(index, endpoint);
+              await mesh.refreshEndpoint(index, endpoint, stopSignal);
               await untilRemote(async signal => {
                 if (await kubeOn(index, ['get', '--raw=/readyz'], {signal, timeout: 5000}) !== 'ok') return false;
                 return Date.parse(await heartbeat(signal)) > before;
@@ -462,6 +462,14 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
             return target.instances.map(id => byId.get(id));
           };
           const bootId = (index, request) => ssh(index, ['cat', '/proc/sys/kernel/random/boot_id'], undefined, 15_000, request);
+          const scratchWitness = (index, phase, request) => ssh(index, ['sudo', 'sh', '-ec', `
+            marker=$2/.d618-cold-restart
+            if [ "$1" = write ]; then
+              umask 077
+              printf '%s\n' "$3" > "$marker"
+            else
+              test "$(cat "$marker")" = "$3"
+            fi`, 'cold-scratch-witness', phase, verifierScratchPath, target.instances[index]], undefined, 15_000, request);
           const heartbeat = async (index, request) => Date.parse(JSON.parse(await kubeOn(index,
             ['-n', 'kube-node-lease', 'get', 'lease', target.nodes[index], '-o', 'json'], {signal: request})).spec.renewTime);
           const admit = () => assert.ok(now() <= singleStopDeadline, 'amazon.cold_restart_late');
@@ -476,6 +484,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           }
           const oldBoot = await Promise.all(indexes.map(index => bootId(index, limit)));
           assert.ok(oldBoot.every(id => /^[0-9a-f-]{36}$/.test(id)), 'amazon.cold_restart_boot_id');
+          await Promise.all(indexes.map(index => scratchWitness(index, 'write', limit)));
           const oldLeases = await Promise.all(indexes.map(index => heartbeat(index, limit)));
           assert.ok(oldLeases.every(Number.isFinite), 'amazon.cold_restart_lease');
           admit();
@@ -508,13 +517,14 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           await Promise.all(hosts.map(host =>
             run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + host], undefined, true).catch(() => {})));
           hosts = endpoints;
-          for (const index of indexes) await mesh.refreshEndpoint(index, hosts[index]);
+          for (const index of indexes) await mesh.refreshEndpoint(index, hosts[index], boot);
           await Promise.all(indexes.map(async index => {
             await untilRemote(async request => {
               if (await instanceIdentity(index, request) !== target.instances[index]) return false;
               const id = await bootId(index, request);
               if (!/^[0-9a-f-]{36}$/.test(id) || id === oldBoot[index]) return false;
               await scratch(index, 'check', request);
+              await scratchWitness(index, 'read', request);
               bootTimesMs[nodes[index].name] ??= Math.round(performance.now() - bootStarted);
               return await heartbeat(index, request) > oldLeases[index] &&
                 await kubeOn(index, ['get', '--raw=/readyz'], {signal: request, timeout: 5000}) === 'ok';

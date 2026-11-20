@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash, randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
+import {get} from 'node:https';
 import {join} from 'node:path';
 import {createRequire} from 'node:module';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -255,6 +256,18 @@ export async function measureServiceRecovery({node, roles, survivors, fault, wri
   return {...database, publication: renewed, outsideStore, flux};
 }
 
+export function readOutsideStore({host, port = 9000, ca, signal}) {
+  return new Promise((resolve, reject) => {
+    const request = get({host, port, ca, signal, servername: servicesStoreHost, agent: false,
+      path: '/minio/health/cluster'}, response => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    request.once('error', reject);
+    request.setTimeout(3000, () => request.destroy(Object.assign(Error('services.store_connection_timeout'), {code: 'ETIMEDOUT'})));
+  });
+}
+
 export async function measureServiceRestart({restartAll, probes, checkStore, storeOutage, restore, prepare, signal}) {
   const healthy = limit => Promise.all([probes.session(limit), probes.remote(limit), checkStore(limit)]);
   await untilRemote(async limit => {await healthy(limit); return true;}, 30_000, signal, 'cold_services_before');
@@ -267,7 +280,7 @@ export async function measureServiceRestart({restartAll, probes, checkStore, sto
       await assert.rejects(() => request(signal), error => {
         signal.throwIfAborted();
         const code = error.code ?? error.cause?.code;
-        failure = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 7, 28].includes(code) ?
+        failure = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH'].includes(code) ?
           code : /^integration\.(?:api_timeout|remote_probe_timeout)$/.test(error.message) ? error.message : undefined;
         assert.ok(failure !== undefined, 'services.cold_transport:' + name + ': ' + error.message);
         return true;
@@ -434,7 +447,8 @@ export async function runKubernetesServices(context) {
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
         stockholmRemote: remoteTarget, verifier, amazon, signal,
         ...(restartAll && {restartServices: probes => measureServiceRestart({
-          restartAll, probes, checkStore: outsideStore, storeOutage: outsideStore, signal,
+          restartAll, probes, checkStore: outsideStore, signal,
+          storeOutage: signal => readOutsideStore({host: remoteTarget.gatewayIp, ca: store.ca, signal}),
           prepare: () => prepareDatabaseWitness({kube: context.kube, signal}),
           async restore(witness) {
             const started = performance.now();
