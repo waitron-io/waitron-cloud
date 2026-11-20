@@ -200,6 +200,31 @@ test('the outside signup check retries a failed inbox read', async () => {
   assert.equal(reads, 2);
 });
 
+test('the outside backup inspection retries one storage deadline and stops', async () => {
+  const {readOutsideRetainedBackup} = await load();
+  assert.equal(typeof readOutsideRetainedBackup, 'function');
+  const timeout = Error('kubectl exec failed\n  Error: backup.cancelled\ncommand terminated with exit code 1');
+  const signal = AbortSignal.timeout(5000);
+  let calls = 0;
+  assert.equal(await readOutsideRetainedBackup(async () => {
+    if (++calls === 1) throw timeout;
+    return 'retained evidence';
+  }, signal), 'retained evidence');
+  calls = 0;
+  await assert.rejects(readOutsideRetainedBackup(async () => {calls++; throw timeout;}, signal), error => error === timeout);
+  assert.equal(calls, 2);
+});
+
+test('the outside backup inspection immediately reports an integrity failure', async () => {
+  const {readOutsideRetainedBackup} = await load();
+  assert.equal(typeof readOutsideRetainedBackup, 'function');
+  const mismatch = Error('kubectl exec failed\nAssertionError: original digest changed');
+  let calls = 0;
+  await assert.rejects(readOutsideRetainedBackup(async () => {calls++; throw mismatch;}, AbortSignal.timeout(5000)),
+    error => error === mismatch);
+  assert.equal(calls, 1);
+});
+
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {
   const {readSignupToken} = await load();
   assert.equal(typeof readSignupToken, 'function', 'the authenticated rehearsal needs to read the signup link');

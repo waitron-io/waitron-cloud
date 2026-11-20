@@ -202,6 +202,17 @@ export async function readOutsideSignupMail(readMail, recipient, origin, signal)
   return readSignupToken(message.Text, origin);
 }
 
+export async function readOutsideRetainedBackup(read, signal) {
+  signal.throwIfAborted();
+  try {return await read();}
+  catch (error) {
+    if (!/^\s*Error: backup\.cancelled\s*$/m.test(error.message)) throw error;
+    signal.throwIfAborted();
+    process.stderr.write('Outside Kind stored backup read timed out, retrying once\n');
+    return read();
+  }
+}
+
 export async function runTestCloudClients(options = {}) {
   const waitronTunnelImage = options.waitronTunnelImage ??
     (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
@@ -668,9 +679,10 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                 202, 'integration.fault_mail_request');
               await readOutsideSignupMail(readMail, recipient, origin, signal);
               process.stderr.write('Outside Kind signup mail received during stop\n');
-              const saved = parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
-                points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
-              }));
+              const saved = parseIntegrationJson(await readOutsideRetainedBackup(() =>
+                accountPhase('inspect-retained-snapshot', {
+                  points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
+                }), signal));
               assert.deepEqual(saved, {retainedSnapshotUnchanged: true}, 'integration.fault_snapshot_changed');
               return {session: true, mail: true, retainedObject: true};
             }));
