@@ -127,7 +127,7 @@ test('the rejoined store retries reported offline shards and refuses exhausting 
     let attempts = 0;
     const run = mockRepair([], async (_binary, args) => JSON.stringify(args[args.indexOf('--data-binary') + 1] ?
       {clientToken: 'fixture:' + ++attempts} : {Summary: 'finished',
-        Items: [{type: 'object', after: {drives: [{state: reports[attempts - 1]}]}}]}));
+        Items: [{type: 'object', object: 'fixture-object', after: {drives: [{state: reports[attempts - 1]}]}}]}));
     const repair = () => storage.healRejoinedStore({node: repairEndpoint, account: repairAccount, run,
       signal: AbortSignal.timeout(5000)});
     if (reports.length === 2) assert.equal(await repair(), 2);

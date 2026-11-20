@@ -1365,7 +1365,9 @@ inbox receives fresh mail, a publication worker completes new work and a new
 backup verification finishes. The publication check starts after Git finishes
 rolling that worker, and its time is measured from the start of the stop.
 Before the next stop, the run checks for one writable PostgreSQL primary and
-six online drives through both returning store peers, then runs bucket repair.
+six online drives through both returning store peers. It logs how many repair
+attempts each rejoin takes and fails if any reported object shard still needs
+repair after three attempts.
 
 For a separately authorised Amazon baseline, run `node scripts/amazon-run.mjs baseline`
 with the private `D618_CONFIG` on the test host. The launcher selects a healthy

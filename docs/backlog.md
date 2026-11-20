@@ -1812,10 +1812,9 @@ implementation or production evidence.
   and MinIO. The [measured outside rehearsal](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
   checks the same venue, account and tunnel during each stop. It records account,
   HTTPS, backup and Git recovery times, and when surviving workers complete new
-  work. Each rejoin checks the returning store peers and runs bucket repair.
-  On the private Linux run, some objects still listed an offline shard after
-  repair. Object repair through consecutive stops and Stockholm measurements
-  remain open.
+  work. Each rejoin checks the returning store peers and requires the repair
+  report to clear offline or missing shards before the next stop. Stockholm
+  still needs its own measurements.
   The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
   During the worker machine stop, the survivor reused the saved certificate and
