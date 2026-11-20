@@ -1222,18 +1222,6 @@ installer. PostgreSQL writes its data on the node where each copy runs. The
 test checks that all three copies are ready and that each node has its own
 bound volume and PostgreSQL data files. This check needs no Cloud image.
 
-### Rehearse an all-node cold restart in private Kind
-
-Run `TEST_KUBERNETES_COLD_RESTART=1 node --test scripts/kubernetes-cold-restart.test.mjs`
-on the same disposable Linux host. The check uses the pinned Kind, CloudNativePG
-and PostgreSQL images. It needs no Cloud image. It stops all three nodes, probes
-the original Kubernetes API address from the host, and requires the API outage
-before starting the same containers at their original addresses. It then checks
-fresh node heartbeats, the original etcd membership, and a marker on each
-PostgreSQL disk. PostgreSQL must return the previously committed row and accept
-and return a fresh write. The full Stockholm check still needs to run from an
-outside host with the real service clients.
-
 The bounded Stockholm launcher waits for the three control planes, the network
 proxy rollout and the DNS rollout before starting PostgreSQL in the `d621-data`
 namespace. The Kind rehearsal and the launcher put a CoreDNS replica on each
@@ -1277,6 +1265,18 @@ for all six peers after joining the three machines. It runs the store in
 `d621-store` with disposable credentials. The legacy fixture keeps its existing
 store. Use the production-mode Kind rehearsal below to exercise the Cloud
 services against the replicated database and store while all three nodes are up.
+
+### Rehearse an all-node cold restart in private Kind
+
+Run `TEST_KUBERNETES_COLD_RESTART=1 node --test scripts/kubernetes-cold-restart.test.mjs`
+on the same disposable Linux host. The check uses the pinned Kind, CloudNativePG
+and PostgreSQL images. It needs no Cloud image. It stops all three nodes, probes
+the original Kubernetes API address from the host, and requires the API outage
+before starting the same containers at their original addresses. It then checks
+fresh node heartbeats, the original etcd membership, and a marker on each
+PostgreSQL disk. PostgreSQL must return the previously committed row and accept
+and return a fresh write. The full Stockholm check still needs to run from an
+outside host with the real service clients.
 
 ### Rehearse signup, pairing and backup on a healthy Kind cell
 

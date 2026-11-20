@@ -1827,8 +1827,11 @@ implementation or production evidence.
   gateway rejoined without its old WireGuard interface or readiness marker.
   The socket test followed a changed backend address and switched nodes
   without changing the listener ports. Real Stockholm gateway loss and
-  address changes, replicated publication, shared ingress and cold restart
-  remain open.
+  address changes, replicated publication and shared ingress remain open.
+  The [private Kind cold-restart check](aws-infrastructure.md#rehearse-an-all-node-cold-restart-in-private-kind)
+  verifies the full API outage, retained PostgreSQL data and a fresh write.
+  Rehearse the Stockholm cold restart from outside the cell with the same
+  service clients before run 9.
   Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
