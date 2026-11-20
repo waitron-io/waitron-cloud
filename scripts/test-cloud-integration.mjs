@@ -1096,16 +1096,21 @@ export function createObserverLogin({api, mailbox, readMail, email, password, co
       assert.ok(reply.status === 202 && reply.body.emailRequired, 'p1.password_signin');
       pending = {seen, challengeToken: reply.body.challengeToken, started: now(), replacing: Boolean(replacing)};
     }
+    const challenge = pending;
+    let refused;
     for (;;) {
-      const challenge = pending;
-      const message = await readMail(email, challenge.seen, signal);
+      const message = await readMail(email, challenge.seen, signal).catch(error => {
+        if (!refused || error?.message !== 'integration.mail_missing' || signal?.aborted) throw error;
+      });
+      if (!message && refused) return refused;
       const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
       pending = undefined;
       const reply = await api('/api/account/login/email', {challengeToken: challenge.challengeToken, code}, {}, undefined, undefined, signal);
       if (reply.status !== 401 || !challenge.replacing || !message.ID) return reply;
       // Once per replacement, discard mail that arrived after its original challenge was replaced.
       challenge.seen.add(message.ID);
-      pending = {...challenge, replacing: false};
+      challenge.replacing = false;
+      refused = reply;
     }
   };
 }

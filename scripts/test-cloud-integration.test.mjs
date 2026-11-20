@@ -163,24 +163,30 @@ test('the measured sign-in replaces a stranded challenge after one mail claim wi
   assert.equal(starts, 2);
 });
 
-test('late mail from a stranded challenge does not delay its replacement sign-in', async () => {
+for (const replacementStatus of [200, 401, undefined]) test(
+  'a replaced sign-in handles late mail with replacement status ' + replacementStatus, async () => {
   const {createObserverLogin} = await load();
-  let clock = 0, starts = 0;
-  const messages = [{ID: 'stranded', Text: '\n100001\n'}, {ID: 'replacement', Text: '\n100002\n'}];
+  let clock = 0, starts = 0, completions = 0;
+  const messages = [{ID: 'stranded', Text: '\n100001\n'}];
+  if (replacementStatus) messages.push({ID: 'replacement', Text: '\n100002\n'}, {ID: 'surplus', Text: '\n100003\n'});
   const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
     replaceStranded: true, now: () => clock, mailbox: async () => ({messages: []}),
     async readMail(_email, seen) {
       if (starts === 1) throw Error('mail stranded');
-      return messages.find(message => !seen.has(message.ID));
+      const message = messages.find(message => !seen.has(message.ID));
+      if (!message) throw Error('integration.mail_missing');
+      return message;
     },
     async api(path, body) {
       if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
       assert.equal(body.challengeToken, 'challenge-2');
-      return {status: body.code === '100002' ? 200 : 401};
+      completions++;
+      return {status: body.code === '100002' ? replacementStatus : 401};
     }});
   await assert.rejects(login(), /mail stranded/);
   clock = 60_000;
-  assert.deepEqual(await login(), {status: 200});
+  assert.deepEqual(await login(), {status: replacementStatus ?? 401});
+  assert.equal(completions, replacementStatus ? 2 : 1);
   assert.equal(starts, 2);
 });
 
