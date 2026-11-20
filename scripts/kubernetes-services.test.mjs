@@ -54,6 +54,14 @@ test('measured stops cover all three machines and the live roles before returnin
   await assert.rejects(run('b', publication, {mail: ''}), /services\.stop_mail_worker/);
   await assert.rejects(run('b', publication, {retained: false}), /services\.stop_backup_worker/);
   await assert.rejects(run('b', publication, {context: {nodes: ['a', 'b']}}), /services\.stop_three_nodes/);
+  let request;
+  await assert.rejects(run('b', publication, {context: {async observe({ready, stopped, signal}) {
+    request = signal;
+    ready();
+    await stopped();
+    throw Error('synthetic probe failed during stop');
+  }}}), /synthetic probe failed during stop/);
+  assert.equal(request.aborted, true);
 });
 
 test('the migration job follows all three prepared PostgreSQL copies and gates the service startup', async () => {

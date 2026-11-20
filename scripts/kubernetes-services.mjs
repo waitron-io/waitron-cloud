@@ -218,7 +218,12 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
           }}));
         stopping.catch(stopped.reject);
       }});
-    try {await observation;} catch (error) {await stopping?.catch(() => {}); throw error;}
+    try {await observation;}
+    catch (error) {
+      leg.abort(error);
+      await stopping?.catch(() => {});
+      throw error;
+    }
     const receipt = await stopping;
     assert.ok(receipt?.stopped === node && receipt.offMs >= holdMs, 'services.stop_missing:' + node);
     const {signup, backup} = receipt.recovery;
