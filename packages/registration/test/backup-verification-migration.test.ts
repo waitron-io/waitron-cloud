@@ -135,6 +135,7 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     for(const entry of allBefore.venues as {row:Record<string,unknown>}[]){
       delete entry.row.local_venue_id;
       entry.row.display_name=null;
+      entry.row.setup_address=null;
     }
     for(const entry of allBefore.installations as {row:Record<string,unknown>}[])entry.row.portal_removed_at=null;
     for(const entry of allBefore.cloud_accounts as {row:Record<string,unknown>}[])Object.assign(entry.row,{recovery_organisation_id:null});
