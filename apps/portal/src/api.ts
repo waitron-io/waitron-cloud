@@ -2,7 +2,7 @@ import {validOwnerRecoveryResult} from './owner-recovery-controller.ts';
 import {validOwnerTransfer,validOwnerTransferList} from './owner-transfer-types.ts';
 import {translations} from './locale.ts';
 import {validPasswordLogin,validFactorStatus,validFactorEnrolment,validFactorChange} from './authenticator-types.ts';
-import {validRecoveryView} from './recovery-types.ts';
+import {validRecoveryDate,validRecoveryView} from './recovery-types.ts';
 import {validRemoteView,validRemoteDns,validGuestMenuView} from './remote-types.ts';
 import {validBackupPage} from './backup-types.ts';
 import {validInstallation} from './installation-types.ts';
@@ -13,7 +13,7 @@ import {validUsageSummary} from './usage-types.ts';
 import {validDiagnosticExport} from './diagnostic-types.ts';
 import {validBillingView,validMethodPresentation,validMethodResult} from './billing-types.ts';
 export const enrollmentRequiredEvent = 'cloud-enrollment-required';
-export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
+export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number; recoveryExpiresAt?: string};
 function validResult(path: string, value: unknown, status: number): boolean {
   if(path.startsWith('/owner-recovery/'))return status===200&&validOwnerRecoveryResult(path,value);
   if(path==='/owner-transfers')return status===200&&validOwnerTransferList(value);
@@ -106,7 +106,9 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const code = !response.ok && value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'unexpected_response';
     if (response.status === 403 && code === 'enrollment_required' && !['/session','/session/activity'].includes(path)) globalThis.document?.dispatchEvent?.(new Event(enrollmentRequiredEvent));
-    return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs};
+    const recoveryExpiresAt=(value as {recoveryExpiresAt?:unknown}|null)?.recoveryExpiresAt;
+    return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs,
+      ...(path==='/recovery/approve'&&response.status===409&&code==='recovery_active'&&validRecoveryDate(recoveryExpiresAt)?{recoveryExpiresAt}:{})};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
 }
 

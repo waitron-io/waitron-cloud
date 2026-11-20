@@ -48,6 +48,13 @@ export interface RecoveryView {
   id:string;venueId:string;pointId:string|null;source:SnapshotRecoverySource|Omit<ContinuousRecoverySource,"sourceDigest">;
   mode:"planned"|"failure";status:string;expiresAt:string;
 }
+export class RecoveryActiveError extends Error {
+  readonly recoveryExpiresAt: string;
+  constructor(recoveryExpiresAt: string) {
+    super("backup.recovery_active");
+    this.recoveryExpiresAt = recoveryExpiresAt;
+  }
+}
 export interface Proof {
   payload: string;
   signature: string;
@@ -233,15 +240,13 @@ export class BackupRecovery {
         await client.query('UPDATE backup_recoveries SET cloud_session_id=$2,cloud_security_revision=$3 WHERE id=$1',[input.id,session.sessionId,session.securityRevision]);
         return view(prior);
       }
-      if (
-        (
-          await client.query(
-            "SELECT 1 FROM backup_recoveries WHERE venue_id=$1 AND status<>'closed'",
-            [venueId],
-          )
-        ).rowCount
-      )
-        backupFail("recovery_active");
+      const active = (
+        await client.query<{ expires_at: Date }>(
+          "SELECT expires_at FROM backup_recoveries WHERE venue_id=$1 AND status<>'closed'",
+          [venueId],
+        )
+      ).rows[0];
+      if (active) throw new RecoveryActiveError(active.expires_at.toISOString());
       if (
         (
           await client.query(

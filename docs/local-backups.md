@@ -411,6 +411,10 @@ continuous generation and its replacement key. If an approval reply is lost, the
 instead of creating another operation. If you reload the page, reopen the link from
 the replacement and enter its code again.
 
+If another recovery blocks approval, the refusal shows when it expires. You can
+close it sooner through its original link. Once it closes, start a fresh request
+on the replacement server and keep the old server stopped.
+
 Use the original recovery link to close recovery access. Closing it, losing owner access,
 or disabling the account stops new downloads. Storage credentials already issued
 can remain valid for up to fifteen minutes, and data already downloaded cannot be

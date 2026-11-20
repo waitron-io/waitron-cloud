@@ -50,8 +50,24 @@ for(const {path,status,code}of [
  const previous=['location','document'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)] as const);
  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:''}});
  t.after(()=>{for(const [key,descriptor]of previous){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}});
- t.mock.method(globalThis,'fetch',async()=>Response.json({error:code},{status}));
+ t.mock.method(globalThis,'fetch',async()=>Response.json({error:code,recoveryExpiresAt:expiresAt},{status}));
  assert.deepEqual(await accountRequest(path,{}),{ok:false,status,code:'unexpected_response',retryAfterMs:0});
+});
+
+test('only approval conflicts with a valid recovery expiry retain the deadline',async t=>{
+ const previous=['location','document'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)] as const);
+ Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:''}});
+ t.after(()=>{for(const [key,descriptor]of previous){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}});
+ const valid={error:'recovery_active',recoveryExpiresAt:expiresAt};
+ let reply:object=valid;
+ t.mock.method(globalThis,'fetch',async()=>Response.json(reply,{status:409}));
+ const failure={ok:false,status:409,code:'recovery_active',retryAfterMs:0};
+ assert.deepEqual(await accountRequest('/recovery/approve',{}),{...failure,recoveryExpiresAt:expiresAt});
+ assert.deepEqual(await accountRequest('/recovery/close',{}),failure);
+ for(const body of [{error:'recovery_active'},{...valid,recoveryExpiresAt:'invalid'},{...valid,error:'conflict'}]){
+  reply=body;
+  assert.deepEqual(await accountRequest('/recovery/approve',{}),{...failure,code:body.error});
+ }
 });
 
 for(const action of ['approve','close','replace'] as const)for(const status of [0,400,409,503])test(`recovery ${action}: uncertain ${status} write still checks its request and never repeats the write`,async()=>{

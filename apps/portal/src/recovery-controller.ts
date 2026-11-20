@@ -5,10 +5,11 @@ import type {RecoveryView} from './recovery-types.ts';
 export class RecoveryController {
  requestId:string|undefined;code='';view:RecoveryView|undefined;venueId:string|undefined;pointId:string|undefined;source:'continuous'|'snapshot'|undefined;
  stopped=false;acceptLoss=false;uncertain=false;pending=false;error:keyof Copy|undefined;
+ recoveryExpiresAt:string|undefined;
  #confirmedReplacement:string|undefined;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
- #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.pointId=undefined;this.source=undefined;this.stopped=false;this.acceptLoss=false;this.#confirmedReplacement=undefined;this.uncertain=false;this.pending=false;this.error=undefined;}
+ #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.pointId=undefined;this.source=undefined;this.stopped=false;this.acceptLoss=false;this.#confirmedReplacement=undefined;this.uncertain=false;this.pending=false;this.error=undefined;this.recoveryExpiresAt=undefined;}
  open(id:string|undefined){if(id!==this.requestId){this.#clear();this.requestId=id;}}
  account(id:string|undefined){if(id!==this.#account){this.#clear();this.#account=id;}}
  choose(venueId:string|undefined,pointId:string|undefined){this.#choose(venueId,pointId?'snapshot':undefined,pointId);}
@@ -38,6 +39,7 @@ export class RecoveryController {
   if(action==='replace')Object.assign(body,{oldInstallationId:replacement!.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
   const generation=this.#generation,point=approvalPoint,venue=approvalVenue,source=approvalSource,proposal=this.#proposal();this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<RecoveryView>('/recovery/'+action,body);if(generation!==this.#generation)return;this.pending=false;
+  this.recoveryExpiresAt=result.ok?undefined:result.recoveryExpiresAt;
   // A confirmed or uncertain approval consumes its confirmations before another authorisation.
   const returned=result.ok?result.value.operation:null;
   if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(source==='continuous'?returned.pointId===null:returned.pointId===point)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.nodeId===replacement.nodeId))){if(action==='approve'||returned?.id!==operation?.id){this.stopped=false;this.acceptLoss=false;}this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}

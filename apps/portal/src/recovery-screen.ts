@@ -13,12 +13,15 @@ export function recoveryScreen(app:PortalApp){
  const available=venues.some(i=>i.venueId===b.venueId);
  const selected=b.page?.points.find(p=>p.id===b.selected&&p.verification==='verified'),continuous=b.page?.continuousRecovery,selectionTime=b.selectedSource==='continuous'?continuous?.recoverableAt:selected?.capturedAt,ready=available&&(b.selectedSource==='continuous'?!!continuous:!!selected);
  const proofRequested=app.actionProof.loaded||app.actionProof.pending||['pairEnrollment','actionProofUnavailable','recoveryProofRequired'].includes(r.error??'');
+ const errorMessage=r.error==='recoveryActive'&&r.recoveryExpiresAt
+  ?c.recoveryActiveUntil.replace('{deadline}',formatDateTime(r.recoveryExpiresAt,app.locale))
+  :r.error?c[r.error]:nothing;
  const approvalDisabled=op?disabled:selectionDisabled,approval=html`
       <label class="disclosure"><input type="checkbox" .checked=${r.stopped} ?disabled=${approvalDisabled||r.uncertain} @change=${(e:Event)=>{r.stopped=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryStopped}</label>
       <label class="disclosure"><input type="checkbox" .checked=${r.acceptLoss} ?disabled=${approvalDisabled||r.uncertain} @change=${(e:Event)=>{r.acceptLoss=(e.target as HTMLInputElement).checked;app.draw();}}> ${op?c.recoveryAcceptExistingLoss:c.recoveryAcceptLoss}</label>
       <wt-button variant="primary" .disabled=${approvalDisabled||r.uncertain||!r.stopped||!r.acceptLoss} @click=${()=>{void app.approveRecovery();}}>${c.recoveryApprove}</wt-button>`;
  return html`<p>${c.recoveryIntro}</p><p>${c.recoveryLocal}</p>
-  ${r.error?html`<p role=${r.error==='recoveryProofRequired'||r.error==='pairEnrollment'?'status':'alert'}>${c[r.error]}</p>`:nothing}
+  ${r.error?html`<p role=${r.error==='recoveryProofRequired'||r.error==='pairEnrollment'?'status':'alert'}>${errorMessage}</p>`:nothing}
   <wt-input name="recoveryCode" .label=${c.pairCode} .value=${r.code} .error=${r.error==='pairCodeError'?c.pairCodeError:''} .required=${true} .disabled=${disabled||!!r.view} autocomplete="off" @wt-change=${(e:CustomEvent<{value:string}>)=>{r.code=e.detail.value;if(r.error==='pairCodeError')r.error=undefined;app.draw();}}></wt-input>
   <wt-button id="submit" .disabled=${disabled} @click=${()=>{app.readFields();void r.inspect();}}>${r.view?(r.error?c.recoveryCheckRequest:c.retry):c.pairInspect}</wt-button>
   ${r.view?html`<p>${c.recoveryExpires} <time datetime=${op?.expiresAt??r.view.expiresAt}>${formatDateTime(op?.expiresAt??r.view.expiresAt,app.locale)}</time></p>`:nothing}
