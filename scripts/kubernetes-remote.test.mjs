@@ -5,7 +5,7 @@ import {createSocket} from 'node:dgram';
 import {EventEmitter, once} from 'node:events';
 import {createConnection, createServer} from 'node:net';
 import {createInterface} from 'node:readline';
-import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {appendFile, mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -363,4 +363,98 @@ test('the same relay ports follow a changed address and then fail over to anothe
   await checked();
   await verifyUdp('replacement', AbortSignal.timeout(500));
   await verifyReplies('standby');
+});
+
+test('outside relay keeps the client-facing address and uses only the three mesh node addresses upstream', async () => {
+  const id = 'a'.repeat(64), calls = [];
+  assert.equal(typeof remoteRehearsal.startRemoteRelay, 'function');
+  const relay = await remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof', outside: true,
+    nodes: ['a', 'b', 'c'].map(name => ({name})), run: async (binary, args, options) => {
+      calls.push([binary, args, options]);
+      if (args[0] === 'create') return id;
+      if (args[0] === 'inspect') return '172.30.250.8';
+    }});
+  assert.equal(relay.gatewayIp, '172.30.250.8');
+  assert.deepEqual(calls[0][1].slice(-8), ['deploy/kubernetes/remote-relay.mjs', '10.77.0.1',
+    '31820', '51820', '0.0.0.0', '30443', '10.77.0.2', '10.77.0.3']);
+  assert.equal(calls[0][1][calls[0][1].indexOf('--network') + 1], 'private-proof');
+  await relay.close();
+  assert.deepEqual(calls.at(-1), ['docker', ['rm', '-f', id], {signal: null}]);
+});
+
+test('the outside Kind network refuses an unrelated node port and carries Flux and signed remote HTTPS', {
+  skip: process.env.TEST_KUBERNETES_OUTSIDE_NETWORK !== '1', timeout: 40 * 60 * 1000,
+}, async () => {
+  assert.equal(process.platform, 'linux');
+  const {installFlux, fluxImages, prepareFluxBundle, startOutsideFluxMirror} = await import('./kubernetes-git.mjs');
+  const {meshNodeAddress, outsideNodePeer, rehearsalMtu, startOutsideMesh} = await import('./kubernetes-outside.mjs');
+  let checked;
+  const {remote} = await runKubernetesCheck('kind-remote', {stopGatewayNode: true, async prepareOutside(context, tag) {
+    const {cluster, directory, nodes, run, kube, signal, waitronImage} = context;
+    const execute = (binary, args, input, cleanup) => run(binary, args, {input, signal: cleanup ? null : signal, timeout: 180000});
+    const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
+    const peers = [];
+    for (const [index, node] of nodes.entries()) {
+      const privateKey = await run('wg', ['genkey']);
+      const publicKey = await execute('wg', ['pubkey'], privateKey + '\n');
+      const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id]);
+      assert.match(pid, /^[1-9][0-9]*$/);
+      const path = join(directory, 'mesh-node-' + index, 'wg0.conf');
+      await mkdir(join(directory, 'mesh-node-' + index));
+      await writeFile(path, `[Interface]
+Address = ${meshNodeAddress(index)}/32
+ListenPort = 51821
+MTU = ${rehearsalMtu}
+PrivateKey = ${privateKey}
+`, {mode: 0o600});
+      peers.push({endpoint: node.ip, publicKey, pid, path, id: node.id});
+    }
+    let flux;
+    const mesh = await startOutsideMesh({directory, peers, run: execute, async prepareNodes(publicKey) {
+      for (const {id, pid, path} of peers) {
+        await appendFile(path, outsideNodePeer(publicKey));
+        await run('nsenter', ['-t', pid, '-n', 'wg-quick', 'up', path]);
+        await execute('docker', ['exec', '-i', id, 'bash', '-s', '--', 'outside-filter'], bootstrap);
+      }
+    }});
+    const close = async () => {try {await flux?.close();} finally {await mesh.close();}};
+    try {
+      assert.equal(await run('curl', ['-fsS', '--max-time', '10', '--cacert', join(directory, 'services-ca.crt'),
+        '--resolve', 'cloud.example.test:3000:10.77.0.1', 'https://cloud.example.test:3000/api/health/ready']),
+      '{"status":"ready"}');
+      await kube(['get', '--raw=/readyz']);
+      await assert.rejects(run('curl', ['-kfsS', '--connect-timeout', '2', 'https://10.77.0.1:6443/readyz']), /failed \(28,/);
+      const path = await prepareFluxBundle(directory, cluster, {run: execute, node: nodes[0].name});
+      for (const {upstream, tag: name} of fluxImages(cluster)) {
+        await run('docker', ['pull', upstream], {timeout: 180000});
+        await run('docker', ['tag', upstream, name]);
+        try {await run('kind', ['load', 'docker-image', '--name', cluster, name], {timeout: 180000});}
+        finally {await run('docker', ['image', 'rm', name], {signal: null});}
+      }
+      const labels = {app: 'manifest'};
+      flux = await installFlux({name: cluster, image: waitronImage, run: execute, controllersPath: path, signal,
+        baselineNode: nodes[2].name, mirror: options => startOutsideFluxMirror({...options, interfaceName: mesh.interfaceName}),
+        kube: (args, input, cleanup, requestSignal) => kube(args, {input, signal: cleanup ? null : requestSignal ?? signal}),
+        deployment: {apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'manifest'}, spec: {
+          selector: {matchLabels: labels}, template: {metadata: {labels}, spec: {nodeName: nodes[2].name,
+            containers: [{name: 'manifest', image: tag, imagePullPolicy: 'Never', command: ['sleep', '3600']}]}}}}});
+      checked = true;
+      return {close};
+    } catch (error) {
+      try {await close();}
+      catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);}
+      throw error;
+    }
+  }});
+  assert.equal(checked, true, 'the real mesh carried account and Flux traffic');
+  assert.equal(remote.staffHttps, true);
+  assert.equal(remote.publicHttps, true);
+  assert.deepEqual(remote.cleanup.remaining, []);
+});
+
+test('outside network setup is bound to the private Kind remote rehearsal', async () => {
+  let prepared = false;
+  await assert.rejects(runKubernetesCheck('unknown-target', {prepareOutside: async () => {prepared = true;}}),
+    {message: 'kubernetes.outside_network_target'});
+  assert.equal(prepared, false);
 });

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 phase=${1:-}
-case "$phase" in prepare|mesh|control|join|storage|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
+case "$phase" in prepare|mesh|outside-filter|control|join|storage|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
 
@@ -100,6 +100,22 @@ mesh)
   umask 077
   cat > /etc/wireguard/wg0.conf
   systemctl enable --now wg-quick@wg0
+  ;;
+outside-filter)
+  address=$(mesh_address)
+  [[ "$address" =~ ^10\.77\.0\.[123]$ ]]
+  # Judge the original destination before Kubernetes rewrites host ports and NodePorts.
+  filter=(iptables -w -t mangle)
+  "${filter[@]}" -N D618-OUTSIDE
+  if [ "$address" = 10.77.0.1 ]; then
+    "${filter[@]}" -A D618-OUTSIDE -d "$address" -p tcp --dport 3000 -j RETURN
+  fi
+  for port in 30443 30900; do
+    "${filter[@]}" -A D618-OUTSIDE -d "$address" -p tcp --dport "$port" -j RETURN
+  done
+  "${filter[@]}" -A D618-OUTSIDE -d "$address" -p udp --dport 31820 -j RETURN
+  "${filter[@]}" -A D618-OUTSIDE -j DROP
+  "${filter[@]}" -I PREROUTING -i wg0 -s 10.77.0.4/32 -m conntrack --ctstate NEW -j D618-OUTSIDE
   ;;
 database-storage)
   # The pinned PostgreSQL image runs as UID and GID 26; the local volume starts private.

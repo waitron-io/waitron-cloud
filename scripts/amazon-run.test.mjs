@@ -32,7 +32,7 @@ for (const failure of ['create', 'prepare', 'before', 'stop', 'stopped', 'replac
   });
 }
 
-test('all three machines wait for deletion schedule, use disposable root disks and expose only SSH to the operator', async () => {
+test('all three machines wait for deletion schedule, use disposable root disks and scope SSH and mesh ingress to the operator', async () => {
   const stack = JSON.parse(await readFile(new URL('../deploy/kubernetes/bounded-amazon/stack.yaml', import.meta.url)));
   const resources = stack.Resources;
   const machines = Object.entries(resources).filter(([, row]) => row.Type === 'AWS::EC2::Instance');
@@ -48,7 +48,10 @@ test('all three machines wait for deletion schedule, use disposable root disks a
   assert.deepEqual(expiry.Target.RoleArn, {Ref: 'SchedulerRole'});
   assert.deepEqual(JSON.parse(expiry.Target.Input['Fn::Sub']), {StackName: '${AWS::StackId}', RoleARN: '${StackRole}'});
   assert.equal(expiry.FlexibleTimeWindow.Mode, 'OFF');
-  assert.deepEqual(resources.Firewall.Properties.SecurityGroupIngress, [{IpProtocol: 'tcp', FromPort: 22, ToPort: 22, CidrIp: {Ref: 'OperatorCidr'}}]);
+  assert.deepEqual(resources.Firewall.Properties.SecurityGroupIngress, [
+    {IpProtocol: 'tcp', FromPort: 22, ToPort: 22, CidrIp: {Ref: 'OperatorCidr'}},
+    {IpProtocol: 'udp', FromPort: 51821, ToPort: 51821, CidrIp: {Ref: 'OperatorCidr'}},
+  ]);
   assert.deepEqual(resources.Mesh.Properties, {GroupId: {Ref: 'Firewall'}, IpProtocol: 'udp', FromPort: 51821, ToPort: 51821, SourceSecurityGroupId: {Ref: 'Firewall'}});
 });
 
@@ -581,4 +584,42 @@ for (const failure of ['never ready', 'stop failed', 'cancelled']) test('observe
     timeout: failure === 'never ready' ? 100 : 3000, signal: controller.signal,
     onReady: async () => {if (failure === 'stop failed') throw Error('stop failed'); controller.abort();},
   }), failure === 'stop failed' ? /stop failed/ : /amazon.observer_/);
+});
+
+test('outside host binds three individual mesh routes and removes only its own interface', async t => {
+  const {mkdtemp, rm} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os');
+  const {join} = await import('node:path');
+  const outside = await import('./kubernetes-outside.mjs').catch(error => {
+    if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+    return {};
+  });
+  assert.equal(typeof outside.startOutsideMesh, 'function');
+  const directory = await mkdtemp(join(tmpdir(), 'outside-mesh-test-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const privateKey = Buffer.alloc(32, 1).toString('base64');
+  const publicKey = Buffer.alloc(32, 2).toString('base64');
+  const peers = [3, 4, 5].map(value => ({endpoint: '192.0.2.' + value,
+    publicKey: Buffer.alloc(32, value).toString('base64')}));
+  const calls = [];
+  const mesh = await outside.startOutsideMesh({directory, peers, async prepareNodes(key) {
+    assert.equal(key, publicKey);
+    calls.push('nodes ready');
+  }, async run(binary, args, input, cleanup) {
+    if (binary === 'wg') return args[0] === 'genkey' ? privateKey : publicKey;
+    calls.push([binary, ...args]);
+    assert.equal(cleanup, true, 'an interrupted command must not strand an interface');
+  }});
+  assert.match(mesh.interfaceName, /^d621[a-f0-9]{11}$/);
+  const config = join(directory, mesh.interfaceName + '.conf');
+  assert.equal(await readFile(config, 'utf8'), [
+    '[Interface]', 'Address = 10.77.0.4/32', 'MTU = 1420', 'PrivateKey = ' + privateKey,
+    ...peers.flatMap((peer, index) => ['', '[Peer]', 'PublicKey = ' + peer.publicKey,
+      'AllowedIPs = 10.77.0.' + (index + 1) + '/32', 'Endpoint = ' + peer.endpoint + ':51821', 'PersistentKeepalive = 15']),
+    '',
+  ].join('\n'));
+  assert.deepEqual(calls, ['nodes ready', ['sudo', '-n', 'wg-quick', 'up', config]]);
+  await mesh.close();
+  assert.deepEqual(calls.at(-1), ['sudo', '-n', 'wg-quick', 'down', config]);
+  assert.equal(existsSync(config), false);
 });

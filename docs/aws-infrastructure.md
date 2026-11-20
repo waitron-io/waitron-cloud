@@ -1316,6 +1316,27 @@ watchers from all three nodes and the database workloads. Set the limit to 512
 in the disposable guest when its current value is lower. See
 [Kind's file-watcher guidance](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files).
 
+### Rehearse the outside network in disposable Linux
+
+Use the same images and tools as the gateway rehearsal below, with WireGuard
+tools and an iptables-backed Docker daemon on the disposable host. Run the
+check as root inside the guest so it can configure the three Kind network
+namespaces.
+
+```sh
+TEST_KUBERNETES_OUTSIDE_NETWORK=1 node --test --test-name-pattern='outside Kind network' scripts/kubernetes-remote.test.mjs
+```
+
+The test host uses `10.77.0.4` with a 1420-byte packet size cap. Machine A
+(`10.77.0.1`) accepts TCP 3000 for the account. A, B (`10.77.0.2`) and C
+(`10.77.0.3`) accept TCP 30443 and 30900 and UDP 31820 for the gateway and
+store. The host checks account HTTPS and tries the Kubernetes API port, which
+is live inside the cell and refused from the host. Flux fetches a synthetic
+deployment through the host's read-only Git mirror on TCP 18000. The venue's
+existing remote-access check sends signed staff and public HTTPS through the
+relay, whose upstreams are the three private addresses. The full Stockholm
+service journey and its Amazon routing check still need to be run.
+
 ### Rehearse a gateway handover on a private Kind cell
 
 Use the same disposable Linux host and pinned images as the services rehearsal.

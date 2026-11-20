@@ -39,7 +39,7 @@ function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key) 
       process.exitCode = 1;
     }
   `, {mode: 0o755});
-  for (const name of ['id', 'ip', 'hostname', 'kubeadm', 'kubectl', 'curl', 'sleep', 'sed', 'install']) symlinkSync(stub, join(dir, name));
+  for (const name of ['id', 'ip', 'hostname', 'kubeadm', 'kubectl', 'curl', 'sleep', 'sed', 'install', 'iptables']) symlinkSync(stub, join(dir, name));
   symlinkSync('/usr/bin/awk', join(dir, 'awk'));
   if (root) {
     chmodSync(dir, 0o755);
@@ -147,4 +147,22 @@ test('the store bootstrap prepares two private directories with the store proces
     ['id', '-u'],
     ['install', '-d', '-m', '0700', '-o', users[1], '-g', users[2], '/var/local/d621-store/0', '/var/local/d621-store/1'],
   ]);
+});
+
+test('outside filtering applies to new rehearsal-host traffic before port rewriting', async t => {
+  for (const address of ['10.77.0.1', '10.77.0.2', '10.77.0.3']) await t.test(address, t => {
+    const {result, calls} = bootstrap(t, 'outside-filter', address);
+    assert.equal(result.status, 0, result.stderr);
+    const rules = calls.filter(call => call.name === 'iptables').map(call => call.args);
+    assert.deepEqual(rules.at(-1), ['-w', '-t', 'mangle', '-I', 'PREROUTING', '-i', 'wg0', '-s', '10.77.0.4/32',
+      '-m', 'conntrack', '--ctstate', 'NEW', '-j', 'D618-OUTSIDE']);
+    const ports = rules.filter(rule => rule.at(-1) === 'RETURN').map(rule => [
+      rule[rule.indexOf('-d') + 1], rule[rule.indexOf('-p') + 1], rule[rule.indexOf('--dport') + 1],
+    ]);
+    assert.deepEqual(ports, [
+      ...(address === '10.77.0.1' ? [[address, 'tcp', '3000']] : []),
+      [address, 'tcp', '30443'], [address, 'tcp', '30900'], [address, 'udp', '31820'],
+    ]);
+    assert.deepEqual(rules.at(-2).slice(-4), ['-A', 'D618-OUTSIDE', '-j', 'DROP']);
+  });
 });

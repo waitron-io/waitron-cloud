@@ -161,3 +161,46 @@ test('timeout diagnostics keep partial revisions and controller apply/fetch refu
     if(missing)assert.deepEqual(last.unavailable,['deployment']);
   }
 });
+
+test('outside Git publishes at the fixed mesh address only after installing the original-destination filter', async () => {
+  const calls = [], id = 'b'.repeat(64);
+  assert.equal(typeof api.startOutsideFluxMirror, 'function');
+  const mirror = await api.startOutsideFluxMirror({name: 'd618-test', image: 'waitron:test', interfaceName: 'd621abc',
+    run: async (binary, args, input, cleanup) => {
+      calls.push({binary, args, cleanup});
+      if (args[0] === 'run') return id;
+      if (args[0] === 'port') return '10.77.0.4:18000';
+    }});
+  assert.equal(mirror.url, 'http://10.77.0.4:18000/run.git');
+  const publish = calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'run');
+  assert.ok(publish > 0 && calls[publish].args.includes('10.77.0.4:18000:8000'));
+  const filters = calls.slice(0, publish).map(({args}) => args);
+  assert.equal(filters.length, 2);
+  for (const filter of filters) {
+    assert.deepEqual(filter.slice(0, 8), ['-n', 'iptables', '-w', '-I', 'DOCKER-USER', '-p', 'tcp', '-m']);
+    assert.deepEqual(filter.slice(8, 15), ['conntrack', '--ctdir', 'ORIGINAL', '--ctorigdst', '10.77.0.4', '--ctorigdstport', '18000']);
+    assert.deepEqual(filter.slice(-2), ['-j', 'DROP']);
+  }
+  assert.deepEqual(filters.map(rule => rule.slice(15, -2)), [
+    ['!', '-i', 'd621abc'], ['-i', 'd621abc', '-m', 'iprange', '!', '--src-range', '10.77.0.1-10.77.0.3'],
+  ]);
+  await mirror.close();
+  assert.deepEqual(calls.slice(-3).map(({args, cleanup}) => [args, cleanup]), [
+    [['rm', '-f', id], true],
+    ...filters.reverse().map(args => [args.map(arg => arg === '-I' ? '-D' : arg), true]),
+  ]);
+});
+
+test('outside Flux reads the initial applied revision from its selected Kind node', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'outside-flux-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const controllersPath = join(directory, 'flux.json');
+  await writeFile(controllersPath, '{"items":[]}');
+  const values = observed(revision, 'baseline');
+  values.pods.items[0].spec.nodeName = 'box-control-plane3';
+  const flux = await api.installFlux({name: 'box', image: 'waitron:test', controllersPath, baselineNode: 'box-control-plane3',
+    signal: AbortSignal.timeout(100), deployment: {metadata: {name: 'manifest'}, spec: {template: {metadata: {}}}},
+    mirror: async () => ({url: 'http://10.77.0.4:18000/run.git', publish: async () => revision, close: async () => {}}),
+    kube: async args => args[0] === 'get' ? JSON.stringify(values[args[1]]) : ''});
+  await flux.close();
+});
