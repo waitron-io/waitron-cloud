@@ -1075,11 +1075,9 @@ implementation or production evidence.
   [test Cloud service controls](test-cloud-service-controls.md) show how to switch
   remote access, backups, the guest menu and box email on the Amazon layout.
   SES startup and authenticated feedback composition, real email delivery and
-  joint box handoff qualification remain open. A fresh named pairing on the Amazon
-  test Cloud remains part of the joint box trial after both builds speak pairing
-  version 3. The Cloud portal accepts the pairing code in its Open Cloud link
-  and checks it after sign-in. The Waitron link change and the joint test Cloud
-  walkthrough remain open. The [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box)
+  joint box handoff qualification remain open. The owner's pre-production box
+  still needs a fresh named pairing with the Amazon test Cloud for the guided
+  backup trial. The [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box)
   uses the installed test box release. The [Amazon backup rehearsal](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud)
   documents the upload route and disk workspace for the isolated restore worker.
   The live capture and guided result still need the fresh synthetic pairing.
