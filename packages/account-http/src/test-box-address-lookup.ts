@@ -3,7 +3,7 @@ import {open} from 'node:fs/promises';
 import {parseEnv} from 'node:util';
 import {AddressLookupError,createGoogleAddressClient} from './address-lookup-google.ts';
 
-// Only the private trial launcher injects this provider into its exact installation scope.
+export const keyFileAddressProvider=Symbol('key-file-address-provider');
 export function createTestBoxAddressLookup(options:{keyFile:string;fetcher:typeof fetch}){
  async function client(){
   try{
@@ -20,6 +20,7 @@ export function createTestBoxAddressLookup(options:{keyFile:string;fetcher:typeo
   }catch{throw new AddressLookupError('unavailable',false);}
  }
  return {
+  [keyFileAddressProvider]:true as const,
   async suggest(...args:Parameters<ReturnType<typeof createGoogleAddressClient>['suggest']>){return (await client()).suggest(...args);},
   async validate(...args:Parameters<ReturnType<typeof createGoogleAddressClient>['validate']>){return (await client()).validate(...args);},
  };

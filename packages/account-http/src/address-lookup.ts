@@ -7,8 +7,11 @@ import {AddressLookupError,checkInput,type createGoogleAddressClient} from './ad
 import {AccountHttpError} from './errors.ts';
 import {AccountRateLimiter,type RateRule} from './rate-limit.ts';
 import {readAccountBody} from './request.ts';
+import {keyFileAddressProvider} from './test-box-address-lookup.ts';
 
-export type AddressLookupOptions={accountId:string;venueId:string;installationId:string;provider:ReturnType<typeof createGoogleAddressClient>};
+type AddressLookupBox={accountId:string;venueId:string;installationId:string};
+type AddressProvider=ReturnType<typeof createGoogleAddressClient>;
+export type AddressLookupOptions={provider:AddressProvider}&(AddressLookupBox|{allowedBoxes?:readonly AddressLookupBox[]});
 type Body={version:1;kind:'suggest'|'validate';workflowId:string;query?:string;selectedText?:string;language?:'es'|'en'};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 function conflict():never{throw new AccountHttpError(409,'conflict');}
@@ -46,20 +49,31 @@ function allowanceError(error:AllowanceError):never{
 
 export class AddressLookupMachine{
  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
- readonly #trial:AddressLookupOptions;readonly #limiter:AccountRateLimiter;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,rateKey:string,trial:AddressLookupOptions,trusted=createLeaseTrust(issuer)){
-  if(!trial||![trial.accountId,trial.venueId,trial.installationId].every(id=>typeof id==='string'&&uuid.test(id))
-   ||typeof trial.provider?.suggest!=='function'||typeof trial.provider.validate!=='function')throw new Error('invalid_address_lookup_configuration');
-  this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#trial={...trial};this.#limiter=new AccountRateLimiter(pool,rateKey);
+ readonly #provider:AddressProvider;readonly #allowedBoxes?:readonly AddressLookupBox[];readonly #limiter:AccountRateLimiter;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,rateKey:string,options:AddressLookupOptions,trusted=createLeaseTrust(issuer)){
+  const provider=options?.provider;
+  if(typeof provider?.suggest!=='function'||typeof provider.validate!=='function')throw new Error('invalid_address_lookup_configuration');
+  const allowedBoxes='installationId' in options?[options]:options.allowedBoxes;
+  if(allowedBoxes!==undefined&&(!Array.isArray(allowedBoxes)||!allowedBoxes.every(box=>box&&
+   [box.accountId,box.venueId,box.installationId].every(id=>typeof id==='string'&&uuid.test(id))))
+   ||keyFileAddressProvider in provider&&allowedBoxes?.length!==1)throw new Error('invalid_address_lookup_configuration');
+  this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#provider=provider;
+  this.#allowedBoxes=allowedBoxes?.map(({accountId,venueId,installationId})=>({accountId,venueId,installationId}));
+  this.#limiter=new AccountRateLimiter(pool,rateKey);
+ }
+ #checkAllowedInstallation(installationId:string){
+  if(this.#allowedBoxes&&!this.#allowedBoxes.some(box=>box.installationId===installationId))throw new InstallationError('permission_denied');
  }
  async authenticate(envelope:SignedEnvelope){
   const claims=await new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate('address-lookup',envelope);
-  if(claims.installationId!==this.#trial.installationId)throw new InstallationError('permission_denied');
+  this.#checkAllowedInstallation(claims.installationId);
   return claims;
  }
- async #authorize(client:PoolClient,envelope:SignedEnvelope,now:Date){
-  const row=(await client.query(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[this.#trial.installationId])).rows[0];
-  if(!row||row.venue_id!==this.#trial.venueId||row.environment!=='test')throw new InstallationError('permission_denied');
+ async #authorize(client:PoolClient,envelope:SignedEnvelope,installationId:string,now:Date):Promise<AddressLookupBox>{
+  const row=(await client.query(`SELECT i.id,i.venue_id,i.public_key,i.revoked_at,i.superseded_by,v.environment,
+   ARRAY(SELECT account_id FROM organisation_memberships WHERE organisation_id=v.organisation_id AND is_owner LIMIT 2) AS owners
+   FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[installationId])).rows[0];
+  if(!row||row.environment!=='test')throw new InstallationError('permission_denied');
   const claims=verifyMachine(envelope,row.public_key,this.#origin,'address-lookup',now.getTime());
   if(claims.installationId!==row.id)throw new InstallationError('invalid_proof');
   if(row.revoked_at||row.superseded_by)throw new InstallationError('revoked');
@@ -67,10 +81,15 @@ export class AddressLookupMachine{
   if(JSON.stringify(encoded)!==claims.lease)throw new InstallationError('invalid_proof');
   const lease=verifyLease(encoded,this.#trusted,this.#origin,now.getTime());
   if(lease.installationId!==row.id||lease.venueId!==row.venue_id||lease.publicKey!==row.public_key||lease.environment!==row.environment)throw new InstallationError('invalid_proof');
+  if(row.owners.length!==1)throw new InstallationError('permission_denied');
+  const scope={accountId:row.owners[0],venueId:row.venue_id,installationId};
+  if(this.#allowedBoxes&&!this.#allowedBoxes.some(box=>box.installationId===installationId&&box.venueId===scope.venueId&&box.accountId===scope.accountId))
+   throw new InstallationError('permission_denied');
+  return scope;
  }
  async execute(envelope:SignedEnvelope){
-  const claims=readMachineClaims(envelope),body=parseBody(claims.body),trial=this.#trial;
-  if(claims.installationId!==trial.installationId)throw new InstallationError('permission_denied');
+  const claims=readMachineClaims(envelope),body=parseBody(claims.body),{installationId}=claims;
+  this.#checkAllowedInstallation(installationId);
   const client=await this.#pool.connect(),stop=new AbortController();let locked=false,discard=false,inTransaction=false,dispatched=false;
   const onError=()=>{discard=true;stop.abort();};client.on('error',onError);
   try{
@@ -79,34 +98,36 @@ export class AddressLookupMachine{
    await delay(500,undefined,{signal:stop.signal});
    await client.query('BEGIN');inTransaction=true;
    const opened=await instant(client);
-   await this.#authorize(client,envelope,opened);
-   const prior=(await client.query("SELECT binding FROM billing_allowance_reservations WHERE installation_id=$1 AND operation_id=$2 AND service='address_lookup'",[trial.installationId,body.workflowId])).rows[0];
+   const scope=await this.#authorize(client,envelope,installationId,opened);
+   const prior=(await client.query("SELECT binding FROM billing_allowance_reservations WHERE installation_id=$1 AND operation_id=$2 AND service='address_lookup'",[installationId,body.workflowId])).rows[0];
    if(!prior&&body.kind==='validate')conflict();
    const binding:string=prior?.binding??newBinding(opened),expiresAt=expiry(binding);
-   const saved=await reserveAllowance(client,{accountId:trial.accountId,venueId:trial.venueId,installationId:trial.installationId,
+   const saved=await reserveAllowance(client,{...scope,
     service:'address_lookup',operationId:body.workflowId,binding,units:1n});
    if(saved.state!=='held')conflict();
    const now=await instant(client),day=now.toISOString().slice(0,10);
    if(now.getTime()>=Date.parse(expiresAt))throw new AccountHttpError(410,'expired');
-   const used=(await client.query("SELECT coalesce(sum(units),0)::text AS used FROM billing_allowance_reservations WHERE account_id=$1 AND service='address_lookup' AND month=$2::date AND state IN ('held','spent')",[trial.accountId,saved.month])).rows[0].used;
+   const used=(await client.query("SELECT coalesce(sum(units),0)::text AS used FROM billing_allowance_reservations WHERE account_id=$1 AND service='address_lookup' AND month=$2::date AND state IN ('held','spent')",[scope.accountId,saved.month])).rows[0].used;
    if(BigInt(used)>10n)throw new AccountHttpError(429,'rate_limited',60);
-   const call=await this.#limiter.consume([{scope:'address-lookup-call',subject:trial.installationId+':'+claims.operationId,limit:1,windowSeconds:300}],client);
+   const call=await this.#limiter.consume([{scope:'address-lookup-call',subject:installationId+':'+claims.operationId,limit:1,windowSeconds:300}],client);
    if(!call.allowed)conflict();
    if(body.kind==='suggest'){
     const decision=await this.#limiter.consume([{scope:'address-lookup-workflow',subject:saved.id,limit:8,windowSeconds:900},
-     {scope:'address-lookup-day',subject:trial.accountId+':'+day,limit:20,windowSeconds:86400}],client);
+     {scope:'address-lookup-day',subject:scope.accountId+':'+day,limit:20,windowSeconds:86400}],client);
     if(!decision.allowed)throw new AccountHttpError(429,'rate_limited',decision.retryAfterSeconds);
    }
    if(body.kind==='validate'){await spendAllowance(client,saved.id);await recordAllowanceAttempt(client,saved.id,(await instant(client)).toISOString());}
-   const final=await instant(client);await this.#authorize(client,envelope,final);
+   // The allowance locks hold the account, venue and installation stable through this final check.
+   const final=await instant(client),confirmed=await this.#authorize(client,envelope,installationId,final);
+   if(confirmed.accountId!==scope.accountId||confirmed.venueId!==scope.venueId)throw new InstallationError('permission_denied');
    if(discard)throw new AccountHttpError(503,'temporarily_unavailable');
    if(final.getTime()>=Date.parse(expiresAt))throw new AccountHttpError(410,'expired');
    if(final.toISOString().slice(0,10)!==day)throw new AccountHttpError(503,'temporarily_unavailable');
    await client.query('COMMIT');inTransaction=false;
    dispatched=true;
    const result=body.kind==='suggest'
-    ?await trial.provider.suggest({query:body.query!,language:body.language!,sessionToken:saved.id},stop.signal)
-    :await trial.provider.validate({selectedText:body.selectedText!,sessionToken:saved.id},stop.signal);
+    ?await this.#provider.suggest({query:body.query!,language:body.language!,sessionToken:saved.id},stop.signal)
+    :await this.#provider.validate({selectedText:body.selectedText!,sessionToken:saved.id},stop.signal);
    return {workflowId:body.workflowId,expiresAt,...result};
   }catch(error){
    if(inTransaction){try{await client.query('ROLLBACK');}catch{discard=true;}}
