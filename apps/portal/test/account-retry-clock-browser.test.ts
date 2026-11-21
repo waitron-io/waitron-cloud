@@ -43,6 +43,9 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
         }
         if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill(anonymous
           ? {status: 401, json: {error: 'unauthenticated'}} : {json: {accountId: 'owner', expiresAt: expiry}});
+        if (path === '/api/account/businesses' && !anonymous && route.request().method() === 'GET') {
+          return route.fulfill({json: {organisations: [], businesses: [], canStartOrganisation: false}});
+        }
         if (path.endsWith('/installations')) return route.fulfill({json: {installations: []}});
         if (path.endsWith('/authenticator')) return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
         if (path.endsWith('/passkeys')) return route.fulfill({json: {passkeys: []}});

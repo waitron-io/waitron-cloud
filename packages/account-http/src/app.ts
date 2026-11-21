@@ -1,3 +1,5 @@
+import {AccountBusinessStore} from '@waitron-cloud/registration';
+import {accountBusinessPaths, accountBusinessResponse} from './account-businesses.ts';
 import {ownerRecoveryResponse} from './owner-recovery.ts';
 import {OwnerRecoveryStore} from '@waitron-cloud/registration';
 import {ownerTransferResponse} from './owner-transfer.ts';
@@ -119,6 +121,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
   const actionProof=new AccountActionProofStore(pool,factor.keys,factor.policy,outbox);
   const ownerTransfers=new OwnerTransferStore(pool,outbox);
+  const accountBusinesses = new AccountBusinessStore(pool, config.countryCode ?? 'ES');
   const accountSecurity=new AccountSecurityStore(pool,outbox,options.passwordScreening);
   const authenticator=new AuthenticatorFactorStore(pool,factor.keys,factor.policy,outbox);
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
@@ -185,6 +188,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
+    if (accountBusinessPaths.includes(c.req.path)) return accountBusinessResponse(c, accountBusinesses, config.portalOrigin, secure);
     if(c.req.path==='/api/account/owner-transfers'||c.req.path.startsWith('/api/account/owner-transfers/'))return ownerTransferResponse(c,{pool,store:ownerTransfers,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/account/security/'))return accountSecurityResponse(c,{pool,store:accountSecurity,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/action-proof'||c.req.path.startsWith('/api/account/action-proof/'))return accountActionProofResponse(c,{pool,store:actionProof,passkeys,origin:config.portalOrigin,secure,ip,consume});

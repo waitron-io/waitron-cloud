@@ -139,6 +139,18 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/usage/read` | `{"organisationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 decimal-string usage totals and measurement freshness |
 | POST `/diagnostics/read` | `{"installationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 redacted installation diagnostic |
 
+Account business management uses the current session. Both writes require the
+portal Origin and CSRF header. The three successful responses return
+`organisations` (`id`, `name`, `canRegister`), `businesses` (`id`,
+`organisationId`, `legalName`, `countryCode`, `taxNumber`), and
+`canStartOrganisation`. Older records can have null names, country or tax details.
+
+| Request | JSON body | Result |
+| --- | --- | --- |
+| GET `/businesses` | No body | 200 with your owned groups and their businesses |
+| POST `/businesses` | `{"legalName":"Café Sol SL","taxNumber":"ES-0123","countryCode":"ES","organisationId":"<optional uuid>"}` | 200 with the saved list. Select a group if several can register businesses. |
+| POST `/organisations/rename` | `{"organisationId":"<uuid>","name":"Grupo Sol"}` | 200 with the renamed group and its businesses |
+
 Handover uses the current session and the shared ten-minute proof window. All
 three writes require the exact portal Origin and CSRF header. Acceptance also
 requires an enrolled app or passkey. Read the offer’s parties and expiry before
@@ -146,12 +158,13 @@ accepting; creating an offer grants the recipient no business access.
 
 | Request | JSON body | Successful response |
 | --- | --- | --- |
-| GET `/owner-transfers` | No body; session cookie | 200 with your owned `organisations` and participating `offers` |
+| GET `/owner-transfers` | No body; session cookie | 200 with your owned `organisations` and participating `offers`. Live offers include `businessNames`. |
 | POST `/owner-transfers/create` | `{"organisationId":"<uuid>","email":"recipient@example.test","locale":"en"}` | 202 `{"status":"accepted"}` for every eligible-format address |
 | POST `/owner-transfers/accept` | `{"id":"<offer uuid>"}` | 200 with the offer state; acceptance replaces the owner atomically |
 | POST `/owner-transfers/cancel` | `{"id":"<offer uuid>"}` | 200 with the offer state; either participant may cancel |
 
-One pending offer per organisation lasts 24 hours. A repeated accept/cancel reads
+One pending offer per organisation lasts 24 hours. For finished offers,
+`organisationName` is empty unless you currently own the organisation. A repeated accept/cancel reads
 its existing state; a cancelled offer cannot become accepted. Unavailable offers
 and other people’s IDs return 404 `transfer_unavailable`; an unfinished recovery
 returns 409 `recovery_in_progress`. Writes share limits of 10 per IP per minute

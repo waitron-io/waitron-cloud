@@ -19,6 +19,7 @@ test('existing-account handover completes in both languages, themes and widths',
    actors.push({...await signup.complete(mail.token,{password,organisationName:role==='sender'?'Café Sol':'Café Luna',legalBusinessName:'Sol SL',countryCode:'ES'}),email});
   }
   const [sender,recipient]=actors;assert.ok(sender&&recipient);
+  await f.db.pool.query('INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES(gen_random_uuid(),$1,$2,$3)', [sender.organisationId, 'Ana SL', 'ES']);
   const c=locale==='en'?{email:'Recipient email',send:'Send handover',accept:'Accept handover',pending:'Pending',accepted:'Accepted'}:{email:'Correo de quien recibe',send:'Enviar traspaso',accept:'Aceptar traspaso',pending:'Pendiente',accepted:'Aceptado'};
   const contexts=await Promise.all([f.browser.newContext({locale,colorScheme,viewport:{width,height:900}}),f.browser.newContext({locale,colorScheme,viewport:{width,height:900}})]);
   try{
@@ -30,6 +31,7 @@ test('existing-account handover completes in both languages, themes and widths',
    await outgoing.screenshot({path:new URL(`../dist/handover-sender-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
    const receiving=await contexts[1]!.newPage();receiving.setDefaultTimeout(5000);await receiving.goto(`${f.origin}/account#lang=${locale}`);
    const incoming=receiving.locator('#owner-transfer-section');await incoming.getByRole('button',{name:c.accept,exact:true}).waitFor();await incoming.getByText(sender.email,{exact:true}).waitFor();
+   await incoming.getByText('Ana SL',{exact:true}).waitFor();await incoming.getByText('Sol SL',{exact:true}).waitFor();
    assert.ok(await receiving.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    await incoming.screenshot({path:new URL(`../dist/handover-recipient-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
    await incoming.getByRole('button',{name:c.accept,exact:true}).click();await incoming.getByText(c.accepted,{exact:true}).waitFor();

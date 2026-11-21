@@ -14,7 +14,8 @@ export function ownerTransferScreen(app:PortalApp){
    <wt-button id="owner-transfer-create" .disabled=${busy} @click=${()=>{void app.transferOwnership('create');}}>${c.transferSend}</wt-button>`:nothing}
   <ul>${t.data.offers.map(offer=>{
    const state=offer.state==='pending'&&Date.parse(offer.expiresAt)<=Date.now()?'expired':offer.state;
-   return html`<li class="installation"><strong>${offer.organisationName}</strong><dl><dt>${c.transferFrom}</dt><dd>${offer.senderEmail}</dd><dt>${c.transferTo}</dt><dd>${offer.recipientEmail}</dd></dl>
+   return html`<li class="installation">${offer.organisationName?html`<strong>${offer.organisationName}</strong>`:nothing}
+    ${offer.businessNames?.length?html`<ul>${offer.businessNames.map(name=>html`<li>${name}</li>`)}</ul>`:nothing}<dl><dt>${c.transferFrom}</dt><dd>${offer.senderEmail}</dd><dt>${c.transferTo}</dt><dd>${offer.recipientEmail}</dd></dl>
     <p>${c[state==='pending'?'transferPending':state==='accepted'?'transferAccepted':state==='cancelled'?'transferCancelled':'transferExpired']}</p>
     <p>${c.transferExpiry} ${new Intl.DateTimeFormat(app.locale,{dateStyle:'medium',timeStyle:'short'}).format(new Date(offer.expiresAt))}</p>
     ${state==='pending'?html`<div class="snapshot-actions">${offer.incoming?html`<wt-button .disabled=${busy} @click=${()=>{void app.transferOwnership('accept',offer.id);}}>${c.transferAccept}</wt-button>`:nothing}

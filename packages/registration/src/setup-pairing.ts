@@ -1,5 +1,6 @@
+import {createFirstOrganisation, fillBlankBusinessTaxNumber, lockBlankBusiness, lockOwnedOrganisations, matchingTaxBusinesses} from './account-businesses.ts';
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
-import {organisationScopeSql, resolveSession, type SessionCredentials} from '@waitron-cloud/identity';
+import {resolveSession, type SessionCredentials} from '@waitron-cloud/identity';
 import type {Pool, PoolClient} from 'pg';
 import {isPairingUuid, PairingError, type PairingV4Claims} from './pairing-proof.ts';
 import {BillingStore} from './billing-store.ts';
@@ -109,55 +110,21 @@ async function boundSession(client: PoolClient, row: Attempt, registering: boole
   return session;
 }
 
-const normaliseTaxNumber = (value: string) => value.toUpperCase().replace(/[\s-]/g, '');
-
-async function lockOwnedOrganisations(client: PoolClient, accountId: string) {
-  // Keep permission stable while filing, in the same lock order as owner transfer.
-  return (await client.query<{id: string}>(`SELECT o.id FROM organisation_memberships m
-    JOIN organisations o ON o.id=m.organisation_id
-    WHERE m.account_id=$1 AND m.is_owner AND m.can_register_venues AND ${organisationScopeSql('m.account_id','o.id')}
-    ORDER BY o.id FOR UPDATE OF o FOR SHARE OF m`, [accountId])).rows;
-}
-
-async function lockBlankBusiness(client: PoolClient, accountId: string, organisationId: string, countryCode: string) {
-  return (await client.query<{id: string}>(`WITH known AS (
-    SELECT b.id FROM legal_businesses b JOIN organisation_memberships m USING (organisation_id)
-    WHERE m.account_id=$1 AND ${organisationScopeSql('m.account_id','b.organisation_id')} LIMIT 2
-  ) SELECT b.id FROM legal_businesses b JOIN known k USING (id)
-  WHERE (SELECT count(*) FROM known)=1 AND b.organisation_id=$2 AND b.country_code=$3 AND b.tax_number IS NULL
-  FOR UPDATE OF b`, [accountId, organisationId, countryCode])).rows[0];
-}
-
 async function businessForVenue(client: PoolClient, accountId: string, countryCode: string, taxNumber: string, legalName: string) {
   const organisations = await lockOwnedOrganisations(client, accountId);
-  const number = normaliseTaxNumber(taxNumber);
-  if (number && organisations.length) {
-    const businesses = (await client.query<{id: string; organisation_id: string; tax_number: string}>(`SELECT id,organisation_id,tax_number
-      FROM legal_businesses WHERE organisation_id=ANY($1::uuid[]) AND country_code=$2 AND tax_number IS NOT NULL
-      ORDER BY id FOR SHARE`, [organisations.map(o => o.id), countryCode])).rows;
-    const matches = businesses.filter(business => normaliseTaxNumber(business.tax_number) === number);
-    if (matches.length > 1) throw new RegistrationError('business_match_ambiguous');
-    if (matches[0]) return {organisationId: matches[0].organisation_id, legalBusinessId: matches[0].id};
-  }
+  const matches = await matchingTaxBusinesses(client, organisations.map(o => o.id), countryCode, taxNumber);
+  if (matches.length > 1) throw new RegistrationError('business_match_ambiguous');
+  if (matches[0]) return {organisationId: matches[0].organisation_id, legalBusinessId: matches[0].id};
   if (organisations.length > 1) throw new RegistrationError('business_match_ambiguous');
   let organisationId = organisations[0]?.id;
   if (organisationId) {
     const blank = await lockBlankBusiness(client, accountId, organisationId, countryCode);
-    if (blank) {
-      // The business lock holds off venue foreign-key checks until filing commits.
-      const updated = await client.query(`UPDATE legal_businesses SET tax_number=$2 WHERE id=$1
-        AND NOT EXISTS (SELECT 1 FROM venues WHERE legal_business_id=$1)`, [blank.id, taxNumber || null]);
-      if (updated.rowCount) return {organisationId, legalBusinessId: blank.id};
+    if (blank && await fillBlankBusinessTaxNumber(client, blank.id, taxNumber || null)) {
+      return {organisationId, legalBusinessId: blank.id};
     }
   } else {
-    const hasScope = await client.query(`SELECT 1 FROM cloud_accounts a WHERE a.id=$1
-      AND to_jsonb(a)->>'recovery_organisation_id' IS NULL
-      AND NOT EXISTS (SELECT 1 FROM organisation_memberships WHERE account_id=a.id)`, [accountId]);
-    if (!hasScope.rowCount) throw new PairingError('permission_denied');
-    organisationId = randomUUID();
-    await client.query('INSERT INTO organisations(id,name) VALUES ($1,$2)', [organisationId, legalName]);
-    await client.query(`INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner)
-      VALUES ($1,$2,true,true)`, [accountId, organisationId]);
+    organisationId = await createFirstOrganisation(client, accountId, legalName);
+    if (!organisationId) throw new PairingError('permission_denied');
   }
   const legalBusinessId = randomUUID();
   await client.query(`INSERT INTO legal_businesses(id,organisation_id,name,country_code,tax_number)
