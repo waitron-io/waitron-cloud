@@ -96,7 +96,7 @@ async function lockGrant(client:PoolClient,installationId:string){
  return (await client.query<GrantRow>('SELECT * FROM relay_grants WHERE installation_id=$1 FOR UPDATE',[installationId])).rows[0];
 }
 
-/** Internal local-proof core. No HTTP caller or production verifier is installed. */
+/** Grant storage for the test relay, shared by setup consent and operator approval. */
 export class RelayGrantStore {
  readonly #pool:Pool;readonly #config:RelayConfig|undefined;readonly #planMode:PlanMode;readonly #allowances:AllowanceOptions|undefined;
  constructor(pool:Pool,config?:RelayConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){

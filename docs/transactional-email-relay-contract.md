@@ -133,8 +133,9 @@ not install owner commands or SES startup.
 
 ## Choose staff email in test setup
 
-Send your choice when you save the email step on a configured test box. Leaving
-the box unticked keeps your mail server and sends no request. Version 1 covers
+Send your choice when you save the email step on a configured test box. Get the
+grant before sending signed complete to file the venue. Leave the box unticked
+to keep your mail server and skip the grant request. Version 1 covers
 staff invitations, password resets and email changes. Adding guest email would
 require another consent version.
 
@@ -151,13 +152,19 @@ current issue time and serialized lease. The signed body uses these keys in orde
 Send the envelope `{payload,signature}` as JSON to `POST /api/pairing/email-grant`
 from the box backend, without browser Origin or cookies. On 200, the response is
 `{emailRelay:{version:1,grant:{id,revision,expiresAt,enabled:true}}}`. The grant
-uses the private HTTPS origin of the configured callback and the operator's pilot
-end date. It can send after you sign out, subject to the usual relay checks.
+uses the private HTTPS origin of the configured callback. A new grant ends on
+the pilot date. If Cloud returns a matching live grant, use the expiry in that
+reply. The grant can send after you sign out, subject to the usual relay checks.
 
-- `400 pairing_unavailable` means you need a fresh setup sign-in.
+- With venue setup still open, `400 pairing_unavailable` means you need a fresh
+  setup sign-in. After the venue is filed, use manual mail or ask the operator
+  to prepare a grant.
 - `403 relay_disabled` or `403 grant_unavailable` means you can choose manual mail.
-- `409 grant_conflict` means a different live grant already exists. The operator
-  can inspect and change it through the existing relay controls.
+  If the lease expired and Cloud returned `grant_unavailable`, renew it and retry
+  once with a fresh signature.
+- `409 grant_conflict` means a live grant already exists with a different owner,
+  box key, origin or consent version. The operator can inspect and change it
+  through the existing relay controls.
 
 If the response is lost, read the grant through signed configuration before trying
 again. An exact consent retry can return the same live grant. The operator can

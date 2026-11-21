@@ -288,3 +288,11 @@ test('test relay setup accepts only a canonical UTC pilot end date',async()=>{
  assert.equal(testRelayGrantConfig({...input,setupExpiresAt}).setupExpiresAt,setupExpiresAt);
  assert.throws(()=>testRelayGrantConfig({...input,setupExpiresAt:'2030-01-01'}),/test_cloud.relay_setup_expiry/);
 });
+
+test('the account worker identifies a malformed setup relay date by its setting name',async t=>{
+ const {db,context}=await setup(t);
+ await prepareAccount(t,context);
+ const running=await startAccount(db,context,{CLOUD_TEST_RELAY_SETUP_EXPIRES_AT:'2030-01-01'});
+ assert.equal(await running.close(),0);
+ assert.match(running.stderr,/CLOUD_TEST_RELAY_SETUP_EXPIRES_AT/);
+});
