@@ -4,6 +4,9 @@ import type {Pool, PoolClient} from 'pg';
 import {isPairingUuid, PairingError, type PairingV4Claims} from './pairing-proof.ts';
 import {BillingStore} from './billing-store.ts';
 import {RegistrationError, RegistrationStore, type Registration} from './index.ts';
+import type {SignedEnvelope} from './installation-proof.ts';
+import {RelayControl} from './relay-control.ts';
+import {RelayError, RelayGrantStore, type RelayConfig} from './relay-grants.ts';
 import {recordSecurityAuditEvent} from './security-audit.ts';
 import {transaction} from './transaction.ts';
 
@@ -284,6 +287,28 @@ export class SetupPairingStore {
       await client.query(`UPDATE setup_pairing_attempts SET cancelled_at=COALESCE(cancelled_at,clock_timestamp()),
         code_hash=NULL,code_expires_at=NULL WHERE id=$1`, [requestId]);
       return returnToBox(row, requestId, {error: expired ? 'expired' : 'access_denied'});
+    });
+  }
+
+  emailGrant(requestId: string, installationId: string, setup: Setup, proof: SignedEnvelope, config?: RelayConfig) {
+    if (!isPairingUuid(requestId)) throw new RelayError('invalid_input');
+    const grants = new RelayGrantStore(this.#pool, config, 'test-venue-levels');
+    return transaction(this.#pool, async client => {
+      // Relay admission locks the switch before taking any account or installation locks.
+      if ((await new RelayControl(this.#pool).lock(client)).stopped) throw new RelayError('relay_disabled');
+      const binding = (await client.query<Attempt>('SELECT * FROM setup_pairing_attempts WHERE id=$1', [requestId])).rows[0];
+      if (!binding?.redeemed_at || !binding.cloud_account_id || binding.public_key !== setup.publicKey
+        || binding.version !== 5 || binding.provisional_registration?.installationId !== installationId) throw unavailable();
+      const session = await boundSession(client, binding, true);
+      const row = await attempt(client, requestId, setup);
+      const provisional = row.provisional_registration;
+      const expiresAt = new Date(Math.min(row.expires_at.getTime(), session.absolute_expires_at.getTime()));
+      if (row.result || row.cancelled_at || !sameAuthority(row, session) || provisional?.installationId !== installationId
+        || expiresAt <= await now(client)) throw unavailable();
+      return grants.issueSetup(client, {
+        requestId, accountId: binding.cloud_account_id, installationId, venueId: provisional.venueId,
+        managementOrigin: new URL(row.redirect_uri).origin, expiresAt,
+      }, proof);
     });
   }
 

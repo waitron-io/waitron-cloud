@@ -35,14 +35,16 @@ async function loadKeys(pool,directory){
   await writeFile(temporary,JSON.stringify(keys),{mode:0o600});await lease.assertOwned();await rename(temporary,path);return keys;
  }finally{await rm(temporary,{force:true});await lease.release();}
 }
-export function testRelayGrantConfig({issuer,origin}){
+export function testRelayGrantConfig({issuer,origin,setupExpiresAt}){
  canonicalHttpsOrigin(origin);
- return {mode:'local-proof',...testRelaySettings,testOrigin:{environment:'test',origin,trusted:createLeaseTrust(issuer)},
+ if(setupExpiresAt!==undefined&&(!Number.isFinite(Date.parse(setupExpiresAt))
+  ||new Date(setupExpiresAt).toISOString()!==setupExpiresAt))throw Error('test_cloud.relay_setup_expiry');
+ return {setupExpiresAt,mode:'local-proof',...testRelaySettings,testOrigin:{environment:'test',origin,trusted:createLeaseTrust(issuer)},
   verifyOrigin:async()=>{throw Error('origin_unverified');}};
 }
-export async function openTestRelayRuntime({pool,directory,issuer,origin,mode,smtpPort=1025}){
+export async function openTestRelayRuntime({pool,directory,issuer,origin,mode,setupExpiresAt,smtpPort=1025}){
  if(mode!=='test-venue-levels')return;
- const keys=await loadKeys(pool,directory),grants=testRelayGrantConfig({issuer,origin});
+ const keys=await loadKeys(pool,directory),grants=testRelayGrantConfig({issuer,origin,setupExpiresAt});
  const admission={mode:'local-proof',grants,payloadKeys:keys.payload,replayKeys:keys.replay,
   bounds:{version:'local-v1',epoch:testRelaySettings.policy.epoch,windowSeconds:3600,recipientLimit:100,grantLimit:100,queuedPayloadBytes:1000000,maxCounterRows:1000,recipientKeys:keys.bounds}};
  const worker=new RelayWorker(pool,{mode:'local-proof',grants,payloadKeys:keys.payload,suppressionKeys:keys.suppression,smtpPort},mode);

@@ -65,7 +65,8 @@ try {
     if(uploadOrigin!==undefined&&(planMode!=='test-venue-levels'||process.env.NODE_ENV==='production'))throw Error('test_cloud.amazon_backups');
     captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory,uploadOrigin}):undefined;
     let relay;
-    try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
+    try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode,
+      setupExpiresAt:process.env.CLOUD_TEST_RELAY_SETUP_EXPIRES_AT || undefined});}
     catch{console.error('Test relay startup failed; restore private keys and check schema');}
     if(guestOrigin&&!stopRequested){
       const key=await readFile(join(directory,'lan/key.pem')),cert=await readFile(join(directory,'lan/cert.pem'));

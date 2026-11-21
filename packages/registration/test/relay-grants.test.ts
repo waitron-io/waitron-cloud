@@ -1,11 +1,12 @@
 import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {after,before,beforeEach,test} from 'node:test';
 import {Pool} from 'pg';
 import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
+import {createLeaseIssuer,createLeaseTrust,encodeMachine} from '../src/installation-proof.ts';
 import {migrate} from '../src/migrate.ts';
 import {transaction} from '../src/transaction.ts';
 import * as relay from '../src/relay-grants.ts';
@@ -252,4 +253,45 @@ test('recovered scope: owner relay approval is confined while an existing machin
  await assert.rejects(approve(s,approval(secondInstallation)),/grant_unavailable/);
  assert.equal((await transaction(pool,c=>relay.readRelayGrantHint(c,installation)))?.id,g.id);
  await setRecoveryScope(pool,account,org);assert.equal((await approve(s,approval(secondInstallation))).organisationId,org);
+});
+
+async function setupGrant() {
+ const keys=generateKeyPairSync('ed25519'),issuer=createLeaseIssuer(keys.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const publicKey=keys.publicKey.export({type:'spki',format:'der'}).toString('base64url');
+ const {rows:[row]}=await pool.query('UPDATE installations SET public_key=$2,setup_pairing_account_id=$3 WHERE id=$1 RETURNING venue_id',[installation,publicKey,account]);
+ const {venue_id:venueId}=row,cloudOrigin='https://cloud.example.test',managementOrigin='https://box.local:3000',issuedAt=Date.now();
+ const setupExpiresAt=new Date(issuedAt+600_000).toISOString();
+ const lease=issuer.issue({origin:cloudOrigin,leaseId:randomUUID(),installationId:installation,venueId,publicKey,environment:'test',issuedAt,expiresAt:issuedAt+3600_000});
+ const requestId=randomUUID(),binding={requestId,accountId:account,installationId:installation,venueId,managementOrigin,expiresAt:new Date(issuedAt+3600_000)};
+ const payload=encodeMachine({origin:cloudOrigin,action:'configuration',installationId:installation,operationId:randomUUID(),issuedAt,
+  lease:JSON.stringify(lease),body:JSON.stringify({purpose:'waitron-cloud-setup-email-consent-v1',requestId,consent:true,consentVersion:'local-owner-v1'})});
+ const proof={payload:payload.toString('base64url'),signature:sign(null,payload,keys.privateKey).toString('base64url')};
+ const config=configured({setupExpiresAt,testOrigin:{environment:'test',origin:cloudOrigin,trusted:createLeaseTrust(issuer)}});
+ const issue=(overrides:Record<string,unknown>={})=>transaction(pool,client=>store({...config,...overrides}).issueSetup(client,binding,proof));
+ return {issue,setupExpiresAt};
+}
+
+test('concurrent setup consent records one grant and a retry cannot restore it after revocation',async()=>{
+ const {issue,setupExpiresAt}=await setupGrant();
+ const [first,second]=await Promise.all([issue(),issue()]);
+ assert.deepEqual(first,second);
+ assert.equal(first.revision,1);
+ assert.equal(first.expiresAt,setupExpiresAt);
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,1);
+ await store().revoke(session.token,session.csrfToken,first.id);
+ await code(issue(),'grant_unavailable');
+});
+
+test('setup consent leaves a conflicting operator grant in place',async()=>{
+ const {issue}=await setupGrant();
+ const existing=await approve();
+ await code(issue(),'grant_conflict');
+ assert.deepEqual((await pool.query('SELECT id,revision,management_origin FROM relay_grants')).rows,
+  [{id:existing.id,revision:1,management_origin:origin}]);
+});
+
+test('setup consent is unavailable when the operator has left the pilot date unset or it has passed',async()=>{
+ const {issue}=await setupGrant();
+ for(const setupExpiresAt of [undefined,'2000-01-01T00:00:00.000Z'])await code(issue({setupExpiresAt}),'grant_unavailable');
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
 });

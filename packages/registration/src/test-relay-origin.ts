@@ -13,13 +13,21 @@ export function privateManagementOrigin(value:unknown):value is string {
     return a===10||(a===172&&b!==undefined&&b>=16&&b<=31)||(a===192&&b===168);
   } catch {return false;}
 }
-// The caller holds test-only owner and installation authority; this checks the signed statement.
-export function testRelayOriginProof(config:TestRelayOrigin,installation:{id:string;venue_id:string;environment:string;public_key:string},managementOrigin:string,envelope:SignedEnvelope,time:number):void {
-  if(!privateManagementOrigin(managementOrigin))throw Error('origin_unverified');
+type Installation = {id:string;venue_id:string;environment:string;public_key:string};
+
+export function testRelayInstallationProof(config:TestRelayOrigin,installation:Installation,envelope:SignedEnvelope,time:number) {
   const c=verifyMachine(envelope,installation.public_key,config.origin,'configuration',time);
-  if(c.installationId!==installation.id||c.body!==JSON.stringify({servicesVersion:2,managementOrigin}))throw Error('origin_unverified');
+  if(c.installationId!==installation.id)throw Error('origin_unverified');
   const lease=JSON.parse(c.lease);
   if(JSON.stringify(lease)!==c.lease)throw Error('origin_unverified');
   const claims=verifyLease(lease,config.trusted,config.origin,time);
   if(claims.installationId!==installation.id||claims.venueId!==installation.venue_id||claims.environment!==installation.environment||claims.publicKey!==installation.public_key)throw Error('origin_unverified');
+  return c;
+}
+
+// The caller holds test-only owner and installation authority; this checks the signed statement.
+export function testRelayOriginProof(config:TestRelayOrigin,installation:Installation,managementOrigin:string,envelope:SignedEnvelope,time:number):void {
+  if(!privateManagementOrigin(managementOrigin))throw Error('origin_unverified');
+  const claims=testRelayInstallationProof(config,installation,envelope,time);
+  if(claims.body!==JSON.stringify({servicesVersion:2,managementOrigin}))throw Error('origin_unverified');
 }

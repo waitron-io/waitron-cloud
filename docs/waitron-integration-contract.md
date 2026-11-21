@@ -149,10 +149,11 @@ sign-in, you can enter the details manually and connect later.
 When you have provisional IDs, renew the signed installation lease at
 `/api/installations/renew` before calling the address route or reading installation
 configuration with `servicesVersion: 2`. Allowance-backed services use the test
-Cloud's published allowances. The address pilot uses a fake provider. To try
-staff email before saving, [prepare a relay grant](test-cloud-service-controls.md)
-for the provisional installation. Read the grant through signed configuration
-and check delivery in Mailpit. Signed complete files the venue's
+Cloud's published allowances. The address pilot uses a fake provider. If you choose
+**Send email through Waitron Cloud**, the box submits the
+[signed staff email choice](transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
+while the setup sign-in is current. The pilot operator sets the grant's end date.
+Signed complete files the venue's
 name and address and returns its final `registration`. The business keeps its
 name. Cloud fills its tax number if it is blank. A tax number already on the business takes
 precedence over the venue form. The IDs stay the same, keeping any setup-time

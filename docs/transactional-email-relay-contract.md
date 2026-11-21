@@ -131,6 +131,38 @@ Configuration replay reads the current hint without changing the service revisio
 or storing the hint in its durable operation result. These local capabilities do
 not install owner commands or SES startup.
 
+## Choose staff email in test setup
+
+Send your choice when you save the email step on a configured test box. Leaving
+the box unticked keeps your mail server and sends no request. Version 1 covers
+staff invitations, password resets and email changes. Adding guest email would
+require another consent version.
+
+After [setup pairing version 5](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
+returns a provisional installation, renew its lease if needed. Use the shared
+`encodeMachine` from `@waitron-io/contract@0.2.42` and sign with the installation key.
+Name the Cloud origin, action `configuration`, installation ID, operation ID,
+current issue time and serialized lease. The signed body uses these keys in order.
+
+```json
+{"purpose":"waitron-cloud-setup-email-consent-v1","requestId":"a826821a-36c3-4b94-b15c-b09ab11cf54d","consent":true,"consentVersion":"local-v1"}
+```
+
+Send the envelope `{payload,signature}` as JSON to `POST /api/pairing/email-grant`
+from the box backend, without browser Origin or cookies. On 200, the response is
+`{emailRelay:{version:1,grant:{id,revision,expiresAt,enabled:true}}}`. The grant
+uses the private HTTPS origin of the configured callback and the operator's pilot
+end date. It can send after you sign out, subject to the usual relay checks.
+
+- `400 pairing_unavailable` means you need a fresh setup sign-in.
+- `403 relay_disabled` or `403 grant_unavailable` means you can choose manual mail.
+- `409 grant_conflict` means a different live grant already exists. The operator
+  can inspect and change it through the existing relay controls.
+
+If the response is lost, read the grant through signed configuration before trying
+again. An exact consent retry can return the same live grant. The operator can
+revoke it. Changing the box's mail choice later does not revoke a grant in Cloud.
+
 ## Proposed wire exchange
 
 The proposed routes are `POST /v1/installations/email/submit`, `/status` and `/cancel`.

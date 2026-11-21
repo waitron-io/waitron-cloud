@@ -1,6 +1,7 @@
 import {organisationScopeSql} from '@waitron-cloud/identity';
-import {testRelayOriginProof,type TestRelayOrigin} from './test-relay-origin.ts';
+import {privateManagementOrigin,testRelayInstallationProof,testRelayOriginProof,type TestRelayOrigin} from './test-relay-origin.ts';
 import {readMachineClaims,type MachineClaims,type SignedEnvelope} from './installation-proof.ts';
+import {PairingError} from './pairing-proof.ts';
 import {requireVenueService} from './venue-service-permissions.ts';
 import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
 import {createHash,randomUUID} from 'node:crypto';
@@ -27,10 +28,15 @@ function canonicalOrigin(value:unknown):value is string{
 export interface RelayPolicy {version:string;units:number;periodSeconds:number;epoch:string;excess:'refuse';debit:'retain'}
 export interface OriginChallenge {installationId:string;managementOrigin:string;challenge:string}
 export interface OriginEvidence extends OriginChallenge {domainControl:true;httpsEndpoint:true;expiresAt:string}
-export interface RelayConfig {testOrigin?:TestRelayOrigin;mode:'local-proof';consentVersion:string;policy:RelayPolicy;verifyOrigin:(request:OriginChallenge)=>Promise<OriginEvidence>}
+export interface RelayConfig {testOrigin?:TestRelayOrigin;setupExpiresAt?:string;mode:'local-proof';consentVersion:string;policy:RelayPolicy;verifyOrigin:(request:OriginChallenge)=>Promise<OriginEvidence>}
 export interface RelayApproval {installationId:string;expectedRevision:number;consent:true;consentVersion:string;managementOrigin:string;expiresAt:string}
 export interface RelayGrant {id:string;installationId:string;accountId:string;organisationId:string;venueId:string;environment:string;managementOrigin:string;revision:number;expiresAt:string;enabled:boolean}
 export type RelayGrantHint=Pick<RelayGrant,'id'|'revision'|'expiresAt'|'enabled'>;
+interface SetupGrantBinding {requestId:string;accountId:string;installationId:string;venueId:string;managementOrigin:string;expiresAt:Date}
+
+export function setupEmailConsentBody(requestId:string,consentVersion:string) {
+ return JSON.stringify({purpose:'waitron-cloud-setup-email-consent-v1',requestId,consent:true,consentVersion});
+}
 
 // Configuration holds the installation lock already. This projection takes no
 // policy or owner locks and is only a hint; submit rechecks sending authority.
@@ -53,7 +59,7 @@ interface GrantRow {
  id:string;installation_id:string;account_id:string;organisation_id:string;venue_id:string;environment:string;public_key:string;
  management_origin:string;consent_version:string;revision:number;expires_at:Date;origin_verified_until:Date;enabled:boolean;revoked_at:Date|null;
 }
-interface InstallationRow {id:string;venue_id:string;organisation_id:string;environment:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;lease_expires_at:Date|null}
+interface InstallationRow {id:string;venue_id:string;organisation_id:string;environment:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;lease_expires_at:Date|null;setup_pairing_account_id:string|null}
 function view(g:GrantRow):RelayGrant{return {id:g.id,installationId:g.installation_id,accountId:g.account_id,organisationId:g.organisation_id,venueId:g.venue_id,environment:g.environment,managementOrigin:g.management_origin,revision:g.revision,expiresAt:g.expires_at.toISOString(),enabled:g.enabled&&g.revoked_at===null};}
 async function now(client:PoolClient):Promise<number>{return (await client.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();}
 async function session(client:PoolClient,token:string,csrfToken:string){
@@ -84,6 +90,11 @@ async function authority(client:PoolClient,accountId:string,installationId:strin
  return {...row,...venue};
 }
 function liveInstallation(row:InstallationRow,time:number){if(!row.lease_expires_at||row.lease_expires_at.getTime()<=time)fail('grant_unavailable');}
+async function lockGrant(client:PoolClient,installationId:string){
+ // Serialize first approval too; there is no grant row to lock until it is created.
+ await client.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))",[installationId]);
+ return (await client.query<GrantRow>('SELECT * FROM relay_grants WHERE installation_id=$1 FOR UPDATE',[installationId])).rows[0];
+}
 
 /** Internal local-proof core. No HTTP caller or production verifier is installed. */
 export class RelayGrantStore {
@@ -98,6 +109,7 @@ export class RelayGrantStore {
     ||!p||typeof p.version!=='string'||!version.test(p.version)||!Number.isSafeInteger(p.units)||p.units<1||p.units>1_000_000
     ||!Number.isSafeInteger(p.periodSeconds)||p.periodSeconds<1||p.periodSeconds>366*86400||!date(p.epoch)||p.excess!=='refuse'||p.debit!=='retain')fail('invalid_input');
    if(config.testOrigin&&(config.testOrigin.environment!=='test'||!canonicalOrigin(config.testOrigin.origin)||!(config.testOrigin.trusted instanceof Map)))fail('invalid_input');
+   if(config.setupExpiresAt!==undefined&&!date(config.setupExpiresAt))fail('invalid_input');
    this.#config={...config,policy:{...p},...(config.testOrigin?{testOrigin:{...config.testOrigin,trusted:new Map(config.testOrigin.trusted)}}:{})};
   }
  }
@@ -132,9 +144,7 @@ export class RelayGrantStore {
   }
   return transaction(this.#pool,async client=>{
    const actor=await session(client,token,csrfToken);await account(client,actor.accountId);const installation=await authority(client,actor.accountId,input.installationId,this.#planMode,undefined,true);
-   // Serialize first approval too; there is no grant row to lock until it is created.
-   await client.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))",[installation.id]);
-   const prior=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE installation_id=$1 FOR UPDATE',[installation.id])).rows[0];
+   const prior=await lockGrant(client,installation.id);
    if((prior?.revision??0)!==input.expectedRevision)fail('grant_conflict');
    const time=await now(client);liveInstallation(installation,time);
    if(Date.parse(verifiedUntil)<=time||Date.parse(verifiedUntil)<Date.parse(input.expiresAt))fail('origin_unverified');
@@ -150,6 +160,38 @@ export class RelayGrantStore {
    if(proof)await verifyTest(client,installation);
    return view(g);
   });
+ }
+ /** The setup transaction holds the relay switch and the verified owner's setup binding. */
+ async issueSetup(client:PoolClient,binding:SetupGrantBinding,proof:SignedEnvelope):Promise<RelayGrantHint>{
+  const {testOrigin,setupExpiresAt,consentVersion}=this.#configured();
+  if(!testOrigin||!setupExpiresAt||!privateManagementOrigin(binding.managementOrigin))fail('grant_unavailable');
+  await account(client,binding.accountId);
+  const installation=await authority(client,binding.accountId,binding.installationId,this.#planMode,undefined,true);
+  if(installation.venue_id!==binding.venueId||installation.setup_pairing_account_id!==binding.accountId)fail('grant_unavailable');
+  const prior=await lockGrant(client,installation.id);
+  const time=await now(client);
+  if(binding.expiresAt.getTime()<=time)throw new PairingError('pairing_unavailable');
+  if(Date.parse(setupExpiresAt)<=time)fail('grant_unavailable');
+  liveInstallation(installation,time);
+  try{
+   const claims=testRelayInstallationProof(testOrigin,installation,proof,time);
+   if(claims.body!==setupEmailConsentBody(binding.requestId,consentVersion))throw Error('invalid_proof');
+  }catch{throw new PairingError('invalid_proof');}
+
+  if(prior){
+   if(!prior.enabled||prior.revoked_at||prior.expires_at.getTime()<=time||prior.origin_verified_until.getTime()<=time)fail('grant_unavailable');
+   if(prior.account_id!==binding.accountId||prior.public_key!==installation.public_key||prior.management_origin!==binding.managementOrigin
+    ||prior.consent_version!==consentVersion||prior.venue_id!==installation.venue_id||prior.organisation_id!==installation.organisation_id)fail('grant_conflict');
+   return {id:prior.id,revision:prior.revision,expiresAt:prior.expires_at.toISOString(),enabled:true};
+  }
+  const grantId=randomUUID();
+  const inserted=await client.query(`INSERT INTO relay_grants
+   (id,installation_id,account_id,organisation_id,venue_id,environment,public_key,management_origin,consent_version,revision,expires_at,origin_verified_until,enabled,created_at)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$10,true,$11)`,
+  [grantId,installation.id,binding.accountId,installation.organisation_id,installation.venue_id,installation.environment,
+   installation.public_key,binding.managementOrigin,consentVersion,setupExpiresAt,new Date(time)]);
+  if(!inserted.rowCount)fail('grant_unavailable');
+  return {id:grantId,revision:1,expiresAt:setupExpiresAt,enabled:true};
  }
  async revoke(token:string,csrfToken:string,grantId:string):Promise<void>{
   if(!id(grantId))fail('invalid_input');
