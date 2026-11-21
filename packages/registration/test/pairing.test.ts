@@ -190,6 +190,16 @@ for (const existing of ['venue', 'different tax number']) {
   });
 }
 
+test('early setup retains both names on a business from older signup', async () => {
+  const setup = new SetupPairingStore(db.pool);
+  const box = await boundSetupBox(setup, 'B12345678', 'Café Sol', {version: 5});
+  const {registration} = await setup.complete(box.complete, box.settings, 'ES');
+  assert.deepEqual(await store.businesses(session.token), [{
+    organisationId: registration.organisationId, organisationName: 'Café Sol',
+    legalBusinessId: registration.legalBusinessId, legalBusinessName: 'Café Sol SL', countryCode: 'ES',
+  }]);
+});
+
 test('early setup files on save when the account already has a venue', async () => {
   await db.pool.query(`INSERT INTO venues (id, organisation_id, legal_business_id, environment)
     VALUES ($1,$2,$3,'test')`, [randomUUID(), owner.organisationId, owner.legalBusinessId]);

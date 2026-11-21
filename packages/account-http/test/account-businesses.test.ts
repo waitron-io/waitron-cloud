@@ -48,7 +48,10 @@ test('Account lists venue-free businesses and uses one record for matching tax n
     request('/businesses', {...input, taxNumber: 'es 0123'}),
   ]);
   for (const reply of replies) assert.equal(reply.status, 200);
-  const businesses = (await (await request()).json() as {businesses: {legalName: string; taxNumber: string | null}[]}).businesses;
+  const {organisations, businesses} = await (await request()).json() as {
+    organisations: {name: string}[]; businesses: {legalName: string; taxNumber: string | null}[];
+  };
+  assert.equal(organisations[0]?.name, 'Test Group');
   assert.deepEqual(businesses.map(b => b.legalName).sort(), ['Original SL', 'Second SL']);
   assert.match(businesses.find(b => b.legalName === 'Second SL')!.taxNumber!, /^(ES-0123|es 0123)$/);
   const rename = await request('/organisations/rename', {organisationId: owner.organisationId, name: 'New Group'});
