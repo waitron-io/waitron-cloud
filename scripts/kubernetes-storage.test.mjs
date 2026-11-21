@@ -125,7 +125,7 @@ test('the rejoined store retries reported offline shards and refuses exhausting 
   const storage = await import('./kubernetes-storage-proof.mjs');
   for (const reports of [['offline', 'ok'], ['offline', 'offline', 'offline']]) {
     let attempts = 0;
-    const run = mockRepair([], async (_binary, args) => JSON.stringify(args[args.indexOf('--data-binary') + 1] ?
+    const run = mockRepair([clusterReport('complete:0'), clusterReport('complete:1')], async (_binary, args) => JSON.stringify(args[args.indexOf('--data-binary') + 1] ?
       {clientToken: 'fixture:' + ++attempts} : {Summary: 'finished',
         Items: [{type: 'object', object: 'fixture-object', after: {drives: [{state: reports[attempts - 1]}]}}]}));
     const repair = () => storage.healRejoinedStore({node: repairEndpoint, account: repairAccount, run,
@@ -133,6 +133,30 @@ test('the rejoined store retries reported offline shards and refuses exhausting 
     if (reports.length === 2) assert.equal(await repair(), 2);
     else await assert.rejects(repair, /storage_loss.incomplete_bucket_repair/);
     assert.equal(attempts, reports.length);
+  }
+});
+
+test('measured rejoin waits for both serving peers to read all six drives before repairing', async () => {
+  const {healRejoinedStore} = await import('./kubernetes-storage-proof.mjs');
+  for (const comesOnline of [true, false]) {
+    const deadline = new AbortController();
+    const reports = [
+      clusterReport('complete:0'), clusterReport('partial:1', 'offline'),
+      ...(comesOnline ? [clusterReport('complete:0'), clusterReport('complete:1')] : []),
+    ];
+    const writes = [{clientToken: 'repair:1'}, {Summary: 'finished'}];
+    const run = mockRepair(reports, async () => JSON.stringify(writes.shift()), () => {
+      if (!comesOnline) deadline.abort(new DOMException('test deadline', 'TimeoutError'));
+    });
+    const repair = () => healRejoinedStore({node: repairEndpoint, account: repairAccount, run, signal: deadline.signal});
+    if (comesOnline) {
+      assert.equal(await repair(), 1);
+      assert.deepEqual(writes, []);
+    } else {
+      await assert.rejects(repair, error => error.message.includes('peer 1') &&
+        error.message.includes(returnedDisk('store-5') + '=offline'));
+      assert.equal(writes.length, 2, 'the bucket repair must never start before both serving peers are ready');
+    }
   }
 });
 
@@ -156,6 +180,13 @@ const baselineReport = (secondState = 'ok') => ({type: 'object', object: 'repair
   {endpoint: returnedDisk('store-0'), state: 'ok'}, {endpoint: returnedDisk('store-1'), state: secondState},
 ]}});
 
+const clusterReport = (token, survivingState = 'ok') => ({
+  token, replies: [{Summary: 'finished', Items: [{type: 'object', object: 'repair-probe-baseline', before: {
+    drives: Array.from({length: 6}, (_, index) => ({
+      endpoint: returnedDisk('store-' + index), state: index === 5 ? survivingState : 'ok',
+    })),
+  }}]}],
+});
 const connectedReports = () => ['first:2', 'second:3'].map(token =>
   ({token, replies: [{Summary: 'finished', Items: [baselineReport()]}]}));
 

@@ -1832,15 +1832,14 @@ implementation or production evidence.
   address changes, replicated publication and shared ingress remain open.
   The [private Kind cold-restart check](aws-infrastructure.md#rehearse-an-all-node-cold-restart-in-private-kind)
   passed in disposable x86-64 Linux with a full API outage, retained PostgreSQL
-  data and a fresh write. Rehearse the Stockholm cold restart from outside the
-  cell with the same service clients before run 9.
+  data and a fresh write.
   The [outside full-service baseline](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
   uses the private test host for one venue's signup, pairing, signed remote
-  access, encrypted upload and isolated restore. The individual stops and
-  all-machine restart still need to use the same outside clients in Stockholm.
-  Follow the [run 9 readiness sizing](superpowers/plans/2026-11-18-d621-run9-sizing.md)
-  for the remaining build and the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
-  for the timed dry run and billing gates.
+  access, encrypted upload and isolated restore. The same clients now exercise
+  each individual stop and the all-machine restart in private Kind. The
+  [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
+  keeps the final-tree timed run, billing reconciliation and paid Stockholm
+  qualification open.
   Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups

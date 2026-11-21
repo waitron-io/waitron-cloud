@@ -305,6 +305,39 @@ test('a fresh outside backup keeps the original verification bound to its origin
   await assert.rejects(async () => run(async () => original, true), /integration\.fault_backup_not_new/);
 });
 
+test('after a full restart the last acknowledged backup is read before restoring a different capture', async () => {
+  const {measureOutsideColdBackup} = await load();
+  const original = {pointId: 'last-acknowledged', workerVerification: {attemptId: 'verified-before'}};
+  for (const scenario of ['complete', 'same capture', 'same restore', 'missing old bytes']) {
+    const calls = [];
+    const run = measureOutsideColdBackup({
+      original,
+      inspect: async point => {
+        assert.equal(point, original);
+        calls.push('old backup');
+        return {retainedSnapshotUnchanged: scenario !== 'missing old bytes'};
+      },
+      capture: async () => {
+        calls.push('capture');
+        return {pointId: scenario === 'same capture' ? original.pointId : 'new-capture'};
+      },
+      verify: async point => {
+        calls.push('restore');
+        assert.equal(point.pointId, 'new-capture');
+        return {status: 'passed', attemptId: scenario === 'same restore' ? 'verified-before' : 'new-attempt', childAbsent: true};
+      },
+    }, new AbortController().signal);
+    if (scenario === 'complete') {
+      const result = await run;
+      assert.deepEqual(calls, ['old backup', 'capture', 'restore']);
+      assert.deepEqual([result.retainedPointId, result.pointId, result.attemptId], ['last-acknowledged', 'new-capture', 'new-attempt']);
+    } else {
+      await assert.rejects(run, /integration.cold_backup/);
+      assert.equal(calls.includes('restore'), scenario === 'same restore');
+    }
+  }
+});
+
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {
   const {readSignupToken} = await load();
   assert.equal(typeof readSignupToken, 'function', 'the authenticated rehearsal needs to read the signup link');

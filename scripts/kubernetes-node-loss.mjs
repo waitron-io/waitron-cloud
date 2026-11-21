@@ -244,63 +244,70 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       if (measured) return {...result, stopped: node.name, failoverMs, offMs};
       return {stopped: node.name, failoverMs, ...result};
     }
-    if (coldRestart) {
+    async function restartAll(whileStopped) {
       const ids = nodes.map(({id}) => id);
       async function verifyBalancer(options) {
         const row = await verifyContainer(balancer.Id, options);
         assert.ok(row.State.Running, 'cold_restart.balancer_stopped');
         assert.deepEqual(row.NetworkSettings.Ports['6443/tcp'], [{HostIp, HostPort}], 'cold_restart.balancer_binding');
       }
-      async function restartAll() {
-        await verifyNetwork();
-        const before = await Promise.all(ids.map(id => verifyContainer(id)));
-        for (const [index, row] of before.entries()) {
-          assert.equal(row.NetworkSettings.Networks[cluster]?.IPAddress, nodes[index].ip, 'node_loss.address_before_stop');
-          assert.ok(row.State.Running, 'cold_restart.node_already_stopped');
-        }
-        await docker(['update', '--restart=no', ...ids]);
-        await docker(['kill', '--signal=SIGKILL', ...ids]);
-        const stopped = await Promise.all(ids.map(id => verifyContainer(id)));
-        const stopTimes = stopped.map(({State}) => {
-          assert.ok(!State.Running && !State.Restarting, 'node_loss.container_still_running');
-          const time = Date.parse(State.FinishedAt);
-          assert.ok(Number.isFinite(time), 'cold_restart.stop_time');
-          return time;
-        });
-        await verifyBalancer();
-        for (let probe = 0; probe < 2; probe++) {
-          await kube(['get', '--raw=/readyz']).then(
-            () => assert.fail('cold_restart.api_still_ready'),
-            error => {
-              stop.signal.throwIfAborted();
-              if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|^error: EOF$/im.test(error.message)) throw error;
-            },
-          );
-        }
-        process.stderr.write(`Kind API outage confirmed with all three nodes stopped
-`);
-        for (const {id, ip} of nodes) {
-          await docker(['network', 'disconnect', networkId, id]);
-          await docker(['network', 'connect', networkId, '--ip', ip, id]);
-        }
-        const started = performance.now();
-        const rejoin = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]), timeout: 185_000};
-        await docker(['start', ...ids], rejoin);
-        for (const [index, {id, ip}] of nodes.entries()) {
-          const row = await verifyContainer(id, rejoin);
-          assert.equal(row.NetworkSettings.Networks[cluster]?.IPAddress, ip, 'node_loss.address_after_restart');
-          assert.ok(row.State.Running && Date.parse(row.State.StartedAt) > stopTimes[index], 'cold_restart.live_restart');
-        }
-        await retry(async () => {
-          const leases = await Promise.all(names.map(name => heartbeat(name, rejoin)));
-          assert.ok(leases.every((lease, index) => lease > stopTimes[index]), 'node_loss.stale_heartbeat');
-        }, rejoin.signal);
-        await retryApi(() => kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], rejoin), rejoin.signal, 'nodes Ready');
-        assert.deepEqual(await retryApi(() => readNodes(rejoin), rejoin.signal, 'node identity'), nodeUids, 'node_loss.node_identity');
-        assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
-        await verifyBalancer(rejoin);
-        return {recoveryMs: Math.round(performance.now() - started)};
+      await verifyNetwork();
+      const before = await Promise.all(ids.map(id => verifyContainer(id)));
+      for (const [index, row] of before.entries()) {
+        assert.equal(row.NetworkSettings.Networks[cluster]?.IPAddress, nodes[index].ip, 'node_loss.address_before_stop');
+        assert.ok(row.State.Running, 'cold_restart.node_already_stopped');
       }
+      await docker(['update', '--restart=no', ...ids]);
+      await docker(['kill', '--signal=SIGKILL', ...ids]);
+      const stopped = await Promise.all(ids.map(id => verifyContainer(id)));
+      const stopTimes = stopped.map(({State}) => {
+        assert.ok(!State.Running && !State.Restarting, 'node_loss.container_still_running');
+        const time = Date.parse(State.FinishedAt);
+        assert.ok(Number.isFinite(time), 'cold_restart.stop_time');
+        return time;
+      });
+      await verifyBalancer();
+      const confirmStopped = async (signal = stop.signal) => {
+        const options = {signal};
+        await verifyBalancer(options);
+        assert.ok((await Promise.all(ids.map(id => verifyContainer(id, options))))
+          .every(row => !row.State.Running && !row.State.Restarting), 'node_loss.container_still_running');
+      };
+      for (let probe = 0; probe < 2; probe++) {
+        await kube(['get', '--raw=/readyz']).then(
+          () => assert.fail('cold_restart.api_still_ready'),
+          error => {
+            stop.signal.throwIfAborted();
+            if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|^error: EOF$/im.test(error.message)) throw error;
+          },
+        );
+      }
+      process.stderr.write(`Kind API outage confirmed with all three nodes stopped
+`);
+      const outage = await whileStopped?.({signal: stop.signal, confirmStopped});
+      for (const {id, ip} of nodes) {
+        await docker(['network', 'disconnect', networkId, id]);
+        await docker(['network', 'connect', networkId, '--ip', ip, id]);
+      }
+      const started = performance.now();
+      const rejoin = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]), timeout: 185_000};
+      await docker(['start', ...ids], rejoin);
+      for (const [index, {id, ip}] of nodes.entries()) {
+        const row = await verifyContainer(id, rejoin);
+        assert.equal(row.NetworkSettings.Networks[cluster]?.IPAddress, ip, 'node_loss.address_after_restart');
+        assert.ok(row.State.Running && Date.parse(row.State.StartedAt) > stopTimes[index], 'cold_restart.live_restart');
+      }
+      await retry(async () => {
+        const leases = await Promise.all(names.map(name => heartbeat(name, rejoin)));
+        assert.ok(leases.every((lease, index) => lease > stopTimes[index]), 'node_loss.stale_heartbeat');
+      }, rejoin.signal);
+      await retryApi(() => kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], rejoin), rejoin.signal, 'nodes Ready');
+      assert.deepEqual(await retryApi(() => readNodes(rejoin), rejoin.signal, 'node identity'), nodeUids, 'node_loss.node_identity');
+      assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
+      await verifyBalancer(rejoin);
+      return {recoveryMs: Math.round(performance.now() - started), ...(whileStopped && {outage})};
+    }
+    if (coldRestart) {
       const result = await coldRestart({nodes, directory, run, kube, restartAll, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, coldRestart: result};
     }
@@ -317,7 +324,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, remote: result};
     }
     if (services) {
-      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, kubeTarget, stopNode, signal: stop.signal});
+      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, kubeTarget, stopNode, ...(outsideServices && {restartAll}), signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members,
         services: {...result, verifierScratchBytes: (await stat(scratchDisk)).size}};
     }

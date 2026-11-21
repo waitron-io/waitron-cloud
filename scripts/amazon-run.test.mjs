@@ -169,6 +169,16 @@ test('launcher policy lets the owner read stack failures within the D618 stack s
   assert.equal(grants[0].Condition, undefined, 'failure diagnosis remains available after a budget denial');
 });
 
+test('the launcher can start and stop the region’s D618 machines under the same tag restriction', async () => {
+  const policy = JSON.parse(await readFile(new URL('../deploy/kubernetes/bounded-amazon/setup/launcher-policy.json', import.meta.url), 'utf8'));
+  for (const action of ['ec2:StartInstances', 'ec2:StopInstances']) {
+    const grants = policy.Statement.filter(row => row.Effect === 'Allow' && [row.Action].flat().includes(action));
+    assert.equal(grants.length, 1, action);
+    assert.equal(grants[0].Resource, 'arn:aws:ec2:REGION:ACCOUNT_ID:instance/*', action);
+    assert.equal(grants[0].Condition.StringEquals['ec2:ResourceTag/cloud.campaign'], 'D618', action);
+  }
+});
+
 test('an explicit region is required before account access', async () => {
   for (const region of [undefined, '', 'REGION']) {
     await assert.rejects(api.startAmazon({...config, region}, {
@@ -233,7 +243,11 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
+  ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
+  ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
+  ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
+  ['baseline single stop late', /amazon.measured_stops_expiry/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
@@ -244,8 +258,16 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const removalReady=new Promise(resolve=>{markRemoval=resolve;});
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
-  const measuredStops = scenario === 'baseline measured stops', restartedAddress = '203.0.113.33';
-  let restarted = false, stopClock = 100;
+  const cold = scenario.startsWith('baseline cold');
+  const measuredStops = cold || ['baseline measured stops', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
+  let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
+  if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
+    const timeout = AbortSignal.timeout;
+    t.mock.method(AbortSignal, 'timeout', ms => timeout(ms === 300_000 ? 1000 : ms));
+  }
+  const roles = ['A', 'B', 'C'], ids = roles.map(role => output[role]);
+  const diskMarkers = new Map();
+  const publicAfter = ['203.0.113.11', '203.0.113.12', '203.0.113.13'];
   if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
   const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
     prepareFlux: async (directory, _name, options) => {calls.push(['flux-prepare', options.node]);return directory+'/flux.json';},
@@ -268,7 +290,30 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});
       await context.kube(['-n', 'd621-data', 'exec', '-i', 'pod/service', '--', 'node'], {input: '{"kind":"Secret"}'});
       await context.importVerifierImage('sha256:' + hashes, ['exec', '-i', 'pod/verifier', '--', 'docker', 'load']);
-      if (measuredStops) {
+      if (scenario === 'baseline deadline') {
+        time += 126 * 60_000;
+        assert.equal(await context.run('probe-venue', []), '');
+        time += 17 * 60_000;
+        await context.run('probe-cleanup', [], {signal: null});
+        const late = context.run('probe-too-late', []);
+        lateCommandReturned = true;
+        await late;
+      }
+      if (cold) {
+        if (scenario.endsWith('late')) time += 126 * 60_000;
+        const result = await context.restartAll(async ({confirmStopped}) => {
+          assert.equal(allState, 'stopped');
+          await confirmStopped();
+          calls.push(['outside outage']);
+        });
+        assert.deepEqual(Object.keys(result.bootTimesMs), context.nodes.map(row => row.name));
+        assert.deepEqual(Object.keys(result.stopTimesMs), context.nodes.map(row => row.name));
+      }
+      if (scenario === 'baseline single stop late') {
+        time += 126 * 60_000;
+        await context.stopNode(context.nodes[2].name, {});
+      }
+      if (scenario === 'baseline measured stops') {
         const {name} = context.nodes[2];
         const resumed = await context.stopNode(name, {
           async whileStopped({holdMs}) {stopClock += holdMs; return {};},
@@ -298,7 +343,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (scenario === 'observer failed after stop') throw Error('synthetic observer stop failure');
       time += 900000; return {continuous: true};
     },
-    aws: async (service, args) => {
+    aws: async (service, args, cleanup, request) => {
       calls.push([service, ...args]);
       if (scenario === 'observer failed after stop') {
         if (args[0] === 'stop-instances') time += 12000;
@@ -310,6 +355,31 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
       if (service === 'service-quotas') return JSON.stringify({Quota: {Value: 12}});
       if (args[0] === 'describe-stacks') return JSON.stringify({Stacks: [{Outputs: Object.entries(output).map(([OutputKey, OutputValue]) => ({OutputKey, OutputValue}))}]});
+      if (cold && service === 'ec2') {
+        assert.deepEqual(args.slice(args.indexOf('--instance-ids') + 1), ids);
+        assert.equal(request?.aborted, false, 'EC2 calls have a live deadline');
+        if (args[0] === 'stop-instances') {allState = 'stopped'; assert.ok(args.includes('--skip-os-shutdown'));}
+        if (args[0] === 'start-instances') {
+          if (scenario.endsWith('denied')) throw Error('start denied');
+          restarted = true;
+          allState = 'running';
+        }
+        if (args[0] === 'describe-instances') {
+          if (allState === 'stopped' && scenario.endsWith('cancelled')) {
+            stop.abort();
+            request.throwIfAborted();
+          }
+          return JSON.stringify({Reservations: [{Instances: roles.map((role, index) => ({
+            InstanceId: ids[index], State: {Name: allState},
+            PublicIpAddress: restarted ? publicAfter[scenario.endsWith('duplicate public') && index === 2 ? 1 : index] :
+              scenario.endsWith('wrong old address') && index === 2 ? '203.0.113.21' : output['Address' + role],
+            PrivateIpAddress: output['Private' + (restarted && scenario.endsWith('private changed') ? ['A', 'C', 'B'][index] : role)],
+            BlockDeviceMappings: [{DeviceName: '/dev/xvda', Ebs: {VolumeId: 'vol-0000000000000000' +
+              (restarted && scenario.endsWith('volumes changed') ? 9 : index)}}],
+          })).reverse()}]});
+        }
+        return '';
+      }
       if (args[0] === 'start-instances') restarted = true;
       if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{
         InstanceId: output.C, State: {Name: restarted ? 'running' : 'stopped'},
@@ -317,8 +387,12 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       }]}]});
       assert.ok(['create-stack', 'start-instances', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);
       return '';
-    }, run: async (binary, args, input, cleanup, timeout) => {
+    }, run: async (binary, args, input, cleanup, timeout, request) => {
       if (!cleanup) stop.signal.throwIfAborted();
+      if (cold && binary === 'sudo' && args.includes('wg') && args.includes('set')) {
+        assert.equal(cleanup, false, 'refreshing a live route is bounded ordinary work');
+        assert.equal(request?.aborted, false);
+      }
       calls.push([binary, ...args]);
       if (['ssh','scp'].includes(binary)) {
         const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
@@ -344,8 +418,22 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if (cold && script.includes("'cold-scratch-witness'")) {
+          const index = Number(args.at(-2).at(-1)) - 1;
+          const role = ids[index];
+          assert.ok(script.endsWith("'" + role + "'"));
+          if (script.includes("'cold-scratch-witness' 'write'")) diskMarkers.set(role, script.split("'").at(-2));
+          else assert.equal(diskMarkers.get(role), role, 'read the original marker from that machine');
+        }
+        if (cold && script.includes('/proc/sys/kernel/random/boot_id')) {
+          return '00000000-0000-4000-8000-00000000000' + (restarted && !(scenario.endsWith('stale boot') && args.at(-2).endsWith('.13')) ? '2' : '1');
+        }
+        if (cold && script.includes('169.254.169.254')) {
+          const role = args.at(-2).at(-1);
+          return restarted && scenario.endsWith('foreign metadata') && role === '3' ? ids[0] : ids[Number(role) - 1];
+        }
         if (script.includes("'kube-node-lease'")) {
-          return JSON.stringify({spec: {renewTime: restarted ? '2026-11-10T00:16:01Z' : '2026-11-10T00:00:01Z'}});
+          return JSON.stringify({spec: {renewTime: restarted && !(scenario.endsWith('stale lease') && args.at(-2).endsWith('.13')) ? '2026-11-10T00:16:01Z' : '2026-11-10T00:00:01Z'}});
         }
         if (script.includes('--raw=/readyz')) {
           if (['baseline', 'baseline measured stops', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
@@ -413,8 +501,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const closes = transports.filter(row => row.args.includes('-O'));
   if (scenario === 'failed creation') assert.deepEqual(transports, []);
   else {
-    assert.deepEqual(closes.map(row => row.args.at(-1)), measuredStops ?
-      ['admin@203.0.113.3', 'admin@203.0.113.1', 'admin@203.0.113.2', 'admin@' + restartedAddress] :
+    const retargeted = scenario === 'baseline cold' || / (stale boot|foreign metadata|stale lease)$/.test(scenario);
+    assert.deepEqual(closes.map(row => row.args.at(-1)), retargeted ?
+      ['203.0.113.1', '203.0.113.2', '203.0.113.3', ...publicAfter].map(ip => 'admin@' + ip) :
+      !cold && restarted && measuredStops ? ['admin@203.0.113.3', 'admin@203.0.113.1', 'admin@203.0.113.2', 'admin@' + restartedAddress] :
       ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
     assert.ok(closes.every(row => row.cleanup === true && row.args.includes('exit')));
     assert.ok(closes.every(row => row.socketDirectoryPresent), 'socket directory remains until every master is closed');
@@ -430,7 +520,45 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.equal(existsSync([...paths][0].slice(0,-3)), false, 'private sockets directory is removed after closure');
     assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
   }
+  if (cold) {
+    const lastHost = transports.filter(row => row.args.at(-2) === 'admin@' + publicAfter[2]).map(row => row.args.at(-1));
+    if (scenario.endsWith('foreign metadata')) {
+      assert.ok(lastHost.some(command => command.includes('169.254.169.254')));
+      assert.ok(!lastHost.some(command => command.includes('/proc/sys/kernel/random/boot_id')));
+    }
+    if (scenario.endsWith('stale boot')) {
+      assert.ok(lastHost.some(command => command.includes('/proc/sys/kernel/random/boot_id')));
+      assert.ok(!lastHost.some(command => command.includes("'cold-scratch-witness' 'read'")));
+    }
+    if (scenario.endsWith('stale lease')) assert.ok(lastHost.some(command => command.includes("'kube-node-lease'")));
+    const stopped = calls.findIndex(row => row[1] === 'stop-instances');
+    const outage = calls.findIndex(row => row[0] === 'outside outage');
+    const start = calls.findIndex(row => row[1] === 'start-instances');
+    if (scenario.endsWith('late') || scenario.endsWith('wrong old address')) assert.equal(stopped, -1);
+    else assert.ok(stopped >= 0);
+    if (scenario.endsWith('cancelled')) assert.equal(start, -1);
+    if (start >= 0) assert.ok(stopped < outage && outage < start);
+    if (!expectedError) {
+      assert.equal(result.removed, true);
+      assert.deepEqual([...diskMarkers.values()].sort(), ids);
+      assert.deepEqual(transports.filter(row => row.args.at(-1).includes("'cold-scratch-witness' 'read'"))
+        .map(row => row.args.at(-2)).sort(), publicAfter.map(ip => 'admin@' + ip));
+      for (const ip of publicAfter) {
+        assert.ok(calls.some(row => row[0] === 'sudo' && row.includes('wg') && row.includes(ip + ':51821')));
+        assert.ok(transports.some(row => row.args.at(-2) === 'admin@' + ip && row.args.at(-1).includes("'verifier-scratch' 'check'")));
+      }
+      return;
+    }
+  }
   if (expectedError) {
+    if (scenario === 'baseline single stop late') assert.equal(calls.some(row => row[1] === 'stop-instances'), false);
+    if (scenario === 'baseline deadline') {
+      assert.equal(lateCommandReturned, true, 'an expired async command returns a rejected promise');
+      assert.ok(calls.some(row => row[0] === 'probe-venue'));
+      assert.ok(calls.some(row => row[0] === 'probe-cleanup'));
+      assert.equal(calls.some(row => row[0] === 'probe-too-late'), false);
+      assert.ok(calls.some(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'rm'));
+    }
     if (scenario === 'baseline interrupted') {
       const logs = transports.find(row => row.args.at(-1).includes("'logs' 'pod/service'"));
       assert.equal(logs?.args.at(-2), 'admin@203.0.113.2');
@@ -512,10 +640,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.match(transports.find(row => row.input === 'synthetic-migration')?.args.at(-1) ?? '', /--context/);
     assert.equal(transports.find(row => row.input === 'synthetic-migration')?.args.at(-2), 'admin@203.0.113.2');
     assert.equal(transports.find(row => row.args.at(-1).includes('docker save'))?.args.at(-2), 'admin@203.0.113.2');
-    for (const fragment of ['mkfs.ext4', "'docker' 'load'"]) {
+    for (const fragment of ['verifier-scratch', "'docker' 'load'"]) {
       assert.deepEqual(transports.filter(row => row.args.at(-1).includes(fragment)).map(row => row.args.at(-2)),
         ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3',
-          ...(measuredStops && fragment === 'mkfs.ext4' ? ['admin@' + restartedAddress] : [])]);
+          ...(measuredStops && fragment === 'verifier-scratch' ? ['admin@' + restartedAddress] : [])]);
     }
     const removedNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'rm' && row[3] === 'd'.repeat(64));
     const deletedStack = calls.findIndex(row => row[1] === 'wait' && row[2] === 'stack-delete-complete');
@@ -776,14 +904,19 @@ test('outside host binds three individual mesh routes and removes only its own i
   const publicKey = Buffer.alloc(32, 2).toString('base64');
   const peers = [3, 4, 5].map(value => ({endpoint: '192.0.2.' + value,
     publicKey: Buffer.alloc(32, value).toString('base64')}));
-  const calls = [];
+  const calls = [], signal = new AbortController().signal;
   const mesh = await outside.startOutsideMesh({directory, peers, async prepareNodes(key) {
     assert.equal(key, publicKey);
     calls.push('nodes ready');
-  }, async run(binary, args, input, cleanup) {
+  }, async run(binary, args, input, cleanup, timeout, request) {
     if (binary === 'wg') return args[0] === 'genkey' ? privateKey : publicKey;
     calls.push([binary, ...args]);
-    assert.equal(cleanup, true, 'an interrupted command must not strand an interface');
+    if (args[1] === 'wg') {
+      assert.equal(cleanup, false, 'a live route refresh must follow its own deadline');
+      assert.equal(request, signal);
+    } else {
+      assert.equal(cleanup, true, 'an interrupted command must not strand an interface');
+    }
   }});
   assert.match(mesh.interfaceName, /^d621[a-f0-9]{11}$/);
   const config = join(directory, mesh.interfaceName + '.conf');
@@ -794,7 +927,7 @@ test('outside host binds three individual mesh routes and removes only its own i
     '',
   ].join('\n'));
   assert.deepEqual(calls, ['nodes ready', ['sudo', '-n', 'wg-quick', 'up', config]]);
-  await (mesh.refreshEndpoint ?? (() => {}))(1, '192.0.2.24');
+  await mesh.refreshEndpoint(1, '192.0.2.24', signal);
   assert.deepEqual(calls.at(-1), ['sudo', '-n', 'wg', 'set', mesh.interfaceName, 'peer', peers[1].publicKey,
     'endpoint', '192.0.2.24:51821']);
   await mesh.close();

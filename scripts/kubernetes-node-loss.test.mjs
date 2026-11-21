@@ -343,8 +343,8 @@ test('the fault check retries a bare Kubernetes API EOF while the node stays dow
   assert.deepEqual(f.mutations('start'), f.mutations('kill'));
 });
 
-function servicesFixture({unmountError, outside = false} = {}) {
-  const {execute: executeKind, calls, remaining} = fixture();
+function servicesFixture({unmountError, outside = false, cold = false} = {}) {
+  const {execute: executeKind, calls, remaining} = fixture({cold});
   const workPaths = [];
   const execute = async (binary, args, options) => {
     if (binary === 'fallocate') {
@@ -501,6 +501,21 @@ test('cold restart sees the full outage before starting the same nodes and waits
   }
   assert.equal(f.remaining(), 0);
   assert.ok(f.removed());
+});
+
+test('the outside journey sees the confirmed outage before the same Kind machines restart', async () => {
+  const {execute, calls} = servicesFixture({cold: true, outside: true});
+  const result = await runCheck({execute, outsideServices: true, services: ({restartAll}) =>
+    restartAll(async ({confirmStopped}) => {
+      await confirmStopped();
+      calls.push({args: ['outside outage']});
+      return {unavailable: true};
+    })});
+  const stop = calls.findIndex(({args}) => args[0] === 'kill');
+  const outage = calls.findIndex(({args}) => args[0] === 'outside outage');
+  const start = calls.findIndex(({args}) => args[0] === 'start');
+  assert.ok(stop >= 0 && stop < outage && outage < start);
+  assert.deepEqual(result.services.outage, {unavailable: true});
 });
 
 for (const [mode, reason] of [

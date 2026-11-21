@@ -7,7 +7,7 @@ import {cleanUp} from './kubernetes-database.mjs';
 import {servicesNamespace, verifierScratchPath} from '../deploy/kubernetes/services.mjs';
 import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
-import {selectSurvivingNode} from './kubernetes-remote.mjs';
+import {selectSurvivingNode, untilRemote} from './kubernetes-remote.mjs';
 
 const stockholmHoldMs = 900_000;
 
@@ -105,7 +105,9 @@ async function main() {
   assert.ok(process.env.D618_CONFIG, 'Set D618_CONFIG to your private run configuration JSON file.');
   const config = JSON.parse(await readFile(process.env.D618_CONFIG, 'utf8'));
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
-  const aws = (service, args, cleanup = false) => command('aws', ['--region', config.region, '--no-cli-pager', service, ...args, '--output', 'json'], undefined, cleanup ? undefined : stop.signal, 300000);
+  const aws = (service, args, cleanup = false, request) => command('aws',
+    ['--region', config.region, '--no-cli-pager', service, ...args, '--output', 'json'],
+    undefined, cleanup ? undefined : AbortSignal.any([stop.signal, request].filter(Boolean)), 300000);
   const stop = new AbortController(), shutdown = () => stop.abort();
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
   try {
@@ -159,11 +161,22 @@ async function runOutsideServices(context) {
   return runKubernetesServices(context);
 }
 
-export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now, signal,
+export async function startAmazon(config, {run: execute, aws: provider, sleep = delay, now = Date.now, signal,
   observe = observerCommand, prepareFlux = prepareFluxBundle, runBaseline = runOutsideServices}) {
   assert.ok(!(config.baseline && config.observer), 'amazon.mode');
   assert.ok(!config.measuredStops || config.baseline, 'amazon.measured_stops_scope');
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
+  let runDeadline, runSignal;
+  const active = (cleanup, request) => {
+    if (cleanup || !runSignal) return request;
+    assert.ok(now() < runDeadline, 'amazon.run_deadline');
+    const limit = request ? AbortSignal.any([runSignal, request]) : runSignal;
+    limit.throwIfAborted();
+    return limit;
+  };
+  const run = async (binary, args, input, cleanup, timeout, request) =>
+    execute(binary, args, input, cleanup, timeout, active(cleanup, request));
+  const aws = async (service, args, cleanup, request) => provider(service, args, cleanup, active(cleanup, request));
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
   assert.match(config.image, /^ami-[a-f0-9]{17}$/);
@@ -238,12 +251,19 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     await run('git', ['archive', '--format=tar', '-o', join(directory, 'source.tar'), 'HEAD']);
     // Stockholm's 150-minute limit includes five minutes to confirm deletion.
     const expiry = now() + (config.measuredStops ? 145 : 90) * 60_000;
+    if (config.measuredStops) {
+      runDeadline = expiry - 2 * 60_000;
+      runSignal = AbortSignal.any([signal, AbortSignal.timeout(runDeadline - now())].filter(Boolean));
+    }
     const parameters = {Image: config.image, Key: config.key, OperatorCidr: config.operatorCidr,
       StackRole: config.stackRole, SchedulerRole: config.schedulerRole, ExpiryTime: new Date(expiry).toISOString().slice(0, 19)};
     let outputs, target;
     const ssh = (index, args, input, timeout = 600000, request, hideStderr = false) => run('ssh',
       [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ') + (hideStderr ? ' 2>/dev/null' : '')],
       input, request === null, timeout, request);
+    const instanceIdentity = (index, request) => ssh(index, ['sh', '-ec',
+      'token=$(curl -fsS -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 60" http://169.254.169.254/latest/api/token); curl -fsS -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/instance-id'],
+      undefined, 15_000, request);
     const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
     const kubeArgs = ['kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name];
@@ -281,7 +301,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           let ready = false;
           for (let attempt = 0; attempt < 30; attempt++) {try {await ssh(index, ['true']); ready = true; break;} catch {await sleep(5000);}}
           assert.ok(ready, 'amazon.ssh_ready');
-          const instance = await ssh(index, ['sh', '-ec', 'token=$(curl -fsS -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 60" http://169.254.169.254/latest/api/token); curl -fsS -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/instance-id']);
+          const instance = await instanceIdentity(index);
           assert.equal(instance, target.instances[index], 'amazon.instance_binding');
           await copy(index, 'source.tar', '/tmp/d618-source.tar');
           await ssh(index, ['sudo', 'mkdir', '-p', '/opt/d618']);
@@ -373,20 +393,13 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         const reserve = config.measuredStops ? 20 * 60_000 : 0;
         assert.ok(!config.measuredStops || expiry - now() >= reserve + 3 * (stockholmHoldMs + 5 * 60_000),
           'amazon.measured_stops_expiry');
-        const limit = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, expiry - now() - reserve))].filter(Boolean));
-        const prepareScratch = (index, request) => ssh(index, ['sudo', 'sh', '-ec', `
-          scratch=/var/local/d621-verifier
-          install -d -m 0700 "$scratch" "$scratch/mount"
-          if ! test -f "$scratch/disk"; then
-            fallocate -l 1G "$scratch/disk"
-            mkfs.ext4 -q -m 0 "$scratch/disk"
-          fi
-          mount -o loop,nodev,nosuid,noexec "$scratch/disk" "$scratch/mount"
-          install -d -m 0700 -o 1000 -g 1000 "$scratch/mount/work"
-          install -d -m 0700 "$1"
-          mount --bind "$scratch/mount/work" "$1"`,
-          'verifier-scratch', verifierScratchPath], undefined, 30_000, request);
-        for (const index of [0, 1, 2]) await prepareScratch(index, limit);
+        const singleStopDeadline = expiry - reserve;
+        const stopSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, singleStopDeadline - now()))].filter(Boolean));
+        const limit = runSignal ?? stopSignal;
+        const scratch = (index, phase, request) => ssh(index,
+          ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', 'verifier-scratch', phase],
+          undefined, 30_000, request);
+        for (const index of [0, 1, 2]) await scratch(index, config.measuredStops ? 'boot' : 'once', limit);
         let controller = 0, unavailable;
         const controlPlaneSelection = {calls: 0, totalMs: 0, longestMs: 0};
         const controlPlane = async request => {
@@ -406,16 +419,17 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         };
         const outsideKube = async (args, options) => kubeOn(await controlPlane(options?.signal), args, options);
         async function stopNode(node, {whileStopped, afterRestart}) {
-          const {untilRemote} = await import('./kubernetes-remote.mjs');
+          assert.ok(now() < singleStopDeadline, 'amazon.measured_stops_expiry');
+          stopSignal.throwIfAborted();
           const index = target.nodes.indexOf(node);
           assert.ok(index >= 0, 'amazon.measured_stop_node');
           const heartbeat = async signal => JSON.parse(await outsideKube(
             ['-n', 'kube-node-lease', 'get', 'lease', node, '-o', 'json'], {signal})).spec.renewTime;
-          const before = Date.parse(await heartbeat(limit));
+          const before = Date.parse(await heartbeat(stopSignal));
           assert.ok(Number.isFinite(before), 'amazon.measured_stop_lease');
           unavailable = index;
-          const receipt = await stopAmazonRehearsalNode({instance: target.instances[index], node, aws, kube: outsideKube,
-            whileStopped, signal: limit,
+          const receipt = await stopAmazonRehearsalNode({instance: target.instances[index], node, aws: (service, args) => aws(service, args, false, stopSignal), kube: outsideKube,
+            whileStopped, signal: stopSignal,
             async afterRestart(instance) {
               const endpoint = instance.PublicIpAddress;
               assert.ok(isIPv4(endpoint) && !hosts.some((address, peer) => peer !== index && address === endpoint) &&
@@ -424,23 +438,106 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
                 await run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + hosts[index]], undefined, true).catch(() => {});
                 hosts[index] = endpoint;
               }
-              await mesh.refreshEndpoint(index, endpoint);
+              await mesh.refreshEndpoint(index, endpoint, stopSignal);
               await untilRemote(async signal => {
                 if (await kubeOn(index, ['get', '--raw=/readyz'], {signal, timeout: 5000}) !== 'ok') return false;
                 return Date.parse(await heartbeat(signal)) > before;
-              }, 180_000, limit, 'amazon_node_rejoined');
-              await prepareScratch(index, limit);
-              await afterRestart({signal: limit});
+              }, 180_000, stopSignal, 'amazon_node_rejoined');
+              await scratch(index, 'check', stopSignal);
+              await afterRestart({signal: stopSignal});
             }});
           unavailable = undefined;
-          await outsideKube(['wait', '--for=condition=Ready', 'node', node, '--timeout=180s'], {signal: limit});
+          await outsideKube(['wait', '--for=condition=Ready', 'node', node, '--timeout=180s'], {signal: stopSignal});
           return receipt;
+        }
+        async function restartAll(whileStopped) {
+          const indexes = [0, 1, 2], roles = ['A', 'B', 'C'];
+          assert.ok(target.instances.length === 3 && new Set(target.instances).size === 3 &&
+            target.instances.every(id => /^i-[a-f0-9]{17}$/.test(id)), 'amazon.cold_restart_instances');
+          const invoke = (request, ...args) => aws('ec2', [...args, '--instance-ids', ...target.instances], false, request);
+          const read = async request => {
+            const {Reservations} = JSON.parse(await invoke(request, 'describe-instances'));
+            const byId = new Map(Reservations.flatMap(row => row.Instances).map(row => [row.InstanceId, row]));
+            assert.ok(byId.size === 3 && target.instances.every(id => byId.has(id)), 'amazon.cold_restart_instances');
+            return target.instances.map(id => byId.get(id));
+          };
+          const bootId = (index, request) => ssh(index, ['cat', '/proc/sys/kernel/random/boot_id'], undefined, 15_000, request);
+          const scratchWitness = (index, phase, request) => ssh(index, ['sudo', 'sh', '-ec', `
+            marker=$2/.d618-cold-restart
+            if [ "$1" = write ]; then
+              umask 077
+              printf '%s\n' "$3" > "$marker"
+            else
+              test "$(cat "$marker")" = "$3"
+            fi`, 'cold-scratch-witness', phase, verifierScratchPath, target.instances[index]], undefined, 15_000, request);
+          const heartbeat = async (index, request) => Date.parse(JSON.parse(await kubeOn(index,
+            ['-n', 'kube-node-lease', 'get', 'lease', target.nodes[index], '-o', 'json'], {signal: request})).spec.renewTime);
+          const admit = () => assert.ok(now() <= singleStopDeadline, 'amazon.cold_restart_late');
+          const volumeIds = row => (row.BlockDeviceMappings ?? []).map(device => device.Ebs?.VolumeId).sort();
+          admit();
+          const before = await read(limit);
+          const disks = before.map(volumeIds);
+          for (const [index, row] of before.entries()) {
+            assert.ok(row.State.Name === 'running' && row.PrivateIpAddress === outputs['Private' + roles[index]] &&
+              row.PublicIpAddress === hosts[index] && disks[index].length &&
+              disks[index].every(id => /^vol-[a-f0-9]+$/.test(id)), 'amazon.cold_restart_binding');
+          }
+          const oldBoot = await Promise.all(indexes.map(index => bootId(index, limit)));
+          assert.ok(oldBoot.every(id => /^[0-9a-f-]{36}$/.test(id)), 'amazon.cold_restart_boot_id');
+          await Promise.all(indexes.map(index => scratchWitness(index, 'write', limit)));
+          const oldLeases = await Promise.all(indexes.map(index => heartbeat(index, limit)));
+          assert.ok(oldLeases.every(Number.isFinite), 'amazon.cold_restart_lease');
+          admit();
+          const started = performance.now(), stopTimesMs = {}, bootTimesMs = {};
+          const fault = AbortSignal.any([limit, AbortSignal.timeout(240_000)]);
+          await invoke(fault, 'stop-instances', '--skip-os-shutdown');
+          await untilRemote(async request => {
+            const rows = await read(request);
+            for (const [index, row] of rows.entries()) {
+              if (row.State.Name === 'stopped') stopTimesMs[nodes[index].name] ??= Math.round(performance.now() - started);
+            }
+            return rows.every(row => row.State.Name === 'stopped');
+          }, 240_000, fault, 'amazon_all_stopped');
+          const confirmStopped = async (request = fault) => {
+            assert.ok((await read(request)).every(row => row.State.Name === 'stopped'), 'amazon.cold_restart_still_running');
+          };
+          const outage = await whileStopped({signal: fault, confirmStopped});
+          const bootStarted = performance.now(), boot = AbortSignal.any([limit, AbortSignal.timeout(300_000)]);
+          await invoke(boot, 'start-instances');
+          const current = await untilRemote(async request => {
+            const rows = await read(request);
+            return rows.every(row => row.State.Name === 'running' && row.PublicIpAddress) && rows;
+          }, 300_000, boot, 'amazon_all_running');
+          const endpoints = current.map(row => row.PublicIpAddress);
+          assert.ok(endpoints.every(isIPv4) && new Set(endpoints).size === 3, 'amazon.cold_restart_public_addresses');
+          for (const [index, row] of current.entries()) {
+            assert.equal(row.PrivateIpAddress, before[index].PrivateIpAddress, 'amazon.cold_restart_private_address');
+            assert.deepEqual(volumeIds(row), disks[index], 'amazon.cold_restart_volumes');
+          }
+          await Promise.all(hosts.map(host =>
+            run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + host], undefined, true).catch(() => {})));
+          hosts = endpoints;
+          for (const index of indexes) await mesh.refreshEndpoint(index, hosts[index], boot);
+          await Promise.all(indexes.map(async index => {
+            await untilRemote(async request => {
+              if (await instanceIdentity(index, request) !== target.instances[index]) return false;
+              const id = await bootId(index, request);
+              if (!/^[0-9a-f-]{36}$/.test(id) || id === oldBoot[index]) return false;
+              await scratch(index, 'check', request);
+              await scratchWitness(index, 'read', request);
+              bootTimesMs[nodes[index].name] ??= Math.round(performance.now() - bootStarted);
+              return await heartbeat(index, request) > oldLeases[index] &&
+                await kubeOn(index, ['get', '--raw=/readyz'], {signal: request, timeout: 5000}) === 'ok';
+            }, 300_000, boot, 'amazon_all_rejoined');
+          }));
+          await outsideKube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], {signal: boot});
+          return {outage, stopTimesMs, bootTimesMs, recoveryMs: Math.round(performance.now() - bootStarted)};
         }
         const verificationTarget = await readRehearsalVerificationTarget();
         const context = {cluster: name, nodes, directory, kube: outsideKube, run: local, image: ids[cloud], waitronImage: ids[waitron],
           signal: limit, verificationTarget, amazon: {...target, phase: 'baseline', ...(config.measuredStops && {measuredStops: true})},
           baseline: true, databasePrepared: true,
-          ...(config.measuredStops && {stopServiceNodes: true, stopNode, holdMs: stockholmHoldMs})};
+          ...(config.measuredStops && {stopServiceNodes: true, stopNode, stopSignal, restartAll, holdMs: stockholmHoldMs})};
         const execute = (binary, args, input, cleanup, request) =>
           run(binary, args, input, cleanup, undefined, request ?? limit);
         const prepareOutside = () => outsidePublication({...context, run: execute, mesh,

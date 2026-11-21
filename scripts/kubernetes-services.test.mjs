@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync} from 'node:crypto';
 import test from 'node:test';
+import {once} from 'node:events';
+import {get} from 'node:https';
+import {createServer} from 'node:net';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -62,6 +65,94 @@ test('measured stops cover all three machines and the live roles before returnin
     throw Error('synthetic probe failed during stop');
   }}}), /synthetic probe failed during stop/);
   assert.equal(request.aborted, true);
+});
+
+test('the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup', async () => {
+  for (const routeStillResponding of [undefined, 'public', 'bad certificate']) {
+    const seen = [], signal = new AbortController().signal;
+    let inspectionChecks = 0;
+    const down = label => async () => {
+      seen.push(label);
+      if (routeStillResponding === label) return {status: 503};
+      if (routeStillResponding === 'bad certificate') throw Object.assign(Error('TLS'), {code: 'CERT_HAS_EXPIRED'});
+      throw Object.assign(Error('unreachable'), {code: 'ECONNREFUSED'});
+    };
+    const run = servicesScript.measureServiceRestart({
+      signal, checkStore: async () => {seen.push('store');},
+      storeOutage: down('store outage'),
+      prepare: async () => () => {seen.push('retained row and new write'); return {primary: 'original-copy'};},
+      restore: async verify => {seen.push('data restored'); return verify();},
+      inspectionReady: async () => {
+        seen.push('inspect');
+        return ++inspectionChecks === 2;
+      },
+      probes: {
+        session: async () => {seen.push('account');}, remote: async () => {seen.push('routes');},
+        outage: {account: down('account outage'), staff: down('staff'), public: down('public')},
+        backupAfterRestart: async () => {
+          assert.equal(inspectionChecks, 2, 'the backup requires a ready inspector');
+          seen.push('backup');
+          return {retainedPointId: 'original', pointId: 'new'};
+        },
+      },
+      async restartAll(outage) {
+        seen.push('stopped');
+        const result = await outage({signal, confirmStopped: async () => {seen.push('confirmed');}});
+        seen.push('restarted');
+        return {outage: result, recoveryMs: 100};
+      },
+    });
+    if (routeStillResponding) {
+      await assert.rejects(run, /services.cold_transport/);
+      assert.ok(!seen.includes('restarted'));
+    } else {
+      const result = await run;
+      assert.deepEqual(result.outage, {account: 'ECONNREFUSED', staff: 'ECONNREFUSED', public: 'ECONNREFUSED', store: 'ECONNREFUSED'});
+      assert.deepEqual(seen, ['account', 'routes', 'store', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
+        'store outage', 'confirmed', 'restarted', 'data restored', 'retained row and new write', 'account', 'routes', 'store',
+        'inspect', 'inspect', 'backup']);
+      assert.equal(result.primary, 'original-copy');
+      assert.equal(result.backup.pointId, 'new');
+    }
+  }
+});
+
+test('a silent outside account connection expires as transport loss', async t => {
+  const sockets = new Set();
+  const listener = createServer(socket => sockets.add(socket));
+  listener.listen(0, '127.0.0.1');
+  t.after(() => {for (const socket of sockets) socket.destroy(); listener.close();});
+  await once(listener, 'listening');
+  const lost = async () => {throw Object.assign(Error('unreachable'), {code: 'ECONNREFUSED'});};
+  for (const parentExpires of [false, true]) {
+    const parent = new AbortController(), {signal} = parent;
+    const reason = new DOMException('parent deadline', 'TimeoutError');
+    const run = servicesScript.measureServiceRestart({
+      signal, checkStore: async () => {}, storeOutage: lost, restore: async () => ({}), inspectionReady: async () => true,
+      probes: {
+        session: async () => {}, remote: async () => {}, backupAfterRestart: async () => ({}),
+        outage: {staff: lost, public: lost, account: signal => new Promise((_, reject) => {
+          const limit = AbortSignal.any([signal, AbortSignal.timeout(100)]);
+          const request = get({host: '127.0.0.1', port: listener.address().port, agent: false, signal: limit});
+          request.once('error', reject);
+          if (parentExpires) parent.abort(reason);
+        })},
+      },
+      async restartAll(outage) {return {outage: await outage({signal, confirmStopped: async () => {}})};},
+    });
+    if (parentExpires) await assert.rejects(run, error => error === reason);
+    else assert.equal((await run).outage.account, 'ETIMEDOUT');
+  }
+});
+
+test('the outside store probe reports a closed connection before TLS can start', async t => {
+  const listener = createServer(socket => socket.destroy());
+  listener.listen(0, '127.0.0.1');
+  t.after(() => listener.close());
+  await once(listener, 'listening');
+  await assert.rejects(async () => servicesScript.readOutsideStore({
+    host: '127.0.0.1', port: listener.address().port, signal: t.signal,
+  }), {code: 'ECONNRESET'});
 });
 
 test('Git recovery starts while the database is moving and finishes before measuring a stable publication worker', async () => {
@@ -298,6 +389,14 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
       assert.ok(Number.isInteger(leg.rejoin.storeRepairAttempts) && leg.rejoin.storeRepairAttempts > 0);
       if (leg.roles.primary === leg.stopped) assert.ok(leg.reconciliation.publication.worker.uid);
     }
+    assert.deepEqual(Object.keys(services.coldRestart.outage).sort(), ['account', 'public', 'staff', 'store']);
+    assert.match(services.coldRestart.primary, /^cloud-db-\d+$/);
+    const {retainedPointId, pointId, status, childAbsent} = services.coldRestart.backup;
+    assert.ok(retainedPointId && pointId && retainedPointId !== pointId);
+    assert.equal(retainedPointId, legs.at(-1).recovery.backup.result.pointId);
+    assert.equal(status, 'passed');
+    assert.equal(childAbsent, true);
+    console.log('D621 cold restart receipt ' + JSON.stringify(services.coldRestart));
     console.log('D621 measured stop receipt ' + JSON.stringify(legs.map(({samples, ...leg}) => ({...leg, probes: samples.length}))));
   }
   assert.equal(services.signup, true);

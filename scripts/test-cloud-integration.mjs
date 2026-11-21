@@ -228,6 +228,17 @@ export async function measureOutsideBackup({original, capture, verify, inspect},
   return {...evidence, retained: true};
 }
 
+export async function measureOutsideColdBackup({original, capture, verify, inspect}, signal) {
+  assert.deepEqual(await readOutsideRetainedBackup(() => inspect(original), signal), {retainedSnapshotUnchanged: true},
+    'integration.cold_backup_retained');
+  const point = await capture();
+  assert.notEqual(point.pointId, original.pointId, 'integration.cold_backup_not_new');
+  const evidence = await verify(point);
+  assert.ok(evidence.status === 'passed' && evidence.childAbsent && evidence.attemptId &&
+    evidence.attemptId !== original.workerVerification.attemptId, 'integration.cold_backup_restore');
+  return {...evidence, retainedPointId: original.pointId, pointId: point.pointId};
+}
+
 export async function runTestCloudClients(options = {}) {
   const waitronTunnelImage = options.waitronTunnelImage ??
     (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
@@ -242,7 +253,7 @@ export async function runTestCloudClients(options = {}) {
       'integration.stockholm_machine_loss_binding');
     const k = options.kubernetes, remote = options.stockholmRemote, baseline = options.stockholmBaseline;
     const mode = baseline ? 'stockholm_baseline' : remote ? 'stockholm_remote' : 'services';
-    assert.ok(baseline || (!k?.readInbox && !k?.stopServices), 'integration.services_binding');
+    assert.ok(baseline || (!k?.readInbox && !k?.stopServices && !k?.restartServices), 'integration.services_binding');
     assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery',
       'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
       'schemaRollback', 'pairedExpiry', 'fixedProject'].some(key => options[key]) && !(remote && (options.services || options.paidVerification)) &&
@@ -251,7 +262,8 @@ export async function runTestCloudClients(options = {}) {
     const ownedCluster = baseline && k?.amazon ? k.amazon.cluster === k.cluster : /^d621-[a-f0-9]{32}$/.test(k?.cluster ?? '');
     const accountRoute = baseline ? /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') &&
       k.proxyIp === k.stockholmRemote?.gatewayIp && k.port === 3000 && typeof k.readInbox === 'function' &&
-      (!k.stopServices || typeof k.stopServices === 'function' && (!k.amazon || k.amazon.measuredStops === true)) :
+      (!k.stopServices || typeof k.stopServices === 'function' && (!k.amazon || k.amazon.measuredStops === true)) &&
+      (!k.restartServices || typeof k.restartServices === 'function' && typeof k.stopServices === 'function') :
       /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') && Number.isInteger(k.port) && Number.isInteger(k.mailPort);
     const verifier = ['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
       .every(name => typeof k?.verifier?.[name] === 'function');
@@ -285,7 +297,7 @@ export async function runTestCloudClients(options = {}) {
   const stop = new AbortController(), shutdown = () => stop.abort(Error('integration.cancelled'));
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
   try {
-    return await cancellation.run({signal: stop.signal}, async () => {
+    return await cancellation.run({signal: AbortSignal.any([stop.signal, options.kubernetes?.signal].filter(Boolean))}, async () => {
       try {
         const checkout = options.waitronCheckout ?? process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT;
         if (options.sourceProvenance) assert.ok(typeof checkout === 'string' && checkout.length > 0, 'integration.waitron_checkout_required');
@@ -474,12 +486,12 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const measured = Boolean(kubernetes?.stopServices);
     const budget = kubernetes?.observe || measured ? createP1Budget() : undefined;
-    const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal) => {
+    const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal, fresh = false) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path.startsWith('/api/account/signup/')) budget?.attempt('signup', body.email);
       return new Promise((resolve, reject) => {
       const req = request({hostname: stockholmBaseline ? kubernetes.proxyIp : '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
-        headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
+        ...(fresh && {agent: false}), headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
         let text = '';
         res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
         res.once('error', reject); res.once('end', () => {
@@ -715,7 +727,22 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             const loginEmail = `integration-observer-${runId}@example.test`, loginPassword = 'Disposable observer ' + randomUUID();
             await signupAccount(loginEmail, loginPassword, 'Observer café');
             const login = createObserverLogin({api, mailbox, readMail, email: loginEmail, password: loginPassword, replaceStranded: true});
-            proveServiceStops = (remote, publication) => observeRetainedClients({paid: {id}, browser, api, docker, control, login,
+            let lastAcknowledged = original;
+            const backupOperations = {
+              capture: () => control(id, 'snapshot-publish'),
+              async verify(point) {
+                await accountPhase('inspect-snapshot', point);
+                const workerVerification = await verify(point);
+                lastAcknowledged = {...point, workerVerification};
+                return workerVerification;
+              },
+              inspect: async point => parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
+                points: [{...point, attemptId: point.workerVerification.attemptId}],
+              })),
+            };
+            const withLimit = (signal, action) => cancellation.run({...cancellation.getStore(),
+              signal: AbortSignal.any([runSignal(), signal].filter(Boolean))}, action);
+            proveServiceStops = (remote, publication, cold) => observeRetainedClients({paid: {id}, browser, api, docker, control, login,
               remote: signal => remote(signal),
               signupMail: async signal => {
                 const recipient = 'integration-stop-' + randomUUID() + '@example.test';
@@ -724,14 +751,19 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                 const {worker} = await readOutsideSignupMail(readMail, recipient, origin, signal, true);
                 return {worker};
               },
-              backup: (signal, stopped) => cancellation.run({...cancellation.getStore(), signal}, () => measureOutsideBackup({
-                original, capture: () => control(id, 'snapshot-publish'),
-                verify: async point => {await accountPhase('inspect-snapshot', point); return verify(point);},
-                inspect: async point => parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
-                  points: [{...point, attemptId: point.workerVerification.attemptId}],
-                })),
-              }, signal, stopped)),
-              observe: probes => {budget.requireRoom(loginEmail); return kubernetes.stopServices({...probes, publication});}});
+              backup: (signal, stopped) => withLimit(signal, () => measureOutsideBackup({original, ...backupOperations}, signal, stopped)),
+              observe: async probes => {
+                budget.requireRoom(loginEmail);
+                const serviceStops = await kubernetes.stopServices({...probes, publication});
+                const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, remote: cold.healthy,
+                  outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
+                  backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({
+                    ...backupOperations, original: lastAcknowledged,
+                  }, signal)),
+                });
+                return {serviceStops, ...(coldRestart && {coldRestart})};
+              }});
+
           }
           if (refused) {
             assert.deepEqual(parseIntegrationJson(await accountPhase('inspect-unpublished', refused)), {unpublished: true});
@@ -905,17 +937,17 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
               origin, signal: runSignal(), baseline: stockholmBaseline, machineLoss: stockholmGatewayMachineLoss,
-              measureStops: proveServiceStops, revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
+              measureStops: proveServiceStops, coldRestart: Boolean(kubernetes.restartServices), revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
             }, own: id => {owned.push(id); record('container', id);}});
           if (!stockholmBaseline) {
             result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
             return;
           }
         }
-        const {serviceStops, ...remoteBaseline} = remote ?? {};
+        const {serviceStops, coldRestart, ...remoteBaseline} = remote ?? {};
         result = {version: 1, kind: 'stockholm-cloud-services', origin, waitronHead: revision,
           signup: true, signIn: true, emailActionProof: true, inboxRequiresAuthentication: true, pairing: persisted,
-          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote: remoteBaseline}), ...(serviceStops && {serviceStops})};
+          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote: remoteBaseline}), ...(serviceStops && {serviceStops}), ...(coldRestart && {coldRestart})};
         return;
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
