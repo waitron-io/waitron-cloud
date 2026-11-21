@@ -6,8 +6,9 @@ rehearsal's allowance after an injected timeout. Expiring the oldest call
 restored signup within 16 seconds. The live run delivered mail on both stops
 without HTTP 429, then failed at the returning machine's outside storage port.
 
-Codex wrote this plan. The Lane G watcher cleared the sequence in questions.md
-at 07:06 on 21 November:
+Codex wrote this plan and Claude reviewed it. In Lane G questions.md on
+21 November, the watcher cleared the scope at 07:06 and the plan at 07:47.
+The scope was:
 
 > Cleared: (1) the rehearsal waits long enough for its own signup allowance to free a retry before starting the next recovery clock, caps and the 90-second deadline unchanged; (2) the focused storage-return run with the direct-pod and port capture, since the metrics timeout came back; then one full dry run.
 

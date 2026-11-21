@@ -1379,7 +1379,8 @@ has fewer than two calls left. It starts the next machine stop once there
 is room for a request and a retry. The allowance is eight calls in 15 minutes.
 That pause happens before the 90-second recovery clock starts. The local
 machine-stop test has a 54-minute timeout. The guest’s separate 55-minute
-limit also covers setup, so the guest can end the test sooner.
+limit also covers setup. Two long pauses can push the whole job past that
+limit before the test’s own timeout.
 
 The same journey then stops all three machines. Fresh account, store, staff and
 public requests must fail at the network while the host can still confirm the
@@ -1394,11 +1395,13 @@ with the private `D618_CONFIG` on the test host. The launcher selects a healthy
 control plane over SSH for Kubernetes commands and verifier image import.
 All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
-holds, refreshes the outside peer's route after each restart and reports how
-long control plane selection took. The signup allowance applies throughout.
-It then restarts the same three Stockholm
-instances, checks their boot IDs, volumes and scratch mounts, and refreshes
-the outside routes to their new addresses. The 150-minute budget reserves
+holds. The hold is the same length as the signup allowance’s counting
+window. The next stop can begin after the returning machine passes its
+health checks. The launcher refreshes the outside peer’s route after each
+restart and reports how long control plane selection took. It then restarts
+the same three Stockholm instances, checks their boot IDs, volumes and
+scratch mounts, and refreshes the outside routes to their new addresses.
+The 150-minute budget reserves
 the final 20 minutes before deletion for this step. Ordinary commands end at
 minute 143, scheduled deletion is at 145, and confirmation has five minutes.
 Cleanup commands can still run after the ordinary command deadline. Before starting a paid rehearsal, follow the gates in
