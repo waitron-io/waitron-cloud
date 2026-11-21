@@ -51,8 +51,8 @@ export function forgetSetupPairingLink() {
 }
 
 export function captureSetupPairingLink(url: URL): SetupPairingLink | undefined {
-  if (url.pathname !== '/login') { forgetSetupPairingLink(); return; }
-  if (url.search) {
+  if (url.pathname !== '/login' && url.pathname !== '/signup') { forgetSetupPairingLink(); return; }
+  if (url.pathname === '/login' && url.search) {
     forgetSetupPairingLink();
     const query = url.searchParams;
     const link = {requestId: query.get('request_id') ?? '', state: query.get('state') ?? '',

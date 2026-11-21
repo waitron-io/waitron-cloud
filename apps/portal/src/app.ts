@@ -151,7 +151,8 @@ export class PortalApp {
   }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
-    if (this.setupPairing && state.kind === 'authenticated' && !this.#setupResumeAttempted) {
+    if (this.path === '/login' && this.setupPairing && state.kind === 'authenticated'
+      && !state.enrollmentRequired && !this.#setupEnrollment && !this.#setupResumeAttempted) {
       this.#setupResumeAttempted = true;
       void this.returnToSetup(false, true);
     }
@@ -163,6 +164,7 @@ export class PortalApp {
     if (restricted && !this.#enrollmentRestricted) { this.passkeys.account(undefined); this.authenticator.account(undefined); }
     this.#enrollmentRestricted = restricted;
     const ordinary = state.kind === 'authenticated' && !state.enrollmentRequired;
+    const enrolling = this.enrollmentPage;
     if (state.kind === 'authenticated') this.#passkeyOffered = false;
     // Redirect before starting reads so navigation cannot discard their replies.
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
@@ -173,9 +175,9 @@ export class PortalApp {
     const page = this.accountPage;
     const verificationPage = page === 'account' || page === 'remoteAccess' || page === 'billing';
     this.actionProof.account(state.kind==='authenticated'?state.accountId:undefined);
-    if(state.kind==='authenticated'&&(verificationPage || restricted)&&!this.actionProof.loaded&&!this.actionProof.pending)void this.actionProof.load();
+    if(state.kind==='authenticated'&&(verificationPage || enrolling)&&!this.actionProof.loaded&&!this.actionProof.pending)void this.actionProof.load();
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (state.kind === 'authenticated' && (page === 'account' || restricted) && !this.authenticator.loadAttempted) void this.authenticator.load();
+    if (state.kind === 'authenticated' && (page === 'account' || enrolling) && !this.authenticator.loadAttempted) void this.authenticator.load();
     this.cloudActions.account(ordinary?state.accountId:undefined);
     if(this.path==='/operator/actions'&&ordinary&&!this.cloudActions.loadAttempted)void this.cloudActions.load();
     this.diagnostics.account(ordinary ? state.accountId : undefined);
@@ -188,7 +190,7 @@ export class PortalApp {
     this.security.account(ordinary ? state.accountId : undefined);
     if (page === 'account' && ordinary && !this.security.loadAttempted) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (state.kind === 'authenticated' && (page === 'account' || restricted) && !this.passkeys.loaded) void this.passkeys.load();
+    if (state.kind === 'authenticated' && (page === 'account' || enrolling) && !this.passkeys.loaded) void this.passkeys.load();
     this.recovery.account(ordinary ? state.accountId : undefined);
     this.alerts.account(ordinary ? state.accountId : undefined);
     if (page === 'venues' && ordinary && !this.alerts.loaded && !this.alerts.loadAttempted) void this.alerts.load();
@@ -225,6 +227,11 @@ export class PortalApp {
     return !!this.accountPage || ['/connect', '/recover', '/operator/actions'].includes(this.path);
   }
   get copy() { return translations[this.locale]; }
+  get #setupEnrollment() { return this.path === '/login' && history.state?.setupEnrollment === true; }
+  get enrollmentPage() {
+    const state = this.session.state;
+    return state.kind === 'authenticated' && (this.setupPairing ? this.#setupEnrollment : state.enrollmentRequired === true);
+  }
   get completion() { return (this.path === '/signup' && !!this.link.token) || this.path === '/reset-password'; }
   get operation() {
     if (this.path === '/signup') return this.link.token ? '/signup/complete' : '/signup/request';
@@ -259,10 +266,10 @@ export class PortalApp {
   }
   title(): string {
     const c = this.copy;
-    if (!this.setupPairing && this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) return c.enrollmentRequiredTitle;
+    if (this.enrollmentPage) return c.enrollmentRequiredTitle;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
     if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?(this.authenticator.proofKind==='recovery'&&!this.authenticator.challenge.rememberBrowserAllowed?c.factorRecovery:c.emailCheckTitle):c.factorTitle;
-    if (this.setupPairing) return c.pairSetupSignIn;
+    if (this.setupPairing && this.path === '/login') return c.pairSetupSignIn;
     if(this.path==='/operator/actions')return c.cloudActionsTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
@@ -390,7 +397,7 @@ export class PortalApp {
     if(this.path==='/login' && this.authenticator.challenge){await this.completeFactorLogin();return;}
     if(this.path==='/login' && this.factorCodes.length)return;
     if(this.path==='/recover'){this.readFields();await this.recovery.inspect();return;}
-    if (this.accountPage) return;
+    if (this.accountPage || this.enrollmentPage) return;
     if (this.path === '/connect') { await this.submitPairing(); return; }
     if (this.pending || this.waiting || (this.path === '/login' && this.passkeys.pending)) return;
     this.readFields(); this.errors = {}; this.error = undefined;
@@ -472,8 +479,20 @@ export class PortalApp {
     this.draw();
     if (!resume) this.#focusErrors();
   }
-  async #factorLoginResult(result:'authenticated'|'factor'|'reconcile'|false,route:number,previouslyAnonymous:boolean) {
-    if (this.setupPairing && (result === 'authenticated' || result === 'reconcile')) { await this.returnToSetup(); return; }
+  async #factorLoginResult(result:'authenticated'|'factor'|'reconcile'|false,route:number,previouslyAnonymous:boolean,bindsSetup=false) {
+    if (this.setupPairing && (result === 'authenticated' || result === 'reconcile')) {
+      if (bindsSetup) { await this.returnToSetup(); return; }
+      // An email or password-only session can enrol a stronger method. It cannot authorize the box.
+      history.replaceState({setupEnrollment: true}, '', location.pathname);
+      this.#setupResumeAttempted = true;
+      this.session.dispose(); this.session = this.#session();
+      await this.session.check();
+      if (route === this.#route) {
+        if (this.authenticator.error) this.#focusErrors();
+        else this.focusHeading();
+      }
+      return;
+    }
     if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.#signedInPath());return;}
     if(result==='reconcile'){
       this.session.dispose();this.session=this.#session();await this.session.check();
@@ -482,7 +501,15 @@ export class PortalApp {
     }
     this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
   }
-  async completeFactorLogin(){this.readFields();const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.completeLogin(this.setupPairing);if(route===this.#route)await this.#factorLoginResult(result,route,previouslyAnonymous);}
+  async completeFactorLogin() {
+    this.readFields();
+    const route = this.#route, previouslyAnonymous = this.session.state.kind === 'anonymous';
+    const challenge = this.authenticator.challenge;
+    const bindsSetup = !!challenge && (!('emailRequired' in challenge)
+      || (!challenge.rememberBrowserAllowed && this.authenticator.proofKind === 'recovery'));
+    const result = await this.authenticator.completeLogin(this.setupPairing);
+    if (route === this.#route) await this.#factorLoginResult(result, route, previouslyAnonymous, bindsSetup);
+  }
   async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh',passkeyRecovery=false){
     this.readFields();const route=this.#route;
     if(!['activate','cancel','refresh'].includes(action)&&!await this.#requireActionProof())return;
@@ -576,6 +603,10 @@ export class PortalApp {
     if (retry) { this.passkeys.notice = 'passkeyAddAgain'; this.draw(); }
     await this.actionProof.load();
     if (!this.#sameAccountRoute(route, account)) return;
+    if (this.setupPairing && this.#setupEnrollment && this.passkeys.notice === 'passkeyAdded') {
+      this.navigate('/login');
+      return;
+    }
     if (this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) await this.session.check({fresh: true});
     if (!continued || !this.#sameAccountRoute(route, account)) return;
     if (retry) this.root.querySelector<HTMLElement>('#passkey-add')?.focus();
@@ -612,7 +643,15 @@ export class PortalApp {
     // Failed sign-out feedback belongs to the view that started it.
     if (!success && route !== this.#route) return;
     // A confirmed anonymous session may already have routed to login.
-    if (success) { if (this.path !== '/login') this.navigate('/login'); this.notice = 'signedOut'; }
+    if (success) {
+      if (this.setupPairing) {
+        this.pending = false;
+        await this.returnToSetup(true);
+        if (route !== this.#route) return;
+      }
+      if (this.path !== '/login') this.navigate('/login');
+      this.notice = 'signedOut';
+    }
     else this.error = this.session.logoutCause ? `logoutRequest${this.session.logoutCause}` : 'logoutFailed';
     this.pending = false; this.draw();
     if (!success && this.error) this.#focusErrors();

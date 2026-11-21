@@ -47,7 +47,11 @@ values in the deployment environment for the account service. Remove both
 values when the check is finished.
 
 From a Waitron test build with setup pairing, open **Cloud services** and start
-sign-in. Use an existing Cloud account with a passkey or authenticator app.
+sign-in. Use a Cloud account with a passkey or authenticator app. If you need
+an account, choose **Create an account**. When the account is ready, sign in
+from the original setup tab and add a passkey or authenticator app. Sign in
+again with that method to return to Waitron. You have 10 minutes from opening
+Cloud sign-in. If time runs out, start again from Waitron.
 The same tab returns to your box and Cloud files the saved venue under the
 matching business. Cloud ignores spaces and hyphens when it compares tax
 numbers and keeps the number as entered. If your only business still has
