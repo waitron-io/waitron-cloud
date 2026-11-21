@@ -13,6 +13,9 @@ test('passive reads do not renew; real activity is throttled and late activity c
     await page.route('**/api/account/**', async route => {
       const proof=mockActionProof(route);if(proof)return proof;
       if(new URL(route.request().url()).pathname==='/api/account/owner-transfers')return route.fulfill({json:{organisations:[],offers:[]}});
+      if (new URL(route.request().url()).pathname === '/api/account/businesses' && route.request().method() === 'GET') {
+        return route.fulfill({json: {organisations: [], businesses: [], canStartOrganisation: false}});
+      }
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/authenticator')) { await route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:false}}); return; }
       if (path.endsWith('/translation-consent')) { await route.fulfill({json:{consents:[]}}); return; }
@@ -54,6 +57,9 @@ test('expiry and visibility rechecks do not renew, and 401 fences a delayed acti
     await page.route('**/api/account/**',async route=>{
       const proof=mockActionProof(route);if(proof)return proof;
       if(new URL(route.request().url()).pathname==='/api/account/owner-transfers')return route.fulfill({json:{organisations:[],offers:[]}});
+      if (new URL(route.request().url()).pathname === '/api/account/businesses' && route.request().method() === 'GET') {
+        return route.fulfill({json: {organisations: [], businesses: [], canStartOrganisation: false}});
+      }
       if(route.request().url().endsWith('/authenticator')) {await route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:false}});return;}
       if(route.request().url().endsWith('/translation-consent')) {await route.fulfill({json:{consents:[]}});return;}
       if(route.request().url().endsWith('/alerts')) {await route.fulfill({json:{enabled:false,locale:'en'}});return;}
