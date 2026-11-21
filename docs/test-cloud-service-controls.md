@@ -113,9 +113,10 @@ For a configured setup box, set `CLOUD_TEST_RELAY_SETUP_EXPIRES_AT` on the test
 account service to the pilot's end in UTC, for example `2026-12-01T12:00:00.000Z`.
 Restart that service to read the setting. A signed setup choice can create a
 staff email grant ending at that time. An unset or passed date makes setup
-issuance unavailable. A malformed value refuses relay startup and the account
-log names the setting. Correct it and restart the account service. Operator
-approval and revocation use their existing commands and grant dates.
+issuance unavailable. A malformed value stops the account service from accepting
+new relay submissions, including for operator-approved grants. The account log
+names the setting. Correct it and restart the account service. Operator approval
+and revocation use their existing commands and grant dates.
 
 To approve a paired box, pass one private JSON object with `command` set to
 `relay-approve` and these existing core inputs:

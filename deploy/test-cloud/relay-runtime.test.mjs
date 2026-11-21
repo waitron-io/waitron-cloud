@@ -295,4 +295,5 @@ test('the account worker identifies a malformed setup relay date by its setting 
  const running=await startAccount(db,context,{CLOUD_TEST_RELAY_SETUP_EXPIRES_AT:'2030-01-01'});
  assert.equal(await running.close(),0);
  assert.match(running.stderr,/CLOUD_TEST_RELAY_SETUP_EXPIRES_AT/);
+ await assert.rejects(stat(join(context.directory,'relay-keys.json')),{code:'ENOENT'});
 });

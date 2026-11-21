@@ -283,11 +283,14 @@ test('concurrent setup consent records one grant and a retry cannot restore it a
 });
 
 test('setup consent leaves a conflicting operator grant in place',async()=>{
- const {issue}=await setupGrant();
+ const {issue,setupExpiresAt}=await setupGrant();
  const existing=await approve();
  await code(issue(),'grant_conflict');
  assert.deepEqual((await pool.query('SELECT id,revision,management_origin FROM relay_grants')).rows,
   [{id:existing.id,revision:1,management_origin:origin}]);
+ const matching=await approve(store(),approval(installation,{expectedRevision:1,managementOrigin:'https://box.local:3000'}));
+ assert.notEqual(matching.expiresAt,setupExpiresAt);
+ assert.deepEqual(await issue(),{id:matching.id,revision:2,enabled:true,expiresAt:matching.expiresAt});
 });
 
 test('setup consent is unavailable when the operator has left the pilot date unset or it has passed',async()=>{

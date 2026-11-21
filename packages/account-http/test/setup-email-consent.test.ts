@@ -109,20 +109,20 @@ test('a public HTTPS callback cannot set the relay management origin', async () 
 
 test('setup consent rechecks sign-in expiry after waiting for the grant lock', async () => {
   const box = await boundBox(), blocker = await db.pool.connect();
+  let pending: Promise<Response>;
   try {
     await blocker.query('BEGIN');
     await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))", [box.installationId]);
     const {rows: [{pid}]} = await blocker.query('SELECT pg_backend_pid() AS pid');
     const {rows: [{expires_at}]} = await db.pool.query(`UPDATE setup_pairing_attempts
       SET expires_at=clock_timestamp()+interval '3 seconds' WHERE id=$1 RETURNING expires_at`, [box.requestId]);
-    const pending = box.post();
+    pending = box.post();
     void pending.catch(() => {});
     await waitLock(db.secondPool, db.schema, 'pg_advisory_xact_lock', pid);
     await db.secondPool.query("SELECT pg_sleep_until($1::timestamptz + interval '1 millisecond')", [expires_at]);
-    await blocker.query('COMMIT');
-    await reply(await pending, 400, {error: 'pairing_unavailable'});
   } finally {
     await blocker.query('ROLLBACK');
     blocker.release();
   }
+  await reply(await pending, 400, {error: 'pairing_unavailable'});
 });

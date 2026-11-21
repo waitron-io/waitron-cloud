@@ -160,8 +160,8 @@ reply. The grant can send after you sign out, subject to the usual relay checks.
   setup sign-in. After the venue is filed, use manual mail or ask the operator
   to prepare a grant.
 - `403 relay_disabled` or `403 grant_unavailable` means you can choose manual mail.
-  If the lease expired and Cloud returned `grant_unavailable`, renew it and retry
-  once with a fresh signature.
+  If the box's own lease has expired and Cloud returned `grant_unavailable`,
+  renew it and retry once with a fresh signature.
 - `409 grant_conflict` means a live grant already exists with a different owner,
   box key, origin or consent version. The operator can inspect and change it
   through the existing relay controls.
