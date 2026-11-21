@@ -5,13 +5,14 @@ on 21 November 2026 and what is still to work out. Nothing here has been built o
 
 ## What the owner decided (2026-11-21)
 
-**Two levels.**
+**A venue's own mail server always wins.** When the venue has saved one, the box sends every
+email straight to it, whatever the venue's plan, and Cloud is not in the path. Cloud sends only
+for a venue with no mail server:
 
 - **Free (level 1).** Cloud sends only the account emails: invitations, password resets and
   email changes. This is the existing
   [free transactional email](free-services.md) work. Everything else the box sends — invoices,
-  reports, clock-in and clock-out reminders — goes through the venue's own mail server
-  (SMTP), or is not sent at all.
+  reports, clock-in and clock-out reminders — is not sent until the venue saves a mail server.
 - **Paid (level 2).** Cloud sends every email the box sends. The venue chooses the sender:
   1. **Their own domain**, such as `facturas@barpepe.es`, once they have added DNS records that
      let Cloud send as it. The owner expects most venues to have their own domain, so this is
@@ -19,8 +20,9 @@ on 21 November 2026 and what is still to work out. Nothing here has been built o
   2. **A Waitron address**, with the venue's name as the sender's name and replies going to the
      venue's own mailbox. This is the fallback for a venue with no domain, or one whose records
      are not yet in place.
-  3. **Their own mail server.** The box keeps sending straight to it, as it does today, and
-     Cloud is not in the path.
+
+Waitron's box does the opposite today for account emails: a paired test Cloud that is switched
+on takes them ahead of a saved mail server. Waitron's backlog records that the order flips.
 
 **Bounces belong to the venue.** The venue decides what to do about an address that bounced.
 Cloud still has to keep its own list of blocked addresses and tell the venue, because Amazon
@@ -86,14 +88,14 @@ pause stops every venue's mail, so one venue must not be able to cause it.
 - **Data protection.** At level 2 Cloud handles the venue's customers' email addresses and
   invoice PDFs, so Cloud becomes a data processor for them. Today's relay carries account email
   only.
-- **The box's half.** At level 2 the box hands every email to Cloud instead of its mail server.
-  That needs an entry in Waitron's backlog, next to its A987 entry.
+- **The box's half.** Without a mail server, a paid venue's box hands every email to Cloud.
+  Waitron's backlog has the entry, next to its A987 entry.
 - **What an email costs Cloud**, so the paid plan covers it.
 
 ## Outside facts this relies on
 
 | Claim | Source |
 | --- | --- |
-| Microsoft switches off password sign-in for SMTP by default at the end of December 2026 and will name a final removal date in the second half of 2027. This affects free-level venues on Microsoft 365 that send invoices through their own mail server. | [Office 365 for IT Pros, 2026-01-29](https://office365itpros.com/2026/01/29/smtp-auth-basic-retirement/), summarising Microsoft's updated timeline; not read at Microsoft's own page |
+| Microsoft switches off password sign-in for SMTP by default at the end of December 2026 and will name a final removal date in the second half of 2027. This affects any venue on Microsoft 365 that saves its own mail server, since that server then sends everything. | [Office 365 for IT Pros, 2026-01-29](https://office365itpros.com/2026/01/29/smtp-auth-basic-retirement/), summarising Microsoft's updated timeline; not read at Microsoft's own page |
 | Google Workspace still accepts app passwords for SMTP, which need two-step sign-in and can be switched off by an administrator. | Third-party guides only; check Google's own pages before relying on it |
 | SES review and pause thresholds, as above. | [SES enforcement FAQ](https://docs.aws.amazon.com/ses/latest/dg/faqs-enforcement.html) |
