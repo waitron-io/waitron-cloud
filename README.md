@@ -41,8 +41,8 @@ pnpm test
 See [registration development](packages/registration/README.md) for the trust boundary,
 migrations and test setup. The workspace packages are private. The [identity package](packages/identity/README.md)
 provides internal password sessions used for Cloud approval. The
-[signup backend](docs/cloud-signup-implementation.md) verifies email tokens and creates
-the first organisation and legal business. The [account HTTP API](packages/account-http/README.md)
+[signup backend](docs/cloud-signup-implementation.md) verifies your email and creates
+your account. The [account HTTP API](packages/account-http/README.md)
 exposes signup, sessions and
 recovery with shared request limits. Run it with `pnpm account:serve` after configuring
 the database, keys and origin and applying migrations. Local venue pairing and
@@ -52,7 +52,8 @@ service adapters are implemented; live provider setup and deployment remain open
 
 You can create an account, sign in and recover a password without a venue server.
 The portal uses English or Spanish from your browser preferences; its language
-switch saves your choice. Signup normally needs just your legal business name.
+switch saves your choice. Verify your email and set a password, then sign in. Open
+**Account** to register a business or accept an ownership handover.
 
 Follow the [local account-server setup](packages/account-http/README.md#run-locally)
 for PostgreSQL, migrations, keys and Mailpit. Then build and serve the screens:

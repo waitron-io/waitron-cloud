@@ -1,7 +1,7 @@
 # Cloud account signup
 
 You can create a Cloud account independently of a venue. Use the
-bilingual portal to verify your email, choose your business country and finish signup.
+bilingual portal to verify your email and set your password.
 
 ## Journey and boundary
 
@@ -10,25 +10,11 @@ bilingual portal to verify your email, choose your business country and finish s
    contacting the mail provider. Verification records store the random 32-byte token
    as a SHA-256 hash; the queue holds its encrypted delivery copy until delivery ends.
    No account or password exists yet.
-2. Follow the email and submit your password, organisation name, legal-business name
-   and two-letter country code. The token lasts 30 minutes and can complete signup
-   once. Reading a link does not consume it; submit it to the account API completion
-   POST route. The linked portal screen submits these details.
-3. Create the verified account, organisation, legal business and owner membership in
-   one transaction. The owner can register venues but receives no platform permission.
-   Sign in through the existing password/session API after completion.
-
-Signup creates one organisation and its first business. Your business country
-must match the service’s `CLOUD_COUNTRY_CODE` (default `ES`).
-Choosing France on Spain’s signup screen returns “Waitron Cloud isn't available in
-France yet”. Choose Spain and retry the same email link before it expires; the
-API’s request limits still apply. The server returns HTTP 400
-`{"error":"country_unavailable"}` before writing an account; the browser translates
-the refusal in English or Spanish. The portal preselects Spain; other countries
-are not configured end to end. Tax details and billing validation belong to
-the later billing journey; a country code does not provision resources or promise
-residency. Existing trusted setup records can retain missing profile fields until
-their operators supply real values.
+2. Open the link and set your password. The link lasts 30 minutes and works
+   once. Opening it displays the form. Submitting it creates your verified account.
+3. Sign in. Open **Account** to register a business or accept a handover sent to
+   your verified email. If you opened Cloud sign-in during Waitron setup, return
+   to the original tab to continue setup on the box.
 
 Do not accept a password before proving email ownership. This prevents a third party
 from supplying a password for someone else's signup. Existing email accounts are
@@ -60,8 +46,7 @@ link must use a configured trusted HTTPS origin and avoid referrer leakage.
    expiry after contention, replay, existing-account protection and atomic creation.
 3. Implement the signup store with a transactional email queue and existing identity
    helpers. Test delivery failures and login after signup with a capture adapter.
-4. Prove concurrent links create one account and one organisation. Keep the existing
-   identity and registration regressions, run types and CI, and complete branch review.
+4. Check that concurrent links for the same email create a single account.
 
 The backend now has an account HTTP adapter. The existing trusted account-provisioning path remains
 responsible for its own email-ownership checks; it is not a public signup endpoint.
@@ -79,10 +64,11 @@ businesses without venues. Use **Register a business** to add its legal name,
 tax number and country. Choose the organisation if you own more than one that
 can register businesses. Retrying the same name and tax number keeps one
 business. Cloud asks you to check the details if that tax number already
-belongs to another business you own. If the business from signup is your
-only one and has no venue, use its existing legal name and country to give
-it a tax number. If your account has no organisation or memberships, registration
-names your new organisation after that first business.
+belongs to another business you own. If your account has no organisation,
+registration names your new organisation after that first business. Choose a
+country served by this Cloud. If it refuses the country, change your selection
+and retry with the same details. An older account with one business and no
+venues can fill its missing tax number using its existing legal name and country.
 
 Use **Organisation name** to rename the group. Each business keeps its own
 legal name and tax number. The [Account browser check](../apps/portal/test/account-businesses-browser.test.ts)
@@ -126,21 +112,13 @@ Open the invitation to see what the handover includes and where to accept it.
 Choose **Account** if you are already signed in, or **Sign in** if you have an
 account. If you need an account, choose **Create an account** and verify the
 email address the invitation was sent to.
-Choose **I’m receiving a business**
-and set your password. This creates your account without a new business. Sign in,
-enroll an app or passkey and verify it is you before accepting the handover on
-your account page. Creating an account attaches every live offer addressed to
-you, including when you choose ordinary business signup, but gives you no access
-to an offered business until you accept.
+Set your password and sign in. Open **Account**, enroll an app or passkey and
+verify it is you before accepting the handover. Creating an account attaches
+live offers sent to your verified address. Accept an offer to get access.
 
-If no handover is waiting when you submit signup, your account is not created.
-You can use the same verified link to create your own business or ask the sender
-for another offer. Cancelled and expired offers do not allow account-only signup.
-
-Once your account exists, you cannot use signup to create a business for that
-address. If the handover is then cancelled or expires, ask the sender for a new
-offer and accept it from your existing account. Resetting your password also
-cancels any pending offers.
+If the handover is cancelled or expires, ask the sender for a new offer and
+accept it from your existing account. You can also register a business you
+own from **Account**. Resetting your password cancels pending offers.
 
 The focused local PostgreSQL and browser checks are:
 

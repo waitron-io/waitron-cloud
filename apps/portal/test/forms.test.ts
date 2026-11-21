@@ -9,10 +9,8 @@ test('Spanish signup preserves values through switching language and validates b
     await page.goto(`${f.origin}/signup#token=${'a'.repeat(43)}&lang=es`);
     await page.getByRole('heading', {name: 'Completa tu cuenta'}).waitFor();
     assert.equal(new URL(page.url()).hash, '');
-    await page.getByLabel('Nombre legal del negocio').fill('Café Sol');
     await page.getByLabel('Nueva contraseña').fill('short');
     await page.getByLabel('Idioma').selectOption('en');
-    assert.equal(await page.getByLabel('Legal business name').inputValue(), 'Café Sol');
     assert.equal(await page.getByLabel('New password').inputValue(), 'short');
     await page.getByRole('button', {name: 'Create account', exact: true}).click();
     assert.equal(await page.locator('input[name=password]').getAttribute('aria-invalid'),'true');
@@ -20,34 +18,31 @@ test('Spanish signup preserves values through switching language and validates b
     const requests: Record<string, string>[] = [];
     await page.route('**/api/account/signup/complete', async route => {
       requests.push(route.request().postDataJSON());
-      await route.fulfill({status: 201, json: {accountId:'account',organisationId:'org',legalBusinessId:'business'}});
+      await route.fulfill({status: 201, json: {accountId:'account'}});
     });
     await page.getByLabel('New password').fill('🔑'.repeat(15));
     await page.getByLabel('New password').press('Enter');
     await page.getByText('Your account is ready. Sign in to continue.').waitFor();
-    assert.deepEqual(requests, [{token:'a'.repeat(43),password:'🔑'.repeat(15),organisationName:'Café Sol',legalBusinessName:'Café Sol',countryCode:'ES'}]);
+    assert.deepEqual(requests, [{token:'a'.repeat(43),password:'🔑'.repeat(15)}]);
   } finally { await f.close(); }
 });
 
-test('password limits count Unicode and UTF-8 independently; optional organisation is explicit', async () => {
+test('password limits count Unicode and UTF-8 independently', async () => {
   const f=await startPortalFixture();
   try {
     const page=await f.browser.newPage();page.setDefaultTimeout(3000);
     const bodies:Record<string,string>[]=[];
     await page.route('**/signup/complete',async route=>{bodies.push(route.request().postDataJSON());await route.fulfill({status:400,json:{error:'link_unavailable'}});});
     await page.goto(`${f.origin}/signup#token=${'a'.repeat(43)}`);
-    await page.getByLabel('Legal business name').fill('Café Sol');
     for (const password of ['🔑'.repeat(14),'é'.repeat(513)]) {
       await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:'Create account',exact:true}).click();
       assert.equal(await page.locator('input[name=password]').getAttribute('aria-invalid'),'true');assert.equal(bodies.length,0);
       if (password.length === 513) assert.ok(await page.locator('wt-form-error-summary').getByText('This password is too long. Use fewer characters.').isVisible());
     }
-    await page.getByLabel('Use a different organisation name').check();
-    await page.locator('input[name=organisationName]').fill('Venue Group');
     await page.locator('input[name=password]').fill('é'.repeat(512));
     await page.getByRole('button',{name:'Create account',exact:true}).click();
     await page.getByText(/This link is unavailable/).waitFor();
-    assert.equal(bodies.length,1);assert.equal(bodies[0]!.password,'é'.repeat(512));assert.equal(bodies[0]!.organisationName,'Venue Group');
+    assert.equal(bodies.length,1);assert.equal(bodies[0]!.password,'é'.repeat(512));
     await page.goto(`${f.origin}/login`);
     await page.route('**/login',async route=>{bodies.push(route.request().postDataJSON());await route.fulfill({status:401,json:{error:'credentials_invalid'}});});
     await page.getByLabel('Email').fill('owner@example.test');await page.locator('input[name=password]').fill('short');
@@ -65,7 +60,6 @@ test('compromised password responses identify the password field in both languag
         const copy=locale==='en'?'This password is known to be compromised. Choose a different password.':'Esta contraseña está comprometida. Elige una contraseña diferente.';
         await page.route('**/api/account/signup/complete',route=>route.fulfill({status:400,json:{error:'password_compromised'}}));
         await page.goto(`${f.origin}/signup#token=${'a'.repeat(43)}&lang=${locale}`);
-        await page.getByLabel(locale==='en'?'Legal business name':'Nombre legal del negocio').fill('Café Sol');
         await page.locator('input[name=password]').fill('a compromised café password');
         await page.getByRole('button',{name:locale==='en'?'Create account':'Crear cuenta',exact:true}).click();
         await page.locator('wt-form-error-summary').getByText(copy,{exact:true}).waitFor();
@@ -105,7 +99,6 @@ test('an unrecognised gateway failure leaves a completion result uncertain', asy
     try {
       await page.route('**/api/account/signup/complete',route=>route.fulfill({status:504,body:'Gateway Timeout'}));
       await page.goto(`${f.origin}/signup#token=${'a'.repeat(43)}&lang=en`);
-      await page.getByLabel('Legal business name').fill('Café Sol');
       await page.locator('input[name=password]').fill('an acceptable café password');
       await page.getByRole('button',{name:'Create account',exact:true}).click();
       await page.getByText('We could not confirm the result. You can try signing in with the password you chose, or deliberately retry this form.',{exact:true}).waitFor();

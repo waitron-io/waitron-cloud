@@ -57,17 +57,22 @@ async function boundSetupBox(store: SetupPairingStore, taxNumber: string, venueN
   return {base, complete, settings, redeemed};
 }
 
-test('early setup registers at redeem and files the same venue on save', async () => {
+test('early setup registers a fresh account at redeem and files the same venue on save', async () => {
+  const signup = new SignupStore(db.pool, db.outbox), email = 'setup@example.test';
+  await signup.request(email);
+  const mail = db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);
+  assert.ok('token' in mail);
+  const {accountId} = await signup.completeAccount(mail.token, {password});
   const store = new SetupPairingStore(db.pool);
-  const box = await boundSetupBox(store, 'B-1234 5678', 'Café Sol', {version: 5});
+  const box = await boundSetupBox(store, 'B-1234 5678', 'Café Sol', {version: 5, accountId});
   const early = box.redeemed.provisionalRegistration;
   assert.ok(early);
-  assert.equal(early.organisationId, owner.organisationId);
-  assert.equal(early.legalBusinessId, owner.legalBusinessId);
+  assert.notEqual(early.organisationId, owner.organisationId);
+  assert.notEqual(early.legalBusinessId, owner.legalBusinessId);
   assert.deepEqual((await db.pool.query('SELECT display_name,setup_address FROM venues WHERE id=$1', [early.venueId])).rows,
     [{display_name: null, setup_address: null}]);
   assert.deepEqual((await db.pool.query('SELECT legal_business_id FROM billing_businesses')).rows,
-    [{legal_business_id: owner.legalBusinessId}]);
+    [{legal_business_id: early.legalBusinessId}]);
   assert.equal((await db.pool.query('SELECT 1 FROM billing_trials')).rowCount, 0);
   const status = {...box.base, action: 'status', args: []} as const;
   assert.deepEqual(await store.status(status), box.redeemed);
@@ -79,7 +84,7 @@ test('early setup registers at redeem and files the same venue on save', async (
   await new AllowanceConfigStore(db.pool).publish({revision:1,effectiveFrom:'2020-01-01',
     limits:{registered:limit,connected:limit,hosted:limit},unpaidTrial:{content_translation:'0',rota_solver:'0'}});
   const operationId = randomUUID();
-  await transaction(db.pool, client => reserveAllowance(client, {...early, accountId: owner.accountId,
+  await transaction(db.pool, client => reserveAllowance(client, {...early, accountId,
     service: 'address_lookup', operationId, binding: 'setup-address', units: 1n}));
   const result = await store.complete(box.complete, box.settings, 'ES');
   assert.deepEqual(result.registration, early);
@@ -87,7 +92,8 @@ test('early setup registers at redeem and files the same venue on save', async (
   assert.deepEqual((await db.pool.query(`SELECT v.display_name,v.setup_address,b.name,b.tax_number
     FROM venues v JOIN legal_businesses b ON b.id=v.legal_business_id WHERE v.id=$1`, [early.venueId])).rows,
     [{display_name: 'Café Sol', setup_address: ['Calle Sol 9', '', '28001', 'Madrid', 'Madrid'],
-      name: 'Café Sol SL', tax_number: 'B-1234 5678'}]);
+      name: 'Café Luna SL', tax_number: 'B-1234 5678'}]);
+  assert.equal((await db.pool.query('SELECT name FROM organisations WHERE id=$1', [early.organisationId])).rows[0].name, 'Café Luna SL');
   assert.equal((await db.pool.query('SELECT 1 FROM installations')).rowCount, 1);
   assert.deepEqual((await db.pool.query('SELECT legal_business_id,venue_id FROM billing_allowance_reservations WHERE operation_id=$1',
     [operationId])).rows, [{legal_business_id: early.legalBusinessId, venue_id: early.venueId}]);

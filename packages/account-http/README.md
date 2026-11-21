@@ -6,13 +6,10 @@ stores. The optional Lit portal uses the same origin. The pairing API supports t
 awaits ingress, service-adapter and deployment checks. The real Waitron administrator
 adapter is included in the local integration proof.
 
-Set `CLOUD_COUNTRY_CODE=ES` for Spain's signup service. It defaults to `ES` and
-must contain two uppercase letters; invalid configuration refuses startup. Signup
-for another business country returns HTTP 400 `{"error":"country_unavailable"}`,
-without consuming the email link. Correct the country and retry before the link
-expires; the API’s request limits still apply. The portal preselects Spain; only `ES` is
-complete end to end. This setting changes the server’s signup check only; it
-does not configure another country’s portal, billing or hosting.
+Set `CLOUD_COUNTRY_CODE=ES` for Spain's account service. It defaults to `ES` and
+requires two uppercase letters. On **Account**, registering a business in a
+different country returns HTTP 400 `{"error":"country_unavailable"}`. Correct the
+country and retry registration. Only `ES` is configured end to end.
 
 ## Run locally
 
@@ -123,8 +120,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | Request | JSON body | Successful response |
 | --- | --- | --- |
 | POST `/signup/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
-| POST `/signup/transfer/complete` | `{"token":"<emailed token>","password":"a long unique password"}` | 201 `{"accountId":"<uuid>"}`; 409 `handover_unavailable` without a live offer |
-| POST `/signup/complete` | `{"token":"<emailed token>","password":"a long unique password","organisationName":"Casa Norte","legalBusinessName":"Casa Norte SL","countryCode":"ES"}` | 201 `{"accountId":"<uuid>","organisationId":"<uuid>","legalBusinessId":"<uuid>"}` |
+| POST `/signup/complete` | `{"token":"<emailed token>","password":"a long unique password"}` | 201 `{"accountId":"<uuid>"}` |
 | POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}` with cookies, or 202 app or email challenge without cookies |
 | GET `/session` | No body; session cookie | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
 | POST `/session/activity` | `{}`, session cookie and `X-CSRF-Token` | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
@@ -227,9 +223,8 @@ from the exact portal origin. A valid code returns 200 with the account ID and s
 cookies. For a passkey fallback, send a saved code to `/login/recovery` with the same challenge and `code` fields instead. This never remembers the browser. To remember that browser, add `"rememberBrowser":true` to this completion.
 The response sets a 30-day HttpOnly cookie, `__Host-cloud_browser` on HTTPS or
 `cloud_browser` in local HTTP tests. It cannot replace an app code or passkey fallback's
-email check. Signup completion accepts the optional string `"rememberBrowser":"true"`
-under the same explicit-choice policy; it sets only this recognition cookie, never a
-session. Both flows store only the cookie's hash, tied to the account and expiry; remembering again removes that account's expired hashes.
+email check. Cloud stores the cookie's hash with the account and expiry.
+Remembering a browser again removes that account's expired hashes.
 The email challenge includes `rememberBrowserAllowed:true` only for a password-only account;
 passkey fallback neither offers the choice nor stores a new recognition cookie.
 Codes keep leading zeroes, expire after five minutes and use the configured
@@ -370,7 +365,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | Credential changes, per IP / account | 10 per minute / 20 per 5 minutes |
 | Email-change delivery, per destination address | One per minute; wait before requesting another link to the same address |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
-| Signup completion (both modes share a budget), or reset completion, per IP and token | 10 per 15 minutes |
+| Signup or reset completion, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |
 
 Successes and failures both count once a request reaches a limit. Login checks the
@@ -821,8 +816,7 @@ of payment-method settings. POST `/api/account/billing/tax/save` with the string
 fields `venueId`, `legalName`, `address` and `taxNumber`, using your existing
 session, origin and CSRF proof. Use synthetic values only. The server trims each
 field, rejects control characters and Unicode line/paragraph separators, and bounds
-name/address/tax number to 200/600/32 characters using JavaScript string length,
-as signup does.
+name, address and tax number to 200, 600 and 32 characters using JavaScript string length.
 
 A business sharing any non-test venue has no tax profile and cannot be changed.
 The response and `/billing/read` include optional `taxProfile` with `legalName`,

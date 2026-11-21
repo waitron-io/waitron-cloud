@@ -150,14 +150,13 @@ test('first-time recipients verify, sign up without a business, enroll and expli
    assert.equal((await page.goto(link))?.status(),200);
    await page.getByRole('heading',{level:1,name:locale==='en'?'Receive a business':'Recibir un negocio'}).waitFor();
    await page.getByText(locale==='en'?'The handover includes the whole organisation and all its businesses. Review and accept it in Account.':'El traspaso incluye toda la organización y sus negocios. Revísalo y acéptalo en Cuenta.',{exact:true}).waitFor();
-   await page.getByText(locale==='en'?/choose “I’m receiving a business”/:/elige «Estoy recibiendo un negocio»/).waitFor();
+   await page.getByText(locale==='en'?/create one with the invited email/:/créala con el correo de la invitación/).waitFor();
    assert.equal(await page.getByRole('link',{name:c.login,exact:true}).getAttribute('href'),'/login');
    assert.equal(await page.locator('form').count(),0);
    await look('receive-business');
    await page.getByRole('link',{name:c.signup,exact:true}).click();
    await page.locator('input[name=email]').fill(email);await page.locator('#submit').click();await page.getByText(c.emailSent,{exact:true}).waitFor();await f.drainMail();
    const mail=await mailFor(email,locale==='en'?'Verify your Waitron Cloud email':'Verifica tu correo de Waitron Cloud',f.mailEvidence),url=mail.match(/http:\/\/localhost:[^\s]+/)?.[0];assert.ok(url);await page.goto(url);
-   await page.getByLabel(locale==='en'?"I'm receiving a business":'Estoy recibiendo un negocio',{exact:true}).check();
    assert.equal(await page.locator('input[name=legalBusinessName]').count(),0);await page.locator('input[name=password]').fill(password);
    await look('signup');await page.locator('#submit').click();await page.getByText(c.signupReady,{exact:true}).waitFor();
    const recipient=(await f.db.pool.query('SELECT account_id FROM cloud_credentials WHERE email=$1',[email])).rows[0].account_id;
@@ -204,7 +203,7 @@ test('first-time recipients verify, sign up without a business, enroll and expli
  }
 });
 
-test('unavailable handover keeps the verified link usable for business signup in both languages',async()=>{
+test('a new account without a handover can register its first business on Account',async()=>{
  const f=await startPortalFixture();
  try{for(const locale of ['en','es'] as const){
   await f.db.pool.query('DELETE FROM account_rate_limits');const context=await f.browser.newContext({locale}),c=translations[locale];
@@ -212,10 +211,20 @@ test('unavailable handover keeps the verified link usable for business signup in
    const email=`no-offer-${randomUUID()}@example.test`,signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email,locale);
    const mail=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
    const page=await context.newPage();page.setDefaultTimeout(7000);await page.goto(`${f.origin}/signup#token=${mail.token}&lang=${locale}`);
-   const choice=page.getByLabel(locale==='en'?"I'm receiving a business":'Estoy recibiendo un negocio',{exact:true});await choice.check();await page.locator('input[name=password]').fill(password);await page.locator('#submit').click();
-   await page.getByText(locale==='en'?'No handover is waiting for this address. Your account has not been created. Create a business or ask the sender.':'No hay un traspaso pendiente para este correo. Tu cuenta no se ha creado. Crea un negocio o consulta con quien lo envió.',{exact:true}).waitFor();
-   assert.equal(await page.getByText(c.linkUnavailable,{exact:true}).count(),0);
-   await choice.uncheck();await page.locator('input[name=legalBusinessName]').fill('New Café');await page.locator('#submit').click();await page.getByText(c.signupReady,{exact:true}).waitFor();
+   await page.locator('input[name=password]').fill(password);
+   await page.locator('#submit').click();
+   await page.getByText(c.signupReady,{exact:true}).waitFor();
+   await page.getByRole('link',{name:c.login,exact:true}).click();
+   await page.locator('input[name=email]').fill(email);
+   await page.locator('input[name=password]').fill(password);
+   await page.getByRole('button',{name:c.login,exact:true}).click();
+   await completeBrowserEmail(f,page,email,locale);
+   const panel=page.getByRole('region',{name:c.businessesTitle});
+   await panel.getByLabel(c.legalName,{exact:true}).fill('New Café');
+   await panel.getByLabel(c.businessTaxNumber,{exact:true}).fill('ES-0123');
+   await panel.getByLabel(c.businessCountry,{exact:true}).selectOption('ES');
+   await panel.getByRole('button',{name:c.businessRegister,exact:true}).click();
+   await panel.getByRole('heading',{name:'New Café',exact:true}).waitFor();
    assert.equal((await f.db.pool.query('SELECT count(*) FROM organisation_memberships m JOIN cloud_credentials c ON c.account_id=m.account_id WHERE c.email=$1 AND m.is_owner',[email])).rows[0].count,'1');
   }finally{await context.close();}
  }}finally{await f.close();}

@@ -9,7 +9,9 @@ export function pairingScreen(app:PortalApp){
   const logout=html`<wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button>`;
   if(!p.loaded)return html`${p.pending?html`<p role="status">${c.pairLoading}</p>`:nothing}
     <wt-button .disabled=${p.pending||!!p.waiting} @click=${()=>{void p.load();}}>${c.retry}</wt-button>${logout}`;
-  if(!p.businesses.length)return html`<p>${c.pairNoBusinesses}</p>${logout}`;
+  if(!p.businesses.length)return html`<p>${c.pairNoBusinesses}</p>
+    <p><a href="/account" @click=${(event: MouseEvent) => app.follow(event, '/account')}>${c.businessRegister}</a>. ${c.pairRestart}</p>
+    ${logout}`;
   const view = p.view;
   const approved = view && view.state !== 'awaiting_cloud';
   const business = approved ? view : p.businesses.length === 1 ? p.businesses[0] : undefined;

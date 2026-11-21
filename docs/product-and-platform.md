@@ -342,9 +342,9 @@ venues to which those people have permissions. Keep the business account distinc
 from each taxpayer's legal identity, each venue, and the machines running that venue.
 Confirmed requirement: one organisation must support several legal businesses with
 different tax identities, potentially across countries, from the beginning. Most
-customers will have one legal business. The agreed signup should create the simple
-structure for you and expose additional businesses only when you need them. A venue
-would belong to a legal business, which would belong to an organisation.
+customers will have one legal business. Create your account first. Register
+your first business, accept a handover or file a venue through Waitron setup.
+Each venue belongs to a legal business, which belongs to an organisation.
 
 Confirmed requirement: a venue belongs to one Cloud organisation at a time. The
 process for transferring a venue between organisations remains future design work.
@@ -642,8 +642,8 @@ Agreed journey for connecting your first venue:
 
 1. As a venue administrator, open Cloud services in the venue's Waitron dashboard.
 2. Create a Cloud login or sign into an existing one.
-3. If you are a new customer, create your organisation and first legal business,
-   using details from Waitron for you to confirm.
+3. If you are a new customer, enter the venue and legal details in Waitron.
+   Cloud files the venue using those details and creates your first group if needed.
 4. Obtain approval from someone permitted to add venues to the Cloud organisation
    and from an administrator of the local Waitron installation. Cloud verifies both
    approvals before linking the venue.

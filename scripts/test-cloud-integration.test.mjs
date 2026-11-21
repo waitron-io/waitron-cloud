@@ -112,13 +112,13 @@ test('retained-client adapter checks sign-in responses, identity and process wit
 test('observer password sign-in completes its real email challenge and retains it across a mail wait', async () => {
   const {createObserverLogin} = await load(); assert.equal(typeof createObserverLogin, 'function');
   const requests = []; let reads = 0;
-  const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic password', cookie: 'recognised',
+  const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic password', cookie: 'recognised', rememberBrowser: true,
     mailbox: async () => ({messages: [{ID: 'old'}]}),
     readMail: async (email, seen) => {assert.equal(email, 'owner@example.test'); assert.ok(seen.has('old')); if (++reads === 1) throw Error('mail delayed'); return {Text: 'Your Waitron Cloud verification code\n\n123456\n'};},
     api: async (path, body, headers) => {
       requests.push(path);
       if (path === '/api/account/login') {assert.equal(headers.cookie, 'recognised'); return {status: 202, body: {emailRequired: true, challengeToken: 'private-challenge'}};}
-      assert.equal(path, '/api/account/login/email'); assert.deepEqual(body, {challengeToken: 'private-challenge', code: '123456'}); return {status: 200};
+      assert.equal(path, '/api/account/login/email'); assert.deepEqual(body, {challengeToken: 'private-challenge', code: '123456', rememberBrowser: true}); return {status: 200};
     }});
   await assert.rejects(login(), /mail delayed/);
   assert.deepEqual(await login(), {status: 200});

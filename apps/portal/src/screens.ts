@@ -4,7 +4,7 @@ import {ownerTransferScreen} from './owner-transfer-screen.ts';
 import {cloudActionsScreen} from './cloud-actions-screen.ts';
 import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {billingScreen} from './billing-screen.ts';
-import {rememberBrowserChoice,authenticatorAccountScreen,authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
+import {authenticatorAccountScreen,authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
 import {recoveryScreen} from './recovery-screen.ts';
 import {installationScreen} from './installation-screen.ts';
 import { pairingScreen } from './pairing-screen.ts';
@@ -95,20 +95,11 @@ export function screen(app: PortalApp) {
       ${app.passkeys.notice && app.passkeys.notice !== 'passkeyUnsupported' ? html`<p role="status">${c[app.passkeys.notice]}</p>` : nothing}
       ${action(c.login)}${app.passkeyFirst ? nothing : passkeySignInScreen(app)}<nav>${link('/forgot-password', c.forgot)}<span>${c.signupLink} ${link('/signup', c.signup)}</span></nav>`;
   } else if (app.path === '/signup' && app.link.token) {
-    content = html`${password()}<p class="help">${c.passwordHelp}</p>
-      <label class="disclosure"><input type="checkbox" name="receivingBusiness" .checked=${app.receivingBusiness} ?disabled=${app.pending}
-        @change=${(event:Event)=>{app.readFields();app.receivingBusiness=(event.target as HTMLInputElement).checked;delete app.errors.legalBusinessName;delete app.errors.organisationName;app.error=undefined;app.draw();}}> ${c.receivingBusiness}</label>
-      ${app.receivingBusiness?nothing:html`${field('legalBusinessName', 'legalName', 'text', 'organization')}
-      <p class="help">${c.soleTrader}</p>
-      <label class="disclosure"><input type="checkbox" .checked=${app.differentOrg} ?disabled=${app.pending}
-        @change=${(event: Event) => {app.readFields(); app.differentOrg = (event.target as HTMLInputElement).checked; if (!app.differentOrg) delete app.errors.organisationName; app.draw();}}> ${c.differentOrg}</label>
-      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<label class="business-choice" for="signup-country">${c.country}<select id="signup-country" name="countryCode" autocomplete="country" ?disabled=${app.pending}
-        @change=${(event: Event) => {app.readFields(); app.countryCode = (event.target as HTMLSelectElement).value; app.refusedCountry = undefined; if(app.error === 'countryUnavailable')app.error = undefined; app.draw();}}>
-        ${countries.map(country => html`<option value=${country.code} .selected=${country.code === app.countryCode}>${country.name}</option>`)}</select></label>`}${rememberBrowserChoice(app)}${action(c.create)}`;
+    content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.create)}`;
   } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}<button type="button" class="text-button" ?disabled=${app.ownerRecovery.pending} @click=${()=>{void app.beginOwnerRecovery();}}>${c.ownerRecoveryLost}</button>`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
-  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [app.error === 'countryUnavailable' ? c.countryUnavailable.replace('{country}', countryNames.of(app.refusedCountry!)!) : c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
+  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>

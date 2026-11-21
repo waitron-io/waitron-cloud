@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdir, readFile} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import {build} from 'esbuild';
 import {chromium, type Browser} from 'playwright';
@@ -17,12 +17,12 @@ const flows = [
  {path:'/login', button:'login', fields:['email','password']},
  {path:'/signup', button:'continue', fields:['email']},
  {path:'/forgot-password', button:'sendReset', fields:['email']},
- {path:'/signup', button:'create', fields:['password','legalBusinessName'], completion:true},
+ {path:'/signup', button:'create', fields:['password'], completion:true},
  {path:'/reset-password', button:'savePassword', fields:['password'], completion:true},
 ] as const;
 type Flow = typeof flows[number];
 const nonbreakingSpace = String.fromCodePoint(0xa0);
-const values = {email:nonbreakingSpace+'owner@example.es'+nonbreakingSpace, password, legalBusinessName:'Bar Pepe SL', organisationName:'Grupo Pepe'};
+const values = {email:nonbreakingSpace+'owner@example.es'+nonbreakingSpace, password};
 async function open(browser:Browser, flow:Flow, locale:Locale, theme:'light'|'dark', width:number, failure=503) {
  const page = await browser.newPage({locale, colorScheme:theme, viewport:{width,height:900}});
  page.setDefaultTimeout(3000);
@@ -75,33 +75,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      await page.getByRole('button',{name:translations[other][flow.button],exact:true}).click();
      await page.locator('wt-form-error-summary').getByText(translations[other].unavailable,{exact:true}).waitFor();
      const expected=flow.path==='/login'?{path:'/login',body:{email:'owner@example.es',password,locale:other}}:
-      'completion' in flow?flow.path==='/signup'?{path:'/signup/complete',body:{token,password,legalBusinessName:'Bar Pepe SL',organisationName:'Bar Pepe SL',countryCode:'ES'}}:
+      'completion' in flow?flow.path==='/signup'?{path:'/signup/complete',body:{token,password}}:
        {path:'/password-reset/complete',body:{token,password,locale:other}}:
        {path:flow.path==='/signup'?'/signup/request':'/password-reset/request',body:{email:'owner@example.es',locale:other}};
      assert.deepEqual(calls,[expected]);
      assert.deepEqual(errors,[]);
-    } finally {await page.close();}
-   });
-   await t.test('hiding organisation clears only its message',async()=>{
-    const {page,calls,errors}=await open(browser,flows[3],locale,theme,width);
-    try {
-     const checkbox=page.getByRole('checkbox',{name:c.differentOrg,exact:true}),submit=page.getByRole('button',{name:c.create,exact:true});
-     await checkbox.check();await submit.click();
-     assert.equal(await page.locator('input[aria-invalid=true]').count(),3);
-     await checkbox.uncheck();
-     assert.equal(await page.locator('input[name=organisationName]').count(),0);
-     assert.deepEqual(await page.locator('wt-form-error-summary').evaluate(element=>(element as HTMLElement & {errors:string[]}).errors),[c.passwordHelp,c.nameError]);
-     assert.equal(await page.locator('input[aria-invalid=true]').count(),2);
-     await page.locator('input[name=legalBusinessName]').fill(values.legalBusinessName);
-     assert.deepEqual(await page.locator('wt-form-error-summary').evaluate(element=>(element as HTMLElement & {errors:string[]}).errors),[c.passwordHelp]);
-     await checkbox.check();
-     assert.equal(await page.locator('input[name=organisationName]').getAttribute('aria-invalid'),'false');
-     await page.locator('input[name=organisationName]').fill(values.organisationName);
-     await checkbox.uncheck();await checkbox.check();
-     assert.equal(await page.locator('input[name=organisationName]').inputValue(),values.organisationName);
-     assert.deepEqual(calls,[]);assert.deepEqual(errors,[]);
-     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-     if(process.env.FORM_ERROR_RECEIPT_DIR){await mkdir(process.env.FORM_ERROR_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.FORM_ERROR_RECEIPT_DIR}/${locale}-${theme}-${width}.png`,fullPage:true});}
     } finally {await page.close();}
    });
   } finally {await browser.close();}

@@ -23,7 +23,7 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
     if(!validOwnerTransferMail(message))throw new Error('Invalid account email');
     const subject=locale==='en'?'Waitron Cloud ownership handover':'Traspaso de titularidad de Waitron Cloud';
     if (message.event === 'invitation') {
-      const detail = locale === 'en' ? 'Open Waitron Cloud to see how to receive the business.' : 'Abre Waitron Cloud para ver cómo recibir el negocio.';
+      const detail = locale === 'en' ? 'Sign in or create an account with the invited email, then accept the handover in Account.' : 'Inicia sesión o crea una cuenta con el correo de la invitación y acepta el traspaso en Cuenta.';
       const link = new URL('/receive-business', origin);
       link.hash = new URLSearchParams({lang: locale}).toString();
       return {subject, text: [subject, '', detail, link.href].join('\n')};

@@ -47,7 +47,7 @@ async function canStartOrganisation(client: PoolClient, accountId: string) {
   return !!result.rowCount;
 }
 
-export async function createFirstOrganisation(client: PoolClient, accountId: string, name: string) {
+export async function createFirstOrganisation(client: PoolClient, accountId: string, name: string | null) {
   if (!await canStartOrganisation(client, accountId)) return undefined;
   const id = randomUUID();
   await client.query('INSERT INTO organisations(id,name) VALUES ($1,$2)', [id, name]);

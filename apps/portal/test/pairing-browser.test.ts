@@ -252,8 +252,9 @@ for (const locale of ['en', 'es'] as const) test(`${locale} verified signup retu
     if (signupPage === page) await page.goto(verification);
     await signupPage.getByRole('heading', {name: c.completeSignup, exact: true}).waitFor();
     assert.ok(!new URL(signupPage.url()).hash, 'the verification token must be scrubbed');
-    await signupPage.getByLabel(c.legalName).fill('Café Sol');
+    assert.equal(await signupPage.locator('input[name=legalBusinessName]').count(), 0);
     await signupPage.locator('input[name=password]').fill(password);
+    if (signupPage === page) await look('complete');
     await signupPage.getByRole('button', {name: c.create, exact: true}).click();
     await signupPage.getByText(c.signupReady, {exact: true}).waitFor();
     await otherTab.close();

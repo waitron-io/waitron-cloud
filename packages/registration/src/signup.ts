@@ -14,7 +14,7 @@ export interface SignupMailer { sendVerification(message: SignupEmail, context?:
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; rememberBrowser?: boolean; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; browserToken?: string; }
 export class SignupError extends Error {
-  readonly code: 'country_unavailable' | 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable' | 'handover_unavailable';
+  readonly code: 'country_unavailable' | 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable';
   constructor(code: SignupError['code']) { super(code); this.name = 'SignupError'; this.code = code; }
 }
 export class SignupStore {
@@ -60,11 +60,12 @@ export class SignupStore {
     });
   }
 
-  async completeForTransfer(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>){
-    return this.#complete(token,input,async()=>({}),true);
+  async completeAccount(token: string, input: Pick<SignupDetails, 'password'>) {
+    const {accountId} = await this.#complete(token, input, async () => ({}));
+    return {accountId};
   }
 
-  async #complete<T extends object>(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>,createBusiness:(client:PoolClient,accountId:string)=>Promise<T>,requireOffer=false){
+  async #complete<T extends object>(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>,createBusiness:(client:PoolClient,accountId:string)=>Promise<T>){
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignupError('verification_unavailable');
     if (!input || !validNewPassword(input.password)) throw new SignupError('signup_invalid');
     const tokenHash = digest(token);
@@ -86,8 +87,7 @@ export class SignupStore {
       const credentials = await client.query(`INSERT INTO cloud_credentials (account_id, email, password_hash, email_verified_at)
         VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING`, [accountId, request.email, passwordHash, now]);
       if (!credentials.rowCount) throw new SignupError('verification_unavailable');
-      const attached=await attachOwnerTransferRecipients(client,accountId,request.email);
-      if(requireOffer&&!attached)throw new SignupError('handover_unavailable');
+      await attachOwnerTransferRecipients(client, accountId, request.email);
       const business=await createBusiness(client,accountId);
       const browserToken=input.rememberBrowser?await rememberBrowser(client,accountId):undefined;
       // Expiry after a contended write rolls back the account, business and membership together.

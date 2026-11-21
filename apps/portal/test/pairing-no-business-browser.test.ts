@@ -60,6 +60,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const c = translations[locale], api = await start(page);
       await page.getByText(c.pairNoBusinesses, {exact: true}).waitFor();
       assert.ok((await page.locator('main').innerText()).includes(guidance[locale]), 'the empty-business message explains how to use the owning account');
+      const register = page.getByRole('link', {name: locale === 'en' ? 'Register a business' : 'Registrar un negocio', exact: true});
+      assert.equal(await register.getAttribute('href'), '/account');
+      assert.ok((await page.locator('main').innerText()).includes(locale === 'en'
+        ? 'Then start Connect again on your box.' : 'Después, vuelve a iniciar la conexión en tu equipo.'));
       assert.equal(await page.locator('input[name=pairingCode]').count(), 0);
       assert.equal(await page.getByRole('button', {name: c.pairInspect, exact: true}).count(), 0);
       assert.equal(await page.getByRole('button', {name: c.pairApprove, exact: true}).count(), 0);
