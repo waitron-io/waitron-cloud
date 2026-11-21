@@ -34,7 +34,7 @@ beforeEach(async()=>{
   cookie=logged.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
   await prepareConnectionProof(db.pool,owner.accountId,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!);
 });
-function setupBox() {
+function setupBox(version: 4 | 5 = 4) {
   const keys = generateKeyPairSync('ed25519');
   const publicKey = keys.publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
   const redirectUri = 'https://box.example.test/cloud/pairing/callback';
@@ -45,7 +45,7 @@ function setupBox() {
   const keysForAuthenticator = {activeKeyId: 'fixture', keys: {fixture: '13'.repeat(32)}};
   function signed(action: string, args: readonly unknown[], privateKey = keys.privateKey, key = publicKey) {
     const bytes = Buffer.from(JSON.stringify([
-      'waitron-cloud-pair-v4', origin, action, requestId, key, 'test', Date.now(), args,
+      `waitron-cloud-pair-v${version}`, origin, action, requestId, key, 'test', Date.now(), args,
     ]));
     return {payload: bytes.toString('base64url'), signature: sign(null, bytes, privateKey).toString('base64url')};
   }
@@ -164,6 +164,34 @@ test('setup pairing accepts only the signed-in session and redeems its code once
   assert.deepEqual(await afterSignOut.json(), {error: 'pairing_unavailable'});
 });
 
+
+test('early setup pairing returns the provisional registration from redeem and signed status', async () => {
+  const {target, start, signed, requestId, state, challenge, verifier, keysForAuthenticator} = setupBox(5);
+  const opened = await request('/api/pairing/start', start, {}, target);
+  assert.equal(opened.status, 200, await opened.clone().text());
+  const pairing = {requestId, state, codeChallenge: challenge};
+  const headers = await signInForSetup(target, keysForAuthenticator, pairing);
+  const authorization = await request('/api/account/pairing/authorize', pairing, {origin, ...headers}, target);
+  assert.equal(authorization.status, 200);
+  const code = new URL((await authorization.json()).returnUrl).searchParams.get('code')!;
+  const redeem = await request('/api/pairing/redeem', signed('redeem', [code, verifier]), {}, target);
+  const bound = await redeem.json();
+  assert.equal(redeem.status, 200, JSON.stringify(bound));
+  assert.equal(bound.state, 'account_bound');
+  assert.equal(bound.requestId, requestId);
+  assert.deepEqual(Object.keys(bound.provisionalRegistration).sort(),
+    ['installationId', 'legalBusinessId', 'organisationId', 'venueId']);
+  const status = await request('/api/pairing/status', signed('status', []), {}, target);
+  assert.equal(status.status, 200);
+  assert.deepEqual(await status.json(), bound);
+  const completed = await request('/api/pairing/complete', signed('complete',
+    ['ES', 'Café Sol', ['Calle Sol 9', '', '28001', 'Madrid', 'Madrid'], 'B12345678', 'Café Sol SL']), {}, target);
+  assert.equal(completed.status, 200);
+  const saved = await completed.json();
+  assert.equal(saved.state, 'complete');
+  assert.deepEqual(saved.registration, bound.provisionalRegistration);
+  assert.equal(Object.hasOwn(saved, 'provisionalRegistration'), false);
+});
 
 test('setup pairing accepts the maximum Unicode venue details in a signed body', async () => {
   const {target, start, signed, requestId, state, challenge, verifier, keysForAuthenticator} = setupBox();
