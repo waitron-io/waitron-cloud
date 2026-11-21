@@ -331,11 +331,10 @@ stays unknown, and a run with gaps cannot replace a published cost figure.
   for email and SMS. Callers supply a template name and values; refuse free text and values
   outside the template's allowed type and length. A code is digits; a time is a time.
 
-- Venue email has two levels (owner, 2026-11-21). Free: Cloud sends only account
-  emails, and the box sends the rest through the venue's own mail server. Paid: Cloud
-  sends everything, as the venue's own domain or a Waitron address, unless the venue
-  keeps its own mail server, which the box then uses directly. Bounces are the venue's
-  to act on. [Detail](backlog/venue-email.md).
+- A venue's own mail server always sends its email; Cloud sends only when there is
+  none (owner, 2026-11-21). Then a free account gets only account emails from Cloud,
+  and a paid venue gets every email, as its own domain or a Waitron address. Bounces
+  are the venue's to act on. [Detail](backlog/venue-email.md).
 
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
   Correcting an address allows an immediate send; returning to it keeps its wait.
@@ -748,11 +747,11 @@ multi-gateway coordination remain production gates.
 
 ## Venue email from Cloud, sent as the venue's own domain
 
-**Open; direction agreed on 21 November 2026, no design yet.** Free accounts get only
-account emails from Cloud; a paid venue has Cloud send every email the box sends, as
-its own domain, a Waitron address or through its own mail server. The hard part is a
-DNS step a non-technical owner can finish alone, with a PDF they can forward to
-whoever runs their domain. [Decisions and open points](backlog/venue-email.md).
+**Open; direction agreed on 21 November 2026, no design yet.** A venue's own mail
+server always wins. Without one, a free account gets only account emails from Cloud,
+and a paid venue has Cloud send every email the box sends, as its own domain or a
+Waitron address. The hard part is a DNS step a non-technical owner can finish alone,
+with a PDF they can forward to whoever runs their domain. [Decisions and open points](backlog/venue-email.md).
 
 ## Launch platform work, in priority order
 
