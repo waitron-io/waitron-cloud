@@ -1,11 +1,15 @@
-# Try address suggestions on the owner's test box
+# Try address suggestions on a registered test box
 
-You can test one paired box against a signed Cloud address route. Normal
-installations keep manual entry: this trial needs an explicitly injected provider
-and one configured Cloud account, venue and installation. The normal server and
-test deployment do not enable it or accept a Google key. The private launcher can
-inject the file-backed provider below after the watcher receives the server-only
-key and the owner confirms usage and quotas. This is not the production address service.
+On a local or disposable stack, you can test the signed Cloud address route
+with an injected fake provider. Cloud uses each registered test box's venue
+and its one current, verified Cloud owner. The boxes of one owner share the
+account limits. Use manual entry if Cloud cannot verify a single current owner.
+After a transfer, start a fresh workflow so Cloud counts it against the new owner.
+
+The normal server and shared test Cloud leave the route disabled. The private launcher
+can inject Google's file-backed provider for one approved Cloud account, venue and
+installation after the watcher receives the server-only key and the owner confirms
+usage and quotas.
 
 The owner approved this trial in A951-S step 5 on 6 November 2026. The watcher’s
 7 November 00:47 and 01:05 decisions choose counted abandonment and the small
@@ -18,8 +22,9 @@ provider terms, permanent address storage and the eventual service.
 
 In the private launcher, import `createTestBoxAddressLookup` from
 `packages/account-http/src/test-box-address-lookup.ts`. Pass its result as
-`addressLookup.provider` to `startAccountServer`, alongside the single approved
-`accountId`, `venueId` and `installationId`. Use
+`addressLookup.provider` to `startAccountServer` with `addressLookup.allowedBoxes`
+containing the single approved `{accountId, venueId, installationId}`. The existing
+launcher can still pass those three IDs directly in `addressLookup`. Use
 `{keyFile:'/trial-address/google.env',fetcher:fetch}`; mount the server's
 `/root/waitron-address` directory read-only at `/trial-address`. Mount the directory
 so removing or replacing the original file remains visible inside the server.
@@ -84,9 +89,9 @@ Validation spends and closes the workflow before its one provider attempt.
 An uncertain validation cannot be submitted again. Remove this counted-abandonment
 exception when the real service is scoped.
 
-A shared nonblocking lock refuses busy callers without spending quota. Each admitted
-request waits 500 ms under the lock. A crash can shorten one dispatch gap in this
-one-box trial. There is no automatic provider retry or stored reply to replay. Unlike recorded
+Address lookup shares one dispatch lock across venues on the same stack. An eligible request holds it
+for at least 500 ms, and another caller arriving in that window gets a 409
+without spending quota. A crash can shorten one dispatch gap. There is no automatic provider retry or stored reply to replay. Unlike recorded
 control mutations, this exchange rejects a consumed call ID: its five-minute
 call record outlasts the signature window without saving address content.
 
@@ -109,9 +114,12 @@ For the local fake-provider proof, run through a Docker-enabled test environment
 node scripts/test-postgres.mjs exec node --test packages/account-http/test/address-lookup.test.ts
 ```
 
-The fake provider proves the wire and the limits. It does not measure Google's
-address quality or complete Waitron’s screen integration. Before the owner tries
-Google, configure the existing allowance for this account only and receive the
-owner’s usage/quotas confirmation through the watcher. Removing the server’s key
+For a local rehearsal with synthetic data, pass `addressLookup: {provider, allowAllTestBoxes: true}`.
+Set `[syntheticAddressProvider]: true` on your fake provider using the symbol from
+`packages/account-http/src/address-lookup.ts`, and publish a test allowance. This exercises the
+signed requests and usage limits while Waitron screen integration and live address
+quality still need their own checks. Before the owner tries Google, configure the
+existing allowance for the approved account and receive the owner’s usage and
+quota confirmation through the watcher. Removing the server’s key
 file stops the trial. Public-service terms/privacy work and production enablement
 remain separate.

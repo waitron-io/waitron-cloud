@@ -1,0 +1,25 @@
+# Cloud services during setup
+
+Sign in after creating the box administrator and before the venue form to get address completion and choose email relay. Save files the venue. Skip keeps manual setup and a later connection from the box. Lane D owns the setup screens. The owner named address completion and emails on 20 November at 13:11 in Lane D's questions. The watcher assigned this plan at 07:33 and cleared these slices with changes at 07:47 on 21 November in Lane K's questions.
+
+After all three pull requests, you can try the full flow on a local or disposable stack with a fake address provider, an operator-prepared relay grant and Mailpit. The shared test Cloud ships without address injection. Ordinary setup has no relay consent screen. Live Google remains limited to the one approved box. Ask the owner about wider live address lookup and where to collect relay consent after slice 3 lands.
+
+## 1. Address lookup for registered test boxes
+
+In `packages/account-http/src/address-lookup.ts`, route from the signed installation and its stored venue. Charge its sole current owner after verifying the account under the allowance locks. Refuse boxes with multiple owners or without a verified owner. Keep the provider stop, dispatch lock, replay checks and existing limits. Put the optional allowed-box list in the options already passed through `app.ts` and `server.ts`. Require exactly one box when injecting the key-file provider in `test-box-address-lookup.ts`, preserving the existing private launcher's scope.
+
+Use `address-lookup.test.ts` for tenant separation, current ownership and shared caps. Update the address trial guide and backlog. Estimate 65–125 code lines and 65–110 test lines. Land this pull request first, within three hours to opening it.
+
+## 2. Register on redeem and file on save
+
+In `packages/registration/src/setup-pairing.ts`, reuse the installed-box flow and `RegistrationStore` at signed redeem when the account's sole business is eligible and empty. Its country comes from signup. It has no tax number or venues, as in the 20 November 19:37 rule. Reuse `ensure_business` and a nonzero test allowance without starting a trial. Migration 080 and `migrate.ts` record the placeholder independently of the completed result. Save fills the venue and blank tax number and preserves other business details. Other accounts file on save. No placeholder is created when you skip before redeem.
+
+A fresh sign-in with the same account and key can resume the placeholder. A different account or key returns `registration_conflict`; the box starts again with a new key. The unfinished venue stays until you use Remove venue. The store's `pairing.test.ts` covers filing, absent placeholder for other accounts, retries, changed key or session, and expiry. The account HTTP `pairing.test.ts` covers response shapes and statuses. Pin migration history. Estimate 130–240 code lines and 90–150 test lines, within three hours to opening the second pull request.
+
+**Box contract.** Version 5 uses `waitron-cloud-pair-v5` in the signed array and the v4 endpoints, args and field limits. Version 4 remains the installed-box flow. Redeem and bound status return `{requestId,state:"account_bound",expiresAt,provisionalRegistration?}`. When present, that object holds `installationId`, `venueId`, `organisationId` and `legalBusinessId`. Treat those IDs as provisional until complete returns the final `registration`. For the placeholder, save keeps the same IDs so usage stays with its original business. Renew with signed `/api/installations/renew`, then call address lookup or the existing `servicesVersion:2` configuration. Signed status recovers a lost reply. On expiry or refusal, keep manual setup available and require fresh authority to retry Cloud filing. Put the shipped contract in `docs/waitron-integration-contract.md` and record the landed SHA for Lane D.
+
+## 3. Verified signup continuation and email
+
+In `apps/portal/src/{links,app,screens}.ts`, keep pairing in the original tab through verified signup, enrolment and fresh sign-in. Use `pairing-browser.test.ts` and `required-enrollment-browser.test.ts`. Prove grant discovery and delivery in `deploy/test-cloud/free-services-relay.test.mjs` with Mailpit and the existing test operator's grant command. Estimate 55–110 code lines and 55–105 test lines, within three hours to opening the third pull request.
+
+Run the named tests failing first and then passing, with real PostgreSQL for database tests, and run `pnpm typecheck`. Check changed screens in both languages and themes at 390 and 1280 pixels.

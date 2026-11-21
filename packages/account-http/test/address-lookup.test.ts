@@ -6,7 +6,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
 import {AllowanceConfigStore,BillingStore,createLeaseIssuer,reserveAllowance,transaction} from '@waitron-cloud/registration';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
-import {AddressLookupMachine} from '../src/address-lookup.ts';
+import {AddressLookupMachine,syntheticAddressProvider,type AddressLookupOptions} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -18,13 +18,16 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 const origin='https://cloud.example.test';
+async function ensureBusiness(pool:Pool,{organisationId,legalBusinessId}:{organisationId:string;legalBusinessId:string}){
+ await new BillingStore(pool).execute({organisationId,legalBusinessId},
+  {key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
+}
 async function fixture(configured=true){
  const db=await database();
  try{
   const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
   const v=await connectedVenue(db,issuer,origin);
-  await new BillingStore(db.pool).execute({organisationId:v.organisationId,legalBusinessId:v.legalBusinessId},
-   {key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
+  await ensureBusiness(db.pool,v);
   const limit={transactional_email:'0',address_lookup:'100',sms:'0',content_translation:'0',rota_solver:'0'};
   if(configured)await new AllowanceConfigStore(db.pool).publish({revision:1,effectiveFrom:'2020-01-01',limits:{registered:limit,connected:limit,hosted:limit},unpaidTrial:{content_translation:'0',rota_solver:'0'}});
   const calls:{kind:string;token:string}[]=[];
@@ -45,7 +48,8 @@ async function fixture(configured=true){
    method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(envelope),
   },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as HttpBindings);
   const post=(body:unknown,operationId=randomUUID())=>request(v.proof('address-lookup',body,operationId,v.lease));
-  return {db,v,issuer,calls,provider,app,options,post,request,setFailure:()=>{failed=true;}};
+  const fakeProvider={[syntheticAddressProvider]:true,suggest:provider.suggest,validate:provider.validate};
+  return {db,v,issuer,calls,provider,fakeProvider,app,options,post,request,setFailure:()=>{failed=true;}};
  }catch(error){await db.close();throw error;}
 }
 test('the signed trial reuses one counted hold and token, validates once and stores no address content',async()=>{
@@ -74,6 +78,70 @@ test('the signed trial reuses one counted hold and token, validates once and sto
 });
 
 const suggestion=(workflowId=randomUUID())=>({version:1,kind:'suggest',workflowId,query:'PRIVATE-QUERY',language:'es'});
+test('registered boxes get separate holds and cannot validate another box workflow',async()=>{
+ const f=await fixture();try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  await ensureBusiness(f.db.pool,other);
+  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
+  const post=(box:typeof f.v,body:unknown)=>f.request(box.proof('address-lookup',body,randomUUID(),box.lease),app);
+  const workflowId=randomUUID();
+  assert.equal((await post(f.v,suggestion(workflowId))).status,200);
+  assert.equal((await post(other,{version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY'})).status,409);
+  assert.equal((await post(other,suggestion(workflowId))).status,200);
+  assert.deepEqual((await f.db.pool.query(`SELECT account_id,venue_id,installation_id FROM billing_allowance_reservations
+   WHERE operation_id=$1 ORDER BY installation_id`,[workflowId])).rows,
+  [f.v,other].sort((a,b)=>a.installationId.localeCompare(b.installationId)).map(box=>({
+   account_id:box.accountId,venue_id:box.venueId,installation_id:box.installationId,
+  })));
+  assert.equal(new Set(f.calls.map(call=>call.token)).size,2);
+ }finally{await f.db.close();}
+});
+test('a second registered box shares the current owner monthly cap',async()=>{
+ const f=await fixture();try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  await ensureBusiness(f.db.pool,other);
+  await f.db.pool.query('UPDATE organisation_memberships SET account_id=$1 WHERE organisation_id=$2',[f.v.accountId,other.organisationId]);
+  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
+  for(let i=0;i<9;i++)assert.equal((await f.post(suggestion())).status,200);
+  const post=()=>f.request(other.proof('address-lookup',suggestion(),randomUUID(),other.lease),app);
+  assert.equal((await post()).status,200);
+  assert.equal((await post()).status,429);
+  assert.equal(f.calls.length,10);
+  assert.deepEqual((await f.db.pool.query('SELECT DISTINCT account_id FROM billing_allowance_reservations')).rows,[{account_id:f.v.accountId}]);
+ }finally{await f.db.close();}
+});
+test('current ownership controls access after a transfer and history cleanup',async()=>{
+ const f=await fixture();try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
+  const post=(body:unknown)=>f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
+  await f.db.pool.query('DELETE FROM connection_requests WHERE installation_key=$1',[f.v.installationKey]);
+  const previous=suggestion();
+  assert.equal((await post(previous)).status,200);
+  await f.db.pool.query('UPDATE organisation_memberships SET account_id=$1 WHERE account_id=$2 AND organisation_id=$3',
+   [other.accountId,f.v.accountId,f.v.organisationId]);
+  assert.equal((await post(previous)).status,409);
+  assert.equal((await f.post(suggestion())).status,403);
+  const current=suggestion();
+  assert.equal((await post(current)).status,200);
+  assert.equal(f.calls.length,2);
+  for(const [body,accountId] of [[previous,f.v.accountId],[current,other.accountId]] as const){
+   assert.deepEqual((await f.db.pool.query('SELECT account_id FROM billing_allowance_reservations WHERE operation_id=$1',[body.workflowId])).rows,[{account_id:accountId}]);
+  }
+ }finally{await f.db.close();}
+});
+test('the key-file provider requires exactly one explicitly scoped box',async()=>{
+ const f=await fixture(),directory=await mkdtemp(join(tmpdir(),'scoped-address-key-'));
+ try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  const provider=createTestBoxAddressLookup({keyFile:join(directory,'google.env'),fetcher:async()=>assert.fail('unapproved dispatch')});
+  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider} as unknown as AddressLookupOptions}),/invalid_address_lookup_configuration/);
+  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider,allowedBoxes:[f.v,other]}}),/invalid_address_lookup_configuration/);
+  const app=createAccountApp({...f.options,addressLookup:{provider,allowedBoxes:[f.v]}});
+  assert.equal((await f.request(other.proof('address-lookup',suggestion(),randomUUID(),other.lease),app)).status,403);
+  assert.deepEqual((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows,[{n:0}]);
+ }finally{await f.db.close();await rm(directory,{recursive:true,force:true});}
+});
 test('trial absence, unpublished allowance and invalid authority never reach Google',async()=>{
  const f=await fixture(false);try{
   const body=suggestion(),signed=f.v.proof('address-lookup',body,randomUUID(),f.v.lease);
@@ -86,6 +154,38 @@ test('trial absence, unpublished allowance and invalid authority never reach Goo
   assert.equal((await f.request(f.v.proof('address-lookup',body))).status,401);
   assert.equal(f.calls.length,0);assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
  }finally{await f.db.close();}
+});
+test('incomplete or unscoped provider configuration fails closed',async()=>{
+ const f=await fixture();try{
+  const keyFile=createTestBoxAddressLookup({keyFile:'/unused/synthetic-key',fetcher:async()=>assert.fail('unexpected dispatch')});
+  const provider={suggest:keyFile.suggest,validate:keyFile.validate};
+  const {accountId,venueId,installationId}=f.v;
+  const box={accountId,venueId,installationId};
+  for(const addressLookup of [
+   {provider},
+   {provider,accountId,venueId},
+   {provider,allowAllTestBoxes:true},
+   {provider:f.provider,allowAllTestBoxes:true},
+   {provider:keyFile,allowAllTestBoxes:true},
+   {provider,...box,allowedBoxes:[box]},
+   {provider:f.fakeProvider,allowAllTestBoxes:true,allowedBoxes:[box]},
+   {provider:f.fakeProvider,allowAllTestBoxes:true,...box},
+  ] as const){
+   assert.throws(()=>createAccountApp({...f.options,addressLookup:addressLookup as AddressLookupOptions}),
+    /invalid_address_lookup_configuration/,Object.keys(addressLookup).join(', '));
+  }
+ }finally{await f.db.close();}
+});
+test('a box without a verified owner is refused before it can take the shared dispatch lock',async()=>{
+ const f=await fixture(),client=await f.db.pool.connect();try{
+  await client.query('UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1',[f.v.accountId]);
+  await client.query("SELECT pg_advisory_lock(hashtext(current_schema()),hashtext('address-lookup:google'))");
+  assert.equal((await f.post(suggestion())).status,403);
+  assert.equal(f.calls.length,0);
+ }finally{
+  await client.query('SELECT pg_advisory_unlock_all()');
+  client.release();await f.db.close();
+ }
 });
 test('a missing trial key stops dispatch while counted admission and validation remain spent',async()=>{
  const f=await fixture(),directory=await mkdtemp(join(tmpdir(),'missing-address-key-'));let sends=0;
