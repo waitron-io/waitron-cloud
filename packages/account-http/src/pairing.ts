@@ -1,7 +1,7 @@
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {PairingError,PairingStore,SetupPairingStore,type PairingCodeKeys,type SetupPairingContext,transaction,verifyPairingProof,verifyPairingV4Proof,verifyPairingV5Proof} from '@waitron-cloud/registration';
+import {PairingError,PairingStore,RelayError,SetupPairingStore,setupEmailConsentBody,type PairingCodeKeys,type RelayAdmissionConfig,type SetupPairingContext,transaction,verifyMachine,verifyPairingProof,verifyPairingV4Proof,verifyPairingV5Proof} from '@waitron-cloud/registration';
 import {readAccountBody} from './request.ts';
 import {readSessionCookie} from './cookies.ts';
 import {AccountHttpError} from './errors.ts';
@@ -23,12 +23,13 @@ export function setupPairingSignIn(pool: Pool, setup: Setup, value: unknown) {
   return new SetupPairingStore(pool).signIn(setupContext(value), setup);
 }
 
-export async function pairingResponse(c:Context,options:{pool:Pool;pairingCodeKeys:PairingCodeKeys|null;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>;setupPairing:Setup;country:string}):Promise<Response> {
+export async function pairingResponse(c:Context,options:{pool:Pool;pairingCodeKeys:PairingCodeKeys|null;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>;setupPairing:Setup;country:string;relayGrants?:RelayAdmissionConfig['grants']}):Promise<Response> {
   const {pool,origin,ip,consume}=options;const store=new PairingStore(pool,options.pairingCodeKeys);const machine=c.req.path.startsWith('/api/pairing/');
   const action=c.req.path.slice((machine?'/api/pairing/':'/api/account/pairing/').length);
   const setup = options.setupPairing;
   const actions = machine ? ['start','status','complete'] : ['businesses','inspect','approve'];
   if (setup) actions.push(...(machine ? ['redeem'] : ['authorize', 'cancel']));
+  if (setup && machine) actions.push('email-grant');
   if (!actions.includes(action)) throw new AccountHttpError(404, 'not_found');
   if(c.req.method!==(action==='businesses'?'GET':'POST'))throw new AccountHttpError(405,'method_not_allowed');
   if(machine) {
@@ -36,6 +37,29 @@ export async function pairingResponse(c:Context,options:{pool:Pool;pairingCodeKe
     await consume([{scope:`pairing-${action}-ip`,subject:ip,limit:action==='start'?10:60,windowSeconds:action==='start'?900:60}]);
     const body=await readAccountBody(c.req.raw,['payload','signature']);
     const consumeKey = (publicKey: string) => consume([{scope:`pairing-${action}-key`,subject:publicKey,limit:action==='start'?10:60,windowSeconds:action==='start'?900:60}]);
+    if (setup && action === 'email-grant') {
+      const proof = {payload: body.payload!, signature: body.signature!};
+      const claims = verifyMachine(proof, setup.publicKey, origin, 'configuration');
+      await consumeKey(setup.publicKey);
+      if (!options.relayGrants) throw new AccountHttpError(403, 'relay_disabled');
+      let choice;
+      try { choice = JSON.parse(claims.body); }
+      catch { throw new AccountHttpError(400, 'invalid_input'); }
+      if (typeof choice?.requestId !== 'string'
+        || claims.body !== setupEmailConsentBody(choice.requestId, options.relayGrants.consentVersion))
+        throw new AccountHttpError(400, 'invalid_input');
+      try {
+        const grant = await new SetupPairingStore(pool).emailGrant(choice.requestId, claims.installationId, setup, proof, options.relayGrants);
+        return c.json({emailRelay: {version: 1, grant}});
+      } catch (error) {
+        if (error instanceof RelayError) {
+          if (error.code === 'grant_conflict') throw new AccountHttpError(409, error.code);
+          if (error.code === 'relay_disabled' || error.code === 'grant_unavailable') throw new AccountHttpError(403, error.code);
+          if (error.code === 'invalid_input') throw new AccountHttpError(400, error.code);
+        }
+        throw error;
+      }
+    }
     if (setup) {
       for (const [version, verify] of [[4, verifyPairingV4Proof], [5, verifyPairingV5Proof]] as const) {
         let claims;

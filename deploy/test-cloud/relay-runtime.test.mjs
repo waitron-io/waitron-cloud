@@ -279,3 +279,21 @@ test('regenerated keys cannot silently accept restored suppression history',asyn
  await assert.rejects(regenerated.worker.suppress('another@example.test'),/relay_unavailable/);
  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_suppressions')).rows[0].n,1);
 });
+
+test('test relay setup accepts only a canonical UTC pilot end date',async()=>{
+ const {testRelayGrantConfig}=await import('./relay-runtime.mjs');
+ const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const input={origin,issuer},setupExpiresAt='2030-01-01T00:00:00.000Z';
+ assert.equal(testRelayGrantConfig(input).setupExpiresAt,undefined);
+ assert.equal(testRelayGrantConfig({...input,setupExpiresAt}).setupExpiresAt,setupExpiresAt);
+ assert.throws(()=>testRelayGrantConfig({...input,setupExpiresAt:'2030-01-01'}),/test_cloud.relay_setup_expiry/);
+});
+
+test('the account worker identifies a malformed setup relay date by its setting name',async t=>{
+ const {db,context}=await setup(t);
+ await prepareAccount(t,context);
+ const running=await startAccount(db,context,{CLOUD_TEST_RELAY_SETUP_EXPIRES_AT:'2030-01-01'});
+ assert.equal(await running.close(),0);
+ assert.match(running.stderr,/CLOUD_TEST_RELAY_SETUP_EXPIRES_AT/);
+ await assert.rejects(stat(join(context.directory,'relay-keys.json')),{code:'ENOENT'});
+});

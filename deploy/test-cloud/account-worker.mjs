@@ -65,8 +65,13 @@ try {
     if(uploadOrigin!==undefined&&(planMode!=='test-venue-levels'||process.env.NODE_ENV==='production'))throw Error('test_cloud.amazon_backups');
     captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory,uploadOrigin}):undefined;
     let relay;
-    try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
-    catch{console.error('Test relay startup failed; restore private keys and check schema');}
+    try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode,
+      setupExpiresAt:process.env.CLOUD_TEST_RELAY_SETUP_EXPIRES_AT || undefined});}
+    catch(error){
+      if(error?.message==='test_cloud.relay_setup_expiry')
+        console.error('Test relay startup refused: use a UTC timestamp with milliseconds for CLOUD_TEST_RELAY_SETUP_EXPIRES_AT');
+      else console.error('Test relay startup failed; restore private keys and check schema');
+    }
     if(guestOrigin&&!stopRequested){
       const key=await readFile(join(directory,'lan/key.pem')),cert=await readFile(join(directory,'lan/cert.pem'));
       guest=await startGuestMenuServer({pool,rateKey:config.rateKey,origin:guestOrigin,tls:{key,cert},planMode,

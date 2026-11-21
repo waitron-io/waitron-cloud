@@ -208,7 +208,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/installations/billing-display')return billingDisplayResponse(c,{machine:billingDisplay,ip,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
-    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys,setupPairing:config.setupPairing,country:config.countryCode??'ES'});
+    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys,setupPairing:config.setupPairing,country:config.countryCode??'ES',relayGrants:options.relay?.grants});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
     const fields = paths[path];
     if (path !== '/session' && !fields) throw new AccountHttpError(404, 'not_found');
