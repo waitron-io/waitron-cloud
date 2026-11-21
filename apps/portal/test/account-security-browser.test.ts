@@ -6,6 +6,7 @@ import type {Request} from 'playwright';
 import {hashSecret} from '@waitron-cloud/identity';
 import {contextSignIn,addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
+import {failPortalWait,portalTrace} from './portal-trace.ts';
 
 const password = 'A real account security password';
 const rule={limit:1000,windowSeconds:60};
@@ -30,10 +31,39 @@ test('password and verified email changes work in both languages, themes and wid
       await page.getByText(c.emailChangeSent,{exact:true}).waitFor();await f.drainMail();
       const mail=await mailFor(next,locale==='en'?'Verify your new Waitron Cloud email':'Verifica tu nuevo correo de Waitron Cloud',f.mailEvidence);
       const link=mail.match(/https?:\/\/\S+\/account#change=[A-Za-z0-9_-]{43}&lang=\w+/)?.[0];assert.ok(link);
-      await page.goto(link);await page.getByRole('button',{name:c.emailChangeVerify,exact:true}).waitFor();
-      assert.equal(new URL(page.url()).hash,'');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-      await page.screenshot({path:new URL(`../dist/credential-change-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
-      await page.getByRole('button',{name:c.emailChangeVerify,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
+      const trace=portalTrace(page);
+      const confirm=page.getByRole('button',{name:c.emailChangeVerify,exact:true});
+      const holdReads=locale==='en'&&colorScheme==='dark'&&width===1280;
+      let releaseSession!:()=>void,releaseList!:()=>void;
+      const heldSession=new Promise<void>(resolve=>{releaseSession=resolve;});
+      const heldList=new Promise<void>(resolve=>{releaseList=resolve;});
+      try {
+        if(holdReads){
+          await page.route('**/api/account/session',async route=>{await heldSession;await route.continue();},{times:1});
+          await page.route('**/api/account/sessions',async route=>{await heldList;await route.continue();},{times:1});
+        }
+        trace.stage('open email verification link');
+        await page.goto(link);await confirm.waitFor();
+        assert.equal(new URL(page.url()).hash,'');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        if(holdReads){
+          assert.equal(await confirm.isDisabled(),true,'confirmation waits for the session check');
+          const listRequested=page.waitForRequest('**/api/account/sessions');
+          releaseSession();
+          await listRequested;
+          assert.equal(await confirm.isDisabled(),true,'confirmation waits for the session list');
+          releaseList();
+        }
+        await page.screenshot({path:new URL(`../dist/credential-change-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
+        trace.stage('confirm new email');
+        await confirm.click();
+        trace.stage('wait for sign-in heading');
+        await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
+      } catch(error) {
+        await failPortalWait(page,trace,`changed-email sign-in ${locale} ${colorScheme} ${width}`,error,details=>t.diagnostic(details));
+      } finally {
+        releaseSession();
+        releaseList();
+      }
       assert.equal((await contextSignIn(f,context,next,password)).status(),200);await page.goto(`${f.origin}/account#lang=${locale}`);await prepareBrowserActionWindow(f,page);
       await page.locator('.credential-settings > summary').click();
       await page.getByLabel(c.newPassword,{exact:true}).fill('A changed synthetic password');

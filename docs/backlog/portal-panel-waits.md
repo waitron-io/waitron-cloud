@@ -129,11 +129,19 @@ failure, using static paths and stage names.
 
 ## Changed-email sign-in wait
 
-[The same merge's second portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44204279476/job/134466278462)
-exceeded five seconds waiting for Spanish “Inicia sesión” after confirming an
-email change (`account-security-browser.test.ts:35`). No refusal was recorded
-for that case. The confirmation button already waits for its session-list read
-through its disabled state; holding those reads for one second still passes all
-eight language, theme and width journeys on Linux (one test case). That control
-does not reproduce or repair this different wait. Preserve its checks and
-deadline; diagnose a recurrence rather than assuming the proof-status race.
+Two CI jobs timed out waiting five seconds for sign-in after the email
+confirmation click. The logs lack the request order needed to attribute either
+failure. [First portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44204279476/job/134466278462).
+[Second portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44897437907/job/136826078589).
+
+A focused Linux probe held the session check after opening the email link in the
+same tab. When the check returned between pointer-down and pointer-up, the list
+request disabled the button and the browser sent no confirmation. The browser
+regression in `apps/portal/test/account-security-browser.test.ts` holds those two
+reads and checks that confirmation stays disabled until it can accept the click.
+The five-second sign-in check remains. If the wait returns, use the trace to see
+whether confirmation reached the server and whether the next session read signed
+the account out.
+
+Sign-out and session-revoke controls still have the window before the session
+check. They are outside the email confirmation fix.

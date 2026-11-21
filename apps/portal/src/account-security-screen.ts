@@ -32,7 +32,7 @@ export function accountSecurityScreen(app: PortalApp) {
     ${accountActionProofScreen(app)}
     <details class="credential-settings" ?open=${!!app.link.emailChangeToken}><summary>${c.credentialChanges}</summary>
       <p class="help">${c.credentialChangesHelp}</p>
-      ${app.link.emailChangeToken ? html`<p>${c.emailChangeConfirm}</p><wt-button .disabled=${app.security.pending||!!app.security.waiting}
+      ${app.link.emailChangeToken ? html`<p>${c.emailChangeConfirm}</p><wt-button .disabled=${!app.security.loadAttempted||app.security.pending||!!app.security.waiting}
         @click=${()=>{void app.changeCredentials('verify');}}>${c.emailChangeVerify}</wt-button>`:nothing}
       <wt-input name="newAccountPassword" .type=${'password'} .autocomplete=${'new-password'} .label=${c.newPassword}
         .value=${app.security.newPassword} .disabled=${app.security.pending||!!app.security.waiting}
