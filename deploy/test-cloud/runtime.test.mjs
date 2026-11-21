@@ -253,32 +253,46 @@ test('Amazon challenge paths reach only worker and gateway',async t=>{
 test('Amazon gateway can verify a publicly trusted staff certificate only with the trusted issuer',async t=>{
  const {testRuntimeEnvironment}=await import('./runtime.mjs');
  const {bootstrapTestCloudIdentity}=await import('./bootstrap.mjs');
- const {readFile}=await import('node:fs/promises');
+ const {mkdir,readFile,writeFile}=await import('node:fs/promises');
+ const {execFileSync}=await import('node:child_process');
  const {createServer,get}=await import('node:https');
  const {getCACertificates,setDefaultCACertificates}=await import('node:tls');
  const dir=await mkdtemp(join(tmpdir(),'cloud-gateway-trust-'));
  t.after(()=>rm(dir,{recursive:true,force:true}));
  const config=await bootstrap(dir);
- await bootstrapTestCloudIdentity(dir,'https://waitron.local:3000');
- const [publicCA,cert,key,lanCA]=await Promise.all(['storage-ca.pem','storage-cert.pem','storage-key.pem','lan/ca.pem'].map(name=>readFile(join(dir,name))));
+ await bootstrapTestCloudIdentity(join(dir,'public'),'https://waitron.local:3000');
+ const openssl=(...args)=>execFileSync('openssl',args,{cwd:dir,stdio:'ignore'});
+ await mkdir(join(dir,'lan'));
+ openssl('req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=Fixture LAN root',
+  '-addext','basicConstraints=critical,CA:TRUE','-out','lan/ca.pem','-keyout','lan/key.pem');
+ // The venue leaf already bears the intermediate's signature. Serve the
+ // intermediate issued by the fixture root, which the client trusts by default.
+ openssl('x509','-x509toreq','-in','public/lan/ca.pem','-signkey','public/lan/ca-key.pem','-out','intermediate.csr');
+ await writeFile(join(dir,'intermediate.ext'),'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n');
+ openssl('x509','-req','-in','intermediate.csr','-CA','storage-ca.pem','-CAkey','storage-key.pem',
+  '-set_serial','1','-out','intermediate.pem','-days','1','-extfile','intermediate.ext');
+ const [publicCA,leaf,intermediate,key]=await Promise.all(
+  ['storage-ca.pem','public/lan/cert.pem','intermediate.pem','public/lan/key.pem'].map(name=>readFile(join(dir,name))));
  const defaultCAs=getCACertificates();
  setDefaultCACertificates([...defaultCAs,publicCA.toString('utf8')]);
  t.after(()=>setDefaultCACertificates(defaultCAs));
- const venue=createServer({cert,key},(_request,response)=>response.end(JSON.stringify({available:true})));
+ const venue=createServer({cert:Buffer.concat([leaf,intermediate]),key},(_request,response)=>response.end(JSON.stringify({available:true})));
  await new Promise(resolve=>venue.listen(0,'127.0.0.1',resolve));
  t.after(()=>{venue.closeAllConnections();return new Promise(resolve=>venue.close(resolve));});
  const trusted={TEST_CLOUD_AMAZON:'1',TEST_CLOUD_PUBLIC_REMOTE:'1',
   TEST_CLOUD_ACME_DIRECTORY:'https://acme-v02.api.letsencrypt.org/directory'};
- const availability=(settings,servername='storage')=>new Promise((resolve,reject)=>{
-  const child=testRuntimeEnvironment('gateway',config,settings);
-  get({hostname:'127.0.0.1',port:venue.address().port,servername,path:'/public/availability',
-   ca:child.GATEWAY_UPSTREAM_CA?lanCA:undefined,agent:false},async response=>{
-   try{let body='';for await(const chunk of response)body+=chunk;resolve(JSON.parse(body));}catch(error){reject(error);}
-  }).on('error',reject);
- });
+ const availability=async(settings,servername='waitron.local')=>{
+  const {GATEWAY_UPSTREAM_CA:caPath}=testRuntimeEnvironment('gateway',config,settings);
+  const ca=caPath?await readFile(join(dir,caPath.replace('/run/local-stack/',''))):undefined;
+  return new Promise((resolve,reject)=>{
+   get({hostname:'127.0.0.1',port:venue.address().port,servername,path:'/public/availability',ca,agent:false},async response=>{
+    try{let body='';for await(const chunk of response)body+=chunk;resolve(JSON.parse(body));}catch(error){reject(error);}
+   }).on('error',reject);
+  });
+ };
  for(const overrides of [{TEST_CLOUD_AMAZON:undefined},{TEST_CLOUD_PUBLIC_REMOTE:'0'},
   {TEST_CLOUD_ACME_DIRECTORY:undefined},{TEST_CLOUD_ACME_DIRECTORY:'https://acme-staging-v02.api.letsencrypt.org/directory'}]){
-  await assert.rejects(availability({...trusted,...overrides}),{code:'DEPTH_ZERO_SELF_SIGNED_CERT'});
+  await assert.rejects(availability({...trusted,...overrides}),{code:'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'});
  }
  assert.deepEqual(await availability(trusted),{available:true});
  await assert.rejects(availability(trusted,'other.example.test'),{code:'ERR_TLS_CERT_ALTNAME_INVALID'});
