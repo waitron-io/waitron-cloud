@@ -102,11 +102,18 @@ test('measured stops cover all three machines and the live roles before returnin
 });
 
 const coldRoles = {primary: 'b', gateway: 'a', operator: 'c', fluxSource: 'b', fluxApply: 'a'};
-for (const [name, routeStillResponding, placement] of [
+const lookupCommandError = fields => Object.assign(Error('synthetic command output'), fields);
+const kindLookupError = fields => Error('inventory command failed', {cause: lookupCommandError(fields)});
+for (const [name, routeStillResponding, placement, reason] of [
   ['the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup'],
   ['the full restart rejects a responding public route', 'public'],
   ['the full restart rejects an expired certificate as evidence of network loss', 'bad certificate'],
-  ['the full restart reports unavailable placement and still stops', undefined, 'unavailable'],
+  ['the full restart reports unavailable placement and still stops', undefined,
+    kindLookupError({code: 'EHOSTUNREACH'}), 'EHOSTUNREACH'],
+  ['the full restart reports a killed Kind placement command', undefined,
+    kindLookupError({code: null, signal: 'SIGKILL'}), 'SIGKILL'],
+  ['the full restart reports a timed-out Stockholm placement command', undefined,
+    lookupCommandError({code: 'ETIMEDOUT'}), 'ETIMEDOUT'],
   ['the full restart propagates cancellation during placement before stopping machines', undefined, 'cancelled'],
 ]) {
   test(name, async t => {
@@ -125,11 +132,7 @@ for (const [name, routeStillResponding, placement] of [
       async inventory(limit) {
         assert.equal(limit, signal);
         if (placement === 'cancelled') controller.abort(cancelled);
-        if (placement === 'unavailable') {
-          const commandError = Object.assign(Error('synthetic command output'), {code: 'EHOSTUNREACH'});
-          throw Error('remote.stop_role_inventory', {cause: Error('inventory command failed', {cause: commandError})});
-        }
-        if (placement === 'cancelled') throw Error('remote.stop_role_inventory');
+        if (placement) throw Error('remote.stop_role_inventory', {cause: placement});
         return coldRoles;
       },
       storeOutage: down('store outage'),
@@ -151,7 +154,7 @@ for (const [name, routeStillResponding, placement] of [
       async restartAll(outage) {
         seen.push('stopped');
         if (placement !== 'cancelled') {
-          const expected = placement ? {unavailable: 'remote.stop_role_inventory', reason: 'EHOSTUNREACH'} : {roles: coldRoles};
+          const expected = placement ? {unavailable: 'remote.stop_role_inventory', reason} : {roles: coldRoles};
           assert.ok(log.mock.calls.some(({arguments: [line]}) =>
             line === 'D621 all-machine stop inventory ' + JSON.stringify(expected) + '\n'),
           'placement must be logged before the machines stop');

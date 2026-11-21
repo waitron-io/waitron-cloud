@@ -283,7 +283,8 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
   let reason;
   const roles = await inventory(signal).catch(error => {
     const cause = error?.cause;
-    reason = cause?.code ?? cause?.cause?.code ?? cause?.name;
+    const commandError = cause?.cause;
+    reason = cause?.code ?? commandError?.code ?? commandError?.signal ?? cause?.name;
   });
   signal.throwIfAborted();
   process.stderr.write('D621 all-machine stop inventory ' +
