@@ -1876,7 +1876,9 @@ implementation or production evidence.
   The [outside full-service baseline](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
   uses the private test host for one venue's signup, pairing, signed remote
   access, encrypted upload and isolated restore. The same clients now exercise
-  each individual stop and the all-machine restart in private Kind. The
+  each individual stop and the all-machine restart in private Kind. Use the role
+  placement logs before both kinds of stop when comparing the earlier storage
+  and HTTPS failures with later runs. The
   [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
   records the passing timed outside rehearsal and the paid attempt that failed
   in the older in-cluster pairing check. The owner verified deletion. The causes

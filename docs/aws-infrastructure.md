@@ -1395,9 +1395,17 @@ machine-stop test has a 54-minute timeout. The guest’s separate 55-minute
 limit also covers setup. Two long pauses can push the whole job past that
 limit before the test’s own timeout.
 
-The same journey then stops all three machines. Fresh account, store, staff and
-public requests must fail at the network while the host can still confirm the
-machines are off. Restart the same machines and check the retained PostgreSQL
+Before the same journey stops all three machines, look in the rehearsal log
+for `D621 all-machine stop inventory`. It records which machine holds the
+database primary, database operator, gateway and Flux controllers. If the
+lookup fails or reaches its 30-second limit, the log reports that placement is
+unavailable. The `reason` field gives the command's error code, termination
+signal or error type when available. The rehearsal continues. The completed
+receipt includes the placement when the lookup succeeds.
+
+Fresh account, store, staff and public requests must fail at the network while
+the host can still confirm the machines are off. Restart the same machines and
+check the retained PostgreSQL
 row and a new write, one writable primary and ready storage. The same venue
 process, session and tunnel must recover its signed routes and last verified
 backup, then publish a different capture and complete an isolated restore.

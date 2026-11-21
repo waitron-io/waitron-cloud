@@ -275,10 +275,20 @@ export function readOutsideStore({host, port = 9000, ca, signal}) {
   });
 }
 
-export async function measureServiceRestart({restartAll, probes, checkStore, storeOutage, restore, prepare, inspectionReady, signal}) {
+export async function measureServiceRestart({restartAll, inventory, probes, checkStore, storeOutage, restore, prepare, inspectionReady, signal}) {
   const healthy = limit => Promise.all([probes.session(limit), probes.remote(limit), checkStore(limit)]);
   await untilRemote(async limit => {await healthy(limit); return true;}, 30_000, signal, 'cold_services_before');
   const witness = await prepare?.();
+  // Placement is diagnostic because this stop targets every machine.
+  let reason;
+  const roles = await inventory(signal).catch(error => {
+    const cause = error?.cause;
+    const commandError = cause?.cause;
+    reason = cause?.code ?? commandError?.code ?? commandError?.signal ?? cause?.name;
+  });
+  signal.throwIfAborted();
+  process.stderr.write('D621 all-machine stop inventory ' +
+    JSON.stringify(roles ? {roles} : {unavailable: 'remote.stop_role_inventory', reason}) + '\n');
   const api = await restartAll(async ({signal, confirmStopped}) => {
     await confirmStopped(signal);
     const endpoints = Object.entries({...probes.outage, store: storeOutage});
@@ -306,7 +316,7 @@ export async function measureServiceRestart({restartAll, probes, checkStore, sto
   await untilRemote(async limit => {await healthy(limit); return true;}, 300_000, clientDeadline, 'cold_services_after');
   await untilRemote(inspectionReady, 300_000, clientDeadline, 'cold_inspection_ready');
   const backup = await probes.backupAfterRestart(clientDeadline);
-  return {...api, ...data, backup, clientRecoveryMs: Math.round(performance.now() - started)};
+  return {...api, ...data, roles, backup, clientRecoveryMs: Math.round(performance.now() - started)};
 }
 
 export async function runKubernetesServices(context) {
@@ -456,7 +466,7 @@ export async function runKubernetesServices(context) {
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
         stockholmRemote: remoteTarget, verifier, amazon, signal,
         ...(restartAll && {restartServices: probes => measureServiceRestart({
-          restartAll, probes, checkStore: outsideStore, signal,
+          restartAll, inventory, probes, checkStore: outsideStore, signal,
           async inspectionReady(limit) {return (await readyServices(limit, 'inspect')).length > 0;},
           storeOutage: signal => readOutsideStore({host: remoteTarget.gatewayIp, ca: store.ca, signal}),
           prepare: () => prepareDatabaseWitness({kube: context.kube, signal}),
