@@ -131,11 +131,12 @@ to enable the account service for the box you are testing.
 
 ### Test-box sign-in before the venue form
 
-Use pairing version 5 when signing in before entering venue details. You need an
-existing Cloud account and a local or disposable Cloud configured for your box's
-exact public key and HTTPS callback. Use the same endpoints, argument arrays and
-field limits as version 4. Sign with `waitron-cloud-pair-v5` as the first array value
-and keep `test` as the environment.
+Use pairing version 5 when signing in before entering venue details. Use a local
+or disposable Cloud configured for your box's exact public key and HTTPS callback.
+If you need an account, keep the verification link and enrolment in the
+[original tab](local-pairing.md#connect-an-installed-test-box-with-cloud-sign-in).
+Use the same endpoints, argument arrays and field limits as version 4. Sign with
+`waitron-cloud-pair-v5` as the first array value and keep `test` as the environment.
 
 When your account has one eligible business in the test Cloud's country with an
 empty tax number and no venues, signed redeem creates a placeholder venue and
@@ -148,8 +149,10 @@ sign-in, you can enter the details manually and connect later.
 When you have provisional IDs, renew the signed installation lease at
 `/api/installations/renew` before calling the address route or reading installation
 configuration with `servicesVersion: 2`. Allowance-backed services use the test
-Cloud's published allowances. The address pilot uses a fake provider and email
-requires an operator-prepared relay grant. Signed complete files the venue's
+Cloud's published allowances. The address pilot uses a fake provider. To try
+staff email before saving, [prepare a relay grant](test-cloud-service-controls.md)
+for the provisional installation. Read the grant through signed configuration
+and check delivery in Mailpit. Signed complete files the venue's
 name and address and returns its final `registration`. The business keeps its
 name. Cloud fills its tax number if it is blank. A tax number already on the business takes
 precedence over the venue form. The IDs stay the same, keeping any setup-time

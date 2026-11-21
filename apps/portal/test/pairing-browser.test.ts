@@ -4,7 +4,7 @@ import {createHash,generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {PairingStore,SetupPairingStore,SignupStore} from '@waitron-cloud/registration';
-import {addVirtualAuthenticator,startPortalFixture,completeBrowserEmail,prepareBrowserActionWindow} from './fixtures.ts';
+import {addVirtualAuthenticator,startPortalFixture,completeBrowserEmail,mailFor,prepareBrowserActionWindow} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)test(`${locale} connection requires code, Cloud approval and a separate local completion`,async()=>{
   const f=await startPortalFixture();
@@ -201,4 +201,77 @@ for (const locale of ['en', 'es'] as const) test(`${locale} setup pairing return
       args: ['ES', 'Café Luna', ['Calle Luna 8', '', '28001', 'Madrid', ''], 'B12345678', 'Luna SL']}, setup, 'ES');
     assert.equal(finished.state, 'complete');
   } finally { await f.close(); }
+});
+
+
+for (const locale of ['en', 'es'] as const) test(`${locale} verified signup returns to setup after enrollment and fresh passkey sign-in`, async () => {
+  const publicKey = generateKeyPairSync('ed25519').publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
+  const redirectUri = 'https://box.example.test/cloud/pairing/callback';
+  const f = await startPortalFixture(undefined, undefined, undefined, undefined, locale === 'es',
+    undefined, undefined, undefined, undefined, {publicKey, redirectUri});
+  const context = await f.browser.newContext({locale}), page = await context.newPage();
+  const authenticator = await addVirtualAuthenticator(context, page);
+  page.setDefaultTimeout(5000);
+  try {
+    const c = translations[locale], email = `setup-signup-${randomUUID()}@example.test`;
+    const password = 'A synthetic setup owner password';
+    const requestId = randomUUID(), state = randomBytes(32).toString('base64url');
+    const challenge = createHash('sha256').update(randomBytes(32)).digest('base64url');
+    const store = new SetupPairingStore(f.db.pool);
+    const start = await store.start({origin: f.origin, requestId, publicKey, version: 5,
+      issuedAt: Date.now(), action: 'start', args: [redirectUri, state, challenge]});
+    async function look(step: string) {
+      for (const width of [390, 1280]) for (const colorScheme of ['light', 'dark'] as const) {
+        await page.setViewportSize({width, height: 812});
+        await page.emulateMedia({colorScheme});
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await page.screenshot({path: new URL(`../dist/setup-signup-${step}-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname});
+      }
+    }
+    const paths: string[] = [];
+    page.on('request', request => paths.push(new URL(request.url()).pathname));
+    await page.goto(start.authorizationUrl);
+    await page.getByRole('link', {name: c.signup, exact: true}).click();
+    await page.getByLabel(c.email).fill(email);
+    await page.getByRole('button', {name: c.continue, exact: true}).click();
+    await page.getByRole('heading', {name: c.checkEmail, exact: true}).waitFor();
+    assert.equal(await page.getByRole('button', {name: c.pairSetupBack, exact: true}).count(), 1,
+      'signup must keep the way back to the box');
+    await look('verify');
+    await f.drainMail();
+    const mail = await mailFor(email, locale === 'en' ? 'Verify your Waitron Cloud email' : 'Verifica tu correo de Waitron Cloud', f.mailEvidence);
+    const verification = mail.match(/http:\/\/[^\s]+\/signup#token=[^\s]+/)?.[0];
+    assert.ok(verification);
+    const otherTab = await context.newPage();
+    await otherTab.goto(verification);
+    await otherTab.getByRole('heading', {name: c.completeSignup, exact: true}).waitFor();
+    assert.equal(await otherTab.getByRole('button', {name: c.pairSetupBack, exact: true}).count(), 0);
+    await otherTab.close();
+    await page.goto(verification);
+    await page.getByRole('heading', {name: c.completeSignup, exact: true}).waitFor();
+    assert.ok(!new URL(page.url()).hash, 'the verification token must be scrubbed');
+    await page.getByLabel(c.legalName).fill('Café Sol');
+    await page.locator('input[name=password]').fill(password);
+    await page.getByRole('button', {name: c.create, exact: true}).click();
+    await page.getByText(c.signupReady, {exact: true}).waitFor();
+    await page.getByRole('link', {name: c.login, exact: true}).click();
+    await page.getByLabel(c.email).fill(email);
+    await page.locator('input[name=password]').fill(password);
+    await page.getByRole('button', {name: c.login, exact: true}).click();
+    await completeBrowserEmail(f, page, email, locale);
+    await page.getByRole('heading', {name: c.enrollmentRequiredTitle, exact: true}).waitFor();
+    await look('enrollment');
+    await prepareBrowserActionWindow(f, page);
+    await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+    await page.getByRole('button', {name: c.passkeySignIn, exact: true}).waitFor();
+    assert.equal(paths.filter(path => path === '/api/account/pairing/authorize').length, 0);
+    await page.route('https://box.example.test/**', route => route.fulfill({body: 'Waitron'}));
+    await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
+    await page.waitForURL('https://box.example.test/cloud/pairing/callback?**');
+    const returned = new URL(page.url()).searchParams;
+    assert.equal(returned.get('request_id'), requestId);
+    assert.equal(returned.get('state'), state);
+    assert.match(returned.get('code') ?? '', /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(context.pages().length, 1);
+  } finally { await authenticator.close(); await f.close(); }
 });

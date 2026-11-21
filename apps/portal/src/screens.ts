@@ -53,7 +53,11 @@ export function screen(app: PortalApp) {
           @click=${(event: MouseEvent) => app.follow(event, path, true)}>${c[page === 'account' ? 'accountLink' : page]}</a></li>`)}
       </ul></nav>` : nothing;
   let content;
-  if (!app.setupPairing && app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
+  if (app.enrollmentPage) content = html`<p>${app.setupPairing ? c.pairSetupEnroll : c.enrollmentRequiredHelp}</p>
+    <section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>
+      ${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section>
+    <wt-form-actions>${app.setupPairing ? link('/login', c.login) : nothing}<wt-button .disabled=${app.logoutDisabled}
+      @click=${() => {void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
   else if(app.path==='/operator/actions')content=cloudActionsScreen(app);
   else if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
@@ -79,8 +83,9 @@ export function screen(app: PortalApp) {
   else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {
     content = html`<p>${app.link.invalid ? c.linkUnavailable : c.missingLink}</p><nav>${link(retryLink, c.requestLink)} ${link('/login', c.login)}</nav>`;
   } else if (app.requested) {
-    content = html`<p role="status">${c.emailSent}</p>${action(c.resend)}
-      <button class="text-button" type="button" ?disabled=${app.pending} @click=${() => {app.requested = false; app.error = undefined; app.draw(); app.focusHeading();}}>${c.changeEmail}</button>`;
+    content = html`<p role="status">${c.emailSent}</p>${app.setupPairing ? html`<p>${c.pairSetupEmail}</p>` : nothing}${action(c.resend)}
+      <button class="text-button" type="button" ?disabled=${app.pending} @click=${() => {app.requested = false; app.error = undefined; app.draw(); app.focusHeading();}}>${c.changeEmail}</button>
+      ${app.setupPairing ? html`<p>${link('/login', c.login)}</p>` : nothing}`;
   } else if (app.path === '/login') {
     content = html`${app.notice ? html`<p role="status">${c[app.notice]}</p>` : nothing}${app.passkeyFirst ? passkeySignInScreen(app) : nothing}${field('email', 'email', 'email', 'username webauthn')}${password()}
       ${app.passkeys.notice && app.passkeys.notice !== 'passkeyUnsupported' ? html`<p role="status">${c[app.passkeys.notice]}</p>` : nothing}
@@ -107,7 +112,7 @@ export function screen(app: PortalApp) {
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>
-        ${app.setupPairing && !app.authenticator.challenge ? html`<p class="help">${c.pairSetupMethods}</p>` : nothing}
+        ${app.setupPairing && app.path === '/login' && !app.enrollmentPage && !app.authenticator.challenge && !app.factorCodes.length ? html`<p class="help">${c.pairSetupMethods}</p>` : nothing}
         ${content}
         ${app.setupPairing ? html`<button type="button" class="text-button" ?disabled=${app.pending || app.passkeys.pending || app.authenticator.pending}
           @click=${() => {void app.returnToSetup(true);}}>${c.pairSetupBack}</button>` : nothing}

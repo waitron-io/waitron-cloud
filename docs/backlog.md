@@ -1013,7 +1013,10 @@ The [local address trial](address-lookup-trial.md) accepts registered test boxes
 with a single verified owner when a fake provider is injected. The
 [test setup contract](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
 lets a configured box register during sign-in for an account with one empty business.
-The joint setup screen and relay checks, and live address quality remain open.
+Cloud browser checks cover verified signup and a return to the same tab after enrolment
+and fresh sign-in. A local provisional box can discover an operator-prepared grant
+and deliver staff email to Mailpit before venue save. The joint Waitron setup screen,
+in-product email consent and live address qualification remain open.
 Qualify providers, storage rights, account allowances and abuse limits against
 the [requirements and open work](backlog/free-services.md).
 Evaluate mobile notifications separately.
