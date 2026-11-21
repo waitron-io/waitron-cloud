@@ -648,8 +648,6 @@ export class PortalApp {
         this.pending = false;
         await this.returnToSetup(true);
         if (route !== this.#route) return;
-        forgetSetupPairingLink();
-        this.setupPairing = undefined;
       }
       if (this.path !== '/login') this.navigate('/login');
       this.notice = 'signedOut';

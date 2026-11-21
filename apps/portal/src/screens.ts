@@ -54,7 +54,7 @@ export function screen(app: PortalApp) {
       </ul></nav>` : nothing;
   let content;
   const hasSetupMethod = app.setupPairing && (app.passkeys.passkeys.length > 0 || app.authenticator.status?.active);
-  const enrollmentHelp = app.setupPairing ? (hasSetupMethod ? c.pairSetupMethods : c.pairSetupEnroll) : c.enrollmentRequiredHelp;
+  const enrollmentHelp = app.setupPairing ? (hasSetupMethod ? c.pairSetupSignInAgain : c.pairSetupEnroll) : c.enrollmentRequiredHelp;
   if (app.enrollmentPage) content = html`<p>${enrollmentHelp}</p>
     <section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>
       ${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section>

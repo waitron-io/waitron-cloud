@@ -248,14 +248,15 @@ for (const locale of ['en', 'es'] as const) test(`${locale} verified signup retu
     await otherTab.goto(verification);
     await otherTab.getByRole('heading', {name: c.completeSignup, exact: true}).waitFor();
     assert.equal(await otherTab.getByRole('button', {name: c.pairSetupBack, exact: true}).count(), 0);
+    const signupPage = locale === 'en' ? page : otherTab;
+    if (signupPage === page) await page.goto(verification);
+    await signupPage.getByRole('heading', {name: c.completeSignup, exact: true}).waitFor();
+    assert.ok(!new URL(signupPage.url()).hash, 'the verification token must be scrubbed');
+    await signupPage.getByLabel(c.legalName).fill('Café Sol');
+    await signupPage.locator('input[name=password]').fill(password);
+    await signupPage.getByRole('button', {name: c.create, exact: true}).click();
+    await signupPage.getByText(c.signupReady, {exact: true}).waitFor();
     await otherTab.close();
-    await page.goto(verification);
-    await page.getByRole('heading', {name: c.completeSignup, exact: true}).waitFor();
-    assert.ok(!new URL(page.url()).hash, 'the verification token must be scrubbed');
-    await page.getByLabel(c.legalName).fill('Café Sol');
-    await page.locator('input[name=password]').fill(password);
-    await page.getByRole('button', {name: c.create, exact: true}).click();
-    await page.getByText(c.signupReady, {exact: true}).waitFor();
     await page.getByRole('link', {name: c.login, exact: true}).click();
     await page.getByLabel(c.email).fill(email);
     await page.locator('input[name=password]').fill(password);
@@ -306,11 +307,15 @@ test('signing out during setup returns a cancellation to the box', async () => {
     await page.locator('input[name=password]').fill(password);
     await page.getByRole('button', {name: c.login, exact: true}).click();
     await completeBrowserEmail(f, page, email);
+    await page.route('**/api/account/pairing/cancel',
+      route => route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}}), {times: 1});
     await page.getByRole('button', {name: c.signout, exact: true}).click();
+    await page.getByText(c.signedOut, {exact: true}).waitFor();
+    assert.equal((await page.context().cookies()).some(cookie => cookie.name === 'cloud_session'), false);
+    await page.getByRole('button', {name: c.pairSetupBack, exact: true}).click();
     await page.waitForURL(redirectUri + '?**');
     const returned = new URL(page.url()).searchParams;
     assert.equal(returned.get('request_id'), requestId);
     assert.equal(returned.get('error'), 'access_denied');
-    assert.equal((await page.context().cookies()).some(cookie => cookie.name === 'cloud_session'), false);
   } finally { await f.close(); }
 });
