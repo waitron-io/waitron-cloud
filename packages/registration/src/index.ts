@@ -297,7 +297,7 @@ export type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 
 export type { AccountLocale, AccountNotification } from './account-input.ts';
 export {PairingStore,type PairingView} from './pairing.ts';
-export {PairingError,verifyPairingProof,verifyPairingV4Proof,pairingPayload,type PairingClaims,type PairingV4Claims} from './pairing-proof.ts';
+export {PairingError,verifyPairingProof,verifyPairingV4Proof,verifyPairingV5Proof,pairingPayload,type PairingClaims,type PairingV4Claims} from './pairing-proof.ts';
 
 export {InstallationStore,installationView,type InstallationView,type DesiredService} from './installations.ts';
 export {InstallationError,createLeaseIssuer,createLeaseTrust,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
