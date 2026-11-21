@@ -1010,8 +1010,10 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 **Open; production enablement is not approved.** Offer address lookup and transactional
 email to open-source Waitron users with a Cloud login, without a paid subscription.
 The [local address trial](address-lookup-trial.md) accepts registered test boxes
-with a single verified owner when a fake provider is injected. Early registration,
-the joint setup screen and relay checks, and live address quality remain open.
+with a single verified owner when a fake provider is injected. The
+[test setup contract](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
+lets a configured box register during sign-in for an account with one empty business.
+The joint setup screen and relay checks, and live address quality remain open.
 Qualify providers, storage rights, account allowances and abuse limits against
 the [requirements and open work](backlog/free-services.md).
 Evaluate mobile notifications separately.

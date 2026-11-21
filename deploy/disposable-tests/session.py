@@ -35,6 +35,7 @@ PACKAGE_SHA512 = {name: {base64.b64decode(value) for value in values} for name, 
     'contract-0.2.33.tgz': ['i72eqk3zl3KYPhxTOoJB/nLYomElqFEbUGucgKOvWntWKF8gkKAUKCXTw71/9SinSyIUr4qD/prf/i2u4jC3SA=='],
     'contract-0.2.34.tgz': ['NG/3JC8GYBYFasH4puaZHl2X3H3R7RVXhqgs8yPz3JgbGX3VjTWl9eVK/yL4yL8+gqdMcWF4kqwYP8+xV87lMw=='],
     'contract-0.2.37.tgz': ['5V7Yr/pXFFPIrLr0HmtWvEjr/QzNsq/BKXg1Ibmu+V0XLYPn+Lu5z/d6HOkPpPBoiBSXk0WpPXkwoyPW2RxmIQ=='],
+    'contract-0.2.42.tgz': ['I8sbUouB8rxGntiyZwfD5Gaf0KqoPS9/nsNgIj7nEg6eFu7E7DuZ2CC8suzfU1e9iru8HPI9SLUMru/UiECXig=='],
 }.items()}
 CONTROL = host.ROOT/'control'
 OPERATIONS = host.ROOT/'operations'

@@ -149,8 +149,8 @@ importers:
         specifier: workspace:*
         version: link:../identity
       '@waitron-io/contract':
-        specifier: 0.2.37
-        version: 0.2.37
+        specifier: 0.2.42
+        version: 0.2.42
       nodemailer:
         specifier: ^10.0.10
         version: 10.0.10
@@ -828,8 +828,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@waitron-io/contract@0.2.37':
-    resolution: {integrity: sha512-5V7Yr/pXFFPIrLr0HmtWvEjr/QzNsq/BKXg1Ibmu+V0XLYPn+Lu5z/d6HOkPpPBoiBSXk0WpPXkwoyPW2RxmIQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.37/ac24a38df6c0de79469937399a1b0e43c5640941}
+  '@waitron-io/contract@0.2.42':
+    resolution: {integrity: sha512-I8sbUouB8rxGntiyZwfD5Gaf0KqoPS9/nsNgIj7nEg6eFu7E7DuZ2CC8suzfU1e9iru8HPI9SLUMru/UiECXig==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.42/f4c4472677aa5a1272b3a48bc86b04ead2909fa0}
 
   '@waitron-io/ui-core@0.2.30':
     resolution: {integrity: sha512-1PhncKtXnoXOLDGoGNRlUuYkF5kHrorjEUxkO7c7ZKAD3uLYtwPA/no5wSBid+WGjTuZQz/pWmWYmqXLvHC6AQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.30/7ea571c6a407a83e7b513020f086929dcb9b15fa}
@@ -1973,7 +1973,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@waitron-io/contract@0.2.37': {}
+  '@waitron-io/contract@0.2.42': {}
 
   '@waitron-io/ui-core@0.2.30(lit@3.3.3)':
     dependencies:

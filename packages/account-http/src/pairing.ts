@@ -1,7 +1,7 @@
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {PairingError,PairingStore,SetupPairingStore,type PairingCodeKeys,type SetupPairingContext,transaction,verifyPairingProof,verifyPairingV4Proof} from '@waitron-cloud/registration';
+import {PairingError,PairingStore,SetupPairingStore,type PairingCodeKeys,type SetupPairingContext,transaction,verifyPairingProof,verifyPairingV4Proof,verifyPairingV5Proof} from '@waitron-cloud/registration';
 import {readAccountBody} from './request.ts';
 import {readSessionCookie} from './cookies.ts';
 import {AccountHttpError} from './errors.ts';
@@ -37,16 +37,19 @@ export async function pairingResponse(c:Context,options:{pool:Pool;pairingCodeKe
     const body=await readAccountBody(c.req.raw,['payload','signature']);
     const consumeKey = (publicKey: string) => consume([{scope:`pairing-${action}-key`,subject:publicKey,limit:action==='start'?10:60,windowSeconds:action==='start'?900:60}]);
     if (setup) {
-      let claims;
-      try { claims = verifyPairingV4Proof(body.payload!, body.signature!, origin, action); }
-      catch (error) { if (!(error instanceof PairingError) || error.code !== 'invalid_proof') throw error; }
-      if (claims) {
+      for (const [version, verify] of [[4, verifyPairingV4Proof], [5, verifyPairingV5Proof]] as const) {
+        let claims;
+        try { claims = {...verify(body.payload!, body.signature!, origin, action), version}; }
+        catch (error) {
+          if (error instanceof PairingError && error.code === 'invalid_proof') continue;
+          throw error;
+        }
         await consumeKey(claims.publicKey);
         if (claims.publicKey !== setup.publicKey || (claims.action === 'start' && claims.args[0] !== setup.redirectUri))
           throw new PairingError('invalid_proof');
         const attempts = new SetupPairingStore(pool);
         if (claims.action === 'start') return c.json(await attempts.start(claims));
-        if (claims.action === 'redeem') return c.json(await attempts.redeem(claims, setup));
+        if (claims.action === 'redeem') return c.json(await attempts.redeem(claims, setup, options.country));
         if (claims.action === 'status') return c.json(await attempts.status(claims));
         try { return c.json(await attempts.complete(claims, setup, options.country)); }
         catch (error) {
