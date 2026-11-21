@@ -22,7 +22,10 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';
  if(['account','action-demo'].includes(role)&&demo){result.CLOUD_ACTION_DEMO='1';result.CLOUD_ACTION_DEMO_DIR=environment.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo';}
  if(role==='account'){delete result.CLOUD_LOCAL_REQUEST_METRICS;result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
- if(role==='gateway')result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';
+ const publicGatewayIssuer=environment.TEST_CLOUD_AMAZON==='1'&&environment.TEST_CLOUD_PUBLIC_REMOTE==='1'&&
+  environment.TEST_CLOUD_ACME_DIRECTORY==='https://acme-v02.api.letsencrypt.org/directory';
+ // An explicit CA replaces Node's public roots for the staff HTTPS request.
+ if(role==='gateway'&&!publicGatewayIssuer)result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';
  if(environment.TEST_CLOUD_PUBLIC_REMOTE==='1'){
   if(role==='manifest')for(const name of ['TEST_CLOUD_TLS_CHALLENGE_DIR','TEST_CLOUD_GATEWAY_STATUS_DIR'])if(environment[name]!==undefined)result[name]=environment[name];
   if(role==='gateway'){

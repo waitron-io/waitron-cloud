@@ -52,7 +52,7 @@ services:
     environment:
       <<: *amazon-environment
       TEST_CLOUD_PUBLIC_REMOTE: "1"
-      TEST_CLOUD_ACME_DIRECTORY: ${TEST_CLOUD_ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
+      TEST_CLOUD_ACME_DIRECTORY: &remote-acme-directory ${TEST_CLOUD_ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
       TEST_CLOUD_CHALLENGE_DIR: /run/remote-challenges
       TEST_CLOUD_TLS_CHALLENGE_DIR: /run/remote-tls-challenges
       TEST_CLOUD_GATEWAY_STATUS_DIR: /run/remote-gateway-status
@@ -64,6 +64,8 @@ services:
     environment:
       <<: *amazon-environment
       TEST_CLOUD_PUBLIC_REMOTE: "1"
+      TEST_CLOUD_AMAZON: "1"
+      TEST_CLOUD_ACME_DIRECTORY: *remote-acme-directory
       GATEWAY_CHALLENGES: /run/remote-tls-challenges
       GATEWAY_STATUS_DIR: /run/remote-gateway-status
     volumes:

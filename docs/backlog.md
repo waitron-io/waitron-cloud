@@ -735,8 +735,9 @@ stored names and signed reply. DNS movement is checked locally by
 covers the one-record portal and certificate worker's gateway path, including issuance
 and renewal with Pebble and an unchanged owner CNAME across a move. The
 [Amazon test Cloud](test-cloud.md#configure-a-separate-https-test-name) uses the same TLS check for
-custom names. Its real-domain trial still needs a paired test venue, one public
-CNAME and a page load on mobile data.
+custom names. With the trusted Let's Encrypt issuer, the gateway uses Node's
+public roots for its staff HTTPS request. The real-domain trial still needs a
+certificate readback and a page load on mobile data.
 Remaining work:
 
 - Qualify automatic staff certificate installation on the appliance.
