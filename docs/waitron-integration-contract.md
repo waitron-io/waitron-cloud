@@ -129,6 +129,36 @@ venues, Cloud uses that business and saves the signed tax number. Use
 [the test configuration](local-pairing.md#connect-an-installed-test-box-with-cloud-sign-in)
 to enable the account service for the box you are testing.
 
+### Test-box sign-in before the venue form
+
+Use pairing version 5 when signing in before entering venue details. You need an
+existing Cloud account and a local or disposable Cloud configured for your box's
+exact public key and HTTPS callback. Use the same endpoints, argument arrays and
+field limits as version 4. Sign with `waitron-cloud-pair-v5` as the first array value
+and keep `test` as the environment.
+
+When your account has one eligible business in the test Cloud's country with an
+empty tax number and no venues, signed redeem creates a placeholder venue and
+registers the box. Redeem and signed status then return `requestId`, `state: "account_bound"`,
+`expiresAt` and `provisionalRegistration`. The provisional object contains
+`installationId`, `venueId`, `organisationId` and `legalBusinessId`. Other accounts
+receive a bound reply without that object and file the venue on save. If you skip
+sign-in, you can enter the details manually and connect later.
+
+When you have provisional IDs, renew the signed installation lease at
+`/api/installations/renew` before calling the address route or reading installation
+configuration with `servicesVersion: 2`. Allowance-backed services use the test
+Cloud's published allowances. The address pilot uses a fake provider and email
+requires an operator-prepared relay grant. Signed complete files the venue's
+details and returns its final `registration`. The IDs stay the same, keeping any
+setup-time usage with the same business.
+
+If the request expires or the browser signs out, sign in again to resume with the
+same Cloud account and box key. A provisional installation stays registered until
+you use **Remove venue**. If Cloud reports `registration_conflict`, continue
+manually. Ask the pilot operator to configure a replacement public key before
+trying Cloud sign-in with that key.
+
 ### Pairing version 3 and managed-stream version 2
 
 Use the shared `@waitron-io/contract` pairing encoder and verifier. A new request signs
