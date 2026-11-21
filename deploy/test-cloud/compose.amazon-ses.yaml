@@ -1,0 +1,11 @@
+services:
+  email-worker:
+    environment:
+      TEST_CLOUD_AMAZON_SES: "1"
+    volumes:
+      - type: bind
+        source: ${TEST_CLOUD_SES_SETTINGS_SOURCE:?Set the private SES settings file}
+        target: /run/test-cloud-ses.json
+        read_only: true
+        bind:
+          create_host_path: false

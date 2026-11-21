@@ -319,3 +319,39 @@ test('the driver enables the Amazon backup override only for an explicit immutab
   assert.equal(inspected,false);
  }
 });
+
+test('Amazon up requires the explicit private SES file and mounts it only on the email worker',async()=>{
+ const {deploy,validateDeployment}=await api(),id='c'.repeat(64),calls=[];let reads=0;
+ const options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',sesSettingsSource:'/private/ses.json'};
+ const rendered=()=>{
+  const value=amazonDeployment(),worker={...value.services['email-worker']};
+  value.services['email-worker']=worker;
+  worker.environment={...worker.environment,TEST_CLOUD_AMAZON_SES:'1'};
+  worker.volumes=[{type:'bind',source:'/private/ses.json',target:'/run/test-cloud-ses.json',read_only:true,bind:{create_host_path:false}}];
+  return value;
+ };
+ const execute=async(_command,args,options)=>{
+  calls.push({args,environment:options?.environment});
+  return args.includes('config')?JSON.stringify(rendered()):args[0]==='image'?JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'}):'';
+ };
+ await deploy('up',{...options,settledSamples:0,inventory:async()=>({...good,availableMiB:2500,freeGiB:12,containers:reads++===0?[]:[{id,project:'waitron-cloud-test'}]}),execute,saveState:async()=>{}});
+ const startup=calls.find(c=>c.args.includes('up'));
+ assert.ok(startup.args.indexOf('deploy/test-cloud/compose.amazon-ses.yaml')>startup.args.indexOf('deploy/test-cloud/compose.amazon.yaml'));
+ assert.equal(startup.environment.TEST_CLOUD_SES_SETTINGS_SOURCE,'/private/ses.json');
+ const {sesSettingsSource,...disabled}=options;
+ assert.throws(()=>validateDeployment(rendered(),disabled),/test_cloud.rendered/);
+ for(const change of [
+  value=>value.services['email-worker'].volumes.pop(),
+  value=>value.services['email-worker'].volumes[0].read_only=false,
+  value=>value.services['email-worker'].volumes[0].bind.create_host_path=true,
+  value=>value.services['email-worker'].volumes[0].source='/private/other.json',
+  value=>value.services.account.environment.TEST_CLOUD_AMAZON_SES='1',
+  value=>value.services.account.volumes=[{...value.services['email-worker'].volumes[0],type:'volume',target:'/other'}],
+ ]){
+  const value=rendered();change(value);
+  assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+ }
+ for(const change of [{target:'lan'},{sesSettingsSource:'relative/ses.json'}]){
+  await assert.rejects(deploy('up',{...options,...change,inventory:assert.fail}),/test_cloud.amazon_ses/);
+ }
+});

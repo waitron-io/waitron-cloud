@@ -513,6 +513,41 @@ The [owner’s Amazon access steps](test-cloud-amazon-access.md) are still requi
 There is no dedicated launch profile yet. Do not substitute the staging or D618
 profile, create the paid DNS zone or request production sending access.
 
+## Send account mail to the approved test mailbox
+
+The Amazon test Cloud captures mail in Mailpit by default. The Stockholm Amazon
+Simple Email Service (SES) switch sends Cloud account mail for the one verified
+pilot mailbox through the sandbox. Operator notices, other Cloud account mail
+and box mail still reach Mailpit. The switch checks a fingerprint of the
+approved scope before it starts. An invalid file stops the email worker with
+`Test email worker refused SES settings`.
+
+After the coordinated backup and image upgrade, transfer
+`deploy/test-cloud/compose.amazon-ses.yaml` with the deployment files. Keep the
+root-owned settings file at mode 0600 in a private directory outside the
+checkout. It holds the pinned `scope` from the trial readback, the `smtp` user and
+password issued to the scoped sender, and a dedicated `recipientKeys` key set
+with `activeKeyId` and `keys`. Retain the recipient keys with your private
+configuration backup so earlier attempts remain matchable after rotation.
+Run the normal Amazon command with the same image and HTTPS settings, adding
+the settings path only for `up`:
+
+```sh
+TEST_CLOUD_SES_SETTINGS_SOURCE=/root/waitron-test-mail/ses.json \
+  node scripts/test-cloud-deploy.mjs up sha256:<reviewed-image-id> amazon
+```
+
+Check that the email worker stays running, then use ordinary Cloud signup
+with the approved address. Confirm SES acceptance and ask the recipient to
+check their inbox and share Gmail’s Show original privately. Keep addresses,
+keys, tokens and mail contents out of shared receipts. To return every message
+to Mailpit, run the same `up` with `TEST_CLOUD_SES_SETTINGS_SOURCE` unset.
+
+Both private feedback queues were configured for four days of retention.
+The hosted test worker sends and records acceptance. Applying bounces and
+complaints from those queues remains in D102. The mailbox and sandbox
+restriction continues to apply throughout this trial.
+
 ## Rehearse backup on the Amazon test Cloud
 
 Use the exact [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).

@@ -9,6 +9,8 @@ import {applySesFeedback} from '../src/ses-feedback-store.ts';
 import {parseSesFeedback} from '../src/ses-feedback-event.ts';
 import {feedbackEnvelope,feedbackEvent} from './fixtures/ses-feedback.ts';
 import {EmailDeliveryError} from '../src/email-delivery.ts';
+import {createLocalAccountMailer} from '../src/local-mailer.ts';
+import {captured} from './fixtures/captured-mail.ts';
 import {RelayWorker} from '../src/relay-worker.ts';
 import {fixture as relayFixture} from './fixtures/relay-worker.ts';
 import * as relaySes from '../src/relay-ses-smtp.ts';
@@ -44,6 +46,24 @@ test('worker passes the committed admission and binds the provider ID separately
   const row=(await f.pool.query('SELECT * FROM email_outbox')).rows[0];
   assert.equal(row.status,'sent');assert.equal(row.message_id,`<${id}@mail.example.test>`);assert.equal(row.payload,null);assert.equal(row.failures,0);assert.equal(sends,1);
   assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-receipt-1');
+ }finally{await f.close();}
+});
+
+test('the pilot admits only the approved account mailbox and captures other staff mail',async()=>{
+ const f=await fixture();try{
+  const id=await enqueue(f.pool),staff=`staff-${randomUUID()}@example.test`;
+  await new SignupStore(f.pool,outbox).request(staff);
+  const send=async(_message:unknown,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
+   assert.equal(context?.deliveryId,id);assert.ok(context.ses);
+   return {transport:'smtp',messageId:'<pilot@mail.example.test>',providerReceipt:{provider:'ses',messageId:'ses-pilot'}};
+  };
+  const captureMailer=createLocalAccountMailer({port:Number(process.env.MAILPIT_TEST_SMTP_PORT),portalOrigin:'http://localhost:3000'});
+  const w=new EmailWorker(f.pool,outbox,{sendVerification:send,sendPasswordReset:send,sendPasswordChanged:send,sendServiceAlert:send},
+    {ses,sesRecipient:{email:' Owner@Example.Test ',captureMailer}});
+  assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);
+  assert.deepEqual((await f.pool.query('SELECT queue_id,provider_message_id FROM mail_attempts')).rows,[{queue_id:id,provider_message_id:'ses-pilot'}]);
+  assert.deepEqual((await f.pool.query("SELECT status FROM email_outbox")).rows,[{status:'sent'},{status:'sent'}]);
+  await captured(process.env.MAILPIT_TEST_URL!,'Verify your Waitron Cloud email',staff);
  }finally{await f.close();}
 });
 

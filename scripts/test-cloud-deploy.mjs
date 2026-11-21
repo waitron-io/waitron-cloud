@@ -31,19 +31,20 @@ export function validatePreflight(value,{image,ownedIds=[],target='lan'}={}){
  return{ready:true};
 }
 const backupRoles=new Set(['bootstrap','account','proxy','backup-worker']);
+const sesSettingsTarget='/run/test-cloud-ses.json';
 const dockerSocket='/var/run/docker.sock';
 const workerStage='/opt/waitron-cloud/amazon-backup-stages/worker/mount/work';
 const verifierStage='/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work';
-function isPrivateBackupBind(mount){
+function isExplicitBind(mount){
  // Some Compose versions omit false from the rendered bind object.
  return mount.type==='bind'&&mount.bind!=null&&(mount.bind.create_host_path===undefined||mount.bind.create_host_path===false);
 }
 function isBackupStage(mount){
- return isPrivateBackupBind(mount)&&mount.read_only!==true&&
+ return isExplicitBind(mount)&&mount.read_only!==true&&
   (mount.source===workerStage&&mount.target==='/run/backup-stage'||mount.source===verifierStage&&mount.target===verifierStage);
 }
 function isBackupSocket(mount){
- return isPrivateBackupBind(mount)&&mount.source===dockerSocket&&mount.target===dockerSocket&&mount.read_only===true;
+ return isExplicitBind(mount)&&mount.source===dockerSocket&&mount.target===dockerSocket&&mount.read_only===true;
 }
 function validateBackupWorker(services,image){
  const worker=services['backup-worker'],mounts=worker?.volumes??[];
@@ -59,15 +60,22 @@ function validateBackupWorker(services,image){
   !mounts.some(v=>v.type==='volume'&&v.source==='local-stack-config'&&v.target==='/run/local-stack'&&v.read_only===true)||
   !mounts.some(v=>v.type==='volume'&&v.source==='test-backup-verifier-state'&&v.target==='/run/backup-verifier'&&!v.read_only))throw new Error('test_cloud.rendered');
 }
-export function validateDeployment(value,{image,target='lan',origin,certificateSource,backupVerifierImage}){
+export function validateDeployment(value,{image,target='lan',origin,certificateSource,backupVerifierImage,sesSettingsSource}){
  targetLimits(target);const amazon=target==='amazon',services=value?.services,backups=backupVerifierImage!==undefined;
  if(backups&&(!amazon||!imagePattern.test(backupVerifierImage)))throw new Error('test_cloud.rendered');
  if(value?.name!==project||!services?.account||!services?.proxy||!services?.postgres||!services?.mailpit)throw new Error('test_cloud.rendered');
  if(backups)validateBackupWorker(services,backupVerifierImage);
+ if(sesSettingsSource!==undefined&&(!amazon||!services['email-worker']||!isAbsolute(sesSettingsSource)))throw new Error('test_cloud.rendered');
  for(const [name,service] of Object.entries(services)){
+  const sesWorker=sesSettingsSource!==undefined&&name==='email-worker';
+  const sesMounts=(service.volumes??[]).filter(v=>v.target===sesSettingsTarget||sesSettingsSource!==undefined&&v.source===sesSettingsSource);
+  const [sesMount]=sesMounts;
+  if(service.environment?.TEST_CLOUD_AMAZON_SES!==(sesWorker?'1':undefined)||
+   sesMounts.length!==(sesWorker?1:0)||sesWorker&&(!isExplicitBind(sesMount)||sesMount.source!==sesSettingsSource||
+    sesMount.target!==sesSettingsTarget||sesMount.read_only!==true))throw new Error('test_cloud.rendered');
   if(service.environment?.CLOUD_TEST_AMAZON_BACKUPS!==(backups&&backupRoles.has(name)?'1':undefined)||
    name!=='backup-worker'&&service.volumes?.some(v=>v.source==='test-backup-verifier-state'||v.target==='/run/backup-verifier'))throw new Error('test_cloud.rendered');
-  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true||amazon&&name==='http-challenges'&&v.source==='/opt/waitron-cloud/acme-webroot'&&v.target==='/run/account-webroot'&&v.read_only===true||backups&&name==='backup-worker'&&(isBackupSocket(v)||isBackupStage(v))))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
+  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true||amazon&&name==='http-challenges'&&v.source==='/opt/waitron-cloud/acme-webroot'&&v.target==='/run/account-webroot'&&v.read_only===true||backups&&name==='backup-worker'&&(isBackupSocket(v)||isBackupStage(v))||sesWorker&&v===sesMount))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
   for(const port of service.ports??[]){
    if(name==='proxy'){if(port.host_ip!==(amazon?'0.0.0.0':'192.168.10.10')||String(port.published)!==(amazon?'443':'3000')||port.target!==(amazon?443:3000)||port.protocol&&port.protocol!=='tcp')throw new Error('test_cloud.rendered');}
    else if(amazon&&name==='http-challenges'){if(port.host_ip!=='0.0.0.0'||String(port.published)!=='80'||port.target!==8080||port.protocol!=='tcp')throw new Error('test_cloud.rendered');}
@@ -156,7 +164,11 @@ function assertOwned(state,current){assertState(state);if(current.containers.som
 export async function deploy(mode,options){
  const target=options.target??'lan',backupVerifierImage=options.backupVerifierImage;targetLimits(target);
  if(backupVerifierImage!==undefined&&(mode!=='up'||target!=='amazon'||!imagePattern.test(backupVerifierImage)))throw new Error('test_cloud.amazon_backups');
- let origin,certificateSource;
+ let origin,certificateSource,sesSettingsSource;
+ if(options.sesSettingsSource!==undefined){
+  if(mode!=='up'||target!=='amazon'||!isAbsolute(options.sesSettingsSource))throw new Error('test_cloud.amazon_ses');
+  sesSettingsSource=resolve(options.sesSettingsSource);
+ }
  if(mode==='up'&&target==='amazon'){origin=canonicalHttpsOrigin(options.origin);if(!isAbsolute(options.certificateSource??''))throw new Error('test_cloud.certificate_source');certificateSource=resolve(options.certificateSource);}
  if(!['preflight','load','up','status','stop'].includes(mode))throw new Error('test_cloud.mode');
  if(options.signal?.aborted)throw new Error('test_cloud.cancelled');
@@ -183,10 +195,11 @@ export async function deploy(mode,options){
  const state={project,image:options.image,ids:previous?.ids??[]};
  const compose=['compose','--project-name',project,'--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml'];
  if(target==='amazon')compose.push('-f','deploy/test-cloud/compose.amazon.yaml');
+ if(sesSettingsSource)compose.push('-f','deploy/test-cloud/compose.amazon-ses.yaml');
  if(backupVerifierImage)compose.push('-f','deploy/test-cloud/compose.amazon-backups.yaml');
- const environment={TEST_CLOUD_IMAGE:options.image,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'0',...(target==='amazon'?{TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource}:{}),...(backupVerifierImage?{CLOUD_VERIFIER_IMAGE:backupVerifierImage}:{})};
+ const environment={TEST_CLOUD_IMAGE:options.image,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'0',...(target==='amazon'?{TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource}:{}),...(backupVerifierImage?{CLOUD_VERIFIER_IMAGE:backupVerifierImage}:{}),...(sesSettingsSource?{TEST_CLOUD_SES_SETTINGS_SOURCE:sesSettingsSource}:{})};
  const rendered=JSON.parse(await run('docker',[...compose,'--profile','*','config','--format','json'],{environment}));
- validateDeployment(rendered,{image:options.image,target,origin,certificateSource,backupVerifierImage});await saveState(state);
+ validateDeployment(rendered,{image:options.image,target,origin,certificateSource,backupVerifierImage,sesSettingsSource});await saveState(state);
  let failure,monitorFailure,below=0,busy=false,activeSample=Promise.resolve();const abort=new AbortController();const cancel=()=>abort.abort();options.signal?.addEventListener('abort',cancel,{once:true});if(options.signal?.aborted)cancel();
  const sample=async()=>{const value=await inspect();below=resourceGuard(current,value,below,{target});};
  const pause=()=>new Promise(resolve=>{const done=()=>{clearTimeout(timer);abort.signal.removeEventListener('abort',done);resolve();};const timer=setTimeout(done,5000);abort.signal.addEventListener('abort',done,{once:true});if(abort.signal.aborted)done();});
@@ -228,7 +241,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const saveState=async value=>{await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(path+'.tmp',JSON.stringify(value)+'\n',{mode:0o600});await rename(path+'.tmp',path);};
   await withTestCloudProjectLock(async()=>{
   const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
-  try{console.log(JSON.stringify(await deploy(mode,{image,target,origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,backupVerifierImage:mode==='up'?process.env.CLOUD_TEST_AMAZON_VERIFIER_IMAGE:undefined,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
+  try{console.log(JSON.stringify(await deploy(mode,{image,target,origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,backupVerifierImage:mode==='up'?process.env.CLOUD_TEST_AMAZON_VERIFIER_IMAGE:undefined,sesSettingsSource:mode==='up'?process.env.TEST_CLOUD_SES_SETTINGS_SOURCE:undefined,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
   finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
   });
  }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud refused or failed; check target, HTTPS origin, certificate folder, image, capacity, ports and recorded ownership. Amazon commands require an explicit amazon argument after the image ID.');process.exitCode=1;}

@@ -688,8 +688,13 @@ These current rules supersede historical Paris-only and date-based enablement
 wording. Operator permission provisioning, production provider acquisition/removal
 and enablement remain open. Additional event types are not qualified;
 `Rendering Failure` still refuses. AWS resources,
-spending, credentials, production access and live mail remain unauthorised for this
-build; the owner's existing DNS setup grants none of those permissions. D101's
+spending, credentials, production access and live mail remain unauthorised for production.
+The separately approved [Stockholm sandbox switch](test-cloud.md#send-account-mail-to-the-approved-test-mailbox)
+admits one verified Cloud account mailbox. The focused worker checks cover SES
+attempt settlement and Mailpit delivery for staff, operator notices and box mail.
+The private test queues have four days of retention. Qualify real receipt and
+sender authentication on the test host, then qualify authenticated queue intake,
+bounce and complaint application and suppression for D102. D101's
 legal, retention and supplier gates, C39's alert thresholds and D104's independent
 alert route remain open; a second country needs its own approved provider-account
 policy. D68 is landed, including

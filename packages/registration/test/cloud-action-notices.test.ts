@@ -71,6 +71,20 @@ test('SES handoff refuses an operator notice even when a capture callback is pre
  assert.equal((await pool.query('SELECT status,last_error FROM email_outbox WHERE id=$1',[row.id])).rows[0].status,'failed');
  assert.equal((await pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
 });
+test('operator notices to the pilot mailbox stay in the local inbox',async()=>{
+ const email=`pilot-${randomUUID()}@example.test`;
+ await pool.query("UPDATE cloud_credentials SET email=$1 WHERE account_id=$2",[email,operator]);
+ await pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) VALUES($1,false,'es')",[operator]);
+ const request=await propose(),row=await queued();
+ const captureMailer=createLocalAccountMailer({port:Number(process.env.MAILPIT_TEST_SMTP_PORT),portalOrigin:'http://localhost:3000'});
+ const w=new EmailWorker(pool,outbox,captureMailer,{ses:{config:sesConfig(),recipientKeys},
+  sesRecipient:{email,captureMailer}});
+ assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);
+ assert.equal((await pool.query('SELECT status FROM email_outbox WHERE id=$1',[row.id])).rows[0].status,'sent');
+ assert.equal((await pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+ await captured(process.env.MAILPIT_TEST_URL!,'Waitron Cloud: acción para revisar',email);
+ assert.ok((await actions.read(actor.token)).requests.some(r=>r.id===request.id));
+});
 for(const [name,sql] of [
  ['disabled operator',"UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1"],
  ['changed email',"UPDATE cloud_credentials SET email='replacement@example.test' WHERE account_id=$1"],
