@@ -125,7 +125,11 @@ for (const [name, routeStillResponding, placement] of [
       async inventory(limit) {
         assert.equal(limit, signal);
         if (placement === 'cancelled') controller.abort(cancelled);
-        if (placement) throw Error('remote.stop_role_inventory');
+        if (placement === 'unavailable') {
+          const commandError = Object.assign(Error('synthetic command output'), {code: 'EHOSTUNREACH'});
+          throw Error('remote.stop_role_inventory', {cause: Error('inventory command failed', {cause: commandError})});
+        }
+        if (placement === 'cancelled') throw Error('remote.stop_role_inventory');
         return coldRoles;
       },
       storeOutage: down('store outage'),
@@ -147,7 +151,7 @@ for (const [name, routeStillResponding, placement] of [
       async restartAll(outage) {
         seen.push('stopped');
         if (placement !== 'cancelled') {
-          const expected = placement ? {unavailable: 'remote.stop_role_inventory'} : {roles: coldRoles};
+          const expected = placement ? {unavailable: 'remote.stop_role_inventory', reason: 'EHOSTUNREACH'} : {roles: coldRoles};
           assert.ok(log.mock.calls.some(({arguments: [line]}) =>
             line === 'D621 all-machine stop inventory ' + JSON.stringify(expected) + '\n'),
           'placement must be logged before the machines stop');

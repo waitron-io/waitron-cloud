@@ -280,10 +280,14 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
   await untilRemote(async limit => {await healthy(limit); return true;}, 30_000, signal, 'cold_services_before');
   const witness = await prepare?.();
   // Placement is diagnostic because this stop targets every machine.
-  const roles = await inventory(signal).catch(() => undefined);
+  let reason;
+  const roles = await inventory(signal).catch(error => {
+    const cause = error?.cause;
+    reason = cause?.code ?? cause?.cause?.code ?? cause?.name;
+  });
   signal.throwIfAborted();
   process.stderr.write('D621 all-machine stop inventory ' +
-    JSON.stringify(roles ? {roles} : {unavailable: 'remote.stop_role_inventory'}) + '\n');
+    JSON.stringify(roles ? {roles} : {unavailable: 'remote.stop_role_inventory', reason}) + '\n');
   const api = await restartAll(async ({signal, confirmStopped}) => {
     await confirmStopped(signal);
     const endpoints = Object.entries({...probes.outage, store: storeOutage});
