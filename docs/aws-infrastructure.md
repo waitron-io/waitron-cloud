@@ -1374,6 +1374,12 @@ rehearsal checks this on a small synthetic object within the existing
 takes and fails if any reported object shard still needs repair after three
 attempts.
 
+After a healthy rejoin, the local test waits if its shared signup allowance
+has fewer than two calls left. It starts the next machine stop once there
+is room for a request and a retry. The allowance is eight calls in 15 minutes.
+That pause happens before the 90-second recovery clock starts. The local
+machine-stop test has a 54-minute timeout within the guest’s 55-minute limit.
+
 The same journey then stops all three machines. Fresh account, store, staff and
 public requests must fail at the network while the host can still confirm the
 machines are off. Restart the same machines and check the retained PostgreSQL

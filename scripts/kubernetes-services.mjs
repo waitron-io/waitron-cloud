@@ -192,7 +192,7 @@ export async function readServicesInbox(pods, fetch, path, authorization) {
 }
 
 export async function measureServiceStops({nodes, inventory, stopNode, restore, healthy, reconcile, probes, holdMs,
-  signal, observe = observeP1}) {
+  signal, spaceSignup, observe = observeP1}) {
   assert.ok(nodes.length === 3 && new Set(nodes).size === 3, 'services.stop_three_nodes');
   const uncovered = new Set(['primary', 'gateway', 'operator', 'fluxSource', 'fluxApply']);
   const remaining = [...nodes], legs = [];
@@ -240,6 +240,10 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     for (const role of uncovered) if (roles[role] === node) uncovered.delete(role);
     const rejoin = await healthy(node, signal);
     legs.push({...receipt, roles, rejoin});
+    if (remaining.length && spaceSignup) {
+      await spaceSignup(signal);
+      signal?.throwIfAborted();
+    }
   }
   for (const role of uncovered) assert.fail('services.stop_role:' + role);
   return legs;
@@ -471,7 +475,8 @@ export async function runKubernetesServices(context) {
               ['node', '--input-type=module', '-e', inboxRequest], JSON.stringify({path, authorization}), limit)),
             path, authorization);
         }}),
-        ...(stopServiceNodes && {stopServices: probes => measureServiceStops({nodes: names, inventory, signal: stopSignal, probes, holdMs,
+        ...(stopServiceNodes && {stopServices: (probes, spaceSignup) => measureServiceStops({nodes: names, inventory, signal: stopSignal, probes, holdMs,
+          spaceSignup,
           stopNode: (node, options) => stopNode(node, {...options, whileStopped(fault) {
             stopped = node;
             return options.whileStopped(fault);

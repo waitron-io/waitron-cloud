@@ -103,6 +103,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
 // Both signup endpoints and every login share the real proxy's source identity.
 export function createP1Budget(now = () => performance.now()) {
   const logins = [], signups = [];
+  const signupLimit = 8, signupWindowMs = 900_000, signupReserve = 2;
   const recent = (rows, ms, email) => rows.filter(row => now() - row.at < ms && (!email || row.email === email)).length;
   return {
     attempt(kind, email) {
@@ -111,14 +112,20 @@ export function createP1Budget(now = () => performance.now()) {
         assert.ok(recent(logins, 900000, email) < 24, 'p1.email_budget');
         logins.push({at: now(), email});
       } else {
-        assert.ok(recent(signups, 900000) < 8, 'p1.signup_budget');
+        assert.ok(recent(signups, signupWindowMs) < signupLimit, 'p1.signup_budget');
         signups.push({at: now(), email});
       }
     },
     requireRoom(email) {
       assert.ok(recent(logins, 60000) <= 4, 'p1.login_budget');
       assert.ok(recent(logins, 900000, email) <= 18, 'p1.email_budget');
-      assert.ok(recent(signups, 900000) <= 6, 'p1.signup_budget');
+      assert.ok(recent(signups, signupWindowMs) <= signupLimit - signupReserve, 'p1.signup_budget');
+    },
+    signupDelayMs() {
+      const at = now();
+      const active = signups.filter(row => at - row.at < signupWindowMs);
+      const limiting = active.at(-(signupLimit - signupReserve + 1));
+      return limiting ? limiting.at + signupWindowMs - at : 0;
     },
   };
 }

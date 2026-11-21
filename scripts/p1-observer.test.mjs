@@ -132,6 +132,30 @@ test('request budgets include setup, both signup endpoints and the original sour
   assert.throws(() => budget.attempt('login', 'owner@example.test'), /p1.email_budget/);
 });
 
+test('signup spacing leaves room for two calls as older attempts expire', () => {
+  let clock = 0;
+  const budget = api.createP1Budget(() => clock);
+  assert.equal(typeof budget.signupDelayMs, 'function');
+  for (let i = 0; i < 6; i++) {
+    budget.attempt('signup', 'setup@example.test');
+    clock += 1000;
+  }
+  budget.attempt('login', 'observer@example.test');
+  assert.equal(budget.signupDelayMs(), 0);
+  budget.attempt('signup', 'first-stop@example.test');
+  assert.equal(budget.signupDelayMs(), 894_000);
+  budget.attempt('signup', 'first-stop@example.test');
+  assert.equal(budget.signupDelayMs(), 895_000);
+
+  clock = 900_999;
+  assert.equal(budget.signupDelayMs(), 1);
+  clock = 901_000;
+  assert.equal(budget.signupDelayMs(), 0);
+  budget.attempt('signup', 'second-stop@example.test');
+  budget.attempt('signup', 'second-stop@example.test');
+  assert.throws(() => budget.attempt('signup', 'second-stop@example.test'), /p1.signup_budget/);
+});
+
 test('fragmented stop signals preserve ordering', async () => {
   assert.equal(typeof api.readP1Signals, 'function');
   const {PassThrough} = await import('node:stream');

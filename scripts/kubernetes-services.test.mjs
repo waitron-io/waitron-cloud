@@ -15,13 +15,14 @@ import {runKubernetesCheck} from './kubernetes-check.mjs';
 import * as servicesScript from './kubernetes-services.mjs';
 const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
 
-test('measured stops cover all three machines and the live roles before returning a receipt', async () => {
+test('measured stops cover all three machines and the live roles before returning a receipt', async t => {
   const nodes = ['a', 'b', 'c'], changes = [];
   const run = (role, publication, overrides = {}) => {
     let healthy = true;
     return servicesScript.measureServiceStops({nodes, holdMs: 360_000,
       inventory: async () => {
         assert.ok(healthy, 'inventory must follow a healthy rejoin');
+        overrides.stages?.push('inventory');
         return {primary: 'b', gateway: 'a', operator: role, fluxSource: 'c', fluxApply: 'c'};
       },
       stopNode: async (node, {whileStopped, afterRestart, measured}) => {
@@ -33,8 +34,13 @@ test('measured stops cover all three machines and the live roles before returnin
         return {...result, stopped: node, offMs: 360_000};
       },
       restore: async node => {changes.push('return:' + node);},
-      healthy: async node => {healthy = true; return {storeRepairedOn: node};},
+      healthy: async node => {
+        healthy = true;
+        overrides.stages?.push('healthy:' + node);
+        return {storeRepairedOn: node};
+      },
       observe: async ({ready, stopped, replacement, reconcile, holdMs}) => {
+        overrides.stages?.push('observe');
         assert.equal(holdMs, 360_000);
         ready(); assert.equal(await stopped(), 2000); await replacement();
         return {recovery: {signup: {result: {worker: overrides.mail ?? 'surviving-mail'}},
@@ -65,6 +71,34 @@ test('measured stops cover all three machines and the live roles before returnin
     throw Error('synthetic probe failed during stop');
   }}}), /synthetic probe failed during stop/);
   assert.equal(request.aborted, true);
+
+  await t.test('signup spacing finishes after each rejoin and before the next inventory or observation', async () => {
+    changes.length = 0;
+    const stages = [], gap = Promise.withResolvers(), {signal} = new AbortController();
+    const measured = run('b', publication, {stages, context: {signal, async spaceSignup(limit) {
+      assert.equal(limit, signal);
+      stages.push('spacing');
+      await gap.promise;
+    }}});
+    await new Promise(setImmediate);
+    const duringGap = {stages: [...stages], changes: [...changes]};
+    gap.resolve();
+    await measured;
+    assert.deepEqual(duringGap, {stages: ['inventory', 'observe', 'healthy:b', 'spacing'],
+      changes: ['off:b', 'return:b']});
+    assert.deepEqual(stages, ['inventory', 'observe', 'healthy:b', 'spacing',
+      'inventory', 'observe', 'healthy:c', 'spacing', 'inventory', 'observe', 'healthy:a']);
+  });
+
+  await t.test('an abort during signup spacing ends the rehearsal before the next stop', async () => {
+    changes.length = 0;
+    const stages = [], controller = new AbortController(), reason = Error('local rehearsal cancelled');
+    await assert.rejects(run('b', publication, {stages, context: {signal: controller.signal,
+      spaceSignup: async () => controller.abort(reason),
+    }}), error => error === reason);
+    assert.deepEqual(stages, ['inventory', 'observe', 'healthy:b']);
+    assert.deepEqual(changes, ['off:b', 'return:b']);
+  });
 });
 
 test('the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup', async () => {
@@ -364,13 +398,13 @@ test('outside baseline validates its Cloud image before creating a Kind cell', (
   });
 });
 
+const stopOutsideServiceNodes = process.env.TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS === '1';
 test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and restores its encrypted backup', {
-  skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: 48 * 60 * 1000,
+  skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: (stopOutsideServiceNodes ? 54 : 48) * 60 * 1000,
 }, async () => {
   assert.equal(process.platform, 'linux');
-  const stopServiceNodes = process.env.TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS === '1';
-  const {services, nodes} = await runKubernetesCheck('kind-baseline', {stopServiceNodes});
-  if (stopServiceNodes) {
+  const {services, nodes} = await runKubernetesCheck('kind-baseline', {stopServiceNodes: stopOutsideServiceNodes});
+  if (stopOutsideServiceNodes) {
     const legs = services.serviceStops;
     assert.deepEqual(legs.map(leg => leg.stopped).sort(), nodes.map(node => node.name).sort());
     assert.equal(services.remote.sameTunnel, true);
