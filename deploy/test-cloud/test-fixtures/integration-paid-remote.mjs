@@ -7,14 +7,14 @@ import {checkSnapshotGrantRefusal} from './integration-snapshot-exposure.mjs';
 
 export async function checkRemoteRoute(name, probe, elapsed) {
   const log = result => {
-    if (elapsed) process.stderr.write('D621 HTTPS attempt ' + JSON.stringify({route: name, seconds: elapsed() / 1000, ...result}) + '\n');
+    process.stderr.write('D621 HTTPS attempt ' + JSON.stringify({route: name, ...(elapsed && {seconds: elapsed() / 1000}), ...result}) + '\n');
   };
   try {
     const response = await probe();
-    log({status: response.status});
+    if (elapsed) log({status: response.status});
     return response;
   } catch (error) {
-    log({error: error.code ?? error.name});
+    log({error: error.code ?? (error.message === 'integration.remote_probe_timeout' ? error.message : error.name)});
     throw Error('integration.remote_route:' + name, {cause: error});
   }
 }
@@ -122,7 +122,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
       nonce++; assert.ok(Date.now() < deadline, 'integration.remote_challenge_timeout');
     }
     const solved = await probePublic('/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}, signal});
-    assert.equal(solved.status, 204);
+    assert.equal(solved.status, 204, 'integration.remote_public_solve_status');
     return solved.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
   };
   let cookie = await solvePublic(), renewedAt = Date.now();

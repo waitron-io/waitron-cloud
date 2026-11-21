@@ -49,16 +49,20 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
       for (const name of names) {
         const state = states[name], pending = state.pending;
         const deadline = name === 'backup' ? 300000 : name === 'signup' ? 90000 : 5000;
+        const afterRecovery = 'p1.' + name + '_after_recovery';
+        const deadlineMessage = durationMs => `${afterRecovery}: probe took ${Math.round(durationMs)} ms (limit ${deadline} ms)`;
         if (pending && !pending.ended && at - pending.at >= deadline) {
           pending.expired = true; pending.controller.abort();
-          if (state.recovered) throw Error('p1.' + name + '_after_recovery');
+          if (state.recovered) throw Error(deadlineMessage(at - pending.at));
         }
         if (pending?.ended) {
           const ok = pending.ok && !pending.expired && pending.endedAt - pending.at <= deadline;
           const durationMs = (pending.endedAt ?? at) - pending.at;
           samples.push({name, startedMs: pending.at - faultAt, durationMs, ok: Boolean(ok)});
           state.pending = undefined;
-          if (!ok && state.recovered) throw Error('p1.' + name + '_after_recovery', {cause: pending.error});
+          if (!ok && state.recovered) {
+            throw Error(durationMs > deadline ? deadlineMessage(durationMs) : afterRecovery, {cause: pending.error});
+          }
           if (ok) {
             state.longestGapMs = Math.max(state.longestGapMs ?? 0, pending.endedAt - state.lastSuccess || 0);
             state.lastSuccess = pending.endedAt;

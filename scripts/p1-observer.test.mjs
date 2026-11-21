@@ -82,27 +82,54 @@ test('a scheduled outage after recovery fails the leg', async () => {
   let clock = 0;
   const failure = Object.assign(Error('tunnel lost'), {code: 'ECONNRESET'});
   const probes = Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => {
-    if (name === 'remote' && clock >= 5000) throw failure;
+    if (name === 'remote' && clock >= 5000) {
+      return remote.checkRemoteRoute('public', async () => {throw failure;});
+    }
     return {ok: true};
   }]));
   await assert.rejects(api.observeP1({probes, now: () => clock,
     sleep: async ms => {clock += ms; await new Promise(setImmediate);},
     ready: () => {}, stopped: async () => {}, replacement: async () => {}}), error => {
     assert.match(error.message, /p1\.remote_after_recovery/);
-    assert.equal(error.cause, failure);
+    assert.match(error.cause?.message ?? '', /integration\.remote_route:public/);
+    assert.equal(error.cause.cause, failure);
     return true;
   });
 });
 
-test('a failed remote request identifies its route and keeps the transport error', async () => {
+test('a failed remote request identifies its route and keeps the transport error', async t => {
   assert.equal(typeof remote.checkRemoteRoute, 'function');
   const failure = Object.assign(Error('socket reset'), {code: 'ECONNRESET'});
+  const output = t.mock.method(process.stderr, 'write', () => true);
   await assert.rejects(remote.checkRemoteRoute('public', async () => {throw failure;}), error => {
     assert.match(error.message, /integration\.remote_route:public/);
     assert.equal(error.cause, failure);
     return true;
   });
+  await assert.rejects(remote.checkRemoteRoute('staff', async () => {throw Error('integration.remote_probe_timeout');}));
+  assert.deepEqual(output.mock.calls.map(call => call.arguments[0]), [
+    'D621 HTTPS attempt {"route":"public","error":"ECONNRESET"}\n',
+    'D621 HTTPS attempt {"route":"staff","error":"integration.remote_probe_timeout"}\n',
+  ]);
 });
+
+for (const lateReply of [false, true]) {
+  test('a remote probe ' + (lateReply ? 'with a late reply' : 'still in flight') + ' reports its deadline after recovery', async () => {
+    let clock = 0, completeRemote;
+    const probes = Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name =>
+      [name, async () => name === 'remote' && clock >= 5000 ?
+        new Promise(resolve => {completeRemote = resolve;}) : true]));
+    await assert.rejects(api.observeP1({probes, now: () => clock,
+      ready: () => {}, stopped: async () => {}, replacement: async () => {},
+      sleep: async ms => {
+        clock += ms;
+        if (lateReply && clock === 10000) {clock += 1000; completeRemote(true);}
+        await new Promise(setImmediate);
+      },
+    }), new RegExp('p1\\.remote_after_recovery: probe took ' + (lateReply ? '6000' : '5000') + ' ms \\(limit 5000 ms\\)'));
+    assert.equal(clock, lateReply ? 11000 : 10000);
+  });
+}
 
 // Hung stop confirmation must end instead of keeping the paid experiment alive.
 test('withheld stop confirmation fails within the existing command budget', async () => {

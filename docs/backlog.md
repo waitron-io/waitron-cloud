@@ -1830,8 +1830,8 @@ implementation or production evidence.
   port timeout and the timed dry run remain open. Stockholm still needs
   its own measurements.
   The saved-image Linux run reached the third stop before an HTTPS probe
-  failed after recovery. The observer retains a completed probe's failure,
-  including the route and transport error for a failed HTTPS request. Run
+  failed after recovery. The observer keeps the failure and reports how long
+  an overdue probe ran. Failed HTTPS requests log the route and transport error. Run
   `node --test scripts/p1-observer.test.mjs` to check that diagnostic.
   The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
