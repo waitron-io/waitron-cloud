@@ -1,0 +1,20 @@
+# Check first-time box setup on the shared test Cloud
+
+A fresh Prepare box should let you sign in after creating its administrator and before entering the venue. Cloud returns you to the same tab and files the new venue under your matching business when setup saves it. Skip keeps manual setup and lets you connect later. Pairing leaves you on Registered. Remote access requires a Connected trial or paid plan. The owner set this flow on 20 November at 13:49, 13:54 and 14:16 in Lane K’s archived questions. The watcher assigned the plan on 21 November at 16:40.
+
+## What has shipped
+
+Cloud #1343 and #1350–#1353 already provide installed-box pairing, early registration, same-tab signup and signed staff-email consent. Waitron #3953, #3957, #3960 and #3965 supply the setup screens and calls. The [sign-in contract](../../waitron-integration-contract.md#test-box-sign-in-before-the-venue-form) and [staff email contract](../../transactional-email-relay-contract.md#choose-staff-email-in-test-setup) describe the requests.
+
+Waitron #3953 opens sign-in before the Admin screen in the test pilot. It returns to Admin with the selected setup mode and language. The watcher cleared that pilot in Lane D’s questions at 11:19 on 21 November. Confirm with the watcher whether the pilot order is sufficient for this rehearsal. The owner’s original after-Admin order is outside what this build can demonstrate.
+
+Lane D’s 21 November progress at 12:08, 13:51 and 16:05 records the disposable browser run, editable address suggestions from a fake provider and all three staff emails in Mailpit. Reuse those results and the fallback checks from the #3965 rehearsal.
+
+## One hosted check
+
+1. After watcher clearance, book a shared Cloud window for one fresh synthetic box and account. Read back the deployed Cloud source and image digest. Lane K’s 16:53 checkpoint records #1355 at `7bfebf64d`. Build from Waitron #3965 at `50a435878d` or a later build containing it and record the exact revision. Check the test service mode, the box’s exact public key and HTTPS callback, the allowance and the relay grant expiry. If the shared settings need a change, coordinate it for that window and restore them afterwards. [Setup settings](../../local-pairing.md#connect-an-installed-test-box-with-cloud-sign-in)
+2. In Prepare, start Cloud signup when the wizard offers it. Verify a synthetic address through private Mailpit, enrol a passkey or app and sign in again. Confirm the original tab returns to Admin with the mode and language intact and no extra pairing confirmation. Signed v5 redeem or status should show a provisional registration before venue save. Record its four IDs and verify that the box can renew the installation lease and read signed service configuration.
+3. Tick **Send staff email through Waitron Cloud** and Provision with the tested mail server required by #3965. The box sends signed `POST /api/pairing/email-grant` with `requestId`, `consent: true` and `consentVersion: local-v1` before signed complete. Check the enabled grant. After restart, compare the four IDs with the final registration and check one filed venue, its name, address, business and tax number. Verify that its level is Registered and it has no trial row. Send one synthetic staff password reset and check receipt in private Mailpit. Stockholm’s existing switch keeps synthetic signup and box mail in Mailpit. [Hosted mail settings](../../test-cloud.md#send-account-mail-to-the-approved-test-mailbox)
+4. Use `packages/registration/test/pairing.test.ts` for matching, creating a different business and stable IDs. Use Waitron’s `apps/setup/src/setup-app-first-fiscal.test.ts` for Skip and Lane K’s installed-box receipt for later connection. Record the exact builds and observations, then retire the synthetic installation using **Remove venue** and release the test window.
+
+This check needs no code or test changes. Live address quality, external staff-mail delivery and the owner’s boxes are outside this rehearsal. Lane D owns optional local mail setup. The separate three-step signup item needs to decide how accounts without a business obtain early services.
