@@ -150,14 +150,18 @@ When you have provisional IDs, renew the signed installation lease at
 configuration with `servicesVersion: 2`. Allowance-backed services use the test
 Cloud's published allowances. The address pilot uses a fake provider and email
 requires an operator-prepared relay grant. Signed complete files the venue's
-details and returns its final `registration`. The IDs stay the same, keeping any
-setup-time usage with the same business.
+name and address and returns its final `registration`. Cloud fills the
+business tax number if it is blank. A tax number already on the business takes
+precedence over the venue form. The IDs stay the same, keeping any setup-time
+usage with the same business.
 
 If the request expires or the browser signs out, sign in again to resume with the
-same Cloud account and box key. A provisional installation stays registered until
-you use **Remove venue**. If Cloud reports `registration_conflict`, continue
-manually. Ask the pilot operator to configure a replacement public key before
-trying Cloud sign-in with that key.
+same Cloud account and box key. **Remove venue** hides an abandoned placeholder
+from the account and revokes its installation. The venue record and the box key
+stay in Cloud. The business then has a venue record, so a later setup with a new
+key files on save. If Cloud reports `registration_conflict`, continue manually.
+Ask the pilot operator to configure a replacement public key before trying Cloud
+sign-in with that key.
 
 ### Pairing version 3 and managed-stream version 2
 
