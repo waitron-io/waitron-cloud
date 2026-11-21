@@ -25,7 +25,7 @@ import { captureLink, captureSetupPairingLink, forgetSetupPairingLink, type Capt
 import { chooseLocale, translations, type Copy, type Locale } from './locale.ts';
 import { PortalSession, type SessionState } from './session.ts';
 import { accountPages, screen } from './screens.ts';
-export type Fields = {email: string; password: string; legalBusinessName: string; organisationName: string};
+export type Fields = {email: string; password: string};
 type PasskeyAddRequest = {accountId: string};
 
 export class PortalApp {
@@ -34,15 +34,11 @@ export class PortalApp {
   link: Omit<CapturedLink, 'pairingCode'>;
   setupPairing: SetupPairingLink | undefined;
   locale: Locale;
-  fields: Fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
+  fields: Fields = {email: '', password: ''};
   errors: Partial<Record<keyof Fields, keyof Copy>> = {};
   error: keyof Copy | undefined;
   notice: keyof Copy | undefined;
   requested = false;
-  differentOrg = false;
-  receivingBusiness = false;
-  countryCode = 'ES';
-  refusedCountry: string | undefined;
   reveal = false;
   pending = false;
   #serverCooldowns = new Map<string, number>();
@@ -78,7 +74,10 @@ export class PortalApp {
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
     this.root = root;
-    this.pairing = new PairingController(() => this.draw());
+    this.pairing = new PairingController(() => {
+      this.#loadBusinessOptions();
+      this.draw();
+    });
     this.link = this.#capture();
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
@@ -188,8 +187,7 @@ export class PortalApp {
     const billingAccount=ordinary && state.billingTrialAvailable === true ? state.accountId : undefined;
     this.billing.account(billingAccount);
     if ((page === 'billing' || page === 'remoteAccess') && billingAccount && !this.billing.loadAttempted) void this.billing.load();
-    this.businesses.account(ordinary && page === 'account' ? state.accountId : undefined);
-    if (page === 'account' && ordinary && !this.businesses.attempted) void this.businesses.request('/businesses');
+    this.businesses.account(ordinary && (page === 'account' || this.path === '/connect') ? state.accountId : undefined);
     this.transfers.account(ordinary?state.accountId:undefined);
     if(page === 'account' && ordinary&&!this.transfers.loadAttempted)void this.transfers.load();
     this.security.account(ordinary ? state.accountId : undefined);
@@ -209,6 +207,7 @@ export class PortalApp {
     if (state.kind === 'unavailable') this.pairing.suspend();
     else this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined, !restricted);
     if (this.path === '/connect' && ordinary && !this.pairing.loaded) void this.pairing.load();
+    this.#loadBusinessOptions();
     const malformedPairingLink = this.path === '/connect' && this.link.invalid;
     if (this.sessionPage && state.kind === 'anonymous' && (state.expired || !malformedPairingLink)) {
       const signedOut = this.#signOutCheck === this.session;
@@ -218,6 +217,11 @@ export class PortalApp {
     }
     else this.draw();
     this.#offerPasskeys();
+  }
+  #loadBusinessOptions() {
+    if (this.businesses.attempted) return;
+    if (this.accountPage === 'account' || (this.path === '/connect' && this.pairing.loaded && !this.pairing.businesses.length))
+      void this.businesses.request('/businesses');
   }
   #offerPasskeys() {
     if (this.path !== '/login' || this.session.state.kind !== 'anonymous' || !this.passkeys.preferred || this.#passkeyOffered) return;
@@ -304,9 +308,9 @@ export class PortalApp {
     this.ownerRecovery.open(path==='/reset-password'&&!this.link.invalid?this.link.token:undefined);
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
     this.locale = this.link.locale ?? this.locale;
-    this.fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
+    this.fields = {email: '', password: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
-    this.pending = false; this.reveal = false; this.differentOrg = false; this.receivingBusiness = false; this.countryCode = 'ES'; this.refusedCountry = undefined;
+    this.pending = false; this.reveal = false;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.installations.showRecovery(path==='/recover');
     this.draw(); this.focusHeading();
@@ -415,11 +419,6 @@ export class PortalApp {
     if (emailNeeded && !validEmail(f.email)) this.errors.email = 'emailError';
     if (passwordNeeded && (new TextEncoder().encode(f.password).length > 1024 || (this.completion ? [...f.password].length < 15 : !f.password)))
       this.errors.password = new TextEncoder().encode(f.password).length > 1024 ? 'passwordLong' : this.completion ? 'passwordHelp' : 'requiredPassword';
-    if (this.path === '/signup' && this.link.token && !this.receivingBusiness) {
-      const validName = (value: string) => value.length <= 200 && value.trim() && !/[\u0000-\u001f\u007f]/.test(value);
-      if (!validName(f.legalBusinessName)) this.errors.legalBusinessName = 'nameError';
-      if (this.differentOrg && !validName(f.organisationName)) this.errors.organisationName = 'nameError';
-    }
     if (Object.keys(this.errors).length) { this.draw(); this.#focusErrors(); return; }
     if (this.link.invalid || (this.path === '/reset-password' && !this.link.token)) return;
     if(this.path==='/login'){
@@ -428,16 +427,14 @@ export class PortalApp {
     }
     let path: string; let body: Record<string, string>;
     if (this.path === '/signup' && this.link.token) {
-      path = this.receivingBusiness?'/signup/transfer/complete':'/signup/complete'; body = {token: this.link.token, password: f.password,
-        ...(this.receivingBusiness?{}:{legalBusinessName: f.legalBusinessName.trim(), organisationName: (this.differentOrg ? f.organisationName : f.legalBusinessName).trim(), countryCode: this.countryCode}),...(this.authenticator.rememberBrowser?{rememberBrowser:'true'}:{})};
+      path = '/signup/complete'; body = {token: this.link.token, password: f.password};
     } else if (this.path === '/reset-password') { path = '/password-reset/complete'; body = {token: this.link.token!, password: f.password, locale: this.locale}; }
     else { path = this.path === '/signup' ? '/signup/request' : '/password-reset/request'; body = {email: f.email, locale: this.locale}; }
     this.pending = true; const route = this.#route;
     this.draw();
     const result = await accountRequest(path, body);
     // A late reply still sets the wait for the operation that sent it.
-    const cooldownPath=path==='/signup/transfer/complete'?'/signup/complete':path;
-    if (!result.ok) this.#serverCooldowns.set(cooldownPath, Math.max(this.#serverCooldowns.get(cooldownPath) ?? 0, performance.now() + result.retryAfterMs));
+    if (!result.ok) this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
@@ -446,9 +443,8 @@ export class PortalApp {
     } else {
       const cause = bodyRefusal(result);
       if (cause) this.error = `${path.startsWith('/signup/')&&path.endsWith('/complete')?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
-      else if (result.code === 'country_unavailable') { this.error = 'countryUnavailable'; this.refusedCountry = body.countryCode; }
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
-      else this.error = result.code === 'handover_unavailable' ? 'handoverUnavailable' : result.code === 'link_unavailable' ? 'linkUnavailable'
+      else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'
         : result.status === 0 ? (path.endsWith('/complete') ? 'uncertain' : 'unavailable')
@@ -639,7 +635,7 @@ export class PortalApp {
   }
   get logoutWaiting() { return this.session.waiting; }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
-  get logoutDisabled() { return this.transfers.pending || this.businesses.pending || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
+  get logoutDisabled() { return this.transfers.pending || (this.accountPage === 'account' && this.businesses.pending) || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
     this.#passkeyAddRequest = undefined;

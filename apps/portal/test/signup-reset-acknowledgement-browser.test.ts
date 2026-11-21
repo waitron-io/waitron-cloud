@@ -16,7 +16,7 @@ const flows = [
   {path: '/signup', endpoint: '/signup/request', button: 'continue', status: 202, value: {status: 'accepted'}},
   {path: '/forgot-password', endpoint: '/password-reset/request', button: 'sendReset', status: 202, value: {status: 'accepted'}},
   {path: '/signup', endpoint: '/signup/complete', button: 'create', status: 201,
-    value: {accountId: 'owner', organisationId: 'organisation', legalBusinessId: 'business'}},
+    value: {accountId: 'owner'}},
   {path: '/reset-password', endpoint: '/password-reset/complete', button: 'savePassword', status: 200, value: {status: 'completed'}},
 ] as const;
 
@@ -44,7 +44,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
           if (completion) await page.locator('input[name=password]').fill(password);
           else await page.locator('input[name=email]').fill('owner@example.test');
-          if (flow.endpoint === '/signup/complete') await page.locator('input[name=legalBusinessName]').fill('Café SL');
+          if (flow.endpoint === '/signup/complete') {
+            assert.deepEqual(await page.locator('form wt-input').evaluateAll(inputs => inputs.map(input => input.getAttribute('name'))), ['password']);
+            assert.equal(await page.locator('form input[type=checkbox], form select').count(), 0);
+            assert.equal(await page.locator('input[name=password]').getAttribute('autocomplete'), 'new-password');
+          }
           const submit = page.getByRole('button', {name: c[flow.button], exact: true});
           await submit.click();
           await page.getByText(completion ? c.uncertain : c.unavailable, {exact: true}).waitFor();
@@ -85,7 +89,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await page.getByText(completion ? flow.endpoint === '/signup/complete' ? c.signupReady : c.resetReady : c.emailSent, {exact: true}).waitFor();
           assert.equal(calls.length, 9, 'only the deliberate retries send another request');
           const body = completion ? flow.endpoint === '/signup/complete'
-            ? {token, password, legalBusinessName: 'Café SL', organisationName: 'Café SL', countryCode: 'ES'}
+            ? {token, password}
             : {token, password, locale} : {email: 'owner@example.test', locale};
           for (const call of calls) {
             assert.equal(call.path, flow.endpoint);

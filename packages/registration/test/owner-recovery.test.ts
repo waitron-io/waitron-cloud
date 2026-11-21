@@ -56,6 +56,13 @@ test('mailbox proof changes purpose, offers owned paired boxes and freezes the e
  assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'1','recovery polls add no metered operation');
 });
 
+test('owner recovery can list a paired box with details still missing',async()=>{
+ await db.pool.query('UPDATE organisations SET name=NULL WHERE id=$1',[owner.organisationId]);
+ await db.pool.query('UPDATE legal_businesses SET name=NULL WHERE id=$1',[owner.legalBusinessId]);
+ const {venues}=await store.begin(token);
+ assert.deepEqual(venues,[{installationId:box.installationId,venueId:box.venueId,organisationName:'',businessName:''}]);
+});
+
 test('approved recovery replaces lost authority once and issues enrollment-only access for the same account',async()=>{
  const old=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));
  await db.pool.query("INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,'lost-ciphertext')",[owner.accountId,randomUUID()]);

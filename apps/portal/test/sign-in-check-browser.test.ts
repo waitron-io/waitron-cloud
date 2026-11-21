@@ -43,16 +43,15 @@ test(`password-only recognition ${locale} ${colorScheme} ${width}`,async()=>{
   try{
     const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email,locale);
     const verification=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0]);assert.ok('token' in verification);
-    await page.goto(`${f.origin}/signup#token=${verification.token}&lang=${locale}`);await page.getByLabel(c.legalName).fill('Synthetic Café');await page.locator('input[name=password]').fill(password);
-    const signupChoice=page.getByRole('checkbox',{name:c.rememberBrowser});assert.equal(await signupChoice.isChecked(),false);await signupChoice.check();
+    await page.goto(`${f.origin}/signup#token=${verification.token}&lang=${locale}`);await page.locator('input[name=password]').fill(password);
+    assert.equal(await page.getByRole('checkbox',{name:c.rememberBrowser}).count(),0);
     if(process.env.EMAIL_SIGN_IN_RECEIPT_DIR)await page.screenshot({path:`${process.env.EMAIL_SIGN_IN_RECEIPT_DIR}/signup-${locale}-${colorScheme}-${width}.png`,fullPage:true});
     const signupReply=page.waitForResponse('**/api/account/signup/complete');
     await page.getByRole('button',{name:c.create,exact:true}).click();
-    assert.deepEqual(Object.keys(await (await signupReply).json()).sort(),['accountId','legalBusinessId','organisationId']);
+    assert.deepEqual(Object.keys(await (await signupReply).json()).sort(),['accountId']);
     await page.getByText(c.signupReady).waitFor();
-    assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);assert.ok((await context.cookies()).find(cookie=>cookie.name==='cloud_browser')?.httpOnly);
+    assert.deepEqual(await context.cookies(), []);
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
-    await context.clearCookies();
     await page.goto(`${f.origin}/login#lang=${locale}`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
     const remember=page.getByRole('checkbox',{name:c.rememberBrowser});assert.equal(await remember.isChecked(),false);await remember.check();
     if(process.env.EMAIL_SIGN_IN_RECEIPT_DIR)await page.screenshot({path:`${process.env.EMAIL_SIGN_IN_RECEIPT_DIR}/remember-${locale}-${colorScheme}-${width}.png`,fullPage:true});

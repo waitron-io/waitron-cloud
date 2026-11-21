@@ -140,7 +140,10 @@ staff invitations, password resets and email changes. Adding guest email would
 require another consent version.
 
 After [setup pairing version 5](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
-returns a provisional installation, renew its lease if needed. Use the shared
+returns a provisional installation, renew its lease if needed. A new account
+can get a provisional installation during setup. If you register the business
+with its tax number on **Account** first, use manual mail during setup.
+Use the shared
 `encodeMachine` from `@waitron-io/contract@0.2.42` and sign with the installation key.
 Name the Cloud origin, action `configuration`, installation ID, operation ID,
 current issue time and serialized lease. The signed body uses these keys in order.

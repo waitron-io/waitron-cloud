@@ -25,7 +25,7 @@ for (const path of routes) for (const {name, password, allowed} of passwords) {
     // Replace the store boundary so its own length check cannot mask a missing HTTP guard.
     t.mock.method(AccountRateLimiter.prototype, 'consume', async () => ({allowed: true, retryAfterSeconds: 0}));
     const seen: string[] = [];
-    t.mock.method(SignupStore.prototype, 'complete', async (_token: string, details: {password: string}) => {
+    t.mock.method(SignupStore.prototype, 'completeAccount', async (_token: string, details: {password: string}) => {
       seen.push(details.password); throw new SignupError('verification_unavailable');
     });
     t.mock.method(PasswordLoginStore.prototype, 'start', async (input: {password: string}) => {
@@ -39,8 +39,7 @@ for (const path of routes) for (const {name, password, allowed} of passwords) {
       config: {portalOrigin: origin, production: true, rateKey: 'cd'.repeat(32), trustedProxyIps: []},
       factor: {keys: null, policy: null}, pairingCodeKeys: null, recoveryCodeKeys: null});
     const body = path === '/login' ? {email: 'owner@example.test', password}
-      : path === '/password-reset/complete' ? {token, password}
-      : {token, password, organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES'};
+      : {token, password};
     const response = await app.request(origin + '/api/account' + path, {method: 'POST',
       headers: {origin, 'content-type': 'application/json'}, body: JSON.stringify(body)},
     {incoming: {socket: {remoteAddress: '192.0.2.10'}}});

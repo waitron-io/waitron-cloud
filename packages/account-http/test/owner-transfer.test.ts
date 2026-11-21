@@ -60,22 +60,13 @@ test('account-only completion is public, strict and creates no session cookies',
  await request(target,sender,'/create',{organisationId:sender.organisationId,email});
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
- const body={token:mail.token,password,rememberBrowser:'true'},path='/signup/transfer/complete';
+ const body={token:mail.token,password},path='/signup/complete';
  assert.equal((await signupRequest(target,path,body,'https://foreign.test')).status,403);
  assert.equal((await signupRequest(target,path,{...body,organisationName:'Injected business'})).status,400);
  const response=await signupRequest(target,path,body);assert.equal(response.status,201);
  const value=await response.json() as {accountId:string};assert.deepEqual(Object.keys(value),['accountId']);assert.ok(value.accountId);
- assert.match(response.headers.get('set-cookie')??'',/__Host-cloud_browser=/);assert.doesNotMatch(response.headers.get('set-cookie')??'',/cloud_session|cloud_csrf/);
+ assert.deepEqual(response.headers.getSetCookie(), []);
 });
-test('account-only completion reports unavailable handover and shares the ordinary signup completion budget',async()=>{
- const email=`new-${randomUUID()}@example.test`,signup=new SignupStore(db.pool,db.outbox),target=app();await signup.request(email);
- const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
- const body={token:mail.token,password};
- const response=await signupRequest(target,'/signup/transfer/complete',body);assert.equal(response.status,409);assert.deepEqual(await response.json(),{error:'handover_unavailable'});
- for(let n=0;n<9;n++)assert.equal((await signupRequest(target,'/signup/complete',{...body,organisationName:'Business',legalBusinessName:'Business SL',countryCode:'ES',password:'short'})).status,400);
- const limited=await signupRequest(target,'/signup/transfer/complete',body);assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
-});
-
 test('recovered scope: handover chooser omits other retained memberships',async()=>{
  const a=await account(),target=app();await setRecoveryScope(db.pool,a.accountId);
  assert.deepEqual((await (await request(target,a,'')).json()).organisations,[]);

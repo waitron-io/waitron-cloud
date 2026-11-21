@@ -7,7 +7,7 @@ export function ownerRecoveryScreen(app:PortalApp){
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}
   ${r.stage==='choose'?html`<p>${c.ownerRecoveryChoose}</p>${r.venues.length?html`
    <div class="business-choice"><label for="owner-recovery-venue">${c.ownerRecoveryBox}</label><select id="owner-recovery-venue" name="ownerRecoveryVenue" .value=${r.installationId} ?disabled=${busy}
-    @change=${(e:Event)=>{r.installationId=(e.target as HTMLSelectElement).value;app.draw();}}>${r.venues.map(v=>html`<option value=${v.installationId}>${v.organisationName} · ${v.businessName} · ${v.venueId}</option>`)}</select></div>${button(c.ownerRecoverySelect)}`:r.error||r.pending?nothing:html`<p>${c.ownerRecoveryUnavailable}</p>`}`:nothing}
+    @change=${(e:Event)=>{r.installationId=(e.target as HTMLSelectElement).value;app.draw();}}>${r.venues.map(v=>html`<option value=${v.installationId}>${v.organisationName || c.unnamedOrganisation} · ${v.businessName || c.unnamedBusiness} · ${v.venueId}</option>`)}</select></div>${button(c.ownerRecoverySelect)}`:r.error||r.pending?nothing:html`<p>${c.ownerRecoveryUnavailable}</p>`}`:nothing}
   ${r.stage==='pending'?html`<p role="status">${c.ownerRecoveryPending}</p>${button(c.ownerRecoveryCheck)}`:nothing}
   ${r.stage==='refused'?html`<p role="status">${c.ownerRecoveryRefused}</p>`:nothing}
   ${r.stage==='approved'?html`<p>${c.ownerRecoveryApproved}</p><p id="owner-recovery-password-help">${c.passwordHelp}</p>

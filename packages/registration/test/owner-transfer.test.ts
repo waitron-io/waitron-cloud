@@ -249,25 +249,26 @@ test('verified first-time signup attaches every live offer without creating busi
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
  const before=(await db.pool.query('SELECT count(*) FROM organisations')).rows[0].count;
- const result=await signup.completeForTransfer(mail.token,{password,rememberBrowser:true});
- assert.deepEqual(Object.keys(result).sort(),['accountId','browserToken']);assert.ok(result.browserToken);
+ const result=await signup.completeAccount(mail.token,{password});
+ assert.deepEqual(Object.keys(result),['accountId']);
  assert.equal((await db.pool.query('SELECT count(*) FROM organisations')).rows[0].count,before);
  assert.equal((await db.pool.query('SELECT count(*) FROM organisation_memberships WHERE account_id=$1',[result.accountId])).rows[0].count,'0');
  assert.equal((await db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1',[result.accountId])).rows[0].count,'0');
  const rows=(await db.pool.query('SELECT id,recipient_id,recipient_needs_enrolment FROM owner_transfers WHERE id=ANY($1::uuid[]) ORDER BY id',[offers.map(o=>o.id)])).rows;
  assert.deepEqual(rows,offers.map(o=>({id:o.id,recipient_id:result.accountId,recipient_needs_enrolment:true})).sort((a,b)=>a.id.localeCompare(b.id)));
- await assert.rejects(signup.completeForTransfer(mail.token,{password}),/verification_unavailable/);
+ await assert.rejects(signup.completeAccount(mail.token,{password}),/verification_unavailable/);
 });
-for(const unavailable of ['wrong address','cancelled','expired'])test(`account-only signup refuses ${unavailable} offers and leaves its verification usable`,async()=>{
+for(const unavailable of ['wrong address','cancelled','expired'])test(`account-only signup leaves ${unavailable} offers unattached`,async()=>{
  const sender=await signedAccount(),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,unavailable==='wrong address'?`other-${email}`:email);
  if(unavailable==='cancelled')await store.decide(sender.token,sender.csrfToken,offer.id,'cancel');
  if(unavailable==='expired')await db.pool.query("UPDATE owner_transfers SET created_at=clock_timestamp()-interval '3 days',expires_at=clock_timestamp()-interval '2 days' WHERE id=$1",[offer.id]);
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
- await assert.rejects(signup.completeForTransfer(mail.token,{password}),/handover_unavailable/);
- assert.equal((await db.pool.query('SELECT count(*) FROM cloud_credentials WHERE email=$1',[email])).rows[0].count,'0');
- assert.ok((await signup.complete(mail.token,{password,organisationName:'New business',legalBusinessName:'New SL',countryCode:'ES'})).organisationId);
+ const {accountId}=await signup.completeAccount(mail.token,{password});
+ assert.ok(accountId);
+ assert.equal((await db.pool.query('SELECT recipient_id FROM owner_transfers WHERE id=$1',[offer.id])).rows[0].recipient_id,null);
+ assert.equal((await db.pool.query('SELECT 1 FROM organisation_memberships WHERE account_id=$1',[accountId])).rowCount,0);
 });
 test('ordinary business signup also attaches its verified email offers without granting the offered business',async()=>{
  const sender=await signedAccount(),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);

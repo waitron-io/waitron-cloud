@@ -40,7 +40,7 @@ async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', w
       return route.fulfill({status: 429, headers: {'Retry-After': '2'}, json: {error: 'rate_limited'}});
     if (path === '/password-reset/request' || path === '/signup/request') return route.fulfill({status: 202, json: {status: 'accepted'}});
     if (path === '/password-reset/complete') return route.fulfill({json: {status: 'completed'}});
-    if (path === '/signup/complete') return route.fulfill({status: 201, json: {accountId: 'owner', organisationId: 'business', legalBusinessId: 'legal-business'}});
+    if (path === '/signup/complete') return route.fulfill({status: 201, json: {accountId: 'owner'}});
     return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
   });
   await page.goto('https://portal.test/login');
@@ -79,7 +79,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(await page.getByRole('alert').filter({hasText: c.limited}).count(), 0);
           if (completion) {
             await page.locator('input[name=password]').fill(password);
-            if (flow.endpoint === '/signup/complete') await page.locator('input[name=legalBusinessName]').fill('Cafe owner');
           } else await page.locator('input[name=email]').fill('owner@example.test');
           if (process.env.LOGIN_COOLDOWN_RECEIPT_DIR) {
             await mkdir(process.env.LOGIN_COOLDOWN_RECEIPT_DIR, {recursive: true});
@@ -88,7 +87,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await submit.click();
           await page.getByRole('status').filter({hasText: completion ? (flow.path === '/signup' ? c.signupReady : c.resetReady) : c.emailSent}).waitFor();
           const body = flow.endpoint === '/signup/complete'
-            ? {token, password, legalBusinessName: 'Cafe owner', organisationName: 'Cafe owner', countryCode: 'ES'}
+            ? {token, password}
             : completion ? {token, password, locale} : {email: 'owner@example.test', locale};
           assert.deepEqual(calls, [{path: '/login', body: {email: 'owner@example.test', password, locale}}, {path: flow.endpoint, body}]);
           if (!completion) {

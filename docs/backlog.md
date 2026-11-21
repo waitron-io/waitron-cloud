@@ -395,8 +395,8 @@ release checks. See [the remaining consent qualifications](backlog/translation.m
 ## Signup and password-reset HTTP acknowledgements (D423)
 
 **Client and local server qualification complete.** Signup and password reset
-require the exact success status and acknowledgement; business signup also requires three
-nonblank identifiers, while account-only handover signup requires its account ID. Browser journeys preserve uncertain results for an explicit
+require the exact success status and acknowledgement. Signup requires a nonblank account ID.
+Browser journeys preserve uncertain results for an explicit
 retry in both languages, themes and widths. Real HTTP checks cover the 15-second
 header and body deadline; local Mailpit checks cover server authority and session
 revocation. Production provider delivery remains with D102's owner-only enablement
@@ -410,7 +410,7 @@ cause remains unknown in the CI bundle; delivery of these client tests does not 
 
 Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
-email-verification signup backend that creates the first organisation and business.
+email-verification signup backend that creates an account.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
 internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
 email capture. SMTP capture tests select by subject and recipient because concurrent
@@ -1026,11 +1026,10 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 ## Cloud signup and business moves
 
-Separate account signup from business registration. Qualify the original-tab
-venue setup on the released Waitron box, including the after-Admin sign-in and
-early services. Check removing
-and reconnecting a venue when one business changes owner or a venue changes
-business. The existing handover transfers the whole organisation.
+Qualify original-tab venue setup on the released Waitron box, including sign-in
+after Admin and the setup services. Confirm the rule for tax numbers when a venue
+reconnects under a new owner. Moving one business by itself and filing a new tax
+number when you own several organisations remain open.
 
 ## Free services for open-source Waitron
 
@@ -1039,7 +1038,7 @@ email to open-source Waitron users with a Cloud login, without a paid subscripti
 The [local address trial](address-lookup-trial.md) accepts registered test boxes
 with a single verified owner when a fake provider is injected. The
 [test setup contract](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
-lets a configured box register during sign-in for an account with one empty business.
+lets a configured box register during sign-in for a new account or an account with one empty business.
 Cloud browser checks cover verified signup and a return to the same tab after enrolment
 and fresh sign-in. The [test relay contract](transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
 covers Cloud's signed staff-email choice. The Mailpit rehearsal in

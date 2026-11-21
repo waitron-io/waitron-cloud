@@ -61,11 +61,10 @@ import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError
 import { AccountRateLimiter, type RateRule } from './rate-limit.ts';
 import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
-import { readSessionCookie, writeSessionCookies, readBrowserCookie, writeBrowserCookie } from './cookies.ts';
+import { readSessionCookie, writeSessionCookies, readBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
 const paths: Record<string, readonly string[]> = {
-  '/signup/transfer/complete': ['token','password'],
-  '/signup/request': ['email'], '/signup/complete': ['token', 'password', 'organisationName', 'legalBusinessName', 'countryCode'],
+  '/signup/request': ['email'], '/signup/complete': ['token', 'password'],
   '/login': ['email', 'password'], '/session/activity': [], '/logout': [],
   '/password-reset/request': ['email'], '/password-reset/complete': ['token', 'password'],
 };
@@ -95,7 +94,6 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof UsageError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='usage_conflict'?'conflict':error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
     if(error.code==='country_unavailable')return new AccountHttpError(400,'country_unavailable');
-    if(error.code==='handover_unavailable')return new AccountHttpError(409,'handover_unavailable');
     if (error.code === 'password_compromised') return new AccountHttpError(400, 'password_compromised');
     if (error.code === 'password_screening_unavailable') return new AccountHttpError(503, 'temporarily_unavailable', 1);
     return new AccountHttpError(400, ['verification_unavailable', 'reset_unavailable'].includes(error.code) ? 'link_unavailable' : 'invalid_input');
@@ -138,7 +136,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
-  const signup = new SignupStore(pool, outbox, options.passwordScreening, config.countryCode); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
+  const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);
   const ownerRecovery=options.leaseIssuer&&config.countryCode?new OwnerRecoveryStore(pool,outbox,{origin:config.portalOrigin,countryCode:config.countryCode,issuer:options.leaseIssuer,trusted:options.leaseTrust,screening:options.passwordScreening}):undefined;
   const app = new Hono<{Bindings: HttpBindings}>();
@@ -222,9 +220,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : ['/signup/complete','/signup/transfer/complete'].includes(path) ? ['rememberBrowser'] : []);
+    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
-    if (body.rememberBrowser !== undefined && body.rememberBrowser !== 'true') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
     const started = performance.now();
     const slow = ['/login', '/signup/request', '/password-reset/request'].includes(path);
@@ -254,18 +251,10 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         return c.json(result, 202);
       }
       if (path.endsWith('/complete')) {
-        const completionPath=path==='/signup/transfer/complete'?'/signup/complete':path;
-        await consume([{scope: `${completionPath}-ip`, subject: ip, limit: 10, windowSeconds: 900},
-          {scope: `${completionPath}-token`, subject: body.token!, limit: 10, windowSeconds: 900}]);
-        if(path==='/signup/transfer/complete'){
-          const {browserToken,...result}=await signup.completeForTransfer(body.token!,{password:body.password!,rememberBrowser:body.rememberBrowser==='true'});
-          writeBrowserCookie(c,secure,browserToken);return c.json(result,201);
-        }
+        await consume([{scope: `${path}-ip`, subject: ip, limit: 10, windowSeconds: 900},
+          {scope: `${path}-token`, subject: body.token!, limit: 10, windowSeconds: 900}]);
         if (path === '/signup/complete') {
-          const {browserToken,...result} = await signup.complete(body.token!, {
-          password: body.password!, organisationName: body.organisationName!, legalBusinessName: body.legalBusinessName!, countryCode: body.countryCode!, rememberBrowser:body.rememberBrowser === 'true',
-          });
-          writeBrowserCookie(c,secure,browserToken);return c.json(result,201);
+          return c.json(await signup.completeAccount(body.token!, {password: body.password!}), 201);
         }
         return c.json(await recovery.complete(body.token!, body.password!, locale));
       }

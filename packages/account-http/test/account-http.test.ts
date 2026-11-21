@@ -54,16 +54,17 @@ function protectedHeaders(response: Response) {
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(response.headers.has('access-control-allow-origin'), false);
 }
-test('signup country configuration reaches the store and returns a protected refusal', async () => {
-  const target = createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(), countryCode: 'FR'}});
-  await new SignupStore(db.pool, db.outbox).request('country@example.test');
+test('signup refuses business details without consuming the verification link', async () => {
+  await new SignupStore(db.pool, db.outbox).request('signup-shape@example.test');
   const content = db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind = 'verification'")).rows[0]);
   assert.ok('token' in content);
-  const response = await request('/signup/complete', {token: content.token, ...details}, {target});
+  const body = {token: content.token, password};
+  const response = await request('/signup/complete', {...body, organisationName: details.organisationName});
   assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), {error: 'country_unavailable'});
+  assert.deepEqual(await response.json(), {error: 'invalid_input'});
   protectedHeaders(response);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal((await request('/signup/complete', body)).status, 201);
 });
 test('HTTP signup and recovery through Mailpit preserve accounts, cookies and session revocation', async () => {
   const email = `journey-${randomUUID()}@example.test`;
@@ -74,10 +75,16 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   assert.deepEqual(await requested.json(), {status: 'accepted'}); protectedHeaders(requested);
   await capture.runOnce(worker); const token = await capture.tokenFromMail(email, 'Verify your Waitron Cloud email');
   assert.equal((await request(`/signup/complete?token=${token}`)).status, 400);
-  const signup = await request('/signup/complete', {token, ...details});
+  const signup = await request('/signup/complete', {token, password});
   assert.equal(signup.status, 201); assert.equal(signup.headers.has('set-cookie'), false);
-  const created = await signup.json() as {accountId: string; organisationId: string}; assert.ok(created.organisationId);
-  assert.equal((await request('/signup/complete', {token, ...details})).status, 400);
+  const created = await signup.json() as {accountId: string};
+  assert.ok(created.accountId); assert.deepEqual(Object.keys(created), ['accountId']);
+  for (const table of ['organisations', 'legal_businesses', 'organisation_memberships']) {
+    assert.equal((await db.pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count, '0');
+  }
+  const replay = await request('/signup/complete', {token, password});
+  assert.equal(replay.status, 400);
+  assert.deepEqual(await replay.json(), {error: 'link_unavailable'});
   const signedIn = await signIn(email); assert.equal(signedIn.status, 200);
   assert.deepEqual(await signedIn.json(), {accountId: created.accountId});
   const session = cookies(signedIn); assert.ok(session.token); assert.ok(session.csrf);
@@ -132,7 +139,7 @@ test('a forced reset-mail miss reports real queue and SMTP outcomes without priv
   });
 });
 test('every mutation rejects missing, null and foreign Origin before changing state', async () => {
-  const paths = ['/signup/request', '/signup/complete', '/signup/transfer/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
+  const paths = ['/signup/request', '/signup/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
   for (const path of paths) for (const badOrigin of [undefined, 'null', 'https://elsewhere.example.test']) {
     const headers = new Headers({'content-type': 'application/json'});
     if (badOrigin) headers.set('origin', badOrigin);
@@ -185,15 +192,15 @@ test('HTTP signup accepts a 1024-byte password and rejects a longer password wit
     const content = db.outbox.open(queued); assert.ok('token' in content); return content.token;
   };
   const exactToken = await issue('exact-password@example.test');
-  const exact = await request('/signup/complete', {token: exactToken, ...details, password: 'é'.repeat(512)});
+  const exact = await request('/signup/complete', {token: exactToken, password: 'é'.repeat(512)});
   assert.equal(exact.status, 201);
 
   const longToken = await issue('long-password@example.test');
-  const rejected = await request('/signup/complete', {token: longToken, ...details, password: `${'é'.repeat(512)}a`});
+  const rejected = await request('/signup/complete', {token: longToken, password: `${'é'.repeat(512)}a`});
   assert.equal(rejected.status, 400);
   assert.deepEqual(await rejected.json(), {error: 'invalid_input'});
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '1');
-  assert.equal((await request('/signup/complete', {token: longToken, ...details})).status, 201);
+  assert.equal((await request('/signup/complete', {token: longToken, password})).status, 201);
 });
 test('HTTP password screening reports compromised input and retryable provider failure without consuming links', async () => {
   let mode: 'compromised' | 'unavailable' | 'acceptable' = 'compromised';
@@ -206,11 +213,11 @@ test('HTTP password screening reports compromised input and retryable provider f
   await signup.request('screened@example.test');
   let queued = (await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0];
   let content = db.outbox.open(queued); assert.ok('token' in content);
-  const compromised = await request('/signup/complete', {token: content.token, ...details}, {target: screened});
+  const compromised = await request('/signup/complete', {token: content.token, password}, {target: screened});
   assert.equal(compromised.status, 400);
   assert.deepEqual(await compromised.json(), {error: 'password_compromised'});
   mode = 'acceptable';
-  assert.equal((await request('/signup/complete', {token: content.token, ...details}, {target: screened})).status, 201);
+  assert.equal((await request('/signup/complete', {token: content.token, password}, {target: screened})).status, 201);
 
   const recovery = new PasswordRecoveryStore(db.pool, db.outbox);
   await recovery.request('screened@example.test');
@@ -294,10 +301,10 @@ test('completion attempts share token limits across IPs and IP limits across tok
   const token = 'a'.repeat(43);
   for (const path of ['/signup/complete', '/password-reset/complete']) {
     for (let i = 0; i < 10; i++) {
-      const body = path.startsWith('/signup') ? {token, ...details} : {token, password};
+      const body = {token, password};
       assert.equal((await request(path, body, {peer: `192.0.2.${i + 1}`})).status, 400);
     }
-    const body = path.startsWith('/signup') ? {token, ...details} : {token, password};
+    const body = {token, password};
     assert.equal((await request(path, body, {peer: '198.51.100.8'})).status, 429);
     await db.pool.query('TRUNCATE account_rate_limits');
     for (let i = 0; i < 10; i++) assert.equal((await request(path, {...body, token: String(i).repeat(43)})).status, 400);
@@ -353,7 +360,7 @@ test('locale is optional and strictly validated only on email-producing routes',
     assert.equal((await request(path, {email: 'owner@example.test', locale: 'es', extra: ''})).status, 400);
     assert.equal((await request(path, {email: 'owner@example.test', locale: 'es'})).status, 202);
   }
-  assert.equal((await request('/signup/complete', {token: 'a'.repeat(43), ...details, locale: 'en'})).status, 400);
+  assert.equal((await request('/signup/complete', {token: 'a'.repeat(43), password, locale: 'en'})).status, 400);
   assert.equal((await request('/password-reset/complete', {token: 'a'.repeat(43), password, locale: 'fr'})).status, 400);
   const row = (await db.pool.query("SELECT * FROM email_outbox WHERE kind = 'verification'")).rows[0];
   assert.equal((db.outbox.open(row) as {locale?: string}).locale, 'es');

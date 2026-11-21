@@ -88,6 +88,9 @@ test('handover invitations link to the public explanation in both languages',()=
   const message={email:'recipient@example.test',locale,offerId:'11111111-2222-4333-8444-555555555555',event:'invitation' as const};
   const mail=accountMail(new URL('https://cloud.example.test'),'owner_transfer',message);
   assert.deepEqual(mail.text.match(/https?:\/\/\S+/g),[`https://cloud.example.test/receive-business#lang=${locale}`]);
+  assert.ok(mail.text.includes(locale === 'en'
+    ? 'Sign in or create an account with the invited email, then accept the handover in Account.'
+    : 'Inicia sesión o crea una cuenta con el correo de la invitación y acepta el traspaso en Cuenta.'));
   assert.equal(mail.text.includes(message.offerId),false);
   assert.equal(mail.text.includes(message.email),false,'invitation reveals no account or business details');
  }

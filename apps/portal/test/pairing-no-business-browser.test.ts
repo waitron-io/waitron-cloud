@@ -22,7 +22,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-async function start(page: Page, eligible = false) {
+async function start(page: Page, eligible = false, registration: 'fresh' | 'staff' | 'owner' = 'fresh') {
   let account: string | undefined = eligible ? 'business-owner' : 'other-account';
   let logoutFails = false;
   const writes: {path: string; body: unknown}[] = [];
@@ -34,6 +34,10 @@ async function start(page: Page, eligible = false) {
     if (path === '/session' || path === '/session/activity') return account
       ? route.fulfill({json: {accountId: account, expiresAt: '2099-01-01T00:00:00Z'}})
       : route.fulfill({status: 401, json: {error: 'unauthenticated'}});
+    if (path === '/businesses') return route.fulfill({json: {
+      organisations: registration === 'owner' ? [{id: business.organisationId, name: null, canRegister: true}] : [],
+      businesses: [], canStartOrganisation: registration === 'fresh',
+    }});
     if (path === '/pairing/businesses') return route.fulfill({json: {businesses: account === 'business-owner' ? [business] : []}});
     if (request.method() === 'POST') writes.push({path, body: request.postDataJSON()});
     if (path === '/logout') {
@@ -60,6 +64,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const c = translations[locale], api = await start(page);
       await page.getByText(c.pairNoBusinesses, {exact: true}).waitFor();
       assert.ok((await page.locator('main').innerText()).includes(guidance[locale]), 'the empty-business message explains how to use the owning account');
+      const register = page.getByRole('link', {name: locale === 'en' ? 'Register a business' : 'Registrar un negocio', exact: true});
+      assert.equal(await register.getAttribute('href'), '/account');
+      assert.ok((await page.locator('main').innerText()).includes(locale === 'en'
+        ? 'Then start Connect again on your box.' : 'Después, vuelve a iniciar la conexión en tu equipo.'));
       assert.equal(await page.locator('input[name=pairingCode]').count(), 0);
       assert.equal(await page.getByRole('button', {name: c.pairInspect, exact: true}).count(), 0);
       assert.equal(await page.getByRole('button', {name: c.pairApprove, exact: true}).count(), 0);
@@ -90,6 +98,31 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
 }
 
 for (const locale of ['en', 'es'] as const) {
+  test(`${locale}: someone who owns an unfinished group can open business registration`, async () => {
+    const browser = await chromium.launch({headless: true});
+    try {
+      const page = await browser.newPage({locale}), c = translations[locale];
+      page.setDefaultTimeout(4000);
+      await start(page, false, 'owner');
+      await page.getByRole('link', {name: c.businessRegister, exact: true}).click();
+      assert.equal(new URL(page.url()).pathname, '/account');
+      await page.getByRole('region', {name: c.businessesTitle}).getByRole('button', {name: c.businessRegister, exact: true}).waitFor();
+    } finally { await browser.close(); }
+  });
+  test(`${locale}: an account without registration permission can switch accounts`, async () => {
+    const browser = await chromium.launch({headless: true});
+    try {
+      const page = await browser.newPage({locale}), c = translations[locale];
+      page.setDefaultTimeout(4000);
+      const eligibility = page.waitForResponse('**/api/account/businesses');
+      await start(page, false, 'staff');
+      await (await eligibility).finished();
+      await page.getByText(c.pairNoBusinesses, {exact: true}).waitFor();
+      assert.equal(await page.getByRole('link', {name: c.businessRegister, exact: true}).count(), 0);
+      await page.getByRole('button', {name: c.signout, exact: true}).click();
+      await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+    } finally { await browser.close(); }
+  });
   test(`${locale}: a refused sign-out keeps the no-business page and permits another attempt`, async () => {
     const browser = await chromium.launch({headless: true});
     try {

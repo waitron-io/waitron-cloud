@@ -210,11 +210,21 @@ export class SetupPairingStore {
       return existing;
     }
 
-    if (organisations.length !== 1) return;
-    const organisationId = organisations[0]!.id;
-    const blank = await lockBlankBusiness(client, accountId, organisationId, country);
-    if (!blank || (await client.query('SELECT 1 FROM venues WHERE legal_business_id=$1 LIMIT 1', [blank.id])).rowCount) return;
-    const business = {organisationId, legalBusinessId: blank.id};
+    if (organisations.length > 1) return;
+    let organisationId = organisations[0]?.id;
+    let legalBusinessId: string;
+    if (!organisationId) {
+      organisationId = await createFirstOrganisation(client, accountId, null);
+      if (!organisationId) return;
+      legalBusinessId = randomUUID();
+      await client.query('INSERT INTO legal_businesses(id,organisation_id,country_code) VALUES ($1,$2,$3)',
+        [legalBusinessId, organisationId, country]);
+    } else {
+      const blank = await lockBlankBusiness(client, accountId, organisationId, country);
+      if (!blank || (await client.query('SELECT 1 FROM venues WHERE legal_business_id=$1 LIMIT 1', [blank.id])).rowCount) return;
+      legalBusinessId = blank.id;
+    }
+    const business = {organisationId, legalBusinessId};
     await new BillingStore(this.#pool).executeOn(client, business,
       {key: requestId, occurredAt: time.toISOString(), source: {kind: 'internal'}}, {type: 'ensure_business'});
     const registration = await register(this.#pool, client, accountId, requestId, publicKey, business);
@@ -302,9 +312,9 @@ export class SetupPairingStore {
         const organisations = await lockOwnedOrganisations(client, binding.cloud_account_id);
         if (!organisations.some(org => org.id === provisional.organisationId)) throw new PairingError('permission_denied');
         // Keep the billing scope used during setup and preserve any billing details already on it.
-        const business = await client.query(`UPDATE legal_businesses SET tax_number=COALESCE(tax_number,$3)
-          WHERE id=$1 AND organisation_id=$2 AND country_code=$4`,
-        [provisional.legalBusinessId, provisional.organisationId, taxNumber || null, countryCode]);
+        const business = await client.query(`UPDATE legal_businesses SET tax_number=COALESCE(tax_number,$3),
+          name=COALESCE(name,$5) WHERE id=$1 AND organisation_id=$2 AND country_code=$4`,
+        [provisional.legalBusinessId, provisional.organisationId, taxNumber || null, countryCode, legalName]);
         if (!business.rowCount || !await lockPlaceholder(client, provisional, binding.cloud_account_id)) throw unavailable();
         await client.query('UPDATE installations SET setup_pairing_account_id=NULL WHERE id=$1', [provisional.installationId]);
         result = provisional;
@@ -312,6 +322,7 @@ export class SetupPairingStore {
         const business = await businessForVenue(client, binding.cloud_account_id, countryCode, taxNumber, legalName);
         result = await register(this.#pool, client, binding.cloud_account_id, requestId, publicKey, business);
       }
+      await client.query('UPDATE organisations SET name=$2 WHERE id=$1 AND name IS NULL', [result.organisationId, legalName]);
       await client.query('UPDATE venues SET display_name=$2,setup_address=$3 WHERE id=$1',
         [result.venueId, venueName, JSON.stringify(address)]);
       if (row.expires_at <= await now(client)) throw unavailable();

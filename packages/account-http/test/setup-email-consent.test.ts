@@ -18,9 +18,14 @@ after(async () => {await db?.close();});
 async function boundBox(redirectUri = 'https://box.local:3000/cloud/pairing/callback') {
   const signup = new SignupStore(db.pool, db.outbox), email = randomUUID() + '@example.test';
   await signup.request(email);
-  const {accountId} = await signup.complete((await signupVerification(db, email)).token, {
-    password: 'A synthetic owner password', organisationName: 'Café Sol', legalBusinessName: 'Café Sol', countryCode: 'ES',
-  });
+  const signupApp = createAccountApp({pool: db.pool, outbox: db.outbox,
+    config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []}});
+  const response = await signupApp.request(origin + '/api/account/signup/complete', {
+    method: 'POST', headers: {origin, 'content-type': 'application/json'},
+    body: JSON.stringify({token: (await signupVerification(db, email)).token, password: 'A synthetic owner password'}),
+  }, {incoming: {socket: {remoteAddress: '192.0.2.4'}}} as HttpBindings);
+  assert.equal(response.status, 201);
+  const {accountId} = await response.json() as {accountId: string};
   const keys = generateKeyPairSync('ed25519');
   const publicKey = keys.publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
   const verifier = randomBytes(32).toString('base64url'), requestId = randomUUID(), state = randomBytes(32).toString('base64url');

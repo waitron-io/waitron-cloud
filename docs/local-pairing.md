@@ -54,9 +54,15 @@ again with that method to return to Waitron. You have 10 minutes from opening
 Cloud sign-in. If time runs out, start again from Waitron.
 The same tab returns to your box and Cloud files the saved venue under the
 matching business. Cloud ignores spaces and hyphens when it compares tax
-numbers and keeps the number as entered. If your only business still has
-an empty tax number and no venues, Cloud uses it and saves the number from
-your box. Choose **Back to Waitron** to leave sign-in and try again from the box.
+numbers and keeps the number as entered. For a new account, Cloud prepares an
+empty business in a new organisation, then names them and saves the tax number
+when you save the venue. A sole existing business with no tax number or venue
+can also qualify for setup services. If you registered your business on **Account**
+first, enter the setup details manually. Choose **Back to Waitron** to leave
+sign-in and try again from the box.
+
+For **Connect** on an installed box, register a business on **Account** if
+needed, then start **Connect** again on your box.
 
 ## Run the local integration proof
 

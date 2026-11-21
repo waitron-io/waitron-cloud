@@ -46,16 +46,11 @@ parser accepts ASCII dot-atom addresses. International domains must already be
 punycode-encoded; raw Unicode domains, quoted addresses and international local parts
 need later normalisation/provider support.
 
-Once you have the emailed token, call `complete(token, { password, organisationName,
-legalBusinessName, countryCode })`. It returns `{ accountId, organisationId,
-legalBusinessId }` after creating all three records and the owner's membership in one
-transaction. New passwords require at least 15 Unicode characters and at most 1024
-UTF-8 bytes. Names have a 200-character limit. Supply a two-letter country code; this
-records a declared country, not verified tax details or a hosting location.
-Pass the service country as two uppercase letters in constructor argument four
-(default `ES`); a different
-business country raises `country_unavailable` before any account writes. You can
-correct the country and retry the same email link before it expires.
+Complete signup with `completeAccount(token, {password})`. It returns
+`{accountId}` after creating the account and verified credentials. New passwords
+require at least 15 Unicode characters and at most 1024 UTF-8 bytes.
+Register a business after sign-in through `AccountBusinessStore`, or file a
+venue with the test-box setup flow.
 
 Pass an optional `PasswordScreeningProvider` as the third `SignupStore` constructor
 argument to enforce compromised-password screening. The provider receives only the
@@ -74,17 +69,11 @@ valid, but email uniqueness permits only one signup. A lost success reply is rec
 by signing in with the chosen password through the existing identity API. Replaying
 a token cannot create a session, reset a password or add another organisation.
 
-For a first-time handover recipient, call
-`completeForTransfer(token, {password, rememberBrowser?})` with the usual verified
-signup token. You receive `{accountId, browserToken?}` without a business,
-membership or session. Both signup modes attach all live unbound offers for the
-verified address; acceptance still requires enrollment and fresh proof.
-`handover_unavailable` means no matching offer remains. The transaction rolls
-back, so you can reuse that token for ordinary business signup. See
-`test/owner-transfer.test.ts` for these PostgreSQL checks.
+Signup attaches live handover offers for the verified address. Accepting an offer
+requires sign-in, enrollment and fresh proof. See `test/owner-transfer.test.ts`
+for these PostgreSQL checks.
 
-`signup_invalid` identifies malformed input. `country_unavailable` refuses a
-business country different from this service’s configured country. `verification_unavailable` covers an
+`signup_invalid` identifies malformed input. `verification_unavailable` covers an
 unknown, expired or used token and an email that already has an account.
 Delivery failures are recorded by the worker. Temporary failures retry automatically;
 permanent rejections stop retrying. Database or
@@ -329,7 +318,7 @@ Migrations run in a transaction under a database advisory lock, which makes conc
 migration runners wait their turn. Applied SQL files are checked against recorded
 hashes; add another migration instead of editing a file that has been applied.
 The library does not migrate on import. Registration assumes existing accounts and
-organisations; call `SignupStore` explicitly to create them through email proof.
+organisations. Create the account through email proof, then register a business on Account.
 Deployment credentials and database privileges remain to be designed before public use.
 
 After you choose deployment-specific retention cutoffs, preview bounded transient-history

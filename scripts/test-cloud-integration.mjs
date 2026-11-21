@@ -538,21 +538,25 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       }
       assert.ok(message, 'integration.mail_missing'); return message;
     };
-    const signupAccount = async (email, password, name, signal) => {
+    const signupAccount = async (email, password, signal) => {
       assert.equal((await api('/api/account/signup/request', {email}, {}, undefined, undefined, signal)).status, 202);
       const message = await readMail(email, new Set(), signal);
       const token = readSignupToken(message.Text, origin);
-      const signup = await api('/api/account/signup/complete', {token, password, rememberBrowser:'true', organisationName: name, legalBusinessName: name + ' SL', countryCode: 'ES'}, {}, undefined, undefined, signal);
+      const signup = await api('/api/account/signup/complete', {token, password}, {}, undefined, undefined, signal);
       assert.equal(signup.status, 201, 'integration.signup');
       return signup;
     };
     let repeatBackup, readBackups, observation, proveServiceStops;
     for (const plan of services ? ['paid'] : ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
-      const signup = await signupAccount(email, password, plan + ' café');
-      const {organisationId, legalBusinessId} = signup.body;
-      const login = await api('/api/account/login', {email, password}, {cookie: sessionCookies(signup)});
+      await signupAccount(email, password);
+      const login = await createObserverLogin({api, mailbox, readMail, email, password, rememberBrowser: true})();
       assert.equal(login.status, 200, 'integration.login');
+      const registered = await api('/api/account/businesses', {legalName: plan + ' café SL',
+        taxNumber: plan === 'free' ? 'B12345678' : 'B87654321', countryCode: 'ES'}, browserSession(login));
+      assert.equal(registered.status, 200, 'integration.register_business');
+      assert.equal(registered.body.businesses.length, 1, 'integration.first_business');
+      const {id: legalBusinessId, organisationId} = registered.body.businesses[0];
       const browser = services ?
         await completeServicesConnectionProof({api, mailbox, readMail, email, password, login}) :
         browserSession(login);
@@ -725,7 +729,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             const original = publishedSnapshot;
             // The venue account uses an authenticator. A separate sign-in exercises email challenge delivery.
             const loginEmail = `integration-observer-${runId}@example.test`, loginPassword = 'Disposable observer ' + randomUUID();
-            await signupAccount(loginEmail, loginPassword, 'Observer café');
+            await signupAccount(loginEmail, loginPassword);
             const login = createObserverLogin({api, mailbox, readMail, email: loginEmail, password: loginPassword, replaceStranded: true});
             let lastAcknowledged = original;
             const backupOperations = {
@@ -968,7 +972,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       restarts.push({installationId: evidence.registration.installationId, before: beforeRestart, after: afterRestart});
       organisations.push({plan, organisationId, venueId: evidence.registration.venueId, installationId: evidence.registration.installationId,
         streamId: evidence.streamId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
-      remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1), browser, email, password, recognisedCookie: signup.headers['set-cookie'].map(value => value.split(';')[0]).join('; ')});
+      remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1), browser, email, password, recognisedCookie: sessionCookies(login).split('; ').find(value => value.startsWith('__Host-cloud_browser='))});
     }
     if (paidRemote) {
       journeyStage = 'remote-withdrawal';
@@ -979,7 +983,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
         observe: kubernetes?.observe ? async remote => {
           observation = await observeRetainedClients({paid, browser: paid.browser, api, docker, control,
             login: createObserverLogin({api, mailbox, readMail, email: paid.email, password: paid.password, cookie: paid.recognisedCookie}),
-            signup: signal => signupAccount(`integration-observer-${runId}@example.test`, 'Disposable signup ' + runId, 'Observer café', signal),
+            signup: signal => signupAccount(`integration-observer-${runId}@example.test`, 'Disposable signup ' + runId, signal),
             backup: repeatBackup, remote: signal => cancellation.run({...cancellation.getStore(), signal: AbortSignal.any([runSignal(), signal].filter(Boolean))}, async () => {await remote(signal); await readBackups();}), observe: probes => kubernetes.observe(probes, () => budget.requireRoom(paid.email))});
         } : undefined,
         own: id => {owned.push(id); record('container', id);}});
@@ -1121,7 +1125,7 @@ export async function observeRetainedClients({observe, paid, browser, api, login
   return result;
 }
 
-export function createObserverLogin({api, mailbox, readMail, email, password, cookie, replaceStranded = false,
+export function createObserverLogin({api, mailbox, readMail, email, password, cookie, rememberBrowser = false, replaceStranded = false,
   now = () => performance.now()}) {
   let pending;
   return async signal => {
@@ -1144,7 +1148,7 @@ export function createObserverLogin({api, mailbox, readMail, email, password, co
       if (!message && refused) return refused;
       const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
       pending = undefined;
-      const reply = await api('/api/account/login/email', {challengeToken: challenge.challengeToken, code}, {}, undefined, undefined, signal);
+      const reply = await api('/api/account/login/email', {challengeToken: challenge.challengeToken, code, ...(rememberBrowser ? {rememberBrowser} : {})}, {}, undefined, undefined, signal);
       if (reply.status !== 401 || !challenge.replacing || !message.ID) return reply;
       // Once per replacement, discard mail that arrived after its original challenge was replaced.
       challenge.seen.add(message.ID);
