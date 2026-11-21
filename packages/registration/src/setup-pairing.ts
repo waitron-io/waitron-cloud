@@ -316,13 +316,13 @@ export class SetupPairingStore {
           name=COALESCE(name,$5) WHERE id=$1 AND organisation_id=$2 AND country_code=$4`,
         [provisional.legalBusinessId, provisional.organisationId, taxNumber || null, countryCode, legalName]);
         if (!business.rowCount || !await lockPlaceholder(client, provisional, binding.cloud_account_id)) throw unavailable();
-        await client.query('UPDATE organisations SET name=$2 WHERE id=$1 AND name IS NULL', [provisional.organisationId, legalName]);
         await client.query('UPDATE installations SET setup_pairing_account_id=NULL WHERE id=$1', [provisional.installationId]);
         result = provisional;
       } else {
         const business = await businessForVenue(client, binding.cloud_account_id, countryCode, taxNumber, legalName);
         result = await register(this.#pool, client, binding.cloud_account_id, requestId, publicKey, business);
       }
+      await client.query('UPDATE organisations SET name=$2 WHERE id=$1 AND name IS NULL', [result.organisationId, legalName]);
       await client.query('UPDATE venues SET display_name=$2,setup_address=$3 WHERE id=$1',
         [result.venueId, venueName, JSON.stringify(address)]);
       if (row.expires_at <= await now(client)) throw unavailable();

@@ -101,6 +101,7 @@ export class AccountBusinessStore {
       if (!selected && organisations.length > 1) throw new RegistrationError('business_match_ambiguous');
       const organisationId = selected ?? organisations[0]?.id ?? await createFirstOrganisation(client, accountId, name);
       if (!organisationId) throw new IdentityError('permission_denied');
+      await client.query('UPDATE organisations SET name=$2 WHERE id=$1 AND name IS NULL', [organisationId, name]);
       const matches = await matchingTaxBusinesses(client, organisations.map(org => org.id), country, taxNumber);
       const match = matches[0];
       if (match) {

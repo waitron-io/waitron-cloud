@@ -12,8 +12,8 @@ bilingual portal to verify your email and set your password.
    No account or password exists yet.
 2. Open the link and set your password. The link lasts 30 minutes and works
    once. Opening it displays the form. Submitting it creates your verified account.
-3. Sign in. Open **Account** to register a business or accept a handover sent to
-   your verified email. If you opened Cloud sign-in during Waitron setup, return
+3. Sign in and enter the code sent to your email. Open **Account** to register
+   a business or accept a handover sent to your verified email. If you opened Cloud sign-in during Waitron setup, return
    to the original tab to continue setup on the box.
 
 Do not accept a password before proving email ownership. This prevents a third party

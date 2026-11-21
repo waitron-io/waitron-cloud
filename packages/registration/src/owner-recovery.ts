@@ -67,7 +67,8 @@ export class OwnerRecoveryStore {
    let row=await lockRequest(client,'token_hash',digest(token));
    if(row.purpose==='password_reset')row=(await client.query("UPDATE password_reset_requests SET purpose='owner_recovery',recovery_id=$2,mailbox_proven_at=clock_timestamp() WHERE token_hash=$1 RETURNING *",[row.token_hash,randomUUID()])).rows[0];
    recovery(row);
-   const venues=(await client.query(`SELECT i.id AS "installationId",v.id AS "venueId",o.name AS "organisationName",b.name AS "businessName"
+   const venues=(await client.query(`SELECT i.id AS "installationId",v.id AS "venueId",
+    COALESCE(o.name,'') AS "organisationName",COALESCE(b.name,'') AS "businessName"
     FROM organisation_memberships m JOIN organisations o ON o.id=m.organisation_id JOIN legal_businesses b ON b.organisation_id=o.id
     JOIN venues v ON v.organisation_id=o.id AND v.legal_business_id=b.id JOIN installations i ON i.venue_id=v.id
     JOIN cloud_accounts a ON a.id=m.account_id

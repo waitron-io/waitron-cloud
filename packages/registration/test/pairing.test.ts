@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto';
 import {migrate,migrationNames} from '../src/migrate.ts';
 import {createSession,login} from '@waitron-cloud/identity';
 import {database} from '../../account-http/test/fixtures.ts';
-import {AllowanceConfigStore,RegistrationStore,reserveAllowance,SetupPairingStore,SignupStore,transaction} from '../src/index.ts';
+import {AccountBusinessStore,AllowanceConfigStore,RegistrationStore,reserveAllowance,SetupPairingStore,SignupStore,transaction} from '../src/index.ts';
 import {PairingStore} from '../src/pairing.ts';
 import type {PairingClaims,PairingV4Claims} from '../src/pairing-proof.ts';
 let db:Awaited<ReturnType<typeof database>>;let store:PairingStore;let other:PairingStore;
@@ -57,12 +57,17 @@ async function boundSetupBox(store: SetupPairingStore, taxNumber: string, venueN
   return {base, complete, settings, redeemed};
 }
 
-test('early setup registers a fresh account at redeem and files the same venue on save', async () => {
+async function freshSetupOwner() {
   const signup = new SignupStore(db.pool, db.outbox), email = 'setup@example.test';
   await signup.request(email);
   const mail = db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);
   assert.ok('token' in mail);
-  const {accountId} = await signup.completeAccount(mail.token, {password});
+  await signup.completeAccount(mail.token, {password});
+  return transaction(db.pool, client => login(client, {email, password}));
+}
+
+test('early setup registers a fresh account at redeem and files the same venue on save', async () => {
+  const {accountId} = await freshSetupOwner();
   const store = new SetupPairingStore(db.pool);
   const box = await boundSetupBox(store, 'B-1234 5678', 'Café Sol', {version: 5, accountId});
   const early = box.redeemed.provisionalRegistration;
@@ -97,6 +102,39 @@ test('early setup registers a fresh account at redeem and files the same venue o
   assert.equal((await db.pool.query('SELECT 1 FROM installations')).rowCount, 1);
   assert.deepEqual((await db.pool.query('SELECT legal_business_id,venue_id FROM billing_allowance_reservations WHERE operation_id=$1',
     [operationId])).rows, [{legal_business_id: early.legalBusinessId, venue_id: early.venueId}]);
+});
+
+test('an abandoned setup does not keep a named business out of Connect', async () => {
+  const owner = await freshSetupOwner();
+  const setup = new SetupPairingStore(db.pool);
+  const box = await boundSetupBox(setup, 'B12345678', 'Café Sol', {version: 5, accountId: owner.accountId});
+  const provisional = box.redeemed.provisionalRegistration;
+  assert.ok(provisional);
+
+  const account = await new AccountBusinessStore(db.pool, 'ES').register(owner.token, owner.csrfToken,
+    {legalName: 'Registered SL', countryCode: 'ES', taxNumber: 'B12345678'});
+  const registered = account.businesses.find(business => business.taxNumber === 'B12345678');
+  assert.ok(registered);
+  assert.deepEqual({groups: account.organisations.map(group => group.name), choices: await store.businesses(owner.token)}, {
+    groups: ['Registered SL'],
+    choices: [{organisationId: provisional.organisationId, organisationName: 'Registered SL',
+      legalBusinessId: registered.id, legalBusinessName: 'Registered SL', countryCode: 'ES'}],
+  });
+});
+
+test('saving from a different box can name the group after abandoned setup', async () => {
+  const owner = await freshSetupOwner();
+  const setup = new SetupPairingStore(db.pool);
+  const first = await boundSetupBox(setup, 'B12345678', 'Café Sol', {version: 5, accountId: owner.accountId});
+  assert.ok(first.redeemed.provisionalRegistration);
+  const second = await boundSetupBox(setup, 'B12345678', 'Café Sol', {version: 5, accountId: owner.accountId});
+  assert.equal(second.redeemed.provisionalRegistration, undefined);
+
+  const {registration} = await setup.complete(second.complete, second.settings, 'ES');
+  assert.deepEqual(await store.businesses(owner.token), [{
+    organisationId: first.redeemed.provisionalRegistration.organisationId, organisationName: 'Café Luna SL',
+    legalBusinessId: registration.legalBusinessId, legalBusinessName: 'Café Luna SL', countryCode: 'ES',
+  }]);
 });
 
 test('early setup resumes only with the same account and installation key after expiry', async () => {

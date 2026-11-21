@@ -74,7 +74,10 @@ export class PortalApp {
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
     this.root = root;
-    this.pairing = new PairingController(() => this.draw());
+    this.pairing = new PairingController(() => {
+      this.#loadBusinessOptions();
+      this.draw();
+    });
     this.link = this.#capture();
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
@@ -184,8 +187,7 @@ export class PortalApp {
     const billingAccount=ordinary && state.billingTrialAvailable === true ? state.accountId : undefined;
     this.billing.account(billingAccount);
     if ((page === 'billing' || page === 'remoteAccess') && billingAccount && !this.billing.loadAttempted) void this.billing.load();
-    this.businesses.account(ordinary && page === 'account' ? state.accountId : undefined);
-    if (page === 'account' && ordinary && !this.businesses.attempted) void this.businesses.request('/businesses');
+    this.businesses.account(ordinary && (page === 'account' || this.path === '/connect') ? state.accountId : undefined);
     this.transfers.account(ordinary?state.accountId:undefined);
     if(page === 'account' && ordinary&&!this.transfers.loadAttempted)void this.transfers.load();
     this.security.account(ordinary ? state.accountId : undefined);
@@ -205,6 +207,7 @@ export class PortalApp {
     if (state.kind === 'unavailable') this.pairing.suspend();
     else this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined, !restricted);
     if (this.path === '/connect' && ordinary && !this.pairing.loaded) void this.pairing.load();
+    this.#loadBusinessOptions();
     const malformedPairingLink = this.path === '/connect' && this.link.invalid;
     if (this.sessionPage && state.kind === 'anonymous' && (state.expired || !malformedPairingLink)) {
       const signedOut = this.#signOutCheck === this.session;
@@ -214,6 +217,11 @@ export class PortalApp {
     }
     else this.draw();
     this.#offerPasskeys();
+  }
+  #loadBusinessOptions() {
+    if (this.businesses.attempted) return;
+    if (this.accountPage === 'account' || (this.path === '/connect' && this.pairing.loaded && !this.pairing.businesses.length))
+      void this.businesses.request('/businesses');
   }
   #offerPasskeys() {
     if (this.path !== '/login' || this.session.state.kind !== 'anonymous' || !this.passkeys.preferred || this.#passkeyOffered) return;
@@ -627,7 +635,7 @@ export class PortalApp {
   }
   get logoutWaiting() { return this.session.waiting; }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
-  get logoutDisabled() { return this.transfers.pending || this.businesses.pending || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
+  get logoutDisabled() { return this.transfers.pending || (this.accountPage === 'account' && this.businesses.pending) || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
     this.#passkeyAddRequest = undefined;

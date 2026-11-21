@@ -81,7 +81,8 @@ export class PairingStore {
       const result=await client.query(`SELECT o.id AS "organisationId",o.name AS "organisationName",b.id AS "legalBusinessId",
         b.name AS "legalBusinessName",b.country_code AS "countryCode" FROM organisation_memberships m
         JOIN organisations o ON o.id=m.organisation_id JOIN legal_businesses b ON b.organisation_id=o.id
-        WHERE m.account_id=$1 AND m.can_register_venues AND ${organisationScopeSql('m.account_id','m.organisation_id')} ORDER BY o.name,b.name,b.id`,[session.accountId]);
+        WHERE m.account_id=$1 AND m.can_register_venues AND ${organisationScopeSql('m.account_id','m.organisation_id')}
+        AND o.name IS NOT NULL AND b.name IS NOT NULL ORDER BY o.name,b.name,b.id`,[session.accountId]);
       // A plain SELECT can wait behind table maintenance past the session deadline.
       await resolveSession(client,token,{touch:false});return result.rows;
     });
