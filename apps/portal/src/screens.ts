@@ -53,10 +53,12 @@ export function screen(app: PortalApp) {
           @click=${(event: MouseEvent) => app.follow(event, path, true)}>${c[page === 'account' ? 'accountLink' : page]}</a></li>`)}
       </ul></nav>` : nothing;
   let content;
-  if (app.enrollmentPage) content = html`<p>${app.setupPairing ? c.pairSetupEnroll : c.enrollmentRequiredHelp}</p>
+  const hasSetupMethod = app.setupPairing && (app.passkeys.passkeys.length > 0 || app.authenticator.status?.active);
+  const enrollmentHelp = app.setupPairing ? (hasSetupMethod ? c.pairSetupMethods : c.pairSetupEnroll) : c.enrollmentRequiredHelp;
+  if (app.enrollmentPage) content = html`<p>${enrollmentHelp}</p>
     <section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>
       ${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section>
-    <wt-form-actions>${app.setupPairing ? link('/login', c.login) : nothing}<wt-button .disabled=${app.logoutDisabled}
+    <wt-form-actions>${hasSetupMethod ? link('/login', c.login) : nothing}<wt-button .disabled=${app.logoutDisabled}
       @click=${() => {void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
   else if(app.path==='/operator/actions')content=cloudActionsScreen(app);
   else if (app.path === '/recover') content = recoveryScreen(app);

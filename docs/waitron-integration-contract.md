@@ -133,10 +133,10 @@ to enable the account service for the box you are testing.
 
 Use pairing version 5 when signing in before entering venue details. Use a local
 or disposable Cloud configured for your box's exact public key and HTTPS callback.
-If you need an account, keep the verification link and enrolment in the
+If you need an account, finish signup and return to the
 [original tab](local-pairing.md#connect-an-installed-test-box-with-cloud-sign-in).
 Use the same endpoints, argument arrays and field limits as version 4. Sign with
-`waitron-cloud-pair-v5` as the first array value and keep `test` as the environment.
+`waitron-cloud-pair-v5` as the first array value and keep `test` as the environment. The initial sign-in attempt lasts 10 minutes.
 
 When your account has one eligible business in the test Cloud's country with an
 empty tax number and no venues, signed redeem creates a placeholder venue and
@@ -158,8 +158,8 @@ name. Cloud fills its tax number if it is blank. A tax number already on the bus
 precedence over the venue form. The IDs stay the same, keeping any setup-time
 usage with the same business.
 
-If the request expires or the browser signs out, sign in again to resume with the
-same Cloud account and box key. **Remove venue** hides an abandoned placeholder
+If the request expires or you sign out during setup, start again from Waitron.
+Use the same Cloud account and box key to resume a placeholder. **Remove venue** hides an abandoned placeholder
 from the account and revokes its installation. The venue record and the box key
 stay in Cloud. A later setup with a new key files on save. If no business matches
 the new venue’s tax number, Cloud creates another business for it. If Cloud

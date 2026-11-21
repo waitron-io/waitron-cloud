@@ -71,7 +71,6 @@ export class PortalApp {
   #operatorSignin=false;
   #passkeyOffered = false;
   #setupResumeAttempted = false;
-  #setupEnrollment = false;
   #enrollmentRestricted = false;
   #signOutCheck: PortalSession | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -228,6 +227,7 @@ export class PortalApp {
     return !!this.accountPage || ['/connect', '/recover', '/operator/actions'].includes(this.path);
   }
   get copy() { return translations[this.locale]; }
+  get #setupEnrollment() { return this.path === '/login' && history.state?.setupEnrollment === true; }
   get enrollmentPage() {
     const state = this.session.state;
     return state.kind === 'authenticated' && (this.setupPairing ? this.#setupEnrollment : state.enrollmentRequired === true);
@@ -283,7 +283,6 @@ export class PortalApp {
   }
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
-    this.#setupEnrollment = false;
     if (path !== '/connect' && (path !== '/login' || this.session.state.kind !== 'anonymous')) this.pairing.discardLinkedCode();
     if(path!=='/login')this.#operatorSignin=false;
     this.transfers.account(undefined);this.cloudActions.account(undefined);
@@ -484,11 +483,14 @@ export class PortalApp {
     if (this.setupPairing && (result === 'authenticated' || result === 'reconcile')) {
       if (bindsSetup) { await this.returnToSetup(); return; }
       // An email or password-only session can enrol a stronger method. It cannot authorize the box.
-      this.#setupEnrollment = true;
+      history.replaceState({setupEnrollment: true}, '', location.pathname);
       this.#setupResumeAttempted = true;
       this.session.dispose(); this.session = this.#session();
       await this.session.check();
-      if (route === this.#route) this.focusHeading();
+      if (route === this.#route) {
+        if (this.authenticator.error) this.#focusErrors();
+        else this.focusHeading();
+      }
       return;
     }
     if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.#signedInPath());return;}
@@ -643,9 +645,11 @@ export class PortalApp {
     // A confirmed anonymous session may already have routed to login.
     if (success) {
       if (this.setupPairing) {
+        this.pending = false;
+        await this.returnToSetup(true);
+        if (route !== this.#route) return;
         forgetSetupPairingLink();
         this.setupPairing = undefined;
-        this.#setupEnrollment = false;
       }
       if (this.path !== '/login') this.navigate('/login');
       this.notice = 'signedOut';

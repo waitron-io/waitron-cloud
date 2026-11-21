@@ -154,5 +154,6 @@ test('a provisional setup box discovers its prepared grant and sends staff email
     const response = await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`, {signal: AbortSignal.timeout(5000)});
     assert.equal(response.status, 200);
     assert.equal((await response.json()).messages.filter(mail => mail.To.some(to => to.Address === recipient)).length, 1);
+    assert.equal((await pairing.status({...base, action: 'status', args: []})).state, 'account_bound');
   } finally { await rm(directory, {recursive: true, force: true}); await db.close(); }
 });

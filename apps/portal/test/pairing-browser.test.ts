@@ -225,7 +225,9 @@ for (const locale of ['en', 'es'] as const) test(`${locale} verified signup retu
         await page.setViewportSize({width, height: 812});
         await page.emulateMedia({colorScheme});
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        await page.screenshot({path: new URL(`../dist/setup-signup-${step}-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname});
+        await page.evaluate(axe.source);
+        assert.deepEqual(await page.evaluate(async () => (await window.axe.run(document)).violations.map(v => v.id)), []);
+        await page.screenshot({fullPage: true, path: new URL(`../dist/setup-signup-${step}-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname});
       }
     }
     const paths: string[] = [];
@@ -259,7 +261,11 @@ for (const locale of ['en', 'es'] as const) test(`${locale} verified signup retu
     await page.locator('input[name=password]').fill(password);
     await page.getByRole('button', {name: c.login, exact: true}).click();
     await completeBrowserEmail(f, page, email, locale);
-    await page.getByRole('heading', {name: c.enrollmentRequiredTitle, exact: true}).waitFor();
+    const enrollment = page.getByRole('heading', {name: c.enrollmentRequiredTitle, exact: true});
+    await enrollment.waitFor();
+    await page.reload();
+    await enrollment.waitFor();
+    await page.getByRole('button', {name: c.passkeyAdd, exact: true}).waitFor();
     await look('enrollment');
     await prepareBrowserActionWindow(f, page);
     await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
@@ -274,4 +280,37 @@ for (const locale of ['en', 'es'] as const) test(`${locale} verified signup retu
     assert.match(returned.get('code') ?? '', /^[A-Za-z0-9_-]{43}$/);
     assert.equal(context.pages().length, 1);
   } finally { await authenticator.close(); await f.close(); }
+});
+
+
+test('signing out during setup returns a cancellation to the box', async () => {
+  const publicKey = generateKeyPairSync('ed25519').publicKey.export({type: 'spki', format: 'der'}).toString('base64url');
+  const redirectUri = 'https://box.example.test/cloud/pairing/callback';
+  const f = await startPortalFixture(undefined, undefined, undefined, undefined, false,
+    undefined, undefined, undefined, undefined, {publicKey, redirectUri});
+  try {
+    const c = translations.en, email = `setup-signout-${randomUUID()}@example.test`, password = 'A synthetic setup owner password';
+    const signup = new SignupStore(f.db.pool, f.db.outbox);
+    await signup.request(email);
+    const mail = f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0]);
+    assert.ok('token' in mail);
+    await signup.complete(mail.token, {password, organisationName: 'Café Sol', legalBusinessName: 'Café Sol', countryCode: 'ES'});
+    const requestId = randomUUID(), state = randomBytes(32).toString('base64url');
+    const start = await new SetupPairingStore(f.db.pool).start({origin: f.origin, requestId, publicKey, version: 5,
+      issuedAt: Date.now(), action: 'start', args: [redirectUri, state, randomBytes(32).toString('base64url')]});
+    const page = await f.browser.newPage({locale: 'en'});
+    page.setDefaultTimeout(5000);
+    await page.route('https://box.example.test/**', route => route.fulfill({body: 'Waitron'}));
+    await page.goto(start.authorizationUrl);
+    await page.getByLabel(c.email).fill(email);
+    await page.locator('input[name=password]').fill(password);
+    await page.getByRole('button', {name: c.login, exact: true}).click();
+    await completeBrowserEmail(f, page, email);
+    await page.getByRole('button', {name: c.signout, exact: true}).click();
+    await page.waitForURL(redirectUri + '?**');
+    const returned = new URL(page.url()).searchParams;
+    assert.equal(returned.get('request_id'), requestId);
+    assert.equal(returned.get('error'), 'access_denied');
+    assert.equal((await page.context().cookies()).some(cookie => cookie.name === 'cloud_session'), false);
+  } finally { await f.close(); }
 });
