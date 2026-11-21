@@ -1,45 +1,48 @@
 # D621 local signup spacing
 
-An operator can run the outside-venue Linux rehearsal through three machine
-stops and a full restart with a fresh signup retry available before each
-subsequent stop. The Lane G watcher cleared the sequence on 21 November at
-07:06. Codex wrote this plan. The timed dry run, billing and launch readback,
-and paid Stockholm qualification remain open.
+The outside-venue Linux rehearsal can start each later machine stop with
+room for a signup request and a retry. The primary-first replay exhausted the
+rehearsal's allowance after an injected timeout. Expiring the oldest call
+restored signup within 16 seconds. The live run delivered mail on both stops
+without HTTP 429, then failed at the returning machine's outside storage port.
 
-The replay of the primary-first trace reproduced the 90-second failure after
-one injected transport timeout used the last local signup attempt. Expiring
-the oldest call restored recovery in 16 seconds. The live trace delivered
-mail on both stops without HTTP 429, then failed to count drives through the
-returning machine's outside storage port.
+Codex wrote this plan. The Lane G watcher cleared the sequence in questions.md
+at 07:06 on 21 November:
 
-1. In `scripts/p1-observer.mjs`, add `signupDelayMs()` to the existing budget.
-   Read the same monotonic clock and timestamps to find when at most six
-   calls remain in the 15-minute window. This restores the existing
-   two-attempt reserve under the eight-call cap. Both endpoints, setup calls
-   and failed attempts still count. In `scripts/test-cloud-integration.mjs`,
-   pass a callback for local measured stops through `stopServices`. In
-   `scripts/kubernetes-services.mjs`, invoke it with the enclosing stop
-   signal after a healthy return and before the next inventory or recovery
-   clock. Log any wait in milliseconds. Both sets of request limits, the
-   90-second recovery deadline and the six- and 15-minute holds stay in force.
-2. Test first. In `scripts/p1-observer.test.mjs`, show there is no wait when
-   two calls are free and that the recorded timestamps free two calls at the
-   exact boundary. In `scripts/kubernetes-services.test.mjs`, hold the
-   callback open to show the next observation and stop wait for it, between
-   legs only. Keep the existing assertions. Run those two files and
-   `scripts/test-cloud-integration.test.mjs` by name. Expect about 35 lines
-   of code and 55 lines of tests, plus short backlog and guide updates in
-   `docs/backlog.md` and `docs/aws-infrastructure.md`.
-3. Reuse the saved disposable storage capture for one focused return run.
-   Compare both pods' own drive counts, the bridge port and the guarded
-   outside port under the existing rejoin deadline. Persistent missing
-   drives or failed repair needs storage investigation. Healthy direct
-   counts with a failing port need the route traced to locate the fault.
-4. Run one full disposable Linux dry run using the same outside-venue test,
-   with the diagnostic capture available and the cold restart enabled.
-   Require all three rejoin and repair checks, cold restart, fresh restore
-   and verified guest removal. Record actual wall time and each signup
-   wait. For the Stockholm projection, subtract measured local-only pauses,
-   replace the three measured holds with 15 minutes each, and report the
-   single-stop and cold-restart timings against the launcher windows. The
-   48-minute test, 55-minute guest and 150-minute launcher limits apply.
+> Cleared: (1) the rehearsal waits long enough for its own signup allowance to free a retry before starting the next recovery clock, caps and the 90-second deadline unchanged; (2) the focused storage-return run with the direct-pod and port capture, since the metrics timeout came back; then one full dry run.
+
+1. Add `signupDelayMs()` to the existing budget in `scripts/p1-observer.mjs`.
+   Use its monotonic clock and signup timestamps to calculate when at most
+   six calls are recorded in the 15-minute window, leaving two of eight free.
+   Both endpoints, setup calls and failed calls still count. In
+   `scripts/test-cloud-integration.mjs`, pass a second `spaceSignup(signal)`
+   argument to `stopServices` only when `kubernetes.amazon` is absent. Log
+   a positive delay before sleeping and recheck after waking. Pass the
+   callback to `measureServiceStops` in `scripts/kubernetes-services.mjs`
+   and await it under the stop signal after a healthy return when another
+   leg remains. The next inventory and recovery clock start afterwards.
+   With two calls free the wait is zero. The six-minute hold and 90-second
+   recovery bound put the worst wait per gap at about 10 minutes 30 seconds.
+   The existing limits and holds still apply.
+2. Test first in `scripts/p1-observer.test.mjs` for zero wait with two calls
+   free, exact expiry with seven or eight signup calls, and separate login
+   accounting. In `scripts/kubernetes-services.test.mjs`, show the
+   callback holds back the next stop and observer, runs only between
+   healthy legs, and can abort without another stop. Run both files and
+   `scripts/test-cloud-integration.test.mjs`. Expect about 25 lines of code
+   and 60 lines of tests, plus short updates to `docs/backlog.md` and
+   `docs/aws-infrastructure.md`.
+3. Name the focused Linux run and decision in `progress.log`. Reuse
+   `receipts/d621-run9-dry-run/metrics-return-capture.patch` from Lane G.
+   Compare both direct pod counts, the bridge and the guarded outside port
+   within the existing rejoin deadline. Stop for product investigation if
+   either pod fails to count all drives, repair fails, or a working direct
+   and bridge path points to a fault in shared outside routing. Isolate
+   any local fixture fault before qualifying the next run.
+4. Run one full local dry run with capture and cold restart enabled after
+   the focused run passes or a demonstrated fixture fault is fixed. Require
+   all three repairs, cold restart, fresh restore and confirmed guest
+   removal within the existing test and guest limits. Record actual holds
+   and local signup pauses, and report the hold-adjusted Stockholm timing
+   required by the watcher's 01:21 dry-run decision. Billing and launch
+   readback and the paid run remain open.
