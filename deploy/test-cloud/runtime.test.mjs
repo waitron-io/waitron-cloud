@@ -265,8 +265,8 @@ test('Amazon gateway can verify a publicly trusted staff certificate only with t
  await mkdir(join(dir,'lan'));
  openssl('req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=Fixture LAN root',
   '-addext','basicConstraints=critical,CA:TRUE','-out','lan/ca.pem','-keyout','lan/key.pem');
- // The venue leaf already bears the intermediate's signature. Serve the
- // intermediate issued by the fixture root, which the client trusts by default.
+ // Reuse a separate bootstrapped box identity as the leaf and intermediate.
+ // The intermediate chains to the default-trusted root, and LAN has its own root.
  openssl('x509','-x509toreq','-in','public/lan/ca.pem','-signkey','public/lan/ca-key.pem','-out','intermediate.csr');
  await writeFile(join(dir,'intermediate.ext'),'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n');
  openssl('x509','-req','-in','intermediate.csr','-CA','storage-ca.pem','-CAkey','storage-key.pem',
