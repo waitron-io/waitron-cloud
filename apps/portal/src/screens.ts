@@ -47,6 +47,7 @@ export function screen(app: PortalApp) {
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   const accountPage = app.accountPage;
   const state = app.session.state;
+  const receiveBusiness = app.path === '/receive-business' && !app.enrollmentPage;
   const accountNav = accountPage && state.kind === 'authenticated' && !state.enrollmentRequired
     ? html`<nav class="account-nav" aria-label=${c.accountNav}><ul role="list">
       ${Object.entries(accountPages).filter(([, page]) => page !== 'billing' || state.billingTrialAvailable === true)
@@ -112,6 +113,10 @@ export function screen(app: PortalApp) {
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>
     ${accountNav}<main><wt-card><h1 tabindex="-1">${app.title()}</h1>
+      ${receiveBusiness ? html`<p>${c.receiveBusinessScope}</p>
+        ${state.kind === 'authenticated' ? html`<nav>${link('/account', c.accountLink)}</nav>`
+          : html`<p>${c.receiveBusinessSignup}</p>
+            <nav>${link('/login', c.login)} ${link('/signup', c.signup)}</nav>`}` : html`
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>
@@ -121,5 +126,5 @@ export function screen(app: PortalApp) {
           @click=${() => {void app.returnToSetup(true);}}>${c.pairSetupBack}</button>` : nothing}
         ${app.error === 'uncertain' || app.error === 'linkUnavailable' ? html`<nav>${link('/login', c.login)} ${link(retryLink, c.requestLink)}</nav>` : nothing}
         ${app.waiting ? html`<p class="help" role="status">${c.cooldown} ${app.waiting} ${app.waiting===1?c.second:c.seconds}</p>` : nothing}
-      </form></wt-card></main>`;
+      </form>`}</wt-card></main>`;
 }

@@ -18,8 +18,9 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
       const headings: Record<string, string> = {
         '/account': c.account, '/account/venues': c.venues, '/account/remote-access': c.remoteAccess, '/account/billing': c.billing,
       };
-      for(const route of ['/login','/signup','/signup#token='+'a'.repeat(43),'/forgot-password','/reset-password#token='+'b'.repeat(43),'/reset-password',...Object.keys(headings)]) {
+      for(const route of ['/login','/signup','/signup#token='+'a'.repeat(43),'/receive-business','/forgot-password','/reset-password#token='+'b'.repeat(43),'/reset-password',...Object.keys(headings)]) {
         await page.goto(f.origin+route);await page.locator('wt-card').waitFor();
+        if (route === '/receive-business') await page.getByRole('link', {name: c.accountLink, exact: true}).waitFor();
         if (route in headings) {
           await page.getByRole('heading', {level: 1, name: headings[route], exact: true}).waitFor();
           await page.getByRole('navigation', {name: c.accountNav}).locator('a[aria-current="page"]').waitFor();

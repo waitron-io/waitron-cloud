@@ -38,14 +38,15 @@ function send(port: number, path: string, method = 'GET', host = 'localhost', st
 test('portal serves only named documents and assets with host, method and security checks', async () => {
   const running = await host();
   try {
-    for (const path of ['/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/account/venues', '/account/remote-access', '/account/billing', '/signup?token=old', '/reset-password?token=old']) {
+    for (const path of ['/', '/signup', '/login', '/receive-business', '/forgot-password', '/reset-password', '/account', '/account/venues', '/account/remote-access', '/account/billing', '/signup?token=old', '/reset-password?token=old']) {
       const res = await send(running.port, path).result;
       assert.equal(res.status, 200, path); assert.match(res.headers['content-type']!, /text\/html/);
       assert.equal(res.headers['cache-control'], 'no-store'); assert.equal(res.headers['referrer-policy'], 'no-referrer');
       assert.equal(res.headers['x-content-type-options'], 'nosniff');
       assert.match(String(res.headers['content-security-policy']), /script-src 'self'/);
       assert.match(String(res.headers['content-security-policy']), /frame-ancestors 'none'/);
-      assert.equal((await send(running.port, path, 'HEAD').result).body, '');
+      const head = await send(running.port, path, 'HEAD').result;
+      assert.equal(head.status, 200, path); assert.equal(head.body, '');
     }
     for (const [path, mime] of [['/app.js', 'text/javascript'], ['/app.css', 'text/css']]) {
       const res = await send(running.port, path!).result;

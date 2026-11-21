@@ -22,9 +22,14 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if(kind==='owner_transfer'){
     if(!validOwnerTransferMail(message))throw new Error('Invalid account email');
     const subject=locale==='en'?'Waitron Cloud ownership handover':'Traspaso de titularidad de Waitron Cloud';
-    const detail=message.event==='invitation'?(locale==='en'?'Sign in to review a handover. New here? Sign up with this email and choose “I’m receiving a business”.':'Inicia sesión para revisar un traspaso. ¿No tienes cuenta? Regístrate con este correo y elige «Estoy recibiendo un negocio».')
-      :message.event==='accepted'?(locale==='en'?'The ownership handover was accepted.':'Se ha aceptado el traspaso de titularidad.'):(locale==='en'?'The ownership handover was cancelled.':'Se ha cancelado el traspaso de titularidad.');
-    return {subject,text:[subject,'',detail,new URL('/account',origin).href,...(message.event==='invitation'?[new URL('/signup',origin).href]:[])].join('\n')};
+    if (message.event === 'invitation') {
+      const detail = locale === 'en' ? 'Open Waitron Cloud to see how to receive the business.' : 'Abre Waitron Cloud para ver cómo recibir el negocio.';
+      const link = new URL('/receive-business', origin);
+      link.hash = new URLSearchParams({lang: locale}).toString();
+      return {subject, text: [subject, '', detail, link.href].join('\n')};
+    }
+    const detail=message.event==='accepted'?(locale==='en'?'The ownership handover was accepted.':'Se ha aceptado el traspaso de titularidad.'):(locale==='en'?'The ownership handover was cancelled.':'Se ha cancelado el traspaso de titularidad.');
+    return {subject,text:[subject,'',detail,new URL('/account',origin).href].join('\n')};
   }
   if(kind==='operator_notice'){
     const subject=locale==='es'?'Waitron Cloud: acción para revisar':'Waitron Cloud: action to review';

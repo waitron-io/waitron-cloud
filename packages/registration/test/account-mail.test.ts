@@ -83,13 +83,11 @@ for(const locale of ['en','es'] as const)test(`operator notice renders ${locale}
  assert.match(mail.text,/http:\/\/localhost:3000\/operator\/actions/);assert.doesNotMatch(mail.text,/token=|operator@example|approve|aprobar/);
 });
 
-test('handover invitations use the same account link and explain account-only signup in both languages',()=>{
+test('handover invitations link to the public explanation in both languages',()=>{
  for(const locale of ['en','es'] as const){
   const message={email:'recipient@example.test',locale,offerId:'11111111-2222-4333-8444-555555555555',event:'invitation' as const};
   const mail=accountMail(new URL('https://cloud.example.test'),'owner_transfer',message);
-  assert.ok(mail.text.includes('https://cloud.example.test/account'));
-  assert.match(mail.text,locale==='en'?/receiving a business/:/recibiendo un negocio/);
-  assert.ok(mail.text.includes('https://cloud.example.test/signup'));
+  assert.deepEqual(mail.text.match(/https?:\/\/\S+/g),[`https://cloud.example.test/receive-business#lang=${locale}`]);
   assert.equal(mail.text.includes(message.offerId),false);
   assert.equal(mail.text.includes(message.email),false,'invitation reveals no account or business details');
  }

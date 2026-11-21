@@ -122,8 +122,11 @@ remain intact. Without your mailbox or a usable box, recovery is unavailable;
 there is no manual or support override. The [focused browser journey](../apps/portal/test/owner-recovery-browser.test.ts)
 exercises enrollment and subsequent sign-in/reset paths.
 
-If you are receiving a business and have no account, follow the invitation’s
-signup link and verify the same email address. Choose **I’m receiving a business**
+Open the invitation to see what the handover includes and where to accept it.
+Choose **Account** if you are already signed in, or **Sign in** if you have an
+account. If you need an account, choose **Create an account** and verify the
+email address the invitation was sent to.
+Choose **I’m receiving a business**
 and set your password. This creates your account without a new business. Sign in,
 enroll an app or passkey and verify it is you before accepting the handover on
 your account page. Creating an account attaches every live offer addressed to

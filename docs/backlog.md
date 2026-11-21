@@ -1026,9 +1026,9 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 ## Cloud signup and business moves
 
-Separate account signup from business registration and add an explanatory page
-for handover invitations. Qualify the original-tab venue setup on the released
-Waitron box, including the after-Admin sign-in and early services. Check removing
+Separate account signup from business registration. Qualify the original-tab
+venue setup on the released Waitron box, including the after-Admin sign-in and
+early services. Check removing
 and reconnecting a venue when one business changes owner or a venue changes
 business. The existing handover transfers the whole organisation.
 
