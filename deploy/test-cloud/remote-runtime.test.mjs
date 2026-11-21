@@ -173,7 +173,11 @@ test('public HTTP issuance and renewal use the independent listener and remove e
  assert.deepEqual(await readdir(join(challenges,hostname)),[]);assert.deepEqual(JSON.parse(await readFile(output+'.account.json','utf8')).contact??[],[]);
  await assert.rejects(acme.issue({...options,http:{zone:'foreign.example.test',challengeDirectory:challenges}}),/certificate_issuance_failed/);assert.deepEqual(await readdir(join(challenges,hostname)),[]);
  const previous=await readFile(output,'utf8');
- docker('stop','--time','1',acme.name+'-http');await assert.rejects(acme.issue(options),/certificate_issuance_failed/);
+ // An account with no prior authorisation forces Pebble to contact the stopped listener.
+ const stoppedAccount=join(directory,'stopped-listener-account.pem');
+ await writeFile(stoppedAccount,generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});
+ docker('stop','--time','1',acme.name+'-http');
+ await assert.rejects(acme.issue({...options,accountKeyFile:stoppedAccount}),/certificate_issuance_failed/);
  assert.deepEqual(await readdir(join(challenges,hostname)),[]);assert.equal(await readFile(output,'utf8'),previous);
  const beforePort=new URL(acme.httpUrl).port;docker('start',acme.name+'-http');
  const restartedHttp='http://127.0.0.1:'+docker('port',acme.name+'-http','80/tcp').split(':').at(-1);t.diagnostic(JSON.stringify({beforePort,afterPort:new URL(restartedHttp).port}));
