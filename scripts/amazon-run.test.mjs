@@ -19,18 +19,40 @@ test('Amazon repeat waits for stopped C, fifteen minutes and replacement; succes
 });
 
 for (const failure of ['create', 'prepare', 'before', 'stop', 'stopped', 'replace', 'after', 'still-stopped', 'expiry', 'deleted']) {
-  test('Amazon teardown runs and failure survives at ' + failure, async () => {
+  test('Amazon teardown runs and failure survives at ' + failure, async t => {
     assert.equal(typeof api.runAmazonExperiment, 'function');
     const calls = [], stage = name => async () => {calls.push(name); if (name === failure) throw Error('failed-' + name);};
+    const diagnostics = [];
+    if (failure === 'before') t.mock.method(process.stderr, 'write', value => {diagnostics.push([calls.at(-1), value.trim()]); return true;});
     await assert.rejects(api.runAmazonExperiment({create: stage('create'), prepare: stage('prepare'),
       journey: async phase => stage(phase)(), stopWorker: stage('stop'), waitStopped: stage('stopped'),
       replace: stage('replace'), checkStopped: stage('still-stopped'), waitDeleted: stage('deleted'), deleteStack: stage('delete')},
       {sleep: stage('sleep'), waitExpiry: stage('expiry')}), new RegExp('failed-' + failure));
     assert.ok(calls.includes('delete'));
     assert.equal(calls.at(-1), 'deleted');
+    if (failure === 'before') assert.deepEqual(diagnostics,
+      [['before', 'Amazon early deletion requested'], ['deleted', 'Amazon early deletion confirmed']]);
     if (['stop', 'stopped'].includes(failure)) assert.equal(calls.includes('after'), false);
   });
 }
+
+test('Amazon teardown reports a failed deletion wait', async t => {
+  const original = Error('journey failed'), cleanup = Error('deletion wait failed');
+  const diagnostics = [];
+  t.mock.method(process.stderr, 'write', value => {diagnostics.push(value.trim()); return true;});
+  await assert.rejects(api.runAmazonExperiment({
+    create: async () => {},
+    prepare: async () => {},
+    journey: async () => {throw original;},
+    deleteStack: async () => {},
+    waitDeleted: async () => {throw cleanup;},
+  }), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [original, cleanup]);
+    return /journey failed; Amazon teardown failed/.test(error.message);
+  });
+  assert.deepEqual(diagnostics, ['Amazon early deletion requested']);
+});
 
 test('all three machines wait for deletion schedule, use disposable root disks and scope SSH and mesh ingress to the operator', async () => {
   const stack = JSON.parse(await readFile(new URL('../deploy/kubernetes/bounded-amazon/stack.yaml', import.meta.url)));
@@ -95,6 +117,15 @@ test('bootstrap refuses an unsupported phase before touching the host', () => {
 const config = {region: 'eu-north-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
   operatorCidr: '203.0.113.8/32', sshKey: '/synthetic/key', stackRole: 'arn:aws:iam::123456789012:role/d618-stack',
   schedulerRole: 'arn:aws:iam::123456789012:role/d618-expiry', waitronCheckout: '/synthetic/waitron'};
+const rehearsedWaitronImage = 'sha256:' + 'a'.repeat(64);
+
+test('measured stops require the saved Waitron image ID before provider access', async () => {
+  for (const image of [undefined, 'waitron:latest']) {
+    await assert.rejects(api.startAmazon({...config, baseline: true, measuredStops: true, rehearsedWaitronImage: image}, {
+      aws: async () => {throw Error('provider reached before the rehearsal image was checked');},
+    }), /Set rehearsedWaitronImage to the loaded rehearsal image ID/);
+  }
+});
 
 test('the Stockholm stop confirms the owned instance before marking it, holds it down and rejoins the same instance', async () => {
   const instance = 'i-00000000000000002', node = 'private-node-b';
@@ -145,18 +176,23 @@ test('failed AWS commands show the provider error without dumping response data'
   const directory = await mkdtemp(join(tmpdir(), 'd618-error-'));
   t.after(() => rm(directory, {recursive: true, force: true}));
   const configPath = join(directory, 'config.json');
-  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(configPath, JSON.stringify({...config, rehearsedWaitronImage}));
   await writeFile(join(directory, 'aws'), `#!${process.execPath}
 console.log('synthetic-private-response');
 console.error('An error occurred (AccessDenied) when calling the DescribeStacks operation: no identity-based policy allows the action');
 process.exit(255);
 `, {mode: 0o700});
-  for (const mode of ['start', 'stop']) {
+  for (const mode of ['start', 'stop', 'measured-stops']) {
     const result = spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
       {encoding: 'utf8', env: {...process.env, D618_CONFIG: configPath, PATH: directory + ':' + process.env.PATH}, timeout: 10000});
     assert.equal(result.status, 1);
     assert.match(result.stderr, /AccessDenied.*no identity-based policy allows the action/);
     assert.match(result.stderr, /amazon.command_failed:aws:Error:255/);
+    if (mode === 'measured-stops') {
+      const revision = spawnSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).stdout.trim();
+      assert.match(revision, /^[a-f0-9]{40}$/);
+      assert.equal(result.stderr.split('\n')[0], 'Amazon launch mode measured-stops; Cloud commit ' + revision);
+    }
     assert.doesNotMatch(result.stdout + result.stderr, /synthetic-private-response/);
   }
 });
@@ -243,14 +279,17 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
+for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
   ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
   ['baseline single stop late', /amazon.measured_stops_expiry/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
-  if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
+  if (['observer failed after stop', 'baseline measured stops'].includes(scenario)) {
+    t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
+  }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
+  const imageHash = tag => scenario === 'baseline measured stops' && tag.endsWith(':cloud') ? 'd'.repeat(64) : hashes;
   const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false, tunnelCloseAttempts = 0;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -259,7 +298,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const cold = scenario.startsWith('baseline cold');
-  const measuredStops = cold || ['baseline measured stops', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
+  const measuredStops = cold || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
   if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
     const timeout = AbortSignal.timeout;
@@ -269,7 +308,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const diskMarkers = new Map();
   const publicAfter = ['203.0.113.11', '203.0.113.12', '203.0.113.13'];
   if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
-  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
+  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, rehearsedWaitronImage,
+    observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
     prepareFlux: async (directory, _name, options) => {calls.push(['flux-prepare', options.node]);return directory+'/flux.json';},
     async runBaseline(context) {
       assert.match(scenario, /^baseline/);
@@ -314,6 +354,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         await context.stopNode(context.nodes[2].name, {});
       }
       if (scenario === 'baseline measured stops') {
+        assert.deepEqual(diagnostics.filter(line => line.startsWith('Waitron rehearsal image ')),
+          ['Waitron rehearsal image ' + context.waitronImage + '\n']);
         const {name} = context.nodes[2];
         const resumed = await context.stopNode(name, {
           async whileStopped({holdMs}) {stopClock += holdMs; return {};},
@@ -399,6 +441,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         transports.push({binary,args,input,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
       if (binary === 'uname') return 'x86_64';
+      if (binary === 'docker' && args[0] === 'tag' && args[1] === rehearsedWaitronImage &&
+        scenario === 'baseline missing rehearsal image') throw Error('saved image unavailable');
       if (binary === 'docker' && args[0] === 'network' && args[1] === 'create') return 'd'.repeat(64);
       if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(args.indexOf('-o') + 2);
       if (binary === 'wc') return '1303994368 images.tar';
@@ -409,7 +453,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
           annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},digest:'sha256:' + 'b'.repeat(64)}))});
         if (args.at(-1) === 'blobs/sha256/' + 'b'.repeat(64)) return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + hashes},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
         if (args.at(-1) === 'blobs/sha256/' + hashes) return JSON.stringify({os:'linux',architecture:'amd64'});
-        return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + hashes,RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
+        return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + imageHash(tag),RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
       }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
       if (binary === 'sudo' && args[1] === 'wg-quick' && args[2] === 'down' &&
@@ -461,7 +505,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         if (script.includes('sha256sum')) return hashes;
         if (script.includes('/opt/cni/bin/flannel')) return scenario === 'missing flannel' && args.at(-2) === 'admin@203.0.113.3' ? 'missing' : 'present';
         if (script.includes('crictl') && scenario === 'observer expiry') time += 700000;
-        if (script.includes('crictl')) return JSON.stringify({status: {id: 'sha256:' + (scenario === 'wrong imported image' ? 'b'.repeat(64) : hashes), pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
+        if (script.includes('crictl')) {
+          const importedHash = scenario === 'wrong imported image' ? 'b'.repeat(64) : imageHash(script.split("'").at(-2));
+          return JSON.stringify({status: {id: 'sha256:' + importedHash, pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
+        }
         if (script.includes('kubernetes-check.mjs')) {phases.push(target.phase); assert.ok(script.includes('sha256:' + hashes)); assert.equal(target.instances[2], output.C); return JSON.stringify({checked: target.phase});}
         if (script.includes('jsonpath=')) return 'manifest-old';
         if (script.includes("bootstrap.sh' 'control'")) return certificateKey;
@@ -489,6 +536,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   }
   let result;
   if (expectedError) await assert.rejects(running, expectedError); else result = await running;
+  if (scenario === 'baseline missing rehearsal image') {
+    assert.equal(calls.some(row => row[1] === 'create-stack'), false);
+    return;
+  }
   if (scenario === 'incomplete archive') {
     assert.equal(calls.some(row => row[1] === 'create-stack'), false, 'no machines before archive closure');
     assert.equal(calls.some(row => row[1] === 'delete-stack'), false);
@@ -635,7 +686,14 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.deepEqual(calls.filter(row => lifecycle.includes(row[1])).map(row => [row[1], row.at(-1)]), measuredStops ?
       ['stop-instances', 'describe-instances', 'describe-instances', 'start-instances', 'describe-instances'].map(call => [call, output.C]) : []);
     assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-storage.mjs')), false);
-    assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
+    if (measuredStops) {
+      assert.deepEqual(calls.find(row => row[0] === 'docker' && row[1] === 'tag' && row[3].endsWith(':waitron')),
+        ['docker', 'tag', rehearsedWaitronImage, savedTags[1]]);
+      assert.equal(calls.some(row => row[0] === 'env' && row.includes('scripts/build-backup-verifier.mjs')), false);
+      assert.equal(calls.some(row => row[0] === 'docker' && row[1] === 'image' && row[2] === 'rm' && row.includes(rehearsedWaitronImage)), false);
+    } else {
+      assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
+    }
     assert.deepEqual(savedTags.filter(tag => /:(source|kustomize)-controller$/.test(tag)).length, 2);
     assert.match(transports.find(row => row.input === 'synthetic-migration')?.args.at(-1) ?? '', /--context/);
     assert.equal(transports.find(row => row.input === 'synthetic-migration')?.args.at(-2), 'admin@203.0.113.2');

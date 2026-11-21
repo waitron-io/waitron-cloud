@@ -4,6 +4,41 @@
 
 **Before launch.** Run 8 stopped only machine C. Machine A hosted the control plane, database, storage and observer. For run 9, keep the observer and venue on the private test host outside the cell. Verify routing after machine addresses change, scope the rehearsal firewall to the test host, and check production-mode mail delivery to the private sink. Verify the schedule fits the approved expiry. The owner applies the reviewed setup and grants restart permission for the three instances. Follow the [readiness sizing](2026-11-18-d621-run9-sizing.md).
 
+**Run 9 result.** The paid attempt used the old in-cluster journey and failed at pairing. The owner confirmed the stack was gone. The HTTP 503 and manifest restarts remain unexplained. Cloud pairing changed between the passing local rehearsal and the paid run. Any repeat needs separate owner approval and a fresh passing outside rehearsal on the exact Cloud commit and Waitron image you plan to use.
+
+Build the Waitron image once on x86-64 Linux using the pinned source, `WAITRON_CHECKOUT` and `NODE_AUTH_TOKEN`. Choose a unique rehearsal tag and a private archive path outside the checkout. The tag keeps the image loaded when the launcher removes its own temporary tag.
+
+```sh
+CLOUD_VERIFIER_IMAGE="$WAITRON_REHEARSAL_TAG" node scripts/build-backup-verifier.mjs --amazon-test
+umask 077
+docker save --output "$WAITRON_REHEARSAL_ARCHIVE" "$WAITRON_REHEARSAL_TAG"
+sha256sum "$WAITRON_REHEARSAL_ARCHIVE"
+```
+
+Copy the archive privately to the disposable Linux rehearsal. Verify its SHA-256 checksum before loading it. Use the loaded Waitron image with the Cloud image from the [outside rehearsal setup](../../aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell).
+
+```sh
+docker load --input "$WAITRON_REHEARSAL_ARCHIVE"
+export TEST_CLOUD_INTEGRATION_WAITRON_IMAGE="$(docker image inspect --format '{{.Id}}' "$WAITRON_REHEARSAL_TAG")"
+git rev-parse HEAD
+TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test --test-name-pattern='one outside Linux venue' scripts/kubernetes-services.test.mjs
+```
+
+Retain the Cloud commit, Waitron image ID and archive checksum with the rehearsal result. For a separately approved paid run, verify the same archive's checksum on the test host. Load it and read the full image ID on that host.
+
+```sh
+docker load --input "$WAITRON_REHEARSAL_ARCHIVE"
+docker image inspect --format '{{.Id}}' "$WAITRON_REHEARSAL_TAG"
+```
+
+Put that ID in `rehearsedWaitronImage` in your private `D618_CONFIG`. Use a clean checkout at the rehearsed Cloud commit. The launcher uses that loaded image for the bundle and logs its configuration digest.
+
+```sh
+node scripts/amazon-run.mjs measured-stops
+```
+
+The Linux rehearsal uses test containers and six-minute holds. Stockholm uses real machines and 15-minute holds.
+
 **Run 9 checks.** Start one disposable venue against production-mode Cloud with test service plans disabled. Use private `.test` DNS and certificates and the real mail transport to a private sink. Verify signup, sign-in, pairing, signed staff and public routes over WireGuard, scoped temporary storage credentials, encrypted capture and genuine isolated restore, along with the [P1 service inventory](2026-10-22-cloud-country-cell.md#coverage-map-and-outside-p1-gates).
 
 - Stop each machine for 15 minutes in turn. Across the legs exercise loss of the database primary, active gateway, database operator and Flux. Keep the same clients and acknowledged data, verify that only one database primary accepts writes, and let replicas heal before the next stop. Keep the 90-second account and remote, 300-second backup and 180-second Git repair bounds. Report longest probe gaps.

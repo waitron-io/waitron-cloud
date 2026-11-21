@@ -1067,8 +1067,10 @@ Keep credentials and a mode-600 JSON file outside the repository. Set `D618_CONF
 to that file. Its keys are `region` (explicitly `eu-north-1` for tonight; no default), `account` (your practice account),
 `image` (Stockholm's Debian 13 amd64 `ami-0d2679679834750c7`, rechecked before launch), `key` (`d618` in Stockholm), `sshKey`
 (the private key path on the test box), `operatorCidr` (that box’s public IPv4 `/32`),
-`stackRole`, `schedulerRole` (the two external role ARNs), and `waitronCheckout`
-(a Waitron checkout containing the revision in `deploy/backup-verifier/target.json`).
+`stackRole` and `schedulerRole` (the two external role ARNs). For `measured-stops`,
+set `rehearsedWaitronImage` to the full Docker image ID loaded from the passing
+Linux rehearsal. For other launch modes, set `waitronCheckout` to the Waitron
+checkout containing the pinned verifier revision.
 No package token or AWS credential is copied to the three machines.
 The launcher saves only Linux/AMD64 images and checks that the selected image
 manifest, configuration and layer files are in the archive before creating machines.
@@ -1131,7 +1133,13 @@ spending authority:
    in the account and region, with no shutdown-parameter condition. Install the
    updated grant and check both actions with the setup page's simulations before
    running the already-built single stops or the all-machine restart.
-6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
+6. For a separately approved outside-venue rehearsal, launch from a clean Cloud checkout
+   with `node scripts/amazon-run.mjs measured-stops`. Use the exact Cloud commit and
+   Waitron image from the passing Linux rehearsal. Save and load the image as
+   described in the [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
+   For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
+   Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
+   In `measured-stops`, the `Waitron rehearsal image` line gives the bundled image ID.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    An unhandled Kubernetes command failure records its stage, journey phase,
    wait arguments, elapsed time, exit code or signal, exception and the last
@@ -1146,7 +1154,12 @@ spending authority:
    `start` repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
    at 90 minutes, allowing five more minutes for deletion. A timeout reports
    `amazon.deletion_late`, requests deletion immediately and allows five minutes
-   to confirm that cleanup, while keeping the run failed. To stop early,
+   to confirm that cleanup, while keeping the run failed. On a caught failure,
+   the log shows when the launcher requests early deletion and when the deletion wait succeeds.
+   The launcher handles Ctrl-C and SIGTERM. A dropped SSH session that sends SIGHUP stops
+   the launcher before it can request deletion. The stack relies on independent
+   scheduled deletion at minute 145 in `measured-stops` or minute 90 in `start`.
+   To stop early,
    use `node scripts/amazon-run.mjs stop d618-<run-uuid>`.
 7. Confirm `aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION"`
    reports that the named stack no longer exists (or `DELETE_COMPLETE` when you use its retained stack ID), and inspect the bill before another run.
@@ -1158,7 +1171,7 @@ database-host loss and production-mode checks. No production service is deployed
 
 The launcher sets up the Kubernetes API and etcd, the cluster's database, on all three machines.
 Each machine uses the API on its own private address after it joins. The legacy fixture still
-mounts its configuration over the network from A, so keep A running for either journey above.
+mounts its configuration over the network from A, so keep A running in `start` and `observe`.
 Stopping C now also stops one API server and one etcd member. Run the setup checks with
 `node --test deploy/kubernetes/bounded-amazon/bootstrap.test.mjs scripts/amazon-run.test.mjs`.
 They use stand-ins for kubeadm, kubectl, SSH and AWS.

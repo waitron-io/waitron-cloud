@@ -72,7 +72,12 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
     await operations.waitDeleted();
     return {...(journeys ? {journeys} : {observation}), removed: true};
   } catch (error) {
-    try {await operations.deleteStack(); await operations.waitDeleted();}
+    try {
+      process.stderr.write('Amazon early deletion requested\n');
+      await operations.deleteStack();
+      await operations.waitDeleted();
+      process.stderr.write('Amazon early deletion confirmed\n');
+    }
     catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; Amazon teardown failed');}
     throw error;
   }
@@ -119,6 +124,8 @@ async function main() {
       await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', stack], true);
       return;
     }
+    const revision = await command('git', ['rev-parse', 'HEAD']);
+    process.stderr.write('Amazon launch mode ' + mode + '; Cloud commit ' + revision + '\n');
     process.stdout.write(JSON.stringify(await startAmazon({...config, observer: mode === 'observe',
       baseline: mode === 'baseline' || mode === 'measured-stops', measuredStops: mode === 'measured-stops'}, {
       signal: stop.signal, run: (binary, args, input, cleanup, timeout, request) => command(binary, args, input,
@@ -165,6 +172,8 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   observe = observerCommand, prepareFlux = prepareFluxBundle, runBaseline = runOutsideServices}) {
   assert.ok(!(config.baseline && config.observer), 'amazon.mode');
   assert.ok(!config.measuredStops || config.baseline, 'amazon.measured_stops_scope');
+  if (config.measuredStops) assert.match(config.rehearsedWaitronImage ?? '', /^sha256:[a-f0-9]{64}$/,
+    'Set rehearsedWaitronImage to the loaded rehearsal image ID');
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   let runDeadline, runSignal;
   const active = (cleanup, request) => {
@@ -208,7 +217,8 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       '--secret', 'id=npm_token,env=NODE_AUTH_TOKEN', '--build-arg', 'SEAWEED_AMD64_SHA256=31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d',
       '-f', 'deploy/local-stack/Dockerfile', '-t', cloud, '.'], undefined, false, 900000);
     ownedImages.push(waitron);
-    await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
+    if (config.measuredStops) await run('docker', ['tag', config.rehearsedWaitronImage, waitron]);
+    else await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
       process.execPath, 'scripts/build-backup-verifier.mjs', ...(config.baseline ? ['--amazon-test'] : [])], undefined, false, 900000);
     ownedImages.push(store);
     await run('docker', storeBuildArgs(store, ['--platform', 'linux/amd64']), undefined, false, 900000);
@@ -245,6 +255,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       assert.match(digest ?? '', /^[a-f0-9]{64}$/, 'amazon.archive_image');
       ids[image] = 'sha256:' + digest;
     }
+    if (config.measuredStops) process.stderr.write('Waitron rehearsal image ' + ids[waitron] + '\n');
     const bytes = parseInt(await run('wc', ['-c', join(directory, 'images.tar')]), 10);
     const archiveCopyTimeout = Math.ceil(bytes * 8 / 10000000 * 1000) + 60000;
     process.stderr.write('Image bundle ' + bytes + ' bytes; one upload and private copies each have ' + archiveCopyTimeout + ' ms (10 Mbit/s cutoff plus 60 seconds)\n');
