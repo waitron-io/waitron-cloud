@@ -3,15 +3,18 @@ import type {Pool,PoolClient} from 'pg';
 import type {Context} from 'hono';
 import {AllowanceError,InstallationError,InstallationStore,createLeaseTrust,readMachineClaims,verifyMachine,verifyLease,
  reserveAllowance,spendAllowance,recordAllowanceAttempt,type LeaseIssuer,type SignedEnvelope} from '@waitron-cloud/registration';
-import {AddressLookupError,checkInput,type createGoogleAddressClient} from './address-lookup-google.ts';
+import {AddressLookupError,checkInput,googleAddressProvider,type createGoogleAddressClient} from './address-lookup-google.ts';
 import {AccountHttpError} from './errors.ts';
 import {AccountRateLimiter,type RateRule} from './rate-limit.ts';
 import {readAccountBody} from './request.ts';
-import {keyFileAddressProvider} from './test-box-address-lookup.ts';
 
 type AddressLookupBox={accountId:string;venueId:string;installationId:string};
-type AddressProvider=ReturnType<typeof createGoogleAddressClient>;
-export type AddressLookupOptions={provider:AddressProvider}&(AddressLookupBox|{allowedBoxes?:readonly AddressLookupBox[]});
+type RegisteredBox={id:string;venue_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;
+ environment:string;account_id:string|null;verified:boolean};
+type AddressProvider=Pick<ReturnType<typeof createGoogleAddressClient>,'suggest'|'validate'>;
+export type AddressLookupOptions=Partial<AddressLookupBox>&{
+ provider:AddressProvider;allowedBoxes?:readonly AddressLookupBox[];allowAllTestBoxes?:true;
+};
 type Body={version:1;kind:'suggest'|'validate';workflowId:string;query?:string;selectedText?:string;language?:'es'|'en'};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 function conflict():never{throw new AccountHttpError(409,'conflict');}
@@ -53,10 +56,16 @@ export class AddressLookupMachine{
  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,rateKey:string,options:AddressLookupOptions,trusted=createLeaseTrust(issuer)){
   const provider=options?.provider;
   if(typeof provider?.suggest!=='function'||typeof provider.validate!=='function')throw new Error('invalid_address_lookup_configuration');
-  const allowedBoxes='installationId' in options?[options]:options.allowedBoxes;
-  if(allowedBoxes!==undefined&&(!Array.isArray(allowedBoxes)||!allowedBoxes.every(box=>box&&
-   [box.accountId,box.venueId,box.installationId].every(id=>typeof id==='string'&&uuid.test(id))))
-   ||keyFileAddressProvider in provider&&allowedBoxes?.length!==1)throw new Error('invalid_address_lookup_configuration');
+  const legacyBox='accountId' in options||'venueId' in options||'installationId' in options;
+  const allowedBoxes=legacyBox?[options as AddressLookupBox]:options.allowedBoxes;
+  const google=googleAddressProvider in provider;
+  if(options.allowAllTestBoxes===true){
+   if(allowedBoxes!==undefined||google)throw new Error('invalid_address_lookup_configuration');
+  }else if(!Array.isArray(allowedBoxes)||!allowedBoxes.length||legacyBox&&options.allowedBoxes!==undefined
+   ||google&&allowedBoxes.length!==1||!allowedBoxes.every(box=>box&&
+    [box.accountId,box.venueId,box.installationId].every(id=>typeof id==='string'&&uuid.test(id)))){
+   throw new Error('invalid_address_lookup_configuration');
+  }
   this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#provider=provider;
   this.#allowedBoxes=allowedBoxes?.map(({accountId,venueId,installationId})=>({accountId,venueId,installationId}));
   this.#limiter=new AccountRateLimiter(pool,rateKey);
@@ -69,22 +78,30 @@ export class AddressLookupMachine{
   this.#checkAllowedInstallation(claims.installationId);
   return claims;
  }
+ async #registeredBox(client:PoolClient,installationId:string){
+  const {rows}=await client.query<RegisteredBox>(`SELECT i.id,i.venue_id,i.public_key,i.revoked_at,i.superseded_by,v.environment,
+   m.account_id,c.email_verified_at IS NOT NULL AND a.disabled_at IS NULL AS verified
+   FROM installations i JOIN venues v ON v.id=i.venue_id
+   LEFT JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.is_owner
+   LEFT JOIN cloud_accounts a ON a.id=m.account_id
+   LEFT JOIN cloud_credentials c ON c.account_id=a.id
+   WHERE i.id=$1 LIMIT 2`,[installationId]);
+  const row=rows.length===1?rows[0]:undefined;
+  if(!row||row.environment!=='test'||!row.account_id||!row.verified)throw new InstallationError('permission_denied');
+  if(row.revoked_at||row.superseded_by)throw new InstallationError('revoked');
+  const scope={accountId:row.account_id,venueId:row.venue_id,installationId};
+  if(this.#allowedBoxes&&!this.#allowedBoxes.some(box=>box.installationId===installationId&&box.venueId===scope.venueId&&box.accountId===scope.accountId))
+   throw new InstallationError('permission_denied');
+  return {row,scope};
+ }
  async #authorize(client:PoolClient,envelope:SignedEnvelope,installationId:string,now:Date):Promise<AddressLookupBox>{
-  const row=(await client.query(`SELECT i.id,i.venue_id,i.public_key,i.revoked_at,i.superseded_by,v.environment,
-   ARRAY(SELECT account_id FROM organisation_memberships WHERE organisation_id=v.organisation_id AND is_owner LIMIT 2) AS owners
-   FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[installationId])).rows[0];
-  if(!row||row.environment!=='test')throw new InstallationError('permission_denied');
+  const {row,scope}=await this.#registeredBox(client,installationId);
   const claims=verifyMachine(envelope,row.public_key,this.#origin,'address-lookup',now.getTime());
   if(claims.installationId!==row.id)throw new InstallationError('invalid_proof');
-  if(row.revoked_at||row.superseded_by)throw new InstallationError('revoked');
   let encoded:unknown;try{encoded=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
   if(JSON.stringify(encoded)!==claims.lease)throw new InstallationError('invalid_proof');
   const lease=verifyLease(encoded,this.#trusted,this.#origin,now.getTime());
   if(lease.installationId!==row.id||lease.venueId!==row.venue_id||lease.publicKey!==row.public_key||lease.environment!==row.environment)throw new InstallationError('invalid_proof');
-  if(row.owners.length!==1)throw new InstallationError('permission_denied');
-  const scope={accountId:row.owners[0],venueId:row.venue_id,installationId};
-  if(this.#allowedBoxes&&!this.#allowedBoxes.some(box=>box.installationId===installationId&&box.venueId===scope.venueId&&box.accountId===scope.accountId))
-   throw new InstallationError('permission_denied');
   return scope;
  }
  async execute(envelope:SignedEnvelope){
@@ -93,6 +110,8 @@ export class AddressLookupMachine{
   const client=await this.#pool.connect(),stop=new AbortController();let locked=false,discard=false,inTransaction=false,dispatched=false;
   const onError=()=>{discard=true;stop.abort();};client.on('error',onError);
   try{
+   // Refuse ineligible boxes before they can occupy the shared dispatch lock.
+   await this.#registeredBox(client,installationId);
    locked=(await client.query("SELECT pg_try_advisory_lock(hashtext(current_schema()),hashtext('address-lookup:google')) AS locked")).rows[0].locked;
    if(!locked)conflict();
    await delay(500,undefined,{signal:stop.signal});

@@ -48,7 +48,8 @@ async function fixture(configured=true){
    method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(envelope),
   },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as HttpBindings);
   const post=(body:unknown,operationId=randomUUID())=>request(v.proof('address-lookup',body,operationId,v.lease));
-  return {db,v,issuer,calls,provider,app,options,post,request,setFailure:()=>{failed=true;}};
+  const fakeProvider={suggest:provider.suggest,validate:provider.validate};
+  return {db,v,issuer,calls,provider,fakeProvider,app,options,post,request,setFailure:()=>{failed=true;}};
  }catch(error){await db.close();throw error;}
 }
 test('the signed trial reuses one counted hold and token, validates once and stores no address content',async()=>{
@@ -81,7 +82,7 @@ test('registered boxes get separate holds and cannot validate another box workfl
  const f=await fixture();try{
   const other=await connectedVenue(f.db,f.issuer,origin);
   await ensureBusiness(f.db.pool,other);
-  const app=createAccountApp({...f.options,addressLookup:{provider:f.provider}});
+  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
   const post=(box:typeof f.v,body:unknown)=>f.request(box.proof('address-lookup',body,randomUUID(),box.lease),app);
   const workflowId=randomUUID();
   assert.equal((await post(f.v,suggestion(workflowId))).status,200);
@@ -100,7 +101,7 @@ test('a second registered box shares the current owner monthly cap',async()=>{
   const other=await connectedVenue(f.db,f.issuer,origin);
   await ensureBusiness(f.db.pool,other);
   await f.db.pool.query('UPDATE organisation_memberships SET account_id=$1 WHERE organisation_id=$2',[f.v.accountId,other.organisationId]);
-  const app=createAccountApp({...f.options,addressLookup:{provider:f.provider}});
+  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
   for(let i=0;i<9;i++)assert.equal((await f.post(suggestion())).status,200);
   const post=()=>f.request(other.proof('address-lookup',suggestion(),randomUUID(),other.lease),app);
   assert.equal((await post()).status,200);
@@ -112,7 +113,7 @@ test('a second registered box shares the current owner monthly cap',async()=>{
 test('current ownership controls access after a transfer and history cleanup',async()=>{
  const f=await fixture();try{
   const other=await connectedVenue(f.db,f.issuer,origin);
-  const app=createAccountApp({...f.options,addressLookup:{provider:f.provider}});
+  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
   const post=(body:unknown)=>f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
   await f.db.pool.query('DELETE FROM connection_requests WHERE installation_key=$1',[f.v.installationKey]);
   const previous=suggestion();
@@ -153,6 +154,31 @@ test('trial absence, unpublished allowance and invalid authority never reach Goo
   assert.equal((await f.request(f.v.proof('address-lookup',body))).status,401);
   assert.equal(f.calls.length,0);assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
  }finally{await f.db.close();}
+});
+test('incomplete or unscoped provider configuration fails closed',async()=>{
+ const f=await fixture();try{
+  const keyFile=createTestBoxAddressLookup({keyFile:'/unused/synthetic-key',fetcher:async()=>assert.fail('unexpected dispatch')});
+  const provider={suggest:keyFile.suggest,validate:keyFile.validate};
+  for(const addressLookup of [
+   {provider},
+   {provider,accountId:f.v.accountId,venueId:f.v.venueId},
+   {provider:f.provider,allowAllTestBoxes:true},
+   {provider:keyFile,allowAllTestBoxes:true},
+  ] as const){
+   assert.throws(()=>createAccountApp({...f.options,addressLookup}),/invalid_address_lookup_configuration/);
+  }
+ }finally{await f.db.close();}
+});
+test('a box without a verified owner is refused before it can take the shared dispatch lock',async()=>{
+ const f=await fixture(),client=await f.db.pool.connect();try{
+  await client.query('UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1',[f.v.accountId]);
+  await client.query("SELECT pg_advisory_lock(hashtext(current_schema()),hashtext('address-lookup:google'))");
+  assert.equal((await f.post(suggestion())).status,403);
+  assert.equal(f.calls.length,0);
+ }finally{
+  await client.query('SELECT pg_advisory_unlock_all()');
+  client.release();await f.db.close();
+ }
 });
 test('a missing trial key stops dispatch while counted admission and validation remain spent',async()=>{
  const f=await fixture(),directory=await mkdtemp(join(tmpdir(),'missing-address-key-'));let sends=0;

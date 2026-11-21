@@ -1,9 +1,7 @@
 import {constants} from 'node:fs';
 import {open} from 'node:fs/promises';
 import {parseEnv} from 'node:util';
-import {AddressLookupError,createGoogleAddressClient} from './address-lookup-google.ts';
-
-export const keyFileAddressProvider=Symbol('key-file-address-provider');
+import {AddressLookupError,createGoogleAddressClient,googleAddressProvider} from './address-lookup-google.ts';
 export function createTestBoxAddressLookup(options:{keyFile:string;fetcher:typeof fetch}){
  async function client(){
   try{
@@ -20,7 +18,7 @@ export function createTestBoxAddressLookup(options:{keyFile:string;fetcher:typeo
   }catch{throw new AddressLookupError('unavailable',false);}
  }
  return {
-  [keyFileAddressProvider]:true as const,
+  [googleAddressProvider]:true as const,
   async suggest(...args:Parameters<ReturnType<typeof createGoogleAddressClient>['suggest']>){return (await client()).suggest(...args);},
   async validate(...args:Parameters<ReturnType<typeof createGoogleAddressClient>['validate']>){return (await client()).validate(...args);},
  };

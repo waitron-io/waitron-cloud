@@ -3,8 +3,8 @@
 On a local or disposable stack, you can test the signed Cloud address route
 with an injected fake provider. Cloud uses each registered test box's venue
 and its one current, verified Cloud owner. The boxes of one owner share the
-account limits. A venue with multiple owners cannot use lookup. After a transfer,
-start a fresh workflow so Cloud counts it against the new owner.
+account limits. Use manual entry if Cloud cannot verify a single current owner.
+After a transfer, start a fresh workflow so Cloud counts it against the new owner.
 
 The normal server and shared test Cloud leave the route disabled. The private launcher
 can inject Google's file-backed provider for one approved Cloud account, venue and
@@ -89,8 +89,9 @@ Validation spends and closes the workflow before its one provider attempt.
 An uncertain validation cannot be submitted again. Remove this counted-abandonment
 exception when the real service is scoped.
 
-A shared nonblocking lock refuses busy callers without spending quota. Each admitted
-request waits 500 ms under the lock. A crash can shorten one dispatch gap. There is no automatic provider retry or stored reply to replay. Unlike recorded
+Both trials share one dispatch lock across venues. An eligible request holds it
+for at least 500 ms, and another caller arriving in that window gets a 409
+without spending quota. A crash can shorten one dispatch gap. There is no automatic provider retry or stored reply to replay. Unlike recorded
 control mutations, this exchange rejects a consumed call ID: its five-minute
 call record outlasts the signature window without saving address content.
 
@@ -113,7 +114,7 @@ For the local fake-provider proof, run through a Docker-enabled test environment
 node scripts/test-postgres.mjs exec node --test packages/account-http/test/address-lookup.test.ts
 ```
 
-For a separate local rehearsal with synthetic data, pass `addressLookup: {provider}`
+For a separate local rehearsal with synthetic data, pass `addressLookup: {provider, allowAllTestBoxes: true}`
 with an injected fake provider and publish a test allowance. This exercises the
 signed requests and usage limits while Waitron screen integration and live address
 quality still need their own checks. Before the owner tries Google, configure the

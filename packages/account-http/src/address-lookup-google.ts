@@ -44,6 +44,8 @@ function draft(value:unknown){
 }
 
 // This module has no startup or package-index wiring: admission must reserve before calling it.
+export const googleAddressProvider=Symbol('google-address-provider');
+
 export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof fetch}){
  if(!options||typeof options.apiKey!=='string'||!options.apiKey.trim()||typeof options.fetcher!=='function')fail('invalid_input');
  try{validateHeaderValue('X-Goog-Api-Key',options.apiKey);}catch{fail('invalid_input');}
@@ -80,6 +82,7 @@ export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof 
   }
  }
  return {
+  [googleAddressProvider]:true as const,
   async suggest(input:SuggestInput,signal?:AbortSignal){
    checkInput(input?.query,input?.sessionToken);
    if(!['es','en'].includes(input.language))fail('invalid_input');
