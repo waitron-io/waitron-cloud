@@ -754,7 +754,14 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               backup: (signal, stopped) => withLimit(signal, () => measureOutsideBackup({original, ...backupOperations}, signal, stopped)),
               observe: async probes => {
                 budget.requireRoom(loginEmail);
-                const serviceStops = await kubernetes.stopServices({...probes, publication});
+                const spaceSignup = kubernetes.amazon ? undefined : (signal => withLimit(signal, async () => {
+                  for (let wait = Math.ceil(budget.signupDelayMs()); wait > 0; wait = Math.ceil(budget.signupDelayMs())) {
+                    process.stderr.write('D621 local signup spacing ' + wait + ' ms\n');
+                    await delay(wait);
+                  }
+                  runSignal().throwIfAborted();
+                }));
+                const serviceStops = await kubernetes.stopServices({...probes, publication}, spaceSignup);
                 const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({
