@@ -30,8 +30,10 @@ test('existing-account handover completes in both languages, themes and widths',
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    await outgoing.screenshot({path:new URL(`../dist/handover-sender-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
    const receiving=await contexts[1]!.newPage();receiving.setDefaultTimeout(5000);await receiving.goto(`${f.origin}/receive-business#lang=${locale}`);
-   const accountLink=receiving.getByRole('link',{name:locale==='en'?'Account':'Cuenta',exact:true});
+   const accountLabel=locale==='en'?'Account':'Cuenta';
+   const accountLink=receiving.getByRole('link',{name:accountLabel,exact:true});
    await accountLink.waitFor();
+   assert.deepEqual(await receiving.getByRole('navigation').getByRole('link').allTextContents(),[accountLabel]);
    await receiving.screenshot({path:new URL(`../dist/signed-in-receive-business-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
    await accountLink.click();
    const incoming=receiving.locator('#owner-transfer-section');await incoming.getByRole('button',{name:c.accept,exact:true}).waitFor();await incoming.getByText(sender.email,{exact:true}).waitFor();
