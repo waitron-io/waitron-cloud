@@ -513,13 +513,53 @@ The [owner’s Amazon access steps](test-cloud-amazon-access.md) are still requi
 There is no dedicated launch profile yet. Do not substitute the staging or D618
 profile, create the paid DNS zone or request production sending access.
 
+## Send account mail to the approved test mailbox
+
+The Amazon test Cloud captures mail in Mailpit by default. The Stockholm Amazon
+Simple Email Service (SES) switch sends Cloud account mail for the one verified
+pilot mailbox through the sandbox. Operator notices, other Cloud account mail
+and box mail still reach Mailpit. The switch checks a fingerprint of the
+approved scope before it starts. A bad file makes the worker exit with
+`Test email worker refused SES settings`. It restarts until you correct the
+file or turn off the switch. Mail waits in the queues during that time. If
+`up` fails its startup checks, the driver stops the recorded test Cloud
+containers. Run it again with the last working settings.
+
+After the coordinated backup and image upgrade, transfer
+`deploy/test-cloud/compose.amazon-ses.yaml` with the deployment files. Keep the
+root-owned settings file at mode 0600 in a private directory outside the
+checkout. It holds the pinned `scope` from the trial readback, the `smtp` user and
+password issued to the scoped sender, and a dedicated `recipientKeys` key set
+with `activeKeyId` and `keys`. Retain the recipient keys with your private
+configuration backup so earlier attempts remain matchable after rotation.
+Run the normal Amazon command with the same image and HTTPS settings. Keep
+every other add-on setting you use, including `CLOUD_TEST_AMAZON_VERIFIER_IMAGE`
+for backups, and add the settings path only for `up`:
+
+```sh
+TEST_CLOUD_SES_SETTINGS_SOURCE=/root/waitron-test-mail/ses.json \
+  node scripts/test-cloud-deploy.mjs up sha256:<reviewed-image-id> amazon
+```
+
+Check that the email worker stays running, then use ordinary Cloud signup
+with the approved address. Confirm SES acceptance and ask the recipient to
+check their inbox and share Gmail’s Show original privately. Keep addresses,
+keys, tokens and mail contents out of shared receipts. To return every message
+to Mailpit, run the same `up` with `TEST_CLOUD_SES_SETTINGS_SOURCE` unset.
+
+Both private feedback queues were configured for four days of retention.
+The hosted test worker sends and records acceptance. Applying bounces and
+complaints from those queues remains in D102. The mailbox and sandbox
+restriction continues to apply throughout this trial.
+
 ## Rehearse backup on the Amazon test Cloud
 
 Use the exact [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
 Transfer the image privately and confirm its full `sha256:` image ID on the
 test host. Transfer `deploy/test-cloud/compose.amazon-backups.yaml` with the
 other deployment files. Set `CLOUD_TEST_AMAZON_VERIFIER_IMAGE` to that ID for the
-driver's Amazon `up`. The override enables one storage upload path on the
+driver's Amazon `up`. Keep the SES settings path if you use the mail switch.
+The override enables one storage upload path on the
 existing account HTTPS name and starts the trusted backup worker. That worker
 controls Docker and can act as root on the host. The proxy verifies the storage
 server against the private local CA's certificate.

@@ -15,6 +15,9 @@ import {connectedVenue, database} from '../../packages/translation/test/fixtures
 import {bootstrapTestCloud} from './bootstrap.mjs';
 import {openTestRelayRuntime} from './relay-runtime.mjs';
 import {executeTestServiceCommand} from './service-controls.mjs';
+import {createTestAccountWorker,runTestEmailQueues} from './email-worker.mjs';
+import {createTestCaptureMailer} from './capture-mailer.mjs';
+import {config as sesConfig,keys as recipientKeys} from '../../packages/registration/test/fixtures/mail-attempt.ts';
 import {testRelaySettings} from './relay-settings.mjs';
 
 // Paid status must create neither consent nor a grant; revocation must win before SMTP.
@@ -93,7 +96,7 @@ test('both plans need fixture-bound TLS origin evidence and explicit relay conse
 
 
 for (const automatic of [false, true]) {
-test(automatic ? 'the setup email choice sends staff mail after the owner signs out'
+test(automatic ? 'setup box and Cloud staff mail reach Mailpit with the Stockholm switch on after owner sign-out'
   : 'a provisional setup box discovers its prepared grant and sends staff email before saving the venue', async () => {
   const db = await database(), directory = await mkdtemp(join(tmpdir(), 'cloud-setup-relay-'));
   try {
@@ -160,10 +163,28 @@ test(automatic ? 'the setup email choice sends staff mail after the owner signs 
       class: 'password_reset', recipient, displayName: 'Test', locale: 'en', timeZone: 'Europe/Rome',
       expiresAt: new Date(Date.now() + 300_000).toISOString(), token: randomBytes(32).toString('base64url')};
     await post('/v1/installations/email/submit', proof('email-submit', message, lease, messageId), 202);
-    assert.equal(await worker.runOnce(), true);
+    const staff=`cloud-staff-${randomUUID()}@example.test`;
+    if(automatic){
+      await signup.request(staff);
+      const unexpected=()=>assert.fail('Mailpit traffic reached the SES transport');
+      const capture=createTestCaptureMailer({origin,port:Number(process.env.MAILPIT_TEST_SMTP_PORT)},origin);
+      const account=createTestAccountWorker(db.pool,db.outbox,capture,{
+        email:recipient,ses:{config:sesConfig(),recipientKeys},
+        mailer:{sendVerification:unexpected,sendPasswordReset:unexpected,sendPasswordChanged:unexpected,sendServiceAlert:unexpected}
+      });
+      const queues={account,relay:worker,once:true};
+      assert.equal(await runTestEmailQueues(queues),true);
+      assert.equal(await runTestEmailQueues(queues),true);
+      assert.equal(await runTestEmailQueues(queues),false);
+      assert.deepEqual((await db.pool.query('SELECT status FROM email_outbox ORDER BY status')).rows,
+        [{status:'cancelled'},{status:'sent'}]);
+      assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM mail_attempts')).rows[0].n,0);
+    } else assert.equal(await worker.runOnce(), true);
     const response = await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`, {signal: AbortSignal.timeout(5000)});
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).messages.filter(mail => mail.To.some(to => to.Address === recipient)).length, 1);
+    const captured=(await response.json()).messages;
+    assert.equal(captured.filter(mail => mail.To.some(to => to.Address === recipient)).length, 1);
+    if(automatic)assert.equal(captured.filter(mail => mail.To.some(to => to.Address === staff)).length, 1);
     if (!automatic) assert.equal((await pairing.status({...base, action: 'status', args: []})).state, 'account_bound');
   } finally { await rm(directory, {recursive: true, force: true}); await db.close(); }
 });

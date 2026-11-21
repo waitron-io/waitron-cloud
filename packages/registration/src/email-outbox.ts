@@ -122,16 +122,24 @@ export class EmailOutbox {
   }
 }
 
+type AccountMailer = SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer>;
+
 export class EmailWorker {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
-  readonly #mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer>;
+  readonly #mailer: AccountMailer;
   readonly #timeout: number;
   readonly #ses:SesHandoffConfig|undefined;
-  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer>, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig} = {}) {
+  readonly #sesRecipient: {email:string;captureMailer:AccountMailer}|undefined;
+  constructor(pool: Pool, outbox: EmailOutbox, mailer: AccountMailer, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig;sesRecipient?:{email:string;captureMailer:AccountMailer}} = {}) {
     this.#pool = pool; this.#outbox = outbox; this.#mailer = mailer;
     this.#timeout = options.sendTimeoutMs ?? 20_000;
     this.#ses=options.ses&&{config:options.ses.config,recipientKeys:{activeKeyId:options.ses.recipientKeys.activeKeyId,keys:{...options.ses.recipientKeys.keys}}};
+    if (options.sesRecipient) {
+      const email=normaliseEmail(options.sesRecipient.email);
+      if(!email||!this.#ses)throw new Error('Invalid SES pilot recipient');
+      this.#sesRecipient={email,captureMailer:options.sesRecipient.captureMailer};
+    }
     if (!Number.isInteger(this.#timeout) || this.#timeout < 1 || this.#timeout > 30_000) throw new Error('Invalid email worker timeout');
   }
 
@@ -159,9 +167,13 @@ export class EmailWorker {
     let message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail;
     try { message = this.#outbox.open(claim); }
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
-    if(claim.kind==='operator_notice'&&(!this.#mailer.sendOperatorNotice||this.#ses)){await this.#fail(claim,'delivery_configuration',false);return true;}
+    // Captured messages never acquire provider locks or create an SES attempt.
+    const pilot=this.#sesRecipient;
+    const ses=pilot&&(claim.kind==='operator_notice'||message.email!==pilot.email)?undefined:this.#ses;
+    const mailer=pilot&&!ses?pilot.captureMailer:this.#mailer;
+    if(claim.kind==='operator_notice'&&(!mailer.sendOperatorNotice||ses)){await this.#fail(claim,'delivery_configuration',false);return true;}
     let handoff:boolean|HandoffAdmission;
-    try{handoff=await this.#handoff(claim,message);if(!handoff)return true;}
+    try{handoff=await this.#handoff(claim,message,ses);if(!handoff)return true;}
     catch(error){
       const reason=error instanceof Error?error.message:'';
       if(reason==='mail_claim_unavailable')return true;
@@ -175,9 +187,9 @@ export class EmailWorker {
     const context = {deliveryId: claim.id, signal: controller.signal,...(admission?{ses:admission}:{})};
     let receipt: void | EmailDeliveryReceipt;
     try {
-      const send = () => claim.kind === 'owner_transfer' ? this.#sendOwnerTransfer(message as OwnerTransferMail,context) : claim.kind === 'operator_notice' ? this.#mailer.sendOperatorNotice!(message,context) : claim.kind === 'email_change' || claim.kind === 'email_changed' ? this.#sendEmailChange(claim.kind,message,context) : claim.kind === 'sign_in_check' ? this.#sendCheck(message as AccountSignInCheck,context) : claim.kind === 'service_alert' ? this.#sendAlert(message as ServiceAlert,context) : claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
-        : claim.kind === 'password_reset' ? this.#mailer.sendPasswordReset(message as AccountEmail, context)
-        : this.#mailer.sendPasswordChanged(message, context);
+      const send = () => claim.kind === 'owner_transfer' ? this.#sendOwnerTransfer(mailer,message as OwnerTransferMail,context) : claim.kind === 'operator_notice' ? mailer.sendOperatorNotice!(message,context) : claim.kind === 'email_change' || claim.kind === 'email_changed' ? this.#sendEmailChange(mailer,claim.kind,message,context) : claim.kind === 'sign_in_check' ? this.#sendCheck(mailer,message as AccountSignInCheck,context) : claim.kind === 'service_alert' ? this.#sendAlert(mailer,message as ServiceAlert,context) : claim.kind === 'verification' ? mailer.sendVerification(message as AccountEmail, context)
+        : claim.kind === 'password_reset' ? mailer.sendPasswordReset(message as AccountEmail, context)
+        : mailer.sendPasswordChanged(message, context);
       // A timeout cannot retract a message already accepted by a provider. Retried sends may duplicate it.
       receipt = await Promise.race([Promise.resolve().then(send), new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
@@ -198,21 +210,21 @@ export class EmailWorker {
     return true;
   }
 
-  async #sendOwnerTransfer(message:OwnerTransferMail,context:EmailDeliveryContext){
-    if(!this.#mailer.sendOwnerTransfer)throw new EmailDeliveryError('delivery_configuration');
-    return this.#mailer.sendOwnerTransfer(message,context);
+  async #sendOwnerTransfer(mailer:AccountMailer,message:OwnerTransferMail,context:EmailDeliveryContext){
+    if(!mailer.sendOwnerTransfer)throw new EmailDeliveryError('delivery_configuration');
+    return mailer.sendOwnerTransfer(message,context);
   }
-  async #sendCheck(message:AccountSignInCheck,context:{deliveryId:string;signal:AbortSignal}) {
-    if (!this.#mailer.sendSignInCheck) throw new EmailDeliveryError('delivery_configuration');
-    return this.#mailer.sendSignInCheck(message,context);
-  }
-
-  async #sendAlert(message:ServiceAlert,context:{deliveryId:string;signal:AbortSignal}){
-    if(!this.#mailer.sendServiceAlert)throw new EmailDeliveryError('delivery_configuration');
-    return this.#mailer.sendServiceAlert(message,context);
+  async #sendCheck(mailer:AccountMailer,message:AccountSignInCheck,context:{deliveryId:string;signal:AbortSignal}) {
+    if (!mailer.sendSignInCheck) throw new EmailDeliveryError('delivery_configuration');
+    return mailer.sendSignInCheck(message,context);
   }
 
-  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert|OwnerTransferMail):Promise<boolean|HandoffAdmission>{
+  async #sendAlert(mailer:AccountMailer,message:ServiceAlert,context:{deliveryId:string;signal:AbortSignal}){
+    if(!mailer.sendServiceAlert)throw new EmailDeliveryError('delivery_configuration');
+    return mailer.sendServiceAlert(message,context);
+  }
+
+  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert|OwnerTransferMail,ses:SesHandoffConfig|undefined):Promise<boolean|HandoffAdmission>{
     return transaction(this.#pool,async client=>{
       if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(row.kind==='verification')await client.query('SELECT token_hash FROM signup_requests WHERE token_hash=$1 FOR SHARE',[row.token_hash]);
@@ -264,7 +276,7 @@ export class EmailWorker {
         if(notice){await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[notice.actor_account_id]);await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 FOR SHARE',[notice.actor_account_id]);}
       }
       if(row.kind==='owner_transfer'&&!await ownerTransferMailLive(client,message as OwnerTransferMail,true)){await this.#finish(row,'cancelled',undefined,client);return false;}
-      if(this.#ses)await lockMailScope(client,this.#ses.config.scope);
+      if(ses)await lockMailScope(client,ses.config.scope);
       const current=(await client.query(`SELECT * FROM email_outbox WHERE id=$1 AND claim_id=$2 AND status='processing' FOR UPDATE`,[row.id,row.claim_id])).rows[0];
       if(!current)return false;
       if(row.kind==='service_alert'&&!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
@@ -272,8 +284,8 @@ export class EmailWorker {
       if(current.lease_until<=now)return false;
       if(current.expires_at<=now){await this.#finish(row,'expired',undefined,client);return false;}
       if(row.kind!=='service_alert'&&!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
-      if(this.#ses){
-        const admission=await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
+      if(ses){
+        const admission=await admitMailAttempt(client,{...ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
         // Retained-key locks can wait after the earlier authority check. Roll admission back if time ran out.
         if(!await this.#live(client,row,message))throw Error('mail_authority_unavailable');
         return admission;
@@ -359,10 +371,10 @@ export class EmailWorker {
     return !!credential && digest(credential.password_hash) === credential.password_fingerprint;
   }
 
-  async #sendEmailChange(kind:'email_change'|'email_changed',message:AccountEmail|AccountNotification,context:Parameters<EmailChangeMailer['sendEmailChange']>[1]){
-    const send=kind==='email_change'?this.#mailer.sendEmailChange:this.#mailer.sendEmailChanged;
+  async #sendEmailChange(mailer:AccountMailer,kind:'email_change'|'email_changed',message:AccountEmail|AccountNotification,context:Parameters<EmailChangeMailer['sendEmailChange']>[1]){
+    const send=kind==='email_change'?mailer.sendEmailChange:mailer.sendEmailChanged;
     if(!send)throw new EmailDeliveryError('delivery_configuration');
-    return send.call(this.#mailer,message as AccountEmail,context);
+    return send.call(mailer,message as AccountEmail,context);
   }
 
   async #finish(row: MessageRow, status: 'sent' | 'expired' | 'cancelled', receipt?: void | EmailDeliveryReceipt,client:Pool|PoolClient=this.#pool) {
