@@ -139,12 +139,20 @@ test('first-time recipients verify, sign up without a business, enroll and expli
    const cookies=await sending.cookies(),offer=await new OwnerTransferStore(f.db.pool,f.db.outbox).create(cookies.find(c=>c.name==='cloud_session')!.value,cookies.find(c=>c.name==='cloud_csrf')!.value,sender.organisationId,email,locale);
    await f.drainMail();const invitation=await mailFor(email,locale==='en'?'Waitron Cloud ownership handover':'Traspaso de titularidad de Waitron Cloud',f.mailEvidence);
    const page=await context.newPage();page.setDefaultTimeout(8000);page.on('pageerror',e=>t.diagnostic(e.message));
-   const link=invitation.match(/http:\/\/localhost:[^\s]+\/signup/)?.[0];assert.ok(link);await page.goto(link+`#lang=${locale}`);
+   async function look(stage:string){assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/first-handover-${stage}-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});}
+   const link=invitation.match(/http:\/\/localhost:[^\s]+\/receive-business#lang=\w+/)?.[0];assert.ok(link);
+   assert.equal((await page.goto(link))?.status(),200);
+   await page.getByRole('heading',{level:1,name:locale==='en'?'Receive a business':'Recibir un negocio'}).waitFor();
+   await page.getByText(locale==='en'?'The handover includes the whole organisation and all its businesses. Review and accept it in Account.':'El traspaso incluye toda la organización y sus negocios. Revísalo y acéptalo en Cuenta.',{exact:true}).waitFor();
+   await page.getByText(locale==='en'?/choose “I’m receiving a business”/:/elige «Estoy recibiendo un negocio»/).waitFor();
+   assert.equal(await page.getByRole('link',{name:c.login,exact:true}).getAttribute('href'),'/login');
+   assert.equal(await page.locator('form').count(),0);
+   await look('receive-business');
+   await page.getByRole('link',{name:c.signup,exact:true}).click();
    await page.locator('input[name=email]').fill(email);await page.locator('#submit').click();await page.getByText(c.emailSent,{exact:true}).waitFor();await f.drainMail();
    const mail=await mailFor(email,locale==='en'?'Verify your Waitron Cloud email':'Verifica tu correo de Waitron Cloud',f.mailEvidence),url=mail.match(/http:\/\/localhost:[^\s]+/)?.[0];assert.ok(url);await page.goto(url);
    await page.getByLabel(locale==='en'?"I'm receiving a business":'Estoy recibiendo un negocio',{exact:true}).check();
    assert.equal(await page.locator('input[name=legalBusinessName]').count(),0);await page.locator('input[name=password]').fill(password);
-   async function look(stage:string){assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/first-handover-${stage}-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});}
    await look('signup');await page.locator('#submit').click();await page.getByText(c.signupReady,{exact:true}).waitFor();
    const recipient=(await f.db.pool.query('SELECT account_id FROM cloud_credentials WHERE email=$1',[email])).rows[0].account_id;
    assert.equal((await f.db.pool.query('SELECT count(*) FROM organisation_memberships WHERE account_id=$1',[recipient])).rows[0].count,'0');

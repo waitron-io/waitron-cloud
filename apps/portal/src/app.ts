@@ -278,6 +278,7 @@ export class PortalApp {
     if(this.path==='/operator/actions')return c.cloudActionsTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
+    if (this.path === '/receive-business') return c.receiveBusinessTitle;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
     if (this.requested) return c.checkEmail;
     if (this.path === '/signup') return c[this.link.token ? 'completeSignup' : 'signup'];

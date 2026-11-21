@@ -71,7 +71,8 @@ assets prevent startup; omitting the setting retains the API-only server.
 The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
 and `/account` for sign-in settings. From Account, choose Venues (`/account/venues`),
 Remote access (`/account/remote-access`) or Billing (`/account/billing`, when available).
-Use `/connect` for pairing and `/recover` for snapshot recovery.
+Handover invitations open the public `/receive-business` page. Use `/connect` for
+pairing and `/recover` for snapshot recovery.
 Unknown paths still return 404, but browser requests receive a small English or Spanish
 error page chosen from `Accept-Language`. Rejected query strings and methods similarly
 retain their 400 or 405 status. Static GET/HEAD requests retain host checks
