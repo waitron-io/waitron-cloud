@@ -2358,9 +2358,13 @@ attributing the initial signed-in timeout. See the [investigation and diagnostic
 
 The owner-recovery browser test covers a delayed proof-status reply and a passkey
 list that starts after the enrolment click. The portal waits for both, and the
-test reports their timing on failure. The historical CI order and a separate
-changed-email sign-in wait remain untraced.
-See [the recovery and changed-email evidence](backlog/portal-panel-waits.md#owner-recovery-enrolment-wait).
+test reports their timing on failure. The historical CI order remains unknown.
+See [the recovery evidence](backlog/portal-panel-waits.md#owner-recovery-enrolment-wait).
+
+A held session check reproduced the changed-email click being lost when the
+session list started. The confirmation now waits through both reads. The two
+historical CI logs lack the request order, and sign-out and revoke still have
+the earlier window. See [the changed-email evidence](backlog/portal-panel-waits.md#changed-email-sign-in-wait).
 
 The owner-handover fixture now holds its authenticator clock through a code
 boundary. The cause of the earlier CI waits remains unverified. Capture the
