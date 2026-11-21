@@ -60,6 +60,17 @@ test('Amazon payment method settings reach only the account service',()=>{
  assert.equal(render(env).account.environment.CLOUD_BILLING_METHODS_MODE,'off');
 });
 
+test('Amazon gateway receives the configured remote certificate issuer',()=>{
+ const directory='https://acme-v02.api.letsencrypt.org/directory';
+ const {services}=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env',
+  '-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],
+ {cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',
+  TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates',TEST_CLOUD_ACME_DIRECTORY:directory}}));
+ assert.equal(services.gateway.environment.TEST_CLOUD_AMAZON,'1');
+ assert.equal(services.gateway.environment.TEST_CLOUD_ACME_DIRECTORY,directory);
+ assert.equal(services['gateway-manifest'].environment.TEST_CLOUD_ACME_DIRECTORY,directory);
+});
+
 test('Amazon override configures HTTPS without publishing database, mail or internal storage',async()=>{
  const accountId='f3a33048-3e2b-498a-b8b5-66e1d143cb5b';
  const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates',CLOUD_BILLING_ACCOUNT_TEST_IDS:accountId}}));

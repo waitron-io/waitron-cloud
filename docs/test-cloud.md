@@ -420,7 +420,9 @@ cell. LAN keeps its private issuer. Public venue issuance defaults to Let's
 Encrypt staging. After qualifying issuance and renewal there, set
 `TEST_CLOUD_ACME_DIRECTORY=https://acme-v02.api.letsencrypt.org/directory` in the
 host's private `deploy/test-cloud/test.env`, then recreate the manifest worker
-with the same Compose files. Staging certificates are not browser trusted.
+and gateway with the same Compose files. The gateway uses Node's public roots
+to verify upstream staff certificates with this issuer. Staging certificates
+are not browser trusted.
 
 After pairing a test venue, use the CNAME shown in its remote access settings to
 point your custom hostname at the venue's assigned name. The worker checks that

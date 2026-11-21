@@ -250,6 +250,40 @@ test('Amazon challenge paths reach only worker and gateway',async t=>{
  }
 });
 
+test('Amazon gateway can verify a publicly trusted staff certificate only with the trusted issuer',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const {bootstrapTestCloudIdentity}=await import('./bootstrap.mjs');
+ const {readFile}=await import('node:fs/promises');
+ const {createServer,get}=await import('node:https');
+ const {getCACertificates,setDefaultCACertificates}=await import('node:tls');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-gateway-trust-'));
+ t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir);
+ await bootstrapTestCloudIdentity(dir,'https://waitron.local:3000');
+ const [publicCA,cert,key,lanCA]=await Promise.all(['storage-ca.pem','storage-cert.pem','storage-key.pem','lan/ca.pem'].map(name=>readFile(join(dir,name))));
+ const defaultCAs=getCACertificates();
+ setDefaultCACertificates([...defaultCAs,publicCA.toString('utf8')]);
+ t.after(()=>setDefaultCACertificates(defaultCAs));
+ const venue=createServer({cert,key},(_request,response)=>response.end(JSON.stringify({available:true})));
+ await new Promise(resolve=>venue.listen(0,'127.0.0.1',resolve));
+ t.after(()=>{venue.closeAllConnections();return new Promise(resolve=>venue.close(resolve));});
+ const trusted={TEST_CLOUD_AMAZON:'1',TEST_CLOUD_PUBLIC_REMOTE:'1',
+  TEST_CLOUD_ACME_DIRECTORY:'https://acme-v02.api.letsencrypt.org/directory'};
+ const availability=(settings,servername='storage')=>new Promise((resolve,reject)=>{
+  const child=testRuntimeEnvironment('gateway',config,settings);
+  get({hostname:'127.0.0.1',port:venue.address().port,servername,path:'/public/availability',
+   ca:child.GATEWAY_UPSTREAM_CA?lanCA:undefined,agent:false},async response=>{
+   try{let body='';for await(const chunk of response)body+=chunk;resolve(JSON.parse(body));}catch(error){reject(error);}
+  }).on('error',reject);
+ });
+ for(const overrides of [{TEST_CLOUD_AMAZON:undefined},{TEST_CLOUD_PUBLIC_REMOTE:'0'},
+  {TEST_CLOUD_ACME_DIRECTORY:undefined},{TEST_CLOUD_ACME_DIRECTORY:'https://acme-staging-v02.api.letsencrypt.org/directory'}]){
+  await assert.rejects(availability({...trusted,...overrides}),{code:'DEPTH_ZERO_SELF_SIGNED_CERT'});
+ }
+ assert.deepEqual(await availability(trusted),{available:true});
+ await assert.rejects(availability(trusted,'other.example.test'),{code:'ERR_TLS_CERT_ALTNAME_INVALID'});
+});
+
 test('public remote settings refuse half-configured or shared challenge directories',async t=>{
  const {loadPublicRemoteSettings}=await import('./remote-runtime.mjs');
  const dir=await mkdtemp(join(tmpdir(),'cloud-challenge-settings-'));t.after(()=>rm(dir,{recursive:true,force:true}));
