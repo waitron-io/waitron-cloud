@@ -1,30 +1,34 @@
 # D621 role placement before the all-machine stop
 
-The full-service rehearsal already prints the database primary, elected
-database operator, active gateway and Flux apply controller before each
-individual stop. Both the private Linux and Stockholm full-service paths use
-`runKubernetesServices`. The separate all-machine restart in that same journey
-calls `measureServiceRestart` without recording the roles. Operators should
-have the placement line even when that stop or its recovery fails.
+The D621 outside full-service journey already logs role placement before each
+individual stop in private Linux and Stockholm. Operators need the same
+diagnostic before the all-machine stop, including when recovery fails. Reuse
+the existing lookup of the database primary, elected database operator,
+active gateway and Flux apply controller.
 
-- [ ] In `scripts/kubernetes-services.test.mjs`, extend the successful
-  all-machine case with a synthetic role map. Capture the placement line, and
-  assert from the fake stop callback that it already contains the role map.
-  Keep the outage, restore and backup assertions. Run the test and see the
-  missing pre-stop line fail.
+- [ ] Extend the existing cold-restart cases in
+  `scripts/kubernetes-services.test.mjs`. The fake restart checks that the
+  placement line already holds the supplied node names, and the completed
+  receipt carries those names. A failed lookup logs that placement is
+  unavailable and the existing restart still runs. A cancelled lookup
+  propagates the parent cancellation before any stop. Give the separate
+  silent-account transport test a successful lookup and keep its assertions.
+  Run the focused tests and see the missing placement check fail.
 - [ ] In `scripts/kubernetes-services.mjs`, pass the existing `inventory`
-  callback to `measureServiceRestart`. Read it after health and witness
-  preparation and before invoking `restartAll`. Print
-  `D621 all-machine stop inventory` with the returned node names. Reuse the
-  existing bounded inventory read, so the stop does not begin with unknown
-  placement. Keep the stop, outage and recovery deadlines as they are.
-- [ ] Update the existing D621 paragraph in `docs/backlog.md` to name the
-  new line and keep machine-loss qualification open. Run
-  `node --test scripts/kubernetes-services.test.mjs scripts/p1-observer.test.mjs scripts/ci-docs.test.mjs`
-  and check that removing the new line in a disposable copy breaks the
-  focused test. Broader CI runs through the normal branch workflow.
+  callback to `measureServiceRestart` as a required argument. After health
+  and witness preparation, use its existing 30-second bound to read the
+  placement and print `D621 all-machine stop inventory` before calling
+  `restartAll`. On lookup error, propagate parent cancellation and otherwise
+  print an unavailable record with the lookup stage. Continue the stop.
+  Include the map in the successful result when available. Keep the
+  existing stop admission cutoff and recovery deadlines.
+- [ ] Update the D621 paragraph in `docs/backlog.md` and the full-service
+  rehearsal steps in `docs/aws-infrastructure.md`. Run
+  `node --test scripts/kubernetes-services.test.mjs scripts/p1-observer.test.mjs scripts/ci-docs.test.mjs`.
+  Remove the new log line in a disposable copy and verify the test fails.
 
-Allow about 6–10 implementation lines and 10–20 test lines plus the backlog
-sentence. This slice covers the D621 outside full-service journey. The isolated
-database, gateway and store tests use their own fixtures. Diagnosis of the
-earlier failures, a new rehearsal and paid qualification stay open.
+Allow about 10–15 implementation lines, 25–35 test lines and a few doc lines.
+The separate gateway-only, database, storage and standalone cold checks
+remain outside this slice. Some of those fixtures lack a gateway or Flux
+apply controller. The five unresolved qualification checks are in the
+campaign receipt. This slice adds evidence to the full-service stop path.
