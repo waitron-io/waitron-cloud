@@ -1131,11 +1131,12 @@ spending authority:
    in the account and region, with no shutdown-parameter condition. Install the
    updated grant and check both actions with the setup page's simulations before
    running the already-built single stops or the all-machine restart.
-6. For a separately approved outside-venue rehearsal, launch from the Cloud repository
+6. For a separately approved outside-venue rehearsal, launch from a clean Cloud checkout
    with `node scripts/amazon-run.mjs measured-stops`. Use the exact Cloud commit and
    Waitron image from the passing Linux rehearsal. Follow the [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
    For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
    Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
+   In `measured-stops`, the image bundle log gives the Waitron image ID to compare with the Linux receipt.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    An unhandled Kubernetes command failure records its stage, journey phase,
    wait arguments, elapsed time, exit code or signal, exception and the last
@@ -1152,8 +1153,8 @@ spending authority:
    `amazon.deletion_late`, requests deletion immediately and allows five minutes
    to confirm that cleanup, while keeping the run failed. On a caught failure,
    the log shows when the launcher requests early deletion and when the deletion wait succeeds.
-   The launcher handles Ctrl-C and SIGTERM. If a dropped SSH session kills the
-   launcher before it can request deletion, the stack relies on independent
+   The launcher handles Ctrl-C and SIGTERM. A dropped SSH session that sends SIGHUP stops
+   the launcher before it can request deletion. The stack relies on independent
    scheduled deletion at minute 145 in `measured-stops` or minute 90 in `start`.
    To stop early,
    use `node scripts/amazon-run.mjs stop d618-<run-uuid>`.

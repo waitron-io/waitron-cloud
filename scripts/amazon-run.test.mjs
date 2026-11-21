@@ -276,7 +276,9 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
   ['baseline single stop late', /amazon.measured_stops_expiry/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
-  if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
+  if (['observer failed after stop', 'baseline measured stops'].includes(scenario)) {
+    t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
+  }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false, tunnelCloseAttempts = 0;
@@ -341,6 +343,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         await context.stopNode(context.nodes[2].name, {});
       }
       if (scenario === 'baseline measured stops') {
+        assert.deepEqual(diagnostics.filter(line => line.startsWith('Waitron rehearsal image ')),
+          ['Waitron rehearsal image ' + context.waitronImage + '\n']);
         const {name} = context.nodes[2];
         const resumed = await context.stopNode(name, {
           async whileStopped({holdMs}) {stopClock += holdMs; return {};},

@@ -13,7 +13,7 @@ git rev-parse HEAD
 TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test --test-name-pattern='one outside Linux venue' scripts/kubernetes-services.test.mjs
 ```
 
-For a separately approved paid run, use the same Cloud commit and Waitron image on the test host. Check the launch log's commit and keep it privately with the result.
+For a separately approved paid run, use a clean checkout at the rehearsed Cloud commit on the test host. The launcher rebuilds the Waitron image from the pinned source in `deploy/backup-verifier/amazon-test-target.json`. Keep the launch log privately and check that its Cloud commit and Waitron image ID match the Linux receipt before accepting the result.
 
 ```sh
 node scripts/amazon-run.mjs measured-stops

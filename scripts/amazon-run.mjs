@@ -252,6 +252,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       assert.match(digest ?? '', /^[a-f0-9]{64}$/, 'amazon.archive_image');
       ids[image] = 'sha256:' + digest;
     }
+    if (config.measuredStops) process.stderr.write('Waitron rehearsal image ' + ids[waitron] + '\n');
     const bytes = parseInt(await run('wc', ['-c', join(directory, 'images.tar')]), 10);
     const archiveCopyTimeout = Math.ceil(bytes * 8 / 10000000 * 1000) + 60000;
     process.stderr.write('Image bundle ' + bytes + ' bytes; one upload and private copies each have ' + archiveCopyTimeout + ' ms (10 Mbit/s cutoff plus 60 seconds)\n');
