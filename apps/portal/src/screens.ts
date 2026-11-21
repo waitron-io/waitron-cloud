@@ -114,8 +114,9 @@ export function screen(app: PortalApp) {
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>
     ${accountNav}<main><wt-card><h1 tabindex="-1">${app.title()}</h1>
       ${receiveBusiness ? html`<p>${c.receiveBusinessScope}</p>
-        <p>${c.receiveBusinessSignup}</p>
-        <nav>${link('/login', c.login)} ${link('/signup', c.signup)}</nav>` : html`
+        ${state.kind === 'authenticated' ? html`<nav>${link('/account', c.accountLink)}</nav>`
+          : html`<p>${c.receiveBusinessSignup}</p>
+            <nav>${link('/login', c.login)} ${link('/signup', c.signup)}</nav>`}` : html`
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>

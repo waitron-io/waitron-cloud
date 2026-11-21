@@ -29,7 +29,11 @@ test('existing-account handover completes in both languages, themes and widths',
    const outgoing=page.locator('#owner-transfer-section');await outgoing.getByText(c.pending,{exact:true}).waitFor();await outgoing.getByText(recipient.email,{exact:true}).waitFor();
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    await outgoing.screenshot({path:new URL(`../dist/handover-sender-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
-   const receiving=await contexts[1]!.newPage();receiving.setDefaultTimeout(5000);await receiving.goto(`${f.origin}/account#lang=${locale}`);
+   const receiving=await contexts[1]!.newPage();receiving.setDefaultTimeout(5000);await receiving.goto(`${f.origin}/receive-business#lang=${locale}`);
+   const accountLink=receiving.getByRole('link',{name:locale==='en'?'Account':'Cuenta',exact:true});
+   await accountLink.waitFor();
+   await receiving.screenshot({path:new URL(`../dist/signed-in-receive-business-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
+   await accountLink.click();
    const incoming=receiving.locator('#owner-transfer-section');await incoming.getByRole('button',{name:c.accept,exact:true}).waitFor();await incoming.getByText(sender.email,{exact:true}).waitFor();
    await incoming.getByText('Ana SL',{exact:true}).waitFor();await incoming.getByText('Sol SL',{exact:true}).waitFor();
    assert.ok(await receiving.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));

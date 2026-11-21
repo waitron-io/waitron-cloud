@@ -123,8 +123,9 @@ there is no manual or support override. The [focused browser journey](../apps/po
 exercises enrollment and subsequent sign-in/reset paths.
 
 Open the invitation to see what the handover includes and where to accept it.
-Sign in if you have an account. Otherwise, choose
-**Create an account** and verify the email address the invitation was sent to.
+Choose **Account** if you are already signed in, or **Sign in** if you have an
+account. If you need an account, choose **Create an account** and verify the
+email address the invitation was sent to.
 Choose **I’m receiving a business**
 and set your password. This creates your account without a new business. Sign in,
 enroll an app or passkey and verify it is you before accepting the handover on
