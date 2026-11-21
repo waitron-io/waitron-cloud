@@ -1829,6 +1829,10 @@ implementation or production evidence.
   and retry before the next recovery clock starts. The returning store
   port timeout and the timed dry run remain open. Stockholm still needs
   its own measurements.
+  The saved-image Linux run reached the third stop before an HTTPS probe
+  failed after recovery. The observer keeps the failure and reports how long
+  an overdue probe ran. HTTPS transport failures log the route and error. Run
+  `node --test scripts/p1-observer.test.mjs` to check that diagnostic.
   The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
   During the worker machine stop, the survivor reused the saved certificate and
