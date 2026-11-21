@@ -6,23 +6,25 @@
 
 **Run 9 result.** The paid attempt used the old in-cluster journey and failed at pairing. The owner confirmed the stack was gone. The HTTP 503 and manifest restarts remain unexplained. Cloud pairing changed between the passing local rehearsal and the paid run. Any repeat needs separate owner approval and a fresh passing outside rehearsal on the exact Cloud commit and Waitron image you plan to use.
 
-With those images loaded, run the outside rehearsal on disposable Linux. Retain the Cloud commit and Waitron image ID with the result. Follow the [outside rehearsal setup](../../aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell).
+Build the Waitron image once on x86-64 Linux using the pinned source, `WAITRON_CHECKOUT` and `NODE_AUTH_TOKEN`. Choose a unique rehearsal tag and a private archive path outside the checkout. The tag keeps the image loaded when the launcher removes its own temporary tag.
 
 ```sh
-git rev-parse HEAD
-TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test --test-name-pattern='one outside Linux venue' scripts/kubernetes-services.test.mjs
-```
-
-After the Linux rehearsal passes, save its Waitron image to a private path outside the checkout and record the archive's SHA-256 checksum with the result. Give it a rehearsal tag so it stays loaded when the launcher removes its own temporary tag.
-
-```sh
+CLOUD_VERIFIER_IMAGE="$WAITRON_REHEARSAL_TAG" node scripts/build-backup-verifier.mjs --amazon-test
 umask 077
-docker tag "$TEST_CLOUD_INTEGRATION_WAITRON_IMAGE" "$WAITRON_REHEARSAL_TAG"
 docker save --output "$WAITRON_REHEARSAL_ARCHIVE" "$WAITRON_REHEARSAL_TAG"
 sha256sum "$WAITRON_REHEARSAL_ARCHIVE"
 ```
 
-For a separately approved paid run, verify that checksum on the test host. Load the archive and read the full image ID.
+Copy the archive privately to the disposable Linux rehearsal. Verify its SHA-256 checksum before loading it. Use the loaded Waitron image with the Cloud image from the [outside rehearsal setup](../../aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell).
+
+```sh
+docker load --input "$WAITRON_REHEARSAL_ARCHIVE"
+export TEST_CLOUD_INTEGRATION_WAITRON_IMAGE="$(docker image inspect --format '{{.Id}}' "$WAITRON_REHEARSAL_TAG")"
+git rev-parse HEAD
+TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test --test-name-pattern='one outside Linux venue' scripts/kubernetes-services.test.mjs
+```
+
+Retain the Cloud commit, Waitron image ID and archive checksum with the rehearsal result. For a separately approved paid run, verify the same archive's checksum on the test host. Load it and read the full image ID on that host.
 
 ```sh
 docker load --input "$WAITRON_REHEARSAL_ARCHIVE"

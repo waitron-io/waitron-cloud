@@ -18,4 +18,4 @@ An operator should have one clear command for the outside-venue rehearsal. If it
 
 The watcher cleared using the saved image on 21 November at 15:20 if two Linux builds differed. Two uncached builds of the same Waitron commit did differ. For `measured-stops`, require the full ID of the loaded rehearsal image, tag it for the bundle and log the bundled image's digest. Cover the missing ID, missing local image and saved-image path with simulated launcher checks.
 
-After landing, repeat the outside rehearsal on the Cloud commit for the proposed paid run and save the Waitron image that passed. Ask the watcher to take that result to the owner. This item does not run the legacy reproduction or start a paid run.
+The watcher cleared the build-once handoff at 15:58. Save the image privately before the rehearsal. On the Cloud commit proposed for the paid run, verify the archive checksum and load it for the outside rehearsal. The paid host uses the same archive. Ask the watcher to take the result to the owner. This item does not run the legacy reproduction or start a paid run.
