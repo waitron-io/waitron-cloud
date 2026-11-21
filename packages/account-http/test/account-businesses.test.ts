@@ -107,6 +107,8 @@ test('Business reads and writes respect ownership and recovery scope', async () 
   assert.equal((await request('/businesses', details, {origin: 'https://foreign.example.test'})).status, 403);
   assert.equal((await request('/businesses', details, {'x-csrf-token': ''})).status, 403);
   assert.equal((await request('/businesses', {...details, countryCode: 'FR'}, {cookie: ''})).status, 401);
+  assert.equal((await request('/businesses', {...details, countryCode: 'FR'}, {'x-csrf-token': ''})).status, 403);
+  assert.equal((await request('/organisations/rename', {...rename, name: ''}, {cookie: ''})).status, 401);
   const unserved = await request('/businesses', {...details, countryCode: 'FR'});
   assert.equal(unserved.status, 400);
   assert.deepEqual(await unserved.json(), {error: 'country_unavailable'});

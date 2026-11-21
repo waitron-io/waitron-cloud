@@ -57,6 +57,14 @@ test('Account owners can register a business and rename the group', async t => {
           }
           assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
           await panel.screenshot({path: new URL(`../dist/account-businesses-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname});
+          if (locale === 'es' && colorScheme === 'dark' && width === 1280) {
+            await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1', [owner.accountId]);
+            await Promise.all([
+              page.waitForResponse(response => response.url().endsWith('/api/account/businesses') && response.ok()),
+              page.reload(),
+            ]);
+            await panel.waitFor({state: 'hidden'});
+          }
         } finally {
           await context.close();
         }

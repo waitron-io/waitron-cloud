@@ -46,7 +46,10 @@ test('recipient acceptance replaces the sole owner and preserves each account’
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email,'es');
  assert.deepEqual(offer.businessNames, ['Ana SL', 'Sol SL']);
  assert.equal(offer.state,'pending');assert.equal(offer.recipientEmail,recipient.email);
- assert.equal((await store.list(recipient.token)).length,1);
+ const pending=await store.list(recipient.token);
+ assert.equal(pending.length,1);
+ assert.equal(pending[0]!.organisationName,'Café Sol');
+ assert.equal((await store.list(sender.token))[0]!.organisationName,'Café Sol');
  assert.equal((await db.pool.query('SELECT count(*) FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2',[recipient.accountId,sender.organisationId])).rows[0].count,'0');
  const done=await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept');assert.equal(done.state,'accepted');
  await db.pool.query('INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,$3,$4)', [randomUUID(), sender.organisationId, 'New Owner SL', 'ES']);
@@ -54,6 +57,7 @@ test('recipient acceptance replaces the sole owner and preserves each account’
  const pastOffer=(await store.list(sender.token))[0]!;
  assert.deepEqual(pastOffer.businessNames, [], 'historical offers do not show the new owner’s businesses');
  assert.equal(pastOffer.organisationName, '', 'the former owner does not see a name the recipient chooses later');
+ assert.equal((await store.list(recipient.token))[0]!.organisationName, 'New Owner Group');
  assert.deepEqual((await db.pool.query('SELECT account_id,is_owner,can_register_venues FROM organisation_memberships WHERE organisation_id=$1',[sender.organisationId])).rows,[{account_id:recipient.accountId,is_owner:true,can_register_venues:true}]);
  assert.equal((await transaction(db.pool,c=>resolveSession(c,sender.token,{touch:false}))).accountId,sender.accountId,'session remains usable outside the transferred business');
  assert.equal((await db.pool.query('SELECT is_owner FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2',[recipient.accountId,recipient.organisationId])).rows[0].is_owner,true);
