@@ -24,8 +24,9 @@ at 07:06 on 21 November:
    With two calls free the wait is zero. The six-minute hold and 90-second
    recovery bound put the worst wait per gap at about 10 minutes 30 seconds.
    The last complete journey took 31 minutes 42 seconds. With two such
-   pauses that projects to about 53 minutes. Give the opt-in machine-stop
-   test 54 minutes within the guest’s unchanged 55-minute limit.
+   pauses that projects to about 53 minutes of test time. Give the opt-in
+   machine-stop test 54 minutes. The guest’s separate 55-minute limit
+   includes setup and can end the test sooner.
 2. Test first in `scripts/p1-observer.test.mjs` for zero wait with two calls
    free, exact expiry with seven or eight signup calls, and separate login
    accounting. In `scripts/kubernetes-services.test.mjs`, show the
