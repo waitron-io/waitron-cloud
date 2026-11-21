@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as remote from '../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs';
 const api = await import('./p1-observer.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
 
 // Counting an in-flight pre-stop reply as recovery would hide the entire outage.
@@ -79,12 +80,28 @@ test('the final measured backup probe reads retained data without starting anoth
 test('a scheduled outage after recovery fails the leg', async () => {
   assert.equal(typeof api.observeP1, 'function');
   let clock = 0;
+  const failure = Object.assign(Error('tunnel lost'), {code: 'ECONNRESET'});
   const probes = Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => {
-    if (name === 'remote' && clock >= 5000) throw Error('tunnel lost'); return {ok: true};
+    if (name === 'remote' && clock >= 5000) throw failure;
+    return {ok: true};
   }]));
   await assert.rejects(api.observeP1({probes, now: () => clock,
     sleep: async ms => {clock += ms; await new Promise(setImmediate);},
-    ready: () => {}, stopped: async () => {}, replacement: async () => {}}), /p1.remote_after_recovery/);
+    ready: () => {}, stopped: async () => {}, replacement: async () => {}}), error => {
+    assert.match(error.message, /p1\.remote_after_recovery/);
+    assert.equal(error.cause, failure);
+    return true;
+  });
+});
+
+test('a failed remote request identifies its route and keeps the transport error', async () => {
+  assert.equal(typeof remote.checkRemoteRoute, 'function');
+  const failure = Object.assign(Error('socket reset'), {code: 'ECONNRESET'});
+  await assert.rejects(remote.checkRemoteRoute('public', async () => {throw failure;}), error => {
+    assert.match(error.message, /integration\.remote_route:public/);
+    assert.equal(error.cause, failure);
+    return true;
+  });
 });
 
 // Hung stop confirmation must end instead of keeping the paid experiment alive.

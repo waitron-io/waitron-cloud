@@ -58,7 +58,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
           const durationMs = (pending.endedAt ?? at) - pending.at;
           samples.push({name, startedMs: pending.at - faultAt, durationMs, ok: Boolean(ok)});
           state.pending = undefined;
-          if (!ok && state.recovered) throw Error('p1.' + name + '_after_recovery');
+          if (!ok && state.recovered) throw Error('p1.' + name + '_after_recovery', {cause: pending.error});
           if (ok) {
             state.longestGapMs = Math.max(state.longestGapMs ?? 0, pending.endedAt - state.lastSuccess || 0);
             state.lastSuccess = pending.endedAt;

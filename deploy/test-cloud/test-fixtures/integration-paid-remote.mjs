@@ -5,6 +5,20 @@ import {checkServerIdentity} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 import {checkSnapshotGrantRefusal} from './integration-snapshot-exposure.mjs';
 
+export async function checkRemoteRoute(name, probe, elapsed) {
+  const log = result => {
+    if (elapsed) process.stderr.write('D621 HTTPS attempt ' + JSON.stringify({route: name, seconds: elapsed() / 1000, ...result}) + '\n');
+  };
+  try {
+    const response = await probe();
+    log({status: response.status});
+    return response;
+  } catch (error) {
+    log({error: error.code ?? error.name});
+    throw Error('integration.remote_route:' + name, {cause: error});
+  }
+}
+
 export async function startRemotePeer({docker, paid, runId, own, image, waitronTunnelImage}) {
   const root = paid.venueRoot.slice('/tmp/cloud-integration-state/'.length) + '/remote-peer';
   const mount = (destination, subpath, readonly = '') =>
@@ -100,14 +114,14 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   180000, stockholm.signal, 'public_ready');
   else assert.equal((await probe(placement.publicHostname, '/management-api/cloud/status')).status, 404);
   assert.equal((await probe(placement.publicHostname, '/public/availability')).status, 403);
-  const solvePublic = async signal => {
-    const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge', {signal})).body);
+  const solvePublic = async (signal, probePublic = (path, options) => probe(placement.publicHostname, path, options)) => {
+    const challenge = JSON.parse((await probePublic('/_cloud/challenge', {signal})).body);
     let nonce = 0;
     const deadline = Date.now() + 10000;
     while (createHash('sha256').update(challenge.challenge + ':' + nonce).digest().readUInt32BE(0) >= 2 ** (32 - challenge.difficulty)) {
       nonce++; assert.ok(Date.now() < deadline, 'integration.remote_challenge_timeout');
     }
-    const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}, signal});
+    const solved = await probePublic('/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}, signal});
     assert.equal(solved.status, 204);
     return solved.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
   };
@@ -123,29 +137,19 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   assert.ok((await peers()).split(/\s+/).includes(peer.peerPublicKey));
   if (stockholm) {
     const check = async (signal, expectedPublic, refreshPublicCookie = false, elapsed) => {
-      const route = async (name, hostname, options) => {
-        const log = result => {
-          if (elapsed) process.stderr.write('D621 HTTPS attempt ' + JSON.stringify({route: name, seconds: elapsed() / 1000, ...result}) + '\n');
-        };
-        try {
-          const response = await probe(hostname, '/public/availability', {signal, ...options});
-          log({status: response.status});
-          return response;
-        } catch (error) {
-          log({error: error.code ?? error.name}); throw error;
-        }
-      };
+      const route = (name, hostname, options, path = '/public/availability') =>
+        checkRemoteRoute(name, () => probe(hostname, path, {signal, ...options}), elapsed);
       const staffReply = await route('staff', placement.staffHostname);
       let publicReply = await route('public', placement.publicHostname, {cookie});
       if (refreshPublicCookie && publicReply.status === 403) {
         assert.match(publicReply.body, /src="\/_cloud\/challenge\.js"/);
-        cookie = await solvePublic(signal);
+        cookie = await solvePublic(signal, (path, options) => route('public ' + path, placement.publicHostname, options, path));
         publicReply = await route('public after challenge', placement.publicHostname, {cookie});
         if (!elapsed) process.stderr.write('D621 preparation public cookie ' + JSON.stringify({previousStatus: 403, refreshedStatus: publicReply.status}) + '\n');
       }
-      assert.equal(staffReply.status, 200);
+      assert.equal(staffReply.status, 200, 'integration.remote_staff_status');
       assert.equal(staffReply.certificateSha256, client.certificateSha256);
-      assert.equal(publicReply.status, 200);
+      assert.equal(publicReply.status, 200, 'integration.remote_public_status');
       assert.deepEqual(JSON.parse(staffReply.body), client.availability);
       assert.deepEqual(JSON.parse(publicReply.body), client.availability);
       if (expectedPublic) assert.equal(publicReply.certificateSha256, expectedPublic);
