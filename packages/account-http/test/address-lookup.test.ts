@@ -6,7 +6,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
 import {AllowanceConfigStore,BillingStore,createLeaseIssuer,reserveAllowance,transaction} from '@waitron-cloud/registration';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
-import {AddressLookupMachine} from '../src/address-lookup.ts';
+import {AddressLookupMachine,syntheticAddressProvider,type AddressLookupOptions} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -48,7 +48,7 @@ async function fixture(configured=true){
    method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(envelope),
   },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as HttpBindings);
   const post=(body:unknown,operationId=randomUUID())=>request(v.proof('address-lookup',body,operationId,v.lease));
-  const fakeProvider={suggest:provider.suggest,validate:provider.validate};
+  const fakeProvider={[syntheticAddressProvider]:true,suggest:provider.suggest,validate:provider.validate};
   return {db,v,issuer,calls,provider,fakeProvider,app,options,post,request,setFailure:()=>{failed=true;}};
  }catch(error){await db.close();throw error;}
 }
@@ -135,7 +135,7 @@ test('the key-file provider requires exactly one explicitly scoped box',async()=
  try{
   const other=await connectedVenue(f.db,f.issuer,origin);
   const provider=createTestBoxAddressLookup({keyFile:join(directory,'google.env'),fetcher:async()=>assert.fail('unapproved dispatch')});
-  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider}}),/invalid_address_lookup_configuration/);
+  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider} as unknown as AddressLookupOptions}),/invalid_address_lookup_configuration/);
   assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider,allowedBoxes:[f.v,other]}}),/invalid_address_lookup_configuration/);
   const app=createAccountApp({...f.options,addressLookup:{provider,allowedBoxes:[f.v]}});
   assert.equal((await f.request(other.proof('address-lookup',suggestion(),randomUUID(),other.lease),app)).status,403);
@@ -159,13 +159,20 @@ test('incomplete or unscoped provider configuration fails closed',async()=>{
  const f=await fixture();try{
   const keyFile=createTestBoxAddressLookup({keyFile:'/unused/synthetic-key',fetcher:async()=>assert.fail('unexpected dispatch')});
   const provider={suggest:keyFile.suggest,validate:keyFile.validate};
+  const {accountId,venueId,installationId}=f.v;
+  const box={accountId,venueId,installationId};
   for(const addressLookup of [
    {provider},
-   {provider,accountId:f.v.accountId,venueId:f.v.venueId},
+   {provider,accountId,venueId},
+   {provider,allowAllTestBoxes:true},
    {provider:f.provider,allowAllTestBoxes:true},
    {provider:keyFile,allowAllTestBoxes:true},
+   {provider,...box,allowedBoxes:[box]},
+   {provider:f.fakeProvider,allowAllTestBoxes:true,allowedBoxes:[box]},
+   {provider:f.fakeProvider,allowAllTestBoxes:true,...box},
   ] as const){
-   assert.throws(()=>createAccountApp({...f.options,addressLookup}),/invalid_address_lookup_configuration/);
+   assert.throws(()=>createAccountApp({...f.options,addressLookup:addressLookup as AddressLookupOptions}),
+    /invalid_address_lookup_configuration/,Object.keys(addressLookup).join(', '));
   }
  }finally{await f.db.close();}
 });

@@ -89,7 +89,7 @@ Validation spends and closes the workflow before its one provider attempt.
 An uncertain validation cannot be submitted again. Remove this counted-abandonment
 exception when the real service is scoped.
 
-Both trials share one dispatch lock across venues. An eligible request holds it
+Address lookup shares one dispatch lock across venues on the same stack. An eligible request holds it
 for at least 500 ms, and another caller arriving in that window gets a 409
 without spending quota. A crash can shorten one dispatch gap. There is no automatic provider retry or stored reply to replay. Unlike recorded
 control mutations, this exchange rejects a consumed call ID: its five-minute
@@ -114,8 +114,9 @@ For the local fake-provider proof, run through a Docker-enabled test environment
 node scripts/test-postgres.mjs exec node --test packages/account-http/test/address-lookup.test.ts
 ```
 
-For a separate local rehearsal with synthetic data, pass `addressLookup: {provider, allowAllTestBoxes: true}`
-with an injected fake provider and publish a test allowance. This exercises the
+For a local rehearsal with synthetic data, pass `addressLookup: {provider, allowAllTestBoxes: true}`.
+Set `[syntheticAddressProvider]: true` on your fake provider using the symbol from
+`packages/account-http/src/address-lookup.ts`, and publish a test allowance. This exercises the
 signed requests and usage limits while Waitron screen integration and live address
 quality still need their own checks. Before the owner tries Google, configure the
 existing allowance for the approved account and receive the owner’s usage and

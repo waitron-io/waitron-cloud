@@ -12,9 +12,13 @@ type AddressLookupBox={accountId:string;venueId:string;installationId:string};
 type RegisteredBox={id:string;venue_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;
  environment:string;account_id:string|null;verified:boolean};
 type AddressProvider=Pick<ReturnType<typeof createGoogleAddressClient>,'suggest'|'validate'>;
-export type AddressLookupOptions=Partial<AddressLookupBox>&{
- provider:AddressProvider;allowedBoxes?:readonly AddressLookupBox[];allowAllTestBoxes?:true;
-};
+export const syntheticAddressProvider=Symbol('synthetic-address-provider');
+type NoLegacyBox={ [Field in keyof AddressLookupBox]?: never };
+export type AddressLookupOptions={provider:AddressProvider}&(
+ (AddressLookupBox&{allowedBoxes?:never;allowAllTestBoxes?:never})|
+ (NoLegacyBox&{allowedBoxes:readonly AddressLookupBox[];allowAllTestBoxes?:never})|
+ (NoLegacyBox&{allowedBoxes?:never;allowAllTestBoxes:true})
+);
 type Body={version:1;kind:'suggest'|'validate';workflowId:string;query?:string;selectedText?:string;language?:'es'|'en'};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 function conflict():never{throw new AccountHttpError(409,'conflict');}
@@ -60,7 +64,8 @@ export class AddressLookupMachine{
   const allowedBoxes=legacyBox?[options as AddressLookupBox]:options.allowedBoxes;
   const google=googleAddressProvider in provider;
   if(options.allowAllTestBoxes===true){
-   if(allowedBoxes!==undefined||google)throw new Error('invalid_address_lookup_configuration');
+   if(allowedBoxes!==undefined||google||!(syntheticAddressProvider in provider)||provider[syntheticAddressProvider]!==true)
+    throw new Error('invalid_address_lookup_configuration');
   }else if(!Array.isArray(allowedBoxes)||!allowedBoxes.length||legacyBox&&options.allowedBoxes!==undefined
    ||google&&allowedBoxes.length!==1||!allowedBoxes.every(box=>box&&
     [box.accountId,box.venueId,box.installationId].every(id=>typeof id==='string'&&uuid.test(id)))){
