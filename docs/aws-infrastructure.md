@@ -1136,7 +1136,7 @@ spending authority:
    Waitron image from the passing Linux rehearsal. Follow the [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
    For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
    Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
-   In `measured-stops`, the image bundle log gives the Waitron image ID to compare with the Linux receipt.
+   In `measured-stops`, the `Waitron rehearsal image` line gives the bundled image ID.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    An unhandled Kubernetes command failure records its stage, journey phase,
    wait arguments, elapsed time, exit code or signal, exception and the last

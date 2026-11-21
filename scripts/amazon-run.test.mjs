@@ -280,6 +280,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
+  const imageHash = tag => scenario === 'baseline measured stops' && tag.endsWith(':cloud') ? 'd'.repeat(64) : hashes;
   const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false, tunnelCloseAttempts = 0;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -440,7 +441,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
           annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},digest:'sha256:' + 'b'.repeat(64)}))});
         if (args.at(-1) === 'blobs/sha256/' + 'b'.repeat(64)) return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + hashes},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
         if (args.at(-1) === 'blobs/sha256/' + hashes) return JSON.stringify({os:'linux',architecture:'amd64'});
-        return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + hashes,RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
+        return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + imageHash(tag),RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
       }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
       if (binary === 'sudo' && args[1] === 'wg-quick' && args[2] === 'down' &&
@@ -492,7 +493,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         if (script.includes('sha256sum')) return hashes;
         if (script.includes('/opt/cni/bin/flannel')) return scenario === 'missing flannel' && args.at(-2) === 'admin@203.0.113.3' ? 'missing' : 'present';
         if (script.includes('crictl') && scenario === 'observer expiry') time += 700000;
-        if (script.includes('crictl')) return JSON.stringify({status: {id: 'sha256:' + (scenario === 'wrong imported image' ? 'b'.repeat(64) : hashes), pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
+        if (script.includes('crictl')) {
+          const importedHash = scenario === 'wrong imported image' ? 'b'.repeat(64) : imageHash(script.split("'").at(-2));
+          return JSON.stringify({status: {id: 'sha256:' + importedHash, pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
+        }
         if (script.includes('kubernetes-check.mjs')) {phases.push(target.phase); assert.ok(script.includes('sha256:' + hashes)); assert.equal(target.instances[2], output.C); return JSON.stringify({checked: target.phase});}
         if (script.includes('jsonpath=')) return 'manifest-old';
         if (script.includes("bootstrap.sh' 'control'")) return certificateKey;
