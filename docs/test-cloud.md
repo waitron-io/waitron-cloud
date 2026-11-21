@@ -521,7 +521,9 @@ pilot mailbox through the sandbox. Operator notices, other Cloud account mail
 and box mail still reach Mailpit. The switch checks a fingerprint of the
 approved scope before it starts. A bad file makes the worker exit with
 `Test email worker refused SES settings`. It restarts until you correct the
-file or turn off the switch. Mail waits in the queues during that time.
+file or turn off the switch. Mail waits in the queues during that time. If
+`up` fails its startup checks, the driver stops the recorded test Cloud
+containers. Run it again with the last working settings.
 
 After the coordinated backup and image upgrade, transfer
 `deploy/test-cloud/compose.amazon-ses.yaml` with the deployment files. Keep the

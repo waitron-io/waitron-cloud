@@ -340,6 +340,10 @@ test('Amazon up requires the explicit private SES file and mounts it only on the
  assert.equal(startup.environment.TEST_CLOUD_SES_SETTINGS_SOURCE,'/private/ses.json');
  const {sesSettingsSource,...disabled}=options;
  assert.throws(()=>validateDeployment(rendered(),disabled),/test_cloud.rendered/);
+ const missingWorker=amazonDeployment();
+ delete missingWorker.services['email-worker'];
+ for(const service of Object.values(missingWorker.services))if(service.environment)delete service.environment.TEST_CLOUD_ORIGIN;
+ assert.throws(()=>validateDeployment(missingWorker,{...options,origin:undefined}),/test_cloud.rendered/);
  for(const change of [
   value=>value.services['email-worker'].volumes.pop(),
   value=>value.services['email-worker'].volumes[0].read_only=false,

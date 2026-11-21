@@ -166,16 +166,16 @@ test('the Amazon backup override activates only its intended worker and retains 
  }
 });
 
-test('the Amazon SES overlay renders a private settings mount only on the email worker',async()=>{
+for(const backups of [false,true])test(`the Amazon SES overlay isolates its settings with backups ${backups?'on':'off'}`,async()=>{
  const {validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');
  const origin='https://cloud.example.test',certificateSource='/tmp/synthetic-certificates',sesSettingsSource='/tmp/synthetic-ses-settings.json';
- const backupVerifierImage='sha256:'+'e'.repeat(64);
+ const backupVerifierImage=backups?'sha256:'+'e'.repeat(64):undefined;
  const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env',
   '-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml',
-  '-f','deploy/test-cloud/compose.amazon-ses.yaml','-f','deploy/test-cloud/compose.amazon-backups.yaml','config','--format','json'],{cwd:root,encoding:'utf8',
-  env:{...process.env,TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource,TEST_CLOUD_SES_SETTINGS_SOURCE:sesSettingsSource,CLOUD_VERIFIER_IMAGE:backupVerifierImage}}));
+  '-f','deploy/test-cloud/compose.amazon-ses.yaml',...(backups?['-f','deploy/test-cloud/compose.amazon-backups.yaml']:[]),'config','--format','json'],{cwd:root,encoding:'utf8',
+  env:{...process.env,TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource,TEST_CLOUD_SES_SETTINGS_SOURCE:sesSettingsSource,CLOUD_VERIFIER_IMAGE:backupVerifierImage??''}}));
  assert.equal(validateDeployment(value,{image:value.services.account.image,target:'amazon',origin,certificateSource,sesSettingsSource,backupVerifierImage}).ready,true);
- assert.equal(value.services['backup-worker'].environment.CLOUD_VERIFIER_IMAGE,backupVerifierImage);
+ if(backups)assert.equal(value.services['backup-worker'].environment.CLOUD_VERIFIER_IMAGE,backupVerifierImage);
  const worker=value.services['email-worker'];
  assert.equal(worker.environment.TEST_CLOUD_AMAZON_SES,'1');
  const mount=worker.volumes.find(v=>v.target==='/run/test-cloud-ses.json');

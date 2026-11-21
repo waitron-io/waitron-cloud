@@ -68,7 +68,7 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
  if(backups&&(!amazon||!imagePattern.test(backupVerifierImage)))throw new Error('test_cloud.rendered');
  if(value?.name!==project||!services?.account||!services?.proxy||!services?.postgres||!services?.mailpit)throw new Error('test_cloud.rendered');
  if(backups)validateBackupWorker(services,backupVerifierImage);
- if(sesSettingsSource!==undefined&&(!amazon||!isAbsolute(sesSettingsSource)))throw new Error('test_cloud.rendered');
+ if(sesSettingsSource!==undefined&&(!amazon||!services['email-worker']||!isAbsolute(sesSettingsSource)))throw new Error('test_cloud.rendered');
  for(const [name,service] of Object.entries(services)){
   const sesWorker=sesSettingsSource!==undefined&&name==='email-worker';
   const sesMounts=(service.volumes??[]).filter(v=>v.target===sesSettingsTarget||sesSettingsSource!==undefined&&v.source===sesSettingsSource);
