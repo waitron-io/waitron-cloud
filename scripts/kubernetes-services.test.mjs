@@ -101,9 +101,18 @@ test('measured stops cover all three machines and the live roles before returnin
   });
 });
 
-test('the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup', async () => {
-  for (const routeStillResponding of [undefined, 'public', 'bad certificate']) {
-    const seen = [], signal = new AbortController().signal;
+const coldRoles = {primary: 'b', gateway: 'a', operator: 'c', fluxSource: 'b', fluxApply: 'a'};
+for (const [name, routeStillResponding, placement] of [
+  ['the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup'],
+  ['the full restart rejects a responding public route', 'public'],
+  ['the full restart rejects an expired certificate as evidence of network loss', 'bad certificate'],
+  ['the full restart reports unavailable placement and still stops', undefined, 'unavailable'],
+  ['the full restart propagates cancellation during placement before stopping machines', undefined, 'cancelled'],
+]) {
+  test(name, async t => {
+    const seen = [], controller = new AbortController(), {signal} = controller;
+    const cancelled = Error('rehearsal cancelled');
+    const log = t.mock.method(process.stderr, 'write');
     let inspectionChecks = 0;
     const down = label => async () => {
       seen.push(label);
@@ -113,6 +122,12 @@ test('the full restart requires healthy routes, fresh transport failures and rec
     };
     const run = servicesScript.measureServiceRestart({
       signal, checkStore: async () => {seen.push('store');},
+      async inventory(limit) {
+        assert.equal(limit, signal);
+        if (placement === 'cancelled') controller.abort(cancelled);
+        if (placement) throw Error('remote.stop_role_inventory');
+        return coldRoles;
+      },
       storeOutage: down('store outage'),
       prepare: async () => () => {seen.push('retained row and new write'); return {primary: 'original-copy'};},
       restore: async verify => {seen.push('data restored'); return verify();},
@@ -131,12 +146,21 @@ test('the full restart requires healthy routes, fresh transport failures and rec
       },
       async restartAll(outage) {
         seen.push('stopped');
+        if (placement !== 'cancelled') {
+          const expected = placement ? {unavailable: 'remote.stop_role_inventory'} : {roles: coldRoles};
+          assert.ok(log.mock.calls.some(({arguments: [line]}) =>
+            line === 'D621 all-machine stop inventory ' + JSON.stringify(expected) + '\n'),
+          'placement must be logged before the machines stop');
+        }
         const result = await outage({signal, confirmStopped: async () => {seen.push('confirmed');}});
         seen.push('restarted');
         return {outage: result, recoveryMs: 100};
       },
     });
-    if (routeStillResponding) {
+    if (placement === 'cancelled') {
+      await assert.rejects(run, error => error === cancelled);
+      assert.ok(!seen.includes('stopped'));
+    } else if (routeStillResponding) {
       await assert.rejects(run, /services.cold_transport/);
       assert.ok(!seen.includes('restarted'));
     } else {
@@ -147,9 +171,10 @@ test('the full restart requires healthy routes, fresh transport failures and rec
         'inspect', 'inspect', 'backup']);
       assert.equal(result.primary, 'original-copy');
       assert.equal(result.backup.pointId, 'new');
+      assert.deepEqual(result.roles, placement ? undefined : coldRoles);
     }
-  }
-});
+  });
+}
 
 test('a silent outside account connection expires as transport loss', async t => {
   const sockets = new Set();
@@ -162,7 +187,8 @@ test('a silent outside account connection expires as transport loss', async t =>
     const parent = new AbortController(), {signal} = parent;
     const reason = new DOMException('parent deadline', 'TimeoutError');
     const run = servicesScript.measureServiceRestart({
-      signal, checkStore: async () => {}, storeOutage: lost, restore: async () => ({}), inspectionReady: async () => true,
+      signal, inventory: async () => coldRoles, checkStore: async () => {}, storeOutage: lost,
+      restore: async () => ({}), inspectionReady: async () => true,
       probes: {
         session: async () => {}, remote: async () => {}, backupAfterRestart: async () => ({}),
         outage: {staff: lost, public: lost, account: signal => new Promise((_, reject) => {
