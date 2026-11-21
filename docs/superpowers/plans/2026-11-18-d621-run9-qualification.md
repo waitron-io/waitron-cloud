@@ -4,6 +4,23 @@
 
 **Before launch.** Run 8 stopped only machine C. Machine A hosted the control plane, database, storage and observer. For run 9, keep the observer and venue on the private test host outside the cell. Verify routing after machine addresses change, scope the rehearsal firewall to the test host, and check production-mode mail delivery to the private sink. Verify the schedule fits the approved expiry. The owner applies the reviewed setup and grants restart permission for the three instances. Follow the [readiness sizing](2026-11-18-d621-run9-sizing.md).
 
+**Run 9 result.** The paid attempt used the old in-cluster journey and failed at pairing. The owner confirmed the stack was gone. The HTTP 503 and manifest restarts remain unexplained. Cloud pairing changed between the passing local rehearsal and the paid run. Any repeat needs separate owner approval and a fresh passing outside rehearsal on the exact Cloud commit and Waitron image you plan to use.
+
+With those images loaded, run the outside rehearsal on disposable Linux. Retain the Cloud commit and Waitron image ID with the result. Follow the [outside rehearsal setup](../../aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell).
+
+```sh
+git rev-parse HEAD
+TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test --test-name-pattern='one outside Linux venue' scripts/kubernetes-services.test.mjs
+```
+
+For a separately approved paid run, use the same Cloud commit and Waitron image on the test host. Check the launch log's commit and keep it privately with the result.
+
+```sh
+node scripts/amazon-run.mjs measured-stops
+```
+
+The Linux rehearsal uses test containers and six-minute holds. Stockholm uses real machines and 15-minute holds.
+
 **Run 9 checks.** Start one disposable venue against production-mode Cloud with test service plans disabled. Use private `.test` DNS and certificates and the real mail transport to a private sink. Verify signup, sign-in, pairing, signed staff and public routes over WireGuard, scoped temporary storage credentials, encrypted capture and genuine isolated restore, along with the [P1 service inventory](2026-10-22-cloud-country-cell.md#coverage-map-and-outside-p1-gates).
 
 - Stop each machine for 15 minutes in turn. Across the legs exercise loss of the database primary, active gateway, database operator and Flux. Keep the same clients and acknowledged data, verify that only one database primary accepts writes, and let replicas heal before the next stop. Keep the 90-second account and remote, 300-second backup and 180-second Git repair bounds. Report longest probe gaps.

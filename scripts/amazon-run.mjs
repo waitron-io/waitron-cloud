@@ -72,7 +72,12 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
     await operations.waitDeleted();
     return {...(journeys ? {journeys} : {observation}), removed: true};
   } catch (error) {
-    try {await operations.deleteStack(); await operations.waitDeleted();}
+    try {
+      process.stderr.write('Amazon early deletion requested\n');
+      await operations.deleteStack();
+      await operations.waitDeleted();
+      process.stderr.write('Amazon early deletion confirmed\n');
+    }
     catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; Amazon teardown failed');}
     throw error;
   }
@@ -119,6 +124,8 @@ async function main() {
       await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', stack], true);
       return;
     }
+    const revision = await command('git', ['rev-parse', 'HEAD']);
+    process.stderr.write('Amazon launch mode ' + mode + '; Cloud commit ' + revision + '\n');
     process.stdout.write(JSON.stringify(await startAmazon({...config, observer: mode === 'observe',
       baseline: mode === 'baseline' || mode === 'measured-stops', measuredStops: mode === 'measured-stops'}, {
       signal: stop.signal, run: (binary, args, input, cleanup, timeout, request) => command(binary, args, input,

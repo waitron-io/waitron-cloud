@@ -724,9 +724,9 @@ and compare again. An older Debian image's ARN does not authorise a newer one.
 The launcher has no IAM-policy read permission; you make this comparison.
 
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
-for quota and spend checks. Confirm the [Paid Plan check](#check-the-account-plan-before-launching),
-then launch with `node scripts/amazon-run.mjs start`
-in this same terminal so `D618_CONFIG` remains set. Keep Stockholm in the config
+for quota and spend checks and the launch command for your approved rehearsal.
+Confirm the [Paid Plan check](#check-the-account-plan-before-launching),
+then launch in this same terminal so `D618_CONFIG` remains set. Keep Stockholm in the config
 and profile; the launcher deliberately lacks `organizations:DescribeOrganization`.
 This page's checks are offline/source guidance until you execute them; no live
 permission enforcement or experiment is proved here.

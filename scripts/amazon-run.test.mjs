@@ -19,18 +19,40 @@ test('Amazon repeat waits for stopped C, fifteen minutes and replacement; succes
 });
 
 for (const failure of ['create', 'prepare', 'before', 'stop', 'stopped', 'replace', 'after', 'still-stopped', 'expiry', 'deleted']) {
-  test('Amazon teardown runs and failure survives at ' + failure, async () => {
+  test('Amazon teardown runs and failure survives at ' + failure, async t => {
     assert.equal(typeof api.runAmazonExperiment, 'function');
     const calls = [], stage = name => async () => {calls.push(name); if (name === failure) throw Error('failed-' + name);};
+    const diagnostics = [];
+    if (failure === 'before') t.mock.method(process.stderr, 'write', value => {diagnostics.push([calls.at(-1), value.trim()]); return true;});
     await assert.rejects(api.runAmazonExperiment({create: stage('create'), prepare: stage('prepare'),
       journey: async phase => stage(phase)(), stopWorker: stage('stop'), waitStopped: stage('stopped'),
       replace: stage('replace'), checkStopped: stage('still-stopped'), waitDeleted: stage('deleted'), deleteStack: stage('delete')},
       {sleep: stage('sleep'), waitExpiry: stage('expiry')}), new RegExp('failed-' + failure));
     assert.ok(calls.includes('delete'));
     assert.equal(calls.at(-1), 'deleted');
+    if (failure === 'before') assert.deepEqual(diagnostics,
+      [['before', 'Amazon early deletion requested'], ['deleted', 'Amazon early deletion confirmed']]);
     if (['stop', 'stopped'].includes(failure)) assert.equal(calls.includes('after'), false);
   });
 }
+
+test('Amazon teardown reports a failed deletion wait', async t => {
+  const original = Error('journey failed'), cleanup = Error('deletion wait failed');
+  const diagnostics = [];
+  t.mock.method(process.stderr, 'write', value => {diagnostics.push(value.trim()); return true;});
+  await assert.rejects(api.runAmazonExperiment({
+    create: async () => {},
+    prepare: async () => {},
+    journey: async () => {throw original;},
+    deleteStack: async () => {},
+    waitDeleted: async () => {throw cleanup;},
+  }), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [original, cleanup]);
+    return /journey failed; Amazon teardown failed/.test(error.message);
+  });
+  assert.deepEqual(diagnostics, ['Amazon early deletion requested']);
+});
 
 test('all three machines wait for deletion schedule, use disposable root disks and scope SSH and mesh ingress to the operator', async () => {
   const stack = JSON.parse(await readFile(new URL('../deploy/kubernetes/bounded-amazon/stack.yaml', import.meta.url)));
@@ -151,12 +173,17 @@ console.log('synthetic-private-response');
 console.error('An error occurred (AccessDenied) when calling the DescribeStacks operation: no identity-based policy allows the action');
 process.exit(255);
 `, {mode: 0o700});
-  for (const mode of ['start', 'stop']) {
+  for (const mode of ['start', 'stop', 'measured-stops']) {
     const result = spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
       {encoding: 'utf8', env: {...process.env, D618_CONFIG: configPath, PATH: directory + ':' + process.env.PATH}, timeout: 10000});
     assert.equal(result.status, 1);
     assert.match(result.stderr, /AccessDenied.*no identity-based policy allows the action/);
     assert.match(result.stderr, /amazon.command_failed:aws:Error:255/);
+    if (mode === 'measured-stops') {
+      const revision = spawnSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).stdout.trim();
+      assert.match(revision, /^[a-f0-9]{40}$/);
+      assert.equal(result.stderr.split('\n')[0], 'Amazon launch mode measured-stops; Cloud commit ' + revision);
+    }
     assert.doesNotMatch(result.stdout + result.stderr, /synthetic-private-response/);
   }
 });

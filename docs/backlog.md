@@ -1852,8 +1852,19 @@ implementation or production evidence.
   access, encrypted upload and isolated restore. The same clients now exercise
   each individual stop and the all-machine restart in private Kind. The
   [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
-  keeps the final-tree timed run, billing reconciliation and paid Stockholm
-  qualification open.
+  records the passing timed outside rehearsal and the paid attempt that failed
+  in the older in-cluster pairing check. The owner verified deletion. The causes
+  of the venue's HTTP 503 and the manifest restarts remain unknown. Cloud pairing
+  changed between the two runs. Paid Stockholm qualification and billing
+  reconciliation remain open. Repeat the outside rehearsal on the exact Cloud
+  commit and Waitron image proposed for any separately approved paid run.
+  To reproduce the older failure, start with just the first in-cluster journey
+  on disposable Debian 13 x86-64 using the paid Cloud revision `f19c12c7` and its
+  pinned Waitron image. If it passes on one node, match the original three-node
+  placement, shared configuration and resource limits. Capture previous manifest
+  and account container exits and bounded private logs. Trace the venue's
+  `/api/pairing/start` request through the host's port 3000 to identify the
+  failing hop or response.
   Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
@@ -1861,7 +1872,7 @@ implementation or production evidence.
   900 seconds before the second journey, and owned cluster/volume cleanup.
   The owner dropped D570's first-machine proposal on 9 November. D618's
   [bounded three-machine plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md)
-  supplies `node scripts/amazon-run.mjs start` for the owner-started Amazon run.
+  supplies `node scripts/amazon-run.mjs start` for the original in-cluster check.
   Its local SSH reuse, saved-image system/processor checks and one-upload/private-share
   distribution run with `node --test scripts/amazon-run.test.mjs`. Archive-copy
   cutoffs use measured bytes and a stated 10 Mbit/s floor. Failed Kubernetes
