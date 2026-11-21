@@ -1,6 +1,6 @@
-import {createFirstOrganisation, lockOwnedOrganisations, matchingTaxBusinesses} from './account-businesses.ts';
+import {createFirstOrganisation, fillBlankBusinessTaxNumber, lockBlankBusiness, lockOwnedOrganisations, matchingTaxBusinesses} from './account-businesses.ts';
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
-import {organisationScopeSql, resolveSession, type SessionCredentials} from '@waitron-cloud/identity';
+import {resolveSession, type SessionCredentials} from '@waitron-cloud/identity';
 import type {Pool, PoolClient} from 'pg';
 import {isPairingUuid, PairingError, type PairingV4Claims} from './pairing-proof.ts';
 import {BillingStore} from './billing-store.ts';
@@ -110,15 +110,6 @@ async function boundSession(client: PoolClient, row: Attempt, registering: boole
   return session;
 }
 
-async function lockBlankBusiness(client: PoolClient, accountId: string, organisationId: string, countryCode: string) {
-  return (await client.query<{id: string}>(`WITH known AS (
-    SELECT b.id FROM legal_businesses b JOIN organisation_memberships m USING (organisation_id)
-    WHERE m.account_id=$1 AND ${organisationScopeSql('m.account_id','b.organisation_id')} LIMIT 2
-  ) SELECT b.id FROM legal_businesses b JOIN known k USING (id)
-  WHERE (SELECT count(*) FROM known)=1 AND b.organisation_id=$2 AND b.country_code=$3 AND b.tax_number IS NULL
-  FOR UPDATE OF b`, [accountId, organisationId, countryCode])).rows[0];
-}
-
 async function businessForVenue(client: PoolClient, accountId: string, countryCode: string, taxNumber: string, legalName: string) {
   const organisations = await lockOwnedOrganisations(client, accountId);
   const matches = await matchingTaxBusinesses(client, organisations.map(o => o.id), countryCode, taxNumber);
@@ -128,11 +119,8 @@ async function businessForVenue(client: PoolClient, accountId: string, countryCo
   let organisationId = organisations[0]?.id;
   if (organisationId) {
     const blank = await lockBlankBusiness(client, accountId, organisationId, countryCode);
-    if (blank) {
-      // The business lock holds off venue foreign-key checks until filing commits.
-      const updated = await client.query(`UPDATE legal_businesses SET tax_number=$2 WHERE id=$1
-        AND NOT EXISTS (SELECT 1 FROM venues WHERE legal_business_id=$1)`, [blank.id, taxNumber || null]);
-      if (updated.rowCount) return {organisationId, legalBusinessId: blank.id};
+    if (blank && await fillBlankBusinessTaxNumber(client, blank.id, taxNumber || null)) {
+      return {organisationId, legalBusinessId: blank.id};
     }
   } else {
     organisationId = await createFirstOrganisation(client, accountId, legalName);

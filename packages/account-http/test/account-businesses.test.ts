@@ -57,6 +57,29 @@ test('Account lists venue-free businesses and uses one record for matching tax n
   assert.equal(list.organisations.find(o => o.id === owner.organisationId)?.name, 'New Group');
 });
 
+test('An owner cannot register the same tax number under a different group or business name', async () => {
+  const owner = await account();
+  const request = requests(owner);
+  const secondGroup = randomUUID();
+  await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Second Group')", [secondGroup]);
+  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,true,true)',
+    [owner.accountId, secondGroup]);
+  assert.equal((await request('/businesses', {...details, organisationId: owner.organisationId})).status, 200);
+  const sameTax = await request('/businesses', {...details, organisationId: secondGroup});
+  const differentName = await request('/businesses', {...details, organisationId: owner.organisationId, legalName: 'Another SL'});
+  assert.deepEqual([sameTax.status, differentName.status], [409, 409]);
+  assert.deepEqual(await sameTax.json(), {error: 'business_match_ambiguous'});
+});
+
+test('Registering the business named during signup completes its existing record', async () => {
+  const owner = await account();
+  const response = await requests(owner)('/businesses', {...details, legalName: 'Original SL'});
+  assert.equal(response.status, 200);
+  const data = await response.json() as {businesses: {id: string; taxNumber: string}[]};
+  assert.deepEqual(data.businesses.map(({id, taxNumber}) => ({id, taxNumber})),
+    [{id: owner.legalBusinessId, taxNumber: 'ES-0123'}]);
+});
+
 test('An account without memberships names its first group after the first business', async () => {
   const owner = await account();
   await db.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1', [owner.accountId]);
@@ -83,6 +106,7 @@ test('Business reads and writes respect ownership and recovery scope', async () 
   assert.equal((await request('/businesses', {...details, organisationId: other.organisationId})).status, 403);
   assert.equal((await request('/businesses', details, {origin: 'https://foreign.example.test'})).status, 403);
   assert.equal((await request('/businesses', details, {'x-csrf-token': ''})).status, 403);
+  assert.equal((await request('/businesses', {...details, countryCode: 'FR'}, {cookie: ''})).status, 401);
   const unserved = await request('/businesses', {...details, countryCode: 'FR'});
   assert.equal(unserved.status, 400);
   assert.deepEqual(await unserved.json(), {error: 'country_unavailable'});

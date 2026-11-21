@@ -8,8 +8,8 @@ import {contextSignIn, startPortalFixture} from './fixtures.ts';
 const copy = {
   en: {section: 'Your businesses', name: 'Legal business name', country: 'Country', tax: 'Tax number',
     register: 'Register a business', rename: 'Organisation name', save: 'Save name'},
-  es: {section: 'Tus empresas', name: 'Nombre legal de la empresa', country: 'País', tax: 'Número fiscal',
-    register: 'Registrar una empresa', rename: 'Nombre de la organización', save: 'Guardar nombre'},
+  es: {section: 'Tus negocios', name: 'Nombre legal del negocio', country: 'País', tax: 'Número fiscal',
+    register: 'Registrar un negocio', rename: 'Nombre de la organización', save: 'Guardar nombre'},
 };
 
 test('Account owners can register a business and rename the group', async t => {

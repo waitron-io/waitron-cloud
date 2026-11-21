@@ -18,10 +18,26 @@ export async function lockOwnedOrganisations(client: PoolClient, accountId: stri
 export async function matchingTaxBusinesses(client: PoolClient, organisations: string[], countryCode: string, taxNumber: string) {
   const number = normaliseTaxNumber(taxNumber);
   if (!number || !organisations.length) return [];
-  const rows = (await client.query<{id: string; organisation_id: string; tax_number: string}>(`SELECT id,organisation_id,tax_number
+  const rows = (await client.query<{id: string; organisation_id: string; tax_number: string; name: string | null}>(`SELECT id,organisation_id,tax_number,name
     FROM legal_businesses WHERE organisation_id=ANY($1::uuid[]) AND country_code=$2 AND tax_number IS NOT NULL
     ORDER BY id FOR SHARE`, [organisations, countryCode])).rows;
   return rows.filter(business => normaliseTaxNumber(business.tax_number) === number);
+}
+
+export async function lockBlankBusiness(client: PoolClient, accountId: string, organisationId: string, countryCode: string) {
+  return (await client.query<{id: string; name: string | null}>(`WITH known AS (
+    SELECT b.id FROM legal_businesses b JOIN organisation_memberships m USING (organisation_id)
+    WHERE m.account_id=$1 AND ${organisationScopeSql('m.account_id','b.organisation_id')} LIMIT 2
+  ) SELECT b.id,b.name FROM legal_businesses b JOIN known k USING (id)
+  WHERE (SELECT count(*) FROM known)=1 AND b.organisation_id=$2 AND b.country_code=$3 AND b.tax_number IS NULL
+  FOR UPDATE OF b`, [accountId, organisationId, countryCode])).rows[0];
+}
+
+export async function fillBlankBusinessTaxNumber(client: PoolClient, businessId: string, taxNumber: string | null) {
+  // The held business lock keeps a new venue's foreign-key check waiting until filing commits.
+  const result = await client.query(`UPDATE legal_businesses SET tax_number=$2 WHERE id=$1
+    AND NOT EXISTS (SELECT 1 FROM venues WHERE legal_business_id=$1)`, [businessId, taxNumber]);
+  return !!result.rowCount;
 }
 
 async function canStartOrganisation(client: PoolClient, accountId: string) {
@@ -75,26 +91,34 @@ export class AccountBusinessStore {
   }
 
   async register(token: string, csrf: string, details: BusinessDetails) {
-    const name = field(details.legalName, 200), taxNumber = field(details.taxNumber, 32);
-    if (!normaliseTaxNumber(taxNumber)) throw new RegistrationError('invalid_input');
-    const country = requireSignupCountry(details.countryCode, this.#countryCode);
     return this.#write(token, csrf, async (client, accountId) => {
+      const name = field(details.legalName, 200), taxNumber = field(details.taxNumber, 32);
+      if (!normaliseTaxNumber(taxNumber)) throw new RegistrationError('invalid_input');
+      const country = requireSignupCountry(details.countryCode, this.#countryCode);
       const organisations = await lockOwnedOrganisations(client, accountId);
       const selected = details.organisationId;
       if (selected && !organisations.some(org => org.id === selected)) throw new IdentityError('permission_denied');
       if (!selected && organisations.length > 1) throw new RegistrationError('business_match_ambiguous');
       const organisationId = selected ?? organisations[0]?.id ?? await createFirstOrganisation(client, accountId, name);
       if (!organisationId) throw new IdentityError('permission_denied');
-      const matches = await matchingTaxBusinesses(client, [organisationId], country, taxNumber);
-      if (matches.length > 1) throw new RegistrationError('business_match_ambiguous');
-      if (matches.length === 0) await client.query(`INSERT INTO legal_businesses(id,organisation_id,name,country_code,tax_number)
+      const matches = await matchingTaxBusinesses(client, organisations.map(org => org.id), country, taxNumber);
+      const match = matches[0];
+      if (match) {
+        if (matches.length > 1 || match.organisation_id !== organisationId || match.name !== name) {
+          throw new RegistrationError('business_match_ambiguous');
+        }
+        return;
+      }
+      const blank = await lockBlankBusiness(client, accountId, organisationId, country);
+      if (blank?.name === name && await fillBlankBusinessTaxNumber(client, blank.id, taxNumber)) return;
+      await client.query(`INSERT INTO legal_businesses(id,organisation_id,name,country_code,tax_number)
         VALUES ($1,$2,$3,$4,$5)`, [randomUUID(), organisationId, name, country, taxNumber]);
     });
   }
 
   async rename(token: string, csrf: string, organisationId: string, input: string) {
-    const name = field(input, 200);
     return this.#write(token, csrf, async (client, accountId) => {
+      const name = field(input, 200);
       const result = await client.query(`UPDATE organisations o SET name=$3 FROM organisation_memberships m
         WHERE o.id=$2 AND m.organisation_id=o.id AND ${ownedScope}`, [accountId, organisationId, name]);
       if (!result.rowCount) throw new IdentityError('permission_denied');

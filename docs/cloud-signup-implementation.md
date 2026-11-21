@@ -77,9 +77,11 @@ checklists. Public ingress, browser behaviour and deployment checks remain separ
 Open **Account** to see the businesses in each organisation you own, including
 businesses without venues. Use **Register a business** to add its legal name,
 tax number and country. Choose the organisation if you own more than one that
-can register businesses. Cloud uses the service's country and the tax number
-to find an existing business in that group, so retrying a saved form keeps one
-business. If your account has no organisation or memberships, registration
+can register businesses. Retrying the same name and tax number keeps one
+business. Cloud asks you to check the details if that tax number already
+belongs to another business you own. If the business from signup is your
+only one and has no venue, use its existing legal name and country to give
+it a tax number. If your account has no organisation or memberships, registration
 names your new organisation after that first business.
 
 Use **Organisation name** to rename the group. Each business keeps its own
@@ -97,8 +99,8 @@ The recipient signs in, enrolls an app or passkey if needed, verifies it is them
 and reviews the organisation, its businesses and the parties before accepting. Activating an app ends their
 session, so they save their recovery codes and sign in again before accepting.
 Acceptance gives them sole ownership of the whole organisation and removes your
-membership there. Your other organisations and the venue’s independently
-authorised machines stay with their existing owners.
+membership there. You keep your other organisations. The venue’s paired
+machines keep their existing access.
 Old support and email-relay approvals are revoked; translation consent and
 queued or running translation work stop. Handing the business back does not
 restore those approvals. Close any unfinished backup recovery or replacement first.

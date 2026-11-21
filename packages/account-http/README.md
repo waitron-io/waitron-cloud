@@ -163,7 +163,8 @@ accepting; creating an offer grants the recipient no business access.
 | POST `/owner-transfers/accept` | `{"id":"<offer uuid>"}` | 200 with the offer state; acceptance replaces the owner atomically |
 | POST `/owner-transfers/cancel` | `{"id":"<offer uuid>"}` | 200 with the offer state; either participant may cancel |
 
-One pending offer per organisation lasts 24 hours. A repeated accept/cancel reads
+One pending offer per organisation lasts 24 hours. For finished offers,
+`organisationName` is empty unless you currently own the organisation. A repeated accept/cancel reads
 its existing state; a cancelled offer cannot become accepted. Unavailable offers
 and other people’s IDs return 404 `transfer_unavailable`; an unfinished recovery
 returns 409 `recovery_in_progress`. Writes share limits of 10 per IP per minute

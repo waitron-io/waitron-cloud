@@ -4,6 +4,7 @@ import type {PortalApp} from './app.ts';
 export function accountBusinessesScreen(app: PortalApp, countries: {code: string; name: string}[], countryNames: Intl.DisplayNames) {
   const c = app.copy, controller = app.businesses;
   const data = controller.data, busy = controller.pending || !!controller.waiting;
+  if (data && !data.organisations.length && !data.canStartOrganisation) return nothing;
   const groups = data?.organisations.filter(group => group.canRegister) ?? [];
   const submit = (path: '/businesses' | '/organisations/rename') => async (event: SubmitEvent) => {
     event.preventDefault();
@@ -41,7 +42,7 @@ export function accountBusinessesScreen(app: PortalApp, countries: {code: string
           ${groups.map(group => html`<option value=${group.id}>${group.name || c.unnamedOrganisation}</option>`)}
         </select>` : groups[0] ? html`<p class="help">${c.businessRegisterIn.replace('{name}', groups[0].name || c.unnamedOrganisation)}</p>
           <input type="hidden" name="organisationId" value=${groups[0].id}>` : nothing}
-      <label for="business-name">${c.businessLegalName}</label>
+      <label for="business-name">${c.legalName}</label>
       <input type="text" id="business-name" name="legalName" maxlength="200" autocomplete="organization" required ?disabled=${busy}>
       <label for="business-tax-number">${c.businessTaxNumber}</label>
       <input type="text" id="business-tax-number" name="taxNumber" maxlength="32" required ?disabled=${busy}>
