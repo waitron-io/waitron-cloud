@@ -16,7 +16,7 @@ Link the bilingual invitation to `/receive-business`. Existing accounts sign in.
 
 ## 2. Register or receive a business
 
-Put the business list and **Register a business** on `/account`. Show legal name, tax number and country for each business, including those without venues. Use the first business's name for the organisation. Name the group the business will join. Offer an owner-only **Organisation name** edit with “This name groups your businesses”. Link the empty `/connect` screen to registration.
+Put the business list and **Register a business** on `/account`. Show legal name, tax number and country for each business, including those without venues. Use the first business's name for the organisation. Name the group the business will join. Offer an owner-only **Organisation name** edit with “This name groups your businesses”.
 
 Add `account-businesses.ts` in registration and account-http and wire the existing HTTP app. GET and POST `/api/account/businesses` list and create. POST `/api/account/organisations/rename` changes the name. Reuse the configured-country refusal, billing field limits and setup's country and normalised tax match. Require a tax number and keep its entered form. Ask which owned organisation to use when several are eligible. Create the first organisation only for an unrestricted account without memberships. Share first-organisation locking with setup, and recheck owner and recovery scope after waits. Use the existing enrolled-session and write checks. In portal, wire the business controller and screen through `app.ts`, `screens.ts`, `api.ts` and `locale.ts`.
 
