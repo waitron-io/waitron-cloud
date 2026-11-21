@@ -16,6 +16,7 @@ import {bootstrapTestCloud} from './bootstrap.mjs';
 import {openTestRelayRuntime} from './relay-runtime.mjs';
 import {executeTestServiceCommand} from './service-controls.mjs';
 import {createTestAccountWorker,runTestEmailQueues} from './email-worker.mjs';
+import {createTestCaptureMailer} from './capture-mailer.mjs';
 import {config as sesConfig,keys as recipientKeys} from '../../packages/registration/test/fixtures/mail-attempt.ts';
 import {testRelaySettings} from './relay-settings.mjs';
 
@@ -166,10 +167,11 @@ test(automatic ? 'setup box and Cloud staff mail reach Mailpit with the Stockhol
     if(automatic){
       await signup.request(staff);
       const unexpected=()=>assert.fail('Mailpit traffic reached the SES transport');
-      const account=createTestAccountWorker(db.pool,db.outbox,origin,{
+      const capture=createTestCaptureMailer({origin,port:Number(process.env.MAILPIT_TEST_SMTP_PORT)},origin);
+      const account=createTestAccountWorker(db.pool,db.outbox,capture,{
         email:recipient,ses:{config:sesConfig(),recipientKeys},
         mailer:{sendVerification:unexpected,sendPasswordReset:unexpected,sendPasswordChanged:unexpected,sendServiceAlert:unexpected}
-      },Number(process.env.MAILPIT_TEST_SMTP_PORT));
+      });
       const queues={account,relay:worker,once:true};
       assert.equal(await runTestEmailQueues(queues),true);
       assert.equal(await runTestEmailQueues(queues),true);

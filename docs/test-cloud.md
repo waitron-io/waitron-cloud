@@ -519,8 +519,9 @@ The Amazon test Cloud captures mail in Mailpit by default. The Stockholm Amazon
 Simple Email Service (SES) switch sends Cloud account mail for the one verified
 pilot mailbox through the sandbox. Operator notices, other Cloud account mail
 and box mail still reach Mailpit. The switch checks a fingerprint of the
-approved scope before it starts. An invalid file stops the email worker with
-`Test email worker refused SES settings`.
+approved scope before it starts. A bad file makes the worker exit with
+`Test email worker refused SES settings`. It restarts until you correct the
+file or turn off the switch. Mail waits in the queues during that time.
 
 After the coordinated backup and image upgrade, transfer
 `deploy/test-cloud/compose.amazon-ses.yaml` with the deployment files. Keep the
@@ -529,8 +530,9 @@ checkout. It holds the pinned `scope` from the trial readback, the `smtp` user a
 password issued to the scoped sender, and a dedicated `recipientKeys` key set
 with `activeKeyId` and `keys`. Retain the recipient keys with your private
 configuration backup so earlier attempts remain matchable after rotation.
-Run the normal Amazon command with the same image and HTTPS settings, adding
-the settings path only for `up`:
+Run the normal Amazon command with the same image and HTTPS settings. Keep
+every other add-on setting you use, including `CLOUD_TEST_AMAZON_VERIFIER_IMAGE`
+for backups, and add the settings path only for `up`:
 
 ```sh
 TEST_CLOUD_SES_SETTINGS_SOURCE=/root/waitron-test-mail/ses.json \
@@ -554,7 +556,8 @@ Use the exact [Amazon test verifier build](backup-verifier-containment.md#build-
 Transfer the image privately and confirm its full `sha256:` image ID on the
 test host. Transfer `deploy/test-cloud/compose.amazon-backups.yaml` with the
 other deployment files. Set `CLOUD_TEST_AMAZON_VERIFIER_IMAGE` to that ID for the
-driver's Amazon `up`. The override enables one storage upload path on the
+driver's Amazon `up`. Keep the SES settings path if you use the mail switch.
+The override enables one storage upload path on the
 existing account HTTPS name and starts the trusted backup worker. That worker
 controls Docker and can act as root on the host. The proxy verifies the storage
 server against the private local CA's certificate.

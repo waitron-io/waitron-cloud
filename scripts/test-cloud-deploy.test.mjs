@@ -323,11 +323,11 @@ test('the driver enables the Amazon backup override only for an explicit immutab
 test('Amazon up requires the explicit private SES file and mounts it only on the email worker',async()=>{
  const {deploy,validateDeployment}=await api(),id='c'.repeat(64),calls=[];let reads=0;
  const options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',sesSettingsSource:'/private/ses.json'};
- const rendered=()=>{
+ const rendered=(source=options.sesSettingsSource)=>{
   const value=amazonDeployment(),worker={...value.services['email-worker']};
   value.services['email-worker']=worker;
   worker.environment={...worker.environment,TEST_CLOUD_AMAZON_SES:'1'};
-  worker.volumes=[{type:'bind',source:'/private/ses.json',target:'/run/test-cloud-ses.json',read_only:true,bind:{create_host_path:false}}];
+  worker.volumes=[{type:'bind',source,target:'/run/test-cloud-ses.json',read_only:true,bind:{create_host_path:false}}];
   return value;
  };
  const execute=async(_command,args,options)=>{
@@ -350,6 +350,11 @@ test('Amazon up requires the explicit private SES file and mounts it only on the
  ]){
   const value=rendered();change(value);
   assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+ }
+ for(const sesSettingsSource of [
+  'relative/ses.json','/private/certificates/ses.json','/opt/waitron-cloud/acme-webroot/ses.json','/opt/waitron-cloud'
+ ]){
+  assert.throws(()=>validateDeployment(rendered(sesSettingsSource),{...options,sesSettingsSource}),/test_cloud.rendered/,sesSettingsSource);
  }
  for(const change of [{target:'lan'},{sesSettingsSource:'relative/ses.json'}]){
   await assert.rejects(deploy('up',{...options,...change,inventory:assert.fail}),/test_cloud.amazon_ses/);

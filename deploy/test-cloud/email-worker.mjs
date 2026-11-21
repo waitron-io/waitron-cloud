@@ -21,22 +21,20 @@ export async function runTestEmailQueues({account,relay,signal,once=false}){
   onError:()=>console.error('Test relay worker failed; check private configuration and schema')}).finally(()=>stop.abort()));
  const results=await Promise.allSettled(loops),failure=results.find(result=>result.status==='rejected');if(failure)throw failure.reason;
 }
-export function createTestAccountWorker(pool,outbox,origin,pilot,port=1025){
- const captureMailer=createTestCaptureMailer({origin,port},origin);
+export function createTestAccountWorker(pool,outbox,captureMailer,pilot){
  const options=pilot?{ses:pilot.ses,sesRecipient:{email:pilot.email,captureMailer}}:undefined;
  return new EmailWorker(pool,outbox,pilot?.mailer??captureMailer,options);
 }
 export async function runTestEmailWorker({directory='/run/local-stack',root='/app',signal,once=false}={}){
  const pilot=loadTestSesRuntime(process.env);
  const config=await loadRuntime(directory),environment=testRuntimeEnvironment('email',config,process.env);
- const origin=process.env.TEST_CLOUD_ORIGIN??'https://waitron.local:3000';
- if(environment.CLOUD_PORTAL_ORIGIN!==origin)throw Error('test_cloud.mail_configuration');
  await checkConsumerDatabase(environment.DATABASE_URL,root);
  const pool=new Pool({connectionString:environment.DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});
  const stop=new AbortController(),abort=()=>stop.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();pool.on('error',abort);
  try{
   const outbox=new EmailOutbox({activeKeyId:config.email.activeKeyId,keys:config.email.keys});
-  const worker=createTestAccountWorker(pool,outbox,origin,pilot);
+  const captureMailer=createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025},process.env.TEST_CLOUD_ORIGIN??'https://waitron.local:3000');
+  const worker=createTestAccountWorker(pool,outbox,captureMailer,pilot);
   const mode=parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS);let relayRuntime;
   const relay=mode==='test-venue-levels'?{async runOnce(){
    const {openTestRelayRuntime}=await import('./relay-runtime.mjs');

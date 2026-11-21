@@ -32,6 +32,9 @@ export function validatePreflight(value,{image,ownedIds=[],target='lan'}={}){
 }
 const backupRoles=new Set(['bootstrap','account','proxy','backup-worker']);
 const sesSettingsTarget='/run/test-cloud-ses.json';
+function containsPath(directory,file){
+ return file===directory||file.startsWith(directory.endsWith('/')?directory:directory+'/');
+}
 const dockerSocket='/var/run/docker.sock';
 const workerStage='/opt/waitron-cloud/amazon-backup-stages/worker/mount/work';
 const verifierStage='/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work';
@@ -65,7 +68,7 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
  if(backups&&(!amazon||!imagePattern.test(backupVerifierImage)))throw new Error('test_cloud.rendered');
  if(value?.name!==project||!services?.account||!services?.proxy||!services?.postgres||!services?.mailpit)throw new Error('test_cloud.rendered');
  if(backups)validateBackupWorker(services,backupVerifierImage);
- if(sesSettingsSource!==undefined&&(!amazon||!services['email-worker']||!isAbsolute(sesSettingsSource)))throw new Error('test_cloud.rendered');
+ if(sesSettingsSource!==undefined&&(!amazon||!isAbsolute(sesSettingsSource)))throw new Error('test_cloud.rendered');
  for(const [name,service] of Object.entries(services)){
   const sesWorker=sesSettingsSource!==undefined&&name==='email-worker';
   const sesMounts=(service.volumes??[]).filter(v=>v.target===sesSettingsTarget||sesSettingsSource!==undefined&&v.source===sesSettingsSource);
@@ -73,6 +76,12 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
   if(service.environment?.TEST_CLOUD_AMAZON_SES!==(sesWorker?'1':undefined)||
    sesMounts.length!==(sesWorker?1:0)||sesWorker&&(!isExplicitBind(sesMount)||sesMount.source!==sesSettingsSource||
     sesMount.target!==sesSettingsTarget||sesMount.read_only!==true))throw new Error('test_cloud.rendered');
+  // A bind of a parent directory would expose the settings despite a separate worker mount.
+  if(sesSettingsSource&&service.volumes?.some(v=>{
+   if(v===sesMount||v.type!=='bind'||!isAbsolute(v.source))return false;
+   const mounted=resolve(v.source);
+   return containsPath(mounted,sesSettingsSource)||containsPath(sesSettingsSource,mounted);
+  }))throw new Error('test_cloud.rendered');
   if(service.environment?.CLOUD_TEST_AMAZON_BACKUPS!==(backups&&backupRoles.has(name)?'1':undefined)||
    name!=='backup-worker'&&service.volumes?.some(v=>v.source==='test-backup-verifier-state'||v.target==='/run/backup-verifier'))throw new Error('test_cloud.rendered');
   if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true||amazon&&name==='http-challenges'&&v.source==='/opt/waitron-cloud/acme-webroot'&&v.target==='/run/account-webroot'&&v.read_only===true||backups&&name==='backup-worker'&&(isBackupSocket(v)||isBackupStage(v))||sesWorker&&v===sesMount))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');

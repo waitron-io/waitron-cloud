@@ -48,5 +48,5 @@ test('the test mail switch requires the pinned sandbox scope and a private regul
   await save({...settings,scope:{...scope,...override}});refused();
  }
  await save({...settings,recipientKeys:{activeKeyId:'missing',keys:{}}});refused();
- await writeFile(path,' '.repeat(65537));refused();
+ await writeFile(path,JSON.stringify(settings).padEnd(65537,' '));refused();
 });
