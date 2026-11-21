@@ -18,8 +18,7 @@ bilingual portal to verify your email, choose your business country and finish s
    one transaction. The owner can register venues but receives no platform permission.
    Sign in through the existing password/session API after completion.
 
-Start with one organisation and one business. Keep both as separate records so later
-businesses can have their own countries and tax identities. Your business country
+Signup creates one organisation and its first business. Your business country
 must match the service’s `CLOUD_COUNTRY_CODE` (default `ES`).
 Choosing France on Spain’s signup screen returns “Waitron Cloud isn't available in
 France yet”. Choose Spain and retry the same email link before it expires; the
@@ -73,18 +72,33 @@ The token and password rules follow the applicable guidance in the
 and [single-use email token](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)
 checklists. Public ingress, browser behaviour and deployment checks remain separate gates.
 
+## Manage your businesses
+
+Open **Account** to see the businesses in each organisation you own, including
+businesses without venues. Use **Register a business** to add its legal name,
+tax number and country. Choose the organisation if you own more than one that
+can register businesses. Cloud uses the service's country and the tax number
+to find an existing business in that group, so retrying a saved form keeps one
+business. If your account has no organisation or memberships, registration
+names your new organisation after that first business.
+
+Use **Organisation name** to rename the group. Each business keeps its own
+legal name and tax number. The [Account browser check](../apps/portal/test/account-businesses-browser.test.ts)
+covers business registration and rename.
+
 ## Hand over an existing business
 
 When someone else takes over your business, open **Account → Hand over ownership**.
-Verify it is you, select the business and enter the recipient’s email. The offer lasts 24 hours; either of you can cancel.
+Verify it is you, select the organisation and enter the recipient’s email. The offer lasts 24 hours. Either of you can cancel.
 The invitation always uses the same wording, including for an unavailable address.
 It does not tell you whether that address has an account.
 
 The recipient signs in, enrolls an app or passkey if needed, verifies it is them
-and accepts the displayed business and parties. Activating an app ends their
+and reviews the organisation, its businesses and the parties before accepting. Activating an app ends their
 session, so they save their recovery codes and sign in again before accepting.
-Acceptance removes your membership and gives them sole ownership together. Your
-other businesses and the venue’s independently authorised machines remain.
+Acceptance gives them sole ownership of the whole organisation and removes your
+membership there. Your other organisations and the venue’s independently
+authorised machines stay with their existing owners.
 Old support and email-relay approvals are revoked; translation consent and
 queued or running translation work stop. Handing the business back does not
 restore those approvals. Close any unfinished backup recovery or replacement first.

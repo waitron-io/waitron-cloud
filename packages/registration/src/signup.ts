@@ -48,9 +48,7 @@ export class SignupStore {
     if (!input) throw new SignupError('signup_invalid');
     const organisationName = name(input.organisationName);
     const legalBusinessName = name(input.legalBusinessName);
-    if (typeof input.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(input.countryCode)) throw new SignupError('signup_invalid');
-    const countryCode = input.countryCode.toUpperCase();
-    if (countryCode !== this.#countryCode) throw new SignupError('country_unavailable');
+    const countryCode = requireSignupCountry(input.countryCode, this.#countryCode);
     return this.#complete(token,input,async (client,accountId)=>{
       const organisationId=randomUUID(),legalBusinessId=randomUUID();
       await client.query('INSERT INTO organisations (id, name) VALUES ($1, $2)', [organisationId, organisationName]);
@@ -105,4 +103,11 @@ const digest = (token: string) => createHash('sha256').update(token).digest('hex
 function name(value: string): string {
   if (typeof value !== 'string' || value.length > 200 || !value.trim() || /[\u0000-\u001f\u007f]/.test(value)) throw new SignupError('signup_invalid');
   return value.trim();
+}
+
+export function requireSignupCountry(input: string, servedCountry: string) {
+  if (typeof input !== 'string' || !/^[A-Za-z]{2}$/.test(input)) throw new SignupError('signup_invalid');
+  const country = input.toUpperCase();
+  if (country !== servedCountry) throw new SignupError('country_unavailable');
+  return country;
 }

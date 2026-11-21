@@ -417,7 +417,7 @@ email capture. SMTP capture tests select by subject and recipient because concur
 database fixtures share the inbox. The account HTTP API now provides signup, login, session activity,
 logout and recovery with shared request limits, Origin/CSRF checks and bounded
 network handling. The bilingual portal supports signup and password recovery.
-After signing in, use Account for sign-in and security, Venues for services and
+After signing in, use Account for businesses and security, Venues for services and
 backups, and Remote access for addresses and guest menus. Billing appears for
 eligible accounts and holds the Connected trial, tax details and test payment methods.
 You can sign out from each page. Browser and Mailpit tests exercise the portal
@@ -1023,6 +1023,14 @@ ordinary-client refusal and public privacy, supplier and release work remain ope
 **Open; local building only.** Launch first in Spain on AWS and keep routine customer
 journeys self-service. Qualify remote access, replacement recovery, hostnames, cell
 movement and outage behaviour against the [requirements and deliberate limits](backlog/initial-focus.md).
+
+## Cloud signup and business moves
+
+Separate account signup from business registration and add an explanatory page
+for handover invitations. Qualify the original-tab venue setup on the released
+Waitron box, including the after-Admin sign-in and early services. Check removing
+and reconnecting a venue when one business changes owner or a venue changes
+business. The existing handover transfers the whole organisation.
 
 ## Free services for open-source Waitron
 

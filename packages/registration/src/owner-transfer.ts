@@ -13,13 +13,18 @@ export class OwnerTransferError extends Error {
  constructor(code:OwnerTransferError['code']='transfer_unavailable'){super(code);this.name='OwnerTransferError';this.code=code;}
 }
 interface Offer {id:string;organisation_id:string;sender_id:string;recipient_id:string|null;sender_email:string;recipient_email:string;recipient_needs_enrolment:boolean;locale:AccountLocale;expires_at:Date;state:'pending'|'accepted'|'cancelled'|'expired'}
-export interface OwnerTransferView {id:string;organisationId:string;organisationName:string;senderEmail:string;recipientEmail:string;expiresAt:string;state:Offer['state'];incoming:boolean}
+export interface OwnerTransferView {id:string;organisationId:string;organisationName:string;businessNames:string[];senderEmail:string;recipientEmail:string;expiresAt:string;state:Offer['state'];incoming:boolean}
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const enrolled=`EXISTS(SELECT 1 FROM cloud_passkeys WHERE account_id=a.id) OR EXISTS(SELECT 1 FROM cloud_authenticator_factors WHERE account_id=a.id AND secret_envelope IS NOT NULL)`;
 async function lockAccounts(client:PoolClient,ids:(string|null)[]){await client.query('SELECT id FROM cloud_accounts WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[ids.filter(Boolean)]);}
 async function view(client:PoolClient,row:Offer,accountId:string):Promise<OwnerTransferView>{
  const org=(await client.query('SELECT name,clock_timestamp() AS now FROM organisations WHERE id=$1',[row.organisation_id])).rows[0];
- return {id:row.id,organisationId:row.organisation_id,organisationName:org.name,senderEmail:row.sender_email,recipientEmail:row.recipient_email,expiresAt:row.expires_at.toISOString(),state:row.state==='pending'&&row.expires_at<=org.now?'expired':row.state,incoming:row.recipient_id===accountId};
+ const state=row.state==='pending'&&row.expires_at<=org.now?'expired':row.state;
+ // Historical offers remain visible to a former owner. Only live offers disclose current businesses.
+ const businessNames=state==='pending'
+  ?(await client.query<{name:string}>('SELECT name FROM legal_businesses WHERE organisation_id=$1 AND name IS NOT NULL ORDER BY name,id',[row.organisation_id])).rows.map(b=>b.name)
+  :[];
+ return {id:row.id,organisationId:row.organisation_id,organisationName:org.name,businessNames,senderEmail:row.sender_email,recipientEmail:row.recipient_email,expiresAt:row.expires_at.toISOString(),state,incoming:row.recipient_id===accountId};
 }
 export class OwnerTransferStore {
  readonly #pool:Pool;readonly #outbox:EmailOutbox;
