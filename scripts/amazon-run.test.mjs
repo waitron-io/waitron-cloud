@@ -117,6 +117,15 @@ test('bootstrap refuses an unsupported phase before touching the host', () => {
 const config = {region: 'eu-north-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
   operatorCidr: '203.0.113.8/32', sshKey: '/synthetic/key', stackRole: 'arn:aws:iam::123456789012:role/d618-stack',
   schedulerRole: 'arn:aws:iam::123456789012:role/d618-expiry', waitronCheckout: '/synthetic/waitron'};
+const rehearsedWaitronImage = 'sha256:' + 'a'.repeat(64);
+
+test('measured stops require the saved Waitron image ID before provider access', async () => {
+  for (const image of [undefined, 'waitron:latest']) {
+    await assert.rejects(api.startAmazon({...config, baseline: true, measuredStops: true, rehearsedWaitronImage: image}, {
+      aws: async () => {throw Error('provider reached before the rehearsal image was checked');},
+    }), /Set rehearsedWaitronImage to the loaded rehearsal image ID/);
+  }
+});
 
 test('the Stockholm stop confirms the owned instance before marking it, holds it down and rejoins the same instance', async () => {
   const instance = 'i-00000000000000002', node = 'private-node-b';
@@ -167,7 +176,7 @@ test('failed AWS commands show the provider error without dumping response data'
   const directory = await mkdtemp(join(tmpdir(), 'd618-error-'));
   t.after(() => rm(directory, {recursive: true, force: true}));
   const configPath = join(directory, 'config.json');
-  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(configPath, JSON.stringify({...config, rehearsedWaitronImage}));
   await writeFile(join(directory, 'aws'), `#!${process.execPath}
 console.log('synthetic-private-response');
 console.error('An error occurred (AccessDenied) when calling the DescribeStacks operation: no identity-based policy allows the action');
@@ -270,7 +279,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
+for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
   ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
@@ -289,7 +298,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const cold = scenario.startsWith('baseline cold');
-  const measuredStops = cold || ['baseline measured stops', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
+  const measuredStops = cold || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
   if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
     const timeout = AbortSignal.timeout;
@@ -299,7 +308,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const diskMarkers = new Map();
   const publicAfter = ['203.0.113.11', '203.0.113.12', '203.0.113.13'];
   if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
-  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
+  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, rehearsedWaitronImage,
+    observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
     prepareFlux: async (directory, _name, options) => {calls.push(['flux-prepare', options.node]);return directory+'/flux.json';},
     async runBaseline(context) {
       assert.match(scenario, /^baseline/);
@@ -431,6 +441,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         transports.push({binary,args,input,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
       if (binary === 'uname') return 'x86_64';
+      if (binary === 'docker' && args[0] === 'tag' && args[1] === rehearsedWaitronImage &&
+        scenario === 'baseline missing rehearsal image') throw Error('saved image unavailable');
       if (binary === 'docker' && args[0] === 'network' && args[1] === 'create') return 'd'.repeat(64);
       if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(args.indexOf('-o') + 2);
       if (binary === 'wc') return '1303994368 images.tar';
@@ -524,6 +536,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   }
   let result;
   if (expectedError) await assert.rejects(running, expectedError); else result = await running;
+  if (scenario === 'baseline missing rehearsal image') {
+    assert.equal(calls.some(row => row[1] === 'create-stack'), false);
+    return;
+  }
   if (scenario === 'incomplete archive') {
     assert.equal(calls.some(row => row[1] === 'create-stack'), false, 'no machines before archive closure');
     assert.equal(calls.some(row => row[1] === 'delete-stack'), false);
@@ -670,7 +686,14 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.deepEqual(calls.filter(row => lifecycle.includes(row[1])).map(row => [row[1], row.at(-1)]), measuredStops ?
       ['stop-instances', 'describe-instances', 'describe-instances', 'start-instances', 'describe-instances'].map(call => [call, output.C]) : []);
     assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-storage.mjs')), false);
-    assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
+    if (measuredStops) {
+      assert.deepEqual(calls.find(row => row[0] === 'docker' && row[1] === 'tag' && row[3].endsWith(':waitron')),
+        ['docker', 'tag', rehearsedWaitronImage, savedTags[1]]);
+      assert.equal(calls.some(row => row[0] === 'env' && row.includes('scripts/build-backup-verifier.mjs')), false);
+      assert.equal(calls.some(row => row[0] === 'docker' && row[1] === 'image' && row[2] === 'rm' && row.includes(rehearsedWaitronImage)), false);
+    } else {
+      assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
+    }
     assert.deepEqual(savedTags.filter(tag => /:(source|kustomize)-controller$/.test(tag)).length, 2);
     assert.match(transports.find(row => row.input === 'synthetic-migration')?.args.at(-1) ?? '', /--context/);
     assert.equal(transports.find(row => row.input === 'synthetic-migration')?.args.at(-2), 'admin@203.0.113.2');

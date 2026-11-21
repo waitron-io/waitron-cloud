@@ -1067,8 +1067,10 @@ Keep credentials and a mode-600 JSON file outside the repository. Set `D618_CONF
 to that file. Its keys are `region` (explicitly `eu-north-1` for tonight; no default), `account` (your practice account),
 `image` (Stockholm's Debian 13 amd64 `ami-0d2679679834750c7`, rechecked before launch), `key` (`d618` in Stockholm), `sshKey`
 (the private key path on the test box), `operatorCidr` (that box’s public IPv4 `/32`),
-`stackRole`, `schedulerRole` (the two external role ARNs), and `waitronCheckout`
-(a Waitron checkout containing the revision in `deploy/backup-verifier/target.json`).
+`stackRole` and `schedulerRole` (the two external role ARNs). For `measured-stops`,
+set `rehearsedWaitronImage` to the full Docker image ID loaded from the passing
+Linux rehearsal. For other launch modes, set `waitronCheckout` to the Waitron
+checkout containing the pinned verifier revision.
 No package token or AWS credential is copied to the three machines.
 The launcher saves only Linux/AMD64 images and checks that the selected image
 manifest, configuration and layer files are in the archive before creating machines.
@@ -1133,7 +1135,8 @@ spending authority:
    running the already-built single stops or the all-machine restart.
 6. For a separately approved outside-venue rehearsal, launch from a clean Cloud checkout
    with `node scripts/amazon-run.mjs measured-stops`. Use the exact Cloud commit and
-   Waitron image from the passing Linux rehearsal. Follow the [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
+   Waitron image from the passing Linux rehearsal. Save and load the image as
+   described in the [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
    For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
    Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
    In `measured-stops`, the `Waitron rehearsal image` line gives the bundled image ID.

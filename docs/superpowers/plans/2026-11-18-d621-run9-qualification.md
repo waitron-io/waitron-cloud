@@ -13,7 +13,23 @@ git rev-parse HEAD
 TEST_KUBERNETES_OUTSIDE_BASELINE=1 TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1 node --test --test-name-pattern='one outside Linux venue' scripts/kubernetes-services.test.mjs
 ```
 
-For a separately approved paid run, use a clean checkout at the rehearsed Cloud commit on the test host. The launcher rebuilds the Waitron image from the pinned source in `deploy/backup-verifier/amazon-test-target.json`. Keep the launch log privately and check that its Cloud commit and Waitron image ID match the Linux receipt before accepting the result.
+After the Linux rehearsal passes, save its Waitron image to a private path outside the checkout and record the archive's SHA-256 checksum with the result. Give it a rehearsal tag so it stays loaded when the launcher removes its own temporary tag.
+
+```sh
+umask 077
+docker tag "$TEST_CLOUD_INTEGRATION_WAITRON_IMAGE" "$WAITRON_REHEARSAL_TAG"
+docker save --output "$WAITRON_REHEARSAL_ARCHIVE" "$WAITRON_REHEARSAL_TAG"
+sha256sum "$WAITRON_REHEARSAL_ARCHIVE"
+```
+
+For a separately approved paid run, verify that checksum on the test host. Load the archive and read the full image ID.
+
+```sh
+docker load --input "$WAITRON_REHEARSAL_ARCHIVE"
+docker image inspect --format '{{.Id}}' "$WAITRON_REHEARSAL_TAG"
+```
+
+Put that ID in `rehearsedWaitronImage` in your private `D618_CONFIG`. Use a clean checkout at the rehearsed Cloud commit. The launcher uses that loaded image for the bundle and logs its configuration digest.
 
 ```sh
 node scripts/amazon-run.mjs measured-stops

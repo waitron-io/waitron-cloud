@@ -172,6 +172,8 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   observe = observerCommand, prepareFlux = prepareFluxBundle, runBaseline = runOutsideServices}) {
   assert.ok(!(config.baseline && config.observer), 'amazon.mode');
   assert.ok(!config.measuredStops || config.baseline, 'amazon.measured_stops_scope');
+  if (config.measuredStops) assert.match(config.rehearsedWaitronImage ?? '', /^sha256:[a-f0-9]{64}$/,
+    'Set rehearsedWaitronImage to the loaded rehearsal image ID');
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   let runDeadline, runSignal;
   const active = (cleanup, request) => {
@@ -215,7 +217,8 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       '--secret', 'id=npm_token,env=NODE_AUTH_TOKEN', '--build-arg', 'SEAWEED_AMD64_SHA256=31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d',
       '-f', 'deploy/local-stack/Dockerfile', '-t', cloud, '.'], undefined, false, 900000);
     ownedImages.push(waitron);
-    await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
+    if (config.measuredStops) await run('docker', ['tag', config.rehearsedWaitronImage, waitron]);
+    else await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
       process.execPath, 'scripts/build-backup-verifier.mjs', ...(config.baseline ? ['--amazon-test'] : [])], undefined, false, 900000);
     ownedImages.push(store);
     await run('docker', storeBuildArgs(store, ['--platform', 'linux/amd64']), undefined, false, 900000);
