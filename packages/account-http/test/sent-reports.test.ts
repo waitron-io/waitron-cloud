@@ -108,9 +108,10 @@ test('Sent reports requires browser proof and live owner and recovery scope', as
  const sameOwnerVenue = randomUUID(), otherInstallation = randomUUID();
  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')", [sameOwnerVenue, box.organisationId, box.legalBusinessId]);
  await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'another-box')", [otherInstallation, sameOwnerVenue]);
+ const otherId = await seed({installationId: otherInstallation});
  const otherPage = await request('list', {venueId: sameOwnerVenue});
  assert.equal(otherPage.status, 200);
- assert.deepEqual((await otherPage.json()).reports, []);
+ assert.deepEqual((await otherPage.json()).reports.map((r: {reportId: string}) => r.reportId), [otherId]);
  assert.equal((await request('read', {...item, venueId: sameOwnerVenue})).status, 403);
  assert.equal((await request('read', {...item, installationId: randomUUID()})).status, 403);
  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE organisation_id=$1', [box.organisationId]);
@@ -138,7 +139,7 @@ for (const [action, invalidated] of [['read', 'membership'], ['read', 'session']
    waiting = !!(await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))', [db.schema, pid])).rowCount;
    if (!waiting) await delay(10);
   }
-  assert.ok(waiting, 'the read waited for the owner membership');
+  assert.ok(waiting, 'the request waited for the owner membership');
   if (invalidated === 'membership') await holder.query('DELETE FROM organisation_memberships WHERE organisation_id=$1', [box.organisationId]);
   else await holder.query('SELECT pg_sleep(GREATEST(0,EXTRACT(epoch FROM (absolute_expires_at-clock_timestamp()))+0.05)) FROM cloud_sessions WHERE account_id=$1', [box.accountId]);
   await holder.query('COMMIT');

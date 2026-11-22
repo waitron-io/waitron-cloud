@@ -1,6 +1,6 @@
 export function parseJsonWithUniqueFields(value: string): unknown {
   const parsed: unknown = JSON.parse(value);
-  const refuse = (): never => { throw new SyntaxError('Ambiguous JSON object'); };
+  const refuse = (): never => { throw new SyntaxError('Invalid JSON object'); };
   // Shape checks would only see the last value of a repeated field.
   const scopes: (Set<string>|null)[] = [];
   const tokens = /"(?:[^"\\]|\\[\s\S])*"|[{}\[\]]/g;
