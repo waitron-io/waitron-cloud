@@ -1103,13 +1103,14 @@ implementation or production evidence.
   email qualification remain open. Driver inventory's
   optional health handling is checked through Docker itself by
   `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`.
-  `node --test scripts/test-cloud-deploy.test.mjs` checks that the driver
-  takes one fresh sample after Docker reports a missing Cloud container.
-  A second removal during the retry still fails the run. The same tests check
-  that the CLI prints the error and any underlying cleanup errors. Stockholm's
-  original restart cause and the joint box email trial remain open. Signed
-  configuration now discovers a
-  relay-grant hint without advancing service configuration. The test-only private-origin
+  `node --test scripts/test-cloud-deploy.test.mjs` simulates Docker output.
+  The driver takes one fresh sample when inspection exits with code 1 and
+  every error names a missing listed Cloud container. A second removal
+  during the retry still fails the run. The same command checks that the CLI
+  prints the error and its underlying cleanup errors. The real-stack settings
+  restart, Stockholm's original restart cause and the joint box email trial
+  remain open. Signed configuration now discovers a relay-grant hint without
+  advancing service configuration. The test-only private-origin
   approval core accepts a signed statement under the current key-bound lease and
   owner consent, with synthetic checks for production refusal. The
   [test Cloud service controls](test-cloud-service-controls.md) show how to switch
