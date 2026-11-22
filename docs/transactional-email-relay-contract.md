@@ -277,9 +277,10 @@ to the earlier of its notice deadline and 24 hours after signing.
 | `role_membership_changed` | `change` (`added` or `removed`), `editorName`, `at`, and exactly one of `builtInKey` (`staff`, `supervisor`, `manager`, `admin`) or `roleName`. |
 
 Editor and custom role labels must be nonblank, single-line strings of at most
-80 Unicode code points. They appear only in the plain-text body.
-Cloud writes the subject and message in English or Spanish and shows the
-notice time in the venue's time zone. The old-address warning has no field
+80 Unicode code points. A role can include angle brackets or emoji with joiners.
+Cloud writes these labels literally in the plain-text part and escapes them in
+the HTML part. Cloud writes the subject and message in English or Spanish and
+shows the notice time in the venue's time zone. The old-address warning has no field
 for the new address, and Cloud adds no action link. The test pilot allows
 three messages per account per hour across both versions. A burst of notices
 can use the remaining allowance and delay a password reset until the next hour.

@@ -50,7 +50,8 @@ function label(value: unknown, max: number): value is string {
   return typeof value === 'string' && [...value].length <= max && !/[\p{Cc}\p{Cf}<>]/u.test(value);
 }
 function noticeLabel(value: unknown): value is string {
-  return label(value, 80) && value.trim().length > 0 && !/[\p{Zl}\p{Zp}]/u.test(value);
+  return typeof value === 'string' && value.trim().length > 0 && [...value].length <= 80
+    && !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(value);
 }
 function validNotice(kind: unknown, facts: unknown): boolean {
   switch (kind) {

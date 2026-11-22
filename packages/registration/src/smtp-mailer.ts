@@ -42,7 +42,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
   // Capture configuration so a caller cannot change the destination or credential during a send.
   const {host, user, password, from} = config;
   const ca = Buffer.isBuffer(trust.ca) ? Buffer.from(trust.ca) : trust.ca;
-  return async (recipient:string,render:()=>{subject:string;text:string},messageId:string,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
+  return async (recipient:string,render:()=>{subject:string;text:string;html?:string},messageId:string,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
     if(normaliseEmail(recipient)!==recipient)throw new EmailDeliveryError('delivery_rejected');
     const headers=ses?sesSmtpHeaders(ses,context?.ses):undefined;
     if(!ses&&context?.ses)throw new EmailDeliveryError('delivery_configuration');
@@ -74,7 +74,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
       timer = setTimeout(abort, timeout);
       const rendered=render();
       const result = await Promise.race([abortPromise, transport.sendMail({from: {name: 'Waitron Cloud', address: from},
-        to: {address: recipient, name: ''}, subject: rendered.subject, text: rendered.text, messageId,headers})]);
+        to: {address: recipient, name: ''}, subject: rendered.subject, text: rendered.text, html: rendered.html, messageId,headers})]);
       if (result.rejected.length || result.accepted.length !== 1) throw new EmailDeliveryError('delivery_rejected');
       const providerReceipt=ses?sesProviderReceipt(result.response):undefined;
       return {transport: 'smtp', messageId,...(providerReceipt?{providerReceipt}:{})};

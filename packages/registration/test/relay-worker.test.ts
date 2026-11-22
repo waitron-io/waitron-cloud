@@ -236,6 +236,8 @@ test('the worker sends a version 2 old-address warning through loopback',async t
  assert.match(raw,/^To: old@example\.test\r?$/m);
  assert.match(raw,/Your sign-in email was changed/);
  assert.match(raw,/Ana changed the email address/);
+ assert.match(raw,/Content-Type: text\/plain/i);
+ assert.match(raw,/Content-Type: text\/html/i);
  assert.doesNotMatch(raw,/https?:\/\//);
 });
 

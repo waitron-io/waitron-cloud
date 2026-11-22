@@ -97,3 +97,18 @@ test('notice labels must contain a name on a single line', () => {
       RelayMessageError, JSON.stringify(notice));
   }
 });
+
+test('saved role labels stay literal in text and are escaped in HTML', () => {
+  for (const [roleName, htmlLabel] of [
+    ['Night <service>', 'Night &lt;service&gt;'],
+    ['Service 👩‍💻', 'Service 👩‍💻'],
+  ] as const) {
+    const submitted = {...common, locale: 'en-GB', ...role,
+      facts: {...role.facts, editorName: 'Ana & Bea', roleName}};
+    const body = relayBody(JSON.stringify(submitted), true) as RelayBody;
+    const rendered = relayTemplate({...body, managementOrigin: 'https://manage.example.test'});
+    assert.ok(rendered.text.includes('Ana & Bea added you to ' + roleName));
+    assert.ok(rendered.html?.includes('Ana &amp; Bea added you to ' + htmlLabel));
+    assert.doesNotMatch(rendered.html!, /<service>/);
+  }
+});
