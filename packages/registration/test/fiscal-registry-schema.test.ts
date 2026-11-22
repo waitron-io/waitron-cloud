@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { after, test } from 'node:test';
 import { Pool } from 'pg';
 import { migrate, migrationNames } from '../src/migrate.ts';
-import { migrationRelease } from './fixtures/migration-release.ts';
+import { migrationRelease, retainedMembershipFields } from './fixtures/migration-release.ts';
 import { fixture } from './fixtures/relay-worker.ts';
 const { checkConsumerSchema } = await import(
   new URL('../../../deploy/local-stack/runtime.mjs', import.meta.url).href
@@ -74,9 +74,13 @@ test('populated release37 upgrades concurrently preserving retained rows and dig
   try {
     await seed(f);
     const before = await oldState(f.pool);
+    const migrationStart = (await f.pool.query('SELECT clock_timestamp() AS at')).rows[0].at.getTime();
     await Promise.all([migrate(f.pool), migrate(second)]);
     await migrate(second);
+    const migrationEnd = (await f.pool.query('SELECT clock_timestamp() AS at')).rows[0].at.getTime();
     const after = await oldState(f.pool);
+    after.organisation_memberships = (after.organisation_memberships as {value: Record<string, unknown>}[])
+      .map(({value}) => ({value: retainedMembershipFields(value, migrationStart, migrationEnd)}));
     for (const name of [
       'billing_businesses', 'billing_charge_lines', 'billing_charges', 'billing_events',
       'billing_hosted_days', 'billing_paid_periods', 'billing_payment_attempts',

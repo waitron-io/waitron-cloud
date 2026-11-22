@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {mkdtemp, rm, symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -50,4 +51,16 @@ export function migrationRelease(count: keyof typeof revisions): Promise<Release
     releases.set(count, release);
   }
   return release;
+}
+
+export function retainedMembershipFields(row: Record<string, unknown>, migrationStart: number, migrationEnd: number) {
+  const {owner_since, ...retained} = row;
+  if (retained.is_owner === true) {
+    assert.ok(typeof owner_since === 'string');
+    const cutoff = Date.parse(owner_since);
+    assert.ok(cutoff >= migrationStart && cutoff <= migrationEnd, 'owner cutoff falls within the migration');
+  } else {
+    assert.equal(owner_since, null);
+  }
+  return retained;
 }
