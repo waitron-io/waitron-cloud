@@ -54,4 +54,10 @@ test('Sent reports refuses a mismatched detail and clears content when the accou
  await controller.read(item);
  assert.equal(controller.detail, undefined);
  assert.equal(controller.page, undefined);
+ assert.equal(controller.error, 'permissionBusiness');
+ await controller.load();
+ reply = {ok: false, status: 403, retryAfterMs: 0, code: 'forbidden'};
+ await controller.read(item);
+ assert.equal(controller.error, 'forbidden');
+ assert.equal(controller.page, undefined);
 });

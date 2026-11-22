@@ -82,7 +82,7 @@ export class SentReportsController {
    this.#retryUntil = Math.max(this.#retryUntil, performance.now() + reply.retryAfterMs);
    if (reply.status === 401 || reply.status === 403) this.page = undefined;
    this.error = reply.status === 429 ? 'limited' : reply.status === 401 ? 'pairSession'
-    : reply.status === 403 ? 'permissionBusiness' : 'unavailable';
+    : reply.status === 403 ? (reply.code === 'permission_denied' ? 'permissionBusiness' : 'forbidden') : 'unavailable';
   }
   this.#changed();
  }

@@ -105,6 +105,13 @@ test('Sent reports requires browser proof and live owner and recovery scope', as
  assert.equal((await request('read', item, {origin: 'https://other.example.test'})).status, 403);
  assert.equal((await request('read', item, {'x-csrf-token': ''})).status, 403);
  assert.equal((await request('read', {...item, venueId: randomUUID()})).status, 403);
+ const sameOwnerVenue = randomUUID(), otherInstallation = randomUUID();
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')", [sameOwnerVenue, box.organisationId, box.legalBusinessId]);
+ await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'another-box')", [otherInstallation, sameOwnerVenue]);
+ const otherPage = await request('list', {venueId: sameOwnerVenue});
+ assert.equal(otherPage.status, 200);
+ assert.deepEqual((await otherPage.json()).reports, []);
+ assert.equal((await request('read', {...item, venueId: sameOwnerVenue})).status, 403);
  assert.equal((await request('read', {...item, installationId: randomUUID()})).status, 403);
  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE organisation_id=$1', [box.organisationId]);
  assert.equal((await request('list')).status, 403);
@@ -114,9 +121,10 @@ test('Sent reports requires browser proof and live owner and recovery scope', as
  assert.equal((await request('read', item)).status, 403);
 });
 
-for (const invalidated of ['membership', 'session'] as const) test(`Sent reports rejects a read when the ${invalidated} changes during a wait`, async () => {
+for (const [action, invalidated] of [['read', 'membership'], ['read', 'session'], ['list', 'session']] as const) test(`Sent reports rejects a ${action} when the ${invalidated} changes during a wait`, async () => {
  const item = {installationId: box.installationId, reportId: await seed()};
- assert.equal((await request('read', item)).status, 200);
+ const fields = action === 'read' ? item : {};
+ assert.equal((await request(action, fields)).status, 200);
  const holder = await db.secondPool.connect();
  let response: Promise<Response>|undefined;
  try {
@@ -124,7 +132,7 @@ for (const invalidated of ['membership', 'session'] as const) test(`Sent reports
   await holder.query('BEGIN');
   await holder.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 FOR UPDATE', [box.organisationId]);
   const {rows: [{pid}]} = await holder.query('SELECT pg_backend_pid() AS pid');
-  response = Promise.resolve(request('read', item));
+  response = Promise.resolve(request(action, fields));
   let waiting = false;
   for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
    waiting = !!(await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))', [db.schema, pid])).rowCount;

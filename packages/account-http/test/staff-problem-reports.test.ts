@@ -331,3 +331,21 @@ test('Sent reports attributes a receipt during handover to the committed owner a
   assert.deepEqual(await read(legacyId),{staff_receipt_owner_id:null,description:'Successor text',staff_description_body:null,staff_description_at:null});
  }finally{await holder.query('ROLLBACK');holder.release();await f.db.close();}
 });
+
+test('Sent reports refuses ambiguous signed JSON in either staff action',async()=>{
+ const f=await fixture();try{
+  const id=randomUUID(),r=report(),raw=JSON.stringify(r);
+  const duplicateReport=raw.replace('"version":"1.2.3"','"version":"1.2.3","version":"1.2.3"');
+  const first=await f.request('staff-report',f.signed('staff-report',r,f.box,id,duplicateReport));
+  assert.equal(first.status,400,await first.clone().text());
+  assert.deepEqual(await first.json(),{error:'invalid_input'});
+  assert.equal((await f.send(r,f.box,id)).status,200,'the ambiguous body wrote nothing');
+  const d={reportId:id,description:'Printer stopped'};
+  const duplicateDescription=JSON.stringify(d).replace('"description":"Printer stopped"','"description":"Printer stopped","description":"Printer stopped"');
+  const operation=randomUUID();
+  const later=await f.request('staff-description',f.signed('staff-description',d,f.box,operation,duplicateDescription));
+  assert.equal(later.status,400,await later.clone().text());
+  assert.deepEqual(await later.json(),{error:'invalid_input'});
+  assert.equal((await f.describe(id,d.description,f.box,operation)).status,200,'the ambiguous description wrote nothing');
+ }finally{await f.db.close();}
+});

@@ -881,7 +881,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    venue is recovered, how much data a failure can lose, and uptime.
 6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
    covers paired-box reports, automatic sending, country feature lists and standard 24-hour
-   support access. Waitron's A1047 owns the staff form, checked sending and offline retries.
+   support access. The owner approved the design on 8 November 2026, including omitting
+   author names and letting staff hide text that contains personal data. A local synthetic
+   browser check covers exact staff Sent reports under the current ownership.
+   Waitron's A1047 owns the staff form, checked sending and offline retries.
    Cloud still needs automatic-report opt-in and Sent reports for automatic sends, private
    bugs and status, country features with votes and comments, GitHub links, the operator
    console and common country routes, grant integration and customer-visible staff history. Joining country lists waits for a second country and an

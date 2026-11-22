@@ -141,8 +141,8 @@ Unicode codepoints and 8,192 UTF-8 bytes. Malformed Unicode and control characte
 are refused, except newline and tab in descriptions. Senders convert Windows
 `\r\n` line endings to `\n` before signing, because a carriage return is refused.
 The decoded body is limited to 16,384 bytes; the outer request to 65,536 bytes
-and five seconds. Unknown fields
-are refused. Each staff action has ten requests per minute per installation,
+and five seconds. Both signed staff requests require unique JSON field names and
+refuse unknown fields. Each staff action has ten requests per minute per installation,
 sharing the existing report IP and account IP limits. Renewal is unchanged.
 
 ## Attach a description later
@@ -185,8 +185,10 @@ ownership. Reports stored before the Sent reports upgrade lack an exact copy and
 stay out of this view. For existing owners the cutoff starts at migration time.
 
 The cutoff compares the signed box time with the database time of the ownership
-write, which precedes the transfer commit. A fast box clock can put delayed text
-created just before handover on the later side of that comparison.
+write, which precedes the transfer commit. A fast box clock can date a delayed report or
+description from before a handover after the cutoff. A slow box clock can date a new report
+before the cutoff, so the receiver can confirm storage and the owner view can
+still hide it.
 
 Run the synthetic loopback HTTP, database wait, migration and owner-reader cases:
 

@@ -4,6 +4,7 @@ import {isPairingUuid} from './pairing-proof.ts';
 import {InstallationStore} from './installations.ts';
 import {createLeaseTrust,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type SignedEnvelope} from './installation-proof.ts';
 import {transaction} from './transaction.ts';
+import {parseJsonWithUniqueFields} from './json-with-unique-fields.ts';
 
 type Action='error-report'|'release-held'|'staff-report'|'staff-description';
 interface Report {code:string;source:string;version:string;time:number;count:number;logs:{level:string;code:string;source:string}[]}
@@ -45,7 +46,7 @@ function staffBody(action:'staff-report'|'staff-description',signed:string,text:
  if(Number(fingerprint.bodyBytes)>16384)return invalid();
  if(typeof text!=='string'||!isWellFormed(text)||Buffer.byteLength(text)!==fingerprint.bodyBytes
   ||createHash('sha256').update(text).digest('hex')!==fingerprint.bodySha256)throw new InstallationError('invalid_proof');
- try{value=JSON.parse(text);}catch{return invalid();}
+ try{value=parseJsonWithUniqueFields(text);}catch{return invalid();}
  if(action==='staff-description'){
   const keys=['reportId','description'];
   if(value&&typeof value==='object'&&'time' in value)keys.push('time');
