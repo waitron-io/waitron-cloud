@@ -183,6 +183,19 @@ for (const [name, routeStillResponding, placement, reason] of [
   });
 }
 
+test('the full restart refuses to stop when witness preparation fails', async () => {
+  const failure = Error('cold_restart.initial_primary');
+  let stopped = false;
+  await assert.rejects(servicesScript.measureServiceRestart({
+    signal: new AbortController().signal,
+    probes: {session: async () => {}, remote: async () => {}}, checkStore: async () => {},
+    inventory: async () => coldRoles,
+    prepare: async () => {throw failure;},
+    restartAll: async () => {stopped = true;},
+  }), error => error === failure);
+  assert.equal(stopped, false);
+});
+
 test('a silent outside account connection expires as transport loss', async t => {
   const sockets = new Set();
   const listener = createServer(socket => sockets.add(socket));

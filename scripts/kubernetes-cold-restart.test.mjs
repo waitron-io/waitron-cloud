@@ -90,6 +90,65 @@ test('the database witness refuses a missing acknowledged row before trying a fr
   assert.equal(f.wrote(), false);
 });
 
+test('outside restart waits for three ready copies and a writable primary', {timeout: 3000}, async t => {
+  const f = databaseFixture(), stop = new AbortController(), signal = new AbortController().signal;
+  const log = t.mock.method(process.stderr, 'write');
+  let reads = 0, writeSignal;
+  const kube = (args, options) => {
+    if (args[2] === 'get' && ++reads <= 3) return JSON.stringify({status: {
+      readyInstances: reads === 1 ? 2 : 3, currentPrimary: 'cloud-db-1',
+    }});
+    if (args.at(-1) === 'SELECT NOT pg_is_in_recovery()' && reads === 2) return 'f';
+    if (args.at(-1).startsWith('CREATE TABLE')) {
+      assert.equal(reads, 3);
+      writeSignal = options.signal;
+    }
+    return f.kube(args, options);
+  };
+  const verify = await prepareDatabaseWitness({kube, signal, initialReadiness: {ms: 180_000, signal: stop.signal}});
+  assert.equal(f.created.size, 1);
+  assert.match(String(log.mock.calls[0].arguments[0]), /"initialReady":2,"ready":3,"primary":"cloud-db-1","writable":true/);
+  stop.abort();
+  assert.ok(writeSignal.aborted);
+  f.restart();
+  assert.equal((await verify()).primary, 'cloud-db-2');
+  assert.equal(f.wrote(), true);
+});
+
+test('outside restart readiness times out before writing', {timeout: 3000}, async t => {
+  const expiry = new AbortController(), failure = Object.assign(Error('test cluster read failed'), {code: 'EIO'});
+  const log = t.mock.method(process.stderr, 'write');
+  const f = databaseFixture();
+  t.mock.method(AbortSignal, 'timeout', ms => {assert.equal(ms, 180_000); return expiry.signal;});
+  let reads = 0;
+  const kube = async (args, options) => {
+    if (args[2] !== 'get') return f.kube(args, options);
+    if (++reads === 2) {
+      setImmediate(() => expiry.abort());
+      throw failure;
+    }
+    return JSON.stringify({status: {readyInstances: 2, currentPrimary: 'cloud-db-1'}});
+  };
+  await assert.rejects(prepareDatabaseWitness({kube, signal: new AbortController().signal,
+    initialReadiness: {ms: 180_000}}), error => error.message === 'cold_restart.initial_primary' &&
+    error.cause?.cause === failure);
+  assert.match(String(log.mock.calls[0].arguments[0]), /"initialReady":2,"ready":2,"primary":"cloud-db-1","writable":null,"lastCommand":\{"stage":"cluster","code":"EIO"\}/);
+  assert.equal(reads, 2);
+  assert.equal(f.created.size, 0);
+});
+
+test('outside restart readiness cancels before writing', async () => {
+  const f = databaseFixture(), stop = new AbortController(), reason = Error('latest stop reached');
+  const kube = async (args, options) => {
+    const output = await f.kube(args, options);
+    if (args.at(-1) === 'SELECT NOT pg_is_in_recovery()') stop.abort(reason);
+    return output;
+  };
+  await assert.rejects(prepareDatabaseWitness({kube, signal: new AbortController().signal,
+    initialReadiness: {ms: 180_000, signal: stop.signal}}), error => error.cause === reason);
+  assert.equal(f.created.size, 0);
+});
+
 test('the database witness stops waiting for three copies after 240 seconds', {timeout: 3000}, async t => {
   const deadline = new AbortController();
   const timeout = t.mock.method(AbortSignal, 'timeout', ms => {
