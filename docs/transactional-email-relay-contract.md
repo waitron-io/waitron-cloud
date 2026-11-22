@@ -310,8 +310,8 @@ server. Cloud accepts the code so it shares the same wire shape as low space.
 
 On test Cloud, apply migrations 081 and 082, upgrade the email workers, then
 upgrade the HTTP API before the box starts sending these classes. The box sender
-and setup wording ship in Waitron. Certificate reminders also need Waitron's
-certificate reminder queue (FI10). Before rolling workers back, stop sending
+and setup wording ship in Waitron. The box uses its existing certificate reminder
+job to supply the facts. Before rolling workers back, stop sending
 classes the old workers cannot read and let their queued messages finish or
 cancel them. An older worker can fail such a message as `payload_unavailable`
 after admission has charged for it. An older API returns `400 invalid_message`

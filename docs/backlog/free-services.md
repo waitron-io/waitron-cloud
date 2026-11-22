@@ -80,8 +80,7 @@ venue does not subscribe to remote access or backups.
 - **Transactional email.** The [test relay](../transactional-email-relay-contract.md)
   covers staff invitations, password resets and email-change codes, plus old-address
   warnings, security changes, role changes, box alerts and certificate reminders.
-  The latter two need the Waitron sender and a joint inbox check, and certificate
-  reminders also need Waitron's FI10 queue. See the
+  The latter two need the Waitron sender and a joint inbox check. See the
   [free email scope](venue-email.md#what-the-owner-decided-2026-11-21) for which
   notices still need your own mail server. The relay uses installation/account
   grants, fixed templates, encrypted admission,
