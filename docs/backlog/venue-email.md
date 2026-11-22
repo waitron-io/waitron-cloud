@@ -1,7 +1,9 @@
 # Venue email: who sends it, and as which address
 
-**Open; direction agreed, no design or build yet.** This file records what the owner decided
-on 21 November 2026 and what is still to work out. Nothing here has been built or tested.
+**Paid venue email is open.** The owner set the direction on 21 November 2026
+and chose the five free staff notices on 22 November 2026. The
+[relay contract](../transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
+tracks the free test pilot.
 
 ## What the owner decided (2026-11-21)
 
@@ -9,10 +11,13 @@ on 21 November 2026 and what is still to work out. Nothing here has been built o
 email straight to it, whatever the venue's plan, and Cloud is not in the path. Cloud sends only
 for a venue with no mail server:
 
-- **Free (level 1).** Cloud sends only the account emails: invitations, password resets and
-  email changes. This is the existing
-  [free transactional email](free-services.md) work. Everything else the box sends — invoices,
-  reports, clock-in and clock-out reminders — is not sent until the venue saves a mail server.
+- **Free (level 1).** Cloud covers staff invitations, password resets and email-change
+  codes, plus five notices the owner chose on 22 November: old-address warnings,
+  security changes, role changes, box alerts and certificate reminders. The
+  [free relay pilot](free-services.md) covers that scope. Staff working-hours
+  questions, clock-in and clock-out reminders, invoices and reports need your own mail
+  server. In this pilot you also need your own mail server for unusable-clock and
+  full-disk emails.
 - **Paid (level 2).** Cloud sends every email the box sends. The venue chooses the sender:
   1. **Their own domain**, such as `facturas@barpepe.es`, once they have added DNS records that
      let Cloud send as it. The owner expects most venues to have their own domain, so this is
@@ -80,14 +85,13 @@ pause stops every venue's mail, so one venue must not be able to cause it.
   alone before it harms the shared account. SES has a
   [tenants feature](https://docs.aws.amazon.com/ses/latest/dg/tenants.html) for this; **not
   checked** whether it fits.
-- **The free level** sends only account emails, under the per-account allowances in
-  [free services](free-services.md).
+- **The free level** shares one per-account allowance across account email and staff
+  notices. See [free services](free-services.md).
 
 ## Still to decide
 
 - **Data protection.** At level 2 Cloud handles the venue's customers' email addresses and
-  invoice PDFs, so Cloud becomes a data processor for them. Today's relay carries account email
-  only.
+  invoice PDFs, so Cloud becomes a data processor for them. The free relay carries staff account email and notices.
 - **The box's half.** Without a mail server, a paid venue's box hands every email to Cloud.
   Waitron's backlog has the entry, next to its A987 entry.
 - **What an email costs Cloud**, so the paid plan covers it.

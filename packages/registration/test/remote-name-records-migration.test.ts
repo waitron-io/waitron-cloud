@@ -17,6 +17,6 @@ test('the name-job upgrade preserves earlier jobs and migration receipts across 
   await pool.query("INSERT INTO remote_configuration_jobs(kind,target_id,desired_digest) VALUES('name',$1,$2)",[randomUUID(),'b'.repeat(64)]);
   assert.deepEqual((await pool.query("SELECT * FROM remote_configuration_jobs WHERE kind<>'name' ORDER BY kind")).rows,rows);
   const current=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.deepEqual(current.slice(0,71),ledger);assert.equal(current.length,81);assert.equal(current[71].name,'072_remote_name_records.sql');
+  assert.deepEqual(current.slice(0,71),ledger);assert.equal(current.length,82);assert.equal(current[71].name,'072_remote_name_records.sql');
  }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();await old.close();}
 });

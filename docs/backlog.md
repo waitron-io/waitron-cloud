@@ -331,10 +331,10 @@ stays unknown, and a run with gaps cannot replace a published cost figure.
   for email and SMS. Callers supply a template name and values; refuse free text and values
   outside the template's allowed type and length. A code is digits; a time is a time.
 
-- A venue's own mail server always sends its email; Cloud sends only when there is
-  none (owner, 2026-11-21). Then a free account gets only account emails from Cloud,
-  and a paid venue gets every email, as its own domain or a Waitron address. Bounces
-  are the venue's to act on. [Detail](backlog/venue-email.md).
+- A venue's own mail server always sends its email (owner, 2026-11-21). Without one,
+  the free scope covers account emails and the five staff notices the owner chose
+  on 22 November. The paid scope covers every venue email, from its own domain or
+  a Waitron address. The venue decides what to do about bounces. [Detail](backlog/venue-email.md).
 
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
   Correcting an address allows an immediate send; returning to it keeps its wait.
@@ -749,8 +749,9 @@ multi-gateway coordination remain production gates.
 ## Venue email from Cloud, sent as the venue's own domain
 
 **Open; direction agreed on 21 November 2026, no design yet.** A venue's own mail
-server always wins. Without one, a free account gets only account emails from Cloud,
-and a paid venue has Cloud send every email the box sends, as its own domain or a
+server always wins. Without one, the free relay pilot covers staff account emails
+and five staff notices. The owner chose the notice scope on 22 November 2026.
+A paid venue has Cloud send every email the box sends, as its own domain or a
 Waitron address. The hard part is a DNS step a non-technical owner can finish alone,
 with a PDF they can forward to whoever runs their domain. [Decisions and open points](backlog/venue-email.md).
 

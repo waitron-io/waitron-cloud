@@ -77,11 +77,13 @@ venue does not subscribe to remote access or backups.
   waits stay quiet; the notice does not shorten the wait or spend a request.
   Offline child checks cover a paused wait and completion across timer chunks.
   Keep manual entry and correction available when lookup is unavailable or wrong.
-- **Transactional email.** Offer managed SMTP delivery for password resets and other
-  account administration emails from on-prem Waitron. Scope the relay to these
-  messages, authenticate requests and handle delivery failures and abuse. The existing
-  Cloud email transport is a starting point. The [version 1 relay contract](../transactional-email-relay-contract.md)
-  now scopes installation/account grants, fixed templates, encrypted admission,
+- **Transactional email.** The [test relay](../transactional-email-relay-contract.md)
+  covers staff invitations, password resets and email-change codes, plus old-address
+  warnings, security changes, role changes, box alerts and certificate reminders.
+  The latter two need the Waitron sender and a joint inbox check. See the
+  [free email scope](venue-email.md#what-the-owner-decided-2026-11-21) for which
+  notices still need your own mail server. The relay uses installation/account
+  grants, fixed templates, encrypted admission,
   retry versus uncertain acceptance, abuse limits, metering and customer status.
   The disabled local-proof grant and account reservation core is implemented, with
   PostgreSQL concurrency, revocation, rollover and process-restart tests. The trusted
