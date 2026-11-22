@@ -14,6 +14,19 @@ shutdown. Scheduling and any error report finish before the loop returns,
 without new claims or waits. Schedule and reporting failures keep their original
 errors. Real database scheduling and production shutdown retain separate gates.
 
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/email-worker-disconnect-shutdown.test.ts` to check the account
+mail command in production SMTP mode. A local encrypted relay holds its reply
+after receiving a complete message. After SIGTERM, the worker records
+`delivery_timeout`, preserves the encrypted message for a retry 30 seconds
+later, leaves the next message pending and exits with no database sessions.
+
+The Linux fixture measured 14.903 seconds from SIGTERM to natural exit. Compare
+that with the [local Compose email worker's 10-second stop allowance](../../compose.yaml#L118-L128)
+and the [Kubernetes rehearsal pod's 15-second allowance](../../deploy/kubernetes/local-checks.yaml#L15-L19).
+Shutdown inside the actual deployment remains open, along with explicit pool
+cleanup, database failures and behavior at a real relay.
+
 Run `node --test packages/registration/test/worker-loop-poll-shutdown.test.ts`
 to check pending idle and retry waits that finish or refuse after shutdown. The
 loop waits for polling and any late error report, preserves the original failure
@@ -112,10 +125,10 @@ the fixture disconnect fails this bound under both stop signals. This is a fixtu
 check, not a production delivery deadline. Requalify the distinction if you shorten
 the local transport’s inactivity timeout.
 
-A lost acknowledgement leaves remote acceptance uncertain: this local check does
-not promise that a later retry avoids duplicate delivery. Production SMTP behavior,
-other connection-loss stages, delivery timeouts, longer waits, explicit pool cleanup
-and production shutdown remain open in D459.
+A lost acknowledgement leaves remote acceptance uncertain and a later retry may
+duplicate delivery. D459 above covers a silent relay using the production SMTP
+code. Other connection-loss stages, explicit pool cleanup and shutdown inside
+the deployment remain open.
 
 ### Email command shutdown before SMTP recipient acceptance (D557)
 
