@@ -18,14 +18,25 @@ Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
 node --test test/email-worker-disconnect-shutdown.test.ts` to check the account
 mail command in production SMTP mode. A local encrypted relay holds its reply
 after receiving a complete message. After SIGTERM, the worker records
-`delivery_timeout`, preserves the encrypted message for a retry 30 seconds
-later, leaves the next message pending and exits with no database sessions.
+`delivery_timeout`, preserves the encrypted message for a delayed retry, leaves
+mail queued during the hold pending and exits with no database sessions.
 
-The Linux fixture measured 14.903 seconds from SIGTERM to natural exit. Compare
-that with the [local Compose email worker's 10-second stop allowance](../../compose.yaml#L118-L128)
-and the [Kubernetes rehearsal pod's 15-second allowance](../../deploy/kubernetes/local-checks.yaml#L15-L19).
-Shutdown inside the actual deployment remains open, along with explicit pool
-cleanup, database failures and behavior at a real relay.
+The test requires natural exit within 22 seconds of SIGTERM. One Linux run
+measured 14.903 seconds with the send already in progress. The SMTP code has
+a 15-second deadline and the worker has a separate 20-second send deadline.
+Either can produce the recorded timeout. Measure shutdown inside the actual
+deployment, including a stop during a database claim, when the mail send can
+begin after the stop signal. Explicit pool cleanup, database failures and
+behavior at a real relay remain open.
+
+The local Compose mail worker uses Mailpit with a 10-second stop allowance.
+The local Kubernetes capture worker has a 15-second allowance. The Kubernetes
+services pod runs the account mail command in production SMTP mode and uses
+the platform's default 30-second allowance.
+[Compose email worker](../../compose.yaml#L118-L128),
+[local capture worker](../../deploy/kubernetes/local-checks.yaml#L90-L96),
+[services pod](../../deploy/kubernetes/services.mjs#L32-L35),
+[Kubernetes pod termination](https://kubernetes.io/docs/concepts/workloads/pods/pod-termination/#pod-termination-flow).
 
 Run `node --test packages/registration/test/worker-loop-poll-shutdown.test.ts`
 to check pending idle and retry waits that finish or refuse after shutdown. The
@@ -127,8 +138,9 @@ the local transport’s inactivity timeout.
 
 A lost acknowledgement leaves remote acceptance uncertain and a later retry may
 duplicate delivery. D459 above covers a silent relay using the production SMTP
-code. Other connection-loss stages, explicit pool cleanup and shutdown inside
-the deployment remain open.
+code after the relay receives a complete message. Other connection-loss and
+timeout stages, explicit pool cleanup and shutdown inside the deployment
+remain open.
 
 ### Email command shutdown before SMTP recipient acceptance (D557)
 
