@@ -1,6 +1,6 @@
 import type { Locale } from './locale.ts';
 export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; pairingCode?: string; recoveryId?: string; locale?: Locale; invalid: boolean};
-export function captureLink(url: URL, replace: (url: string) => void): CapturedLink {
+export function captureLink(url: URL, replace: (url: string) => void, historyState?: {pairingRequestId?: unknown}): CapturedLink {
   const params = [url.searchParams, new URLSearchParams(url.hash.slice(1))];
   const tokens = params.flatMap(p => p.getAll('token'));
   const languages = params.flatMap(p => p.getAll('lang'));
@@ -15,7 +15,7 @@ export function captureLink(url: URL, replace: (url: string) => void): CapturedL
   const requests = params.flatMap(p => p.getAll('request'));
   if (requests.length) {
     if (requests.length !== 1 || url.searchParams.has('request') || !['/connect','/recover'].includes(url.pathname)
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(requests[0]!) || result.invalid) result.invalid = true;
+      || !pairingId.test(requests[0]!) || result.invalid) result.invalid = true;
     else if(url.pathname==='/recover')result.recoveryId=requests[0];else result.requestId = requests[0];
   }
   const changes=params.flatMap(p=>p.getAll('change'));
@@ -30,6 +30,10 @@ export function captureLink(url: URL, replace: (url: string) => void): CapturedL
       return result.locale ? {invalid: true, locale: result.locale} : {invalid: true};
     }
     result.pairingCode = code;
+  }
+  if (!result.invalid && !result.requestId && ['/connect', '/login'].includes(url.pathname)) {
+    const storedId = historyState?.pairingRequestId;
+    if (typeof storedId === 'string' && pairingId.test(storedId)) result.requestId = storedId;
   }
   return result;
 }

@@ -35,6 +35,19 @@ test('captures only a single fragment request on the connection route, always sc
   }
 });
 
+test('a clean pairing or sign-in page restores a valid request from history', () => {
+  const url = new URL('https://cloud.example/connect');
+  const id = '12345678-1234-4234-8234-123456789abc';
+  const state = {pairingRequestId: id};
+  assert.deepEqual(captureLink(url, () => {}, {pairingRequestId: 'bad'}), {invalid: false});
+  assert.deepEqual(captureLink(url, () => {}, state), {invalid: false, requestId: id});
+  assert.deepEqual(captureLink(new URL('/login', url), () => {}, state), {invalid: false, requestId: id});
+  assert.deepEqual(captureLink(new URL('/account', url), () => {}, state), {invalid: false});
+  assert.deepEqual(captureLink(new URL('#request=bad', url), () => {}, state), {invalid: true});
+  const freshId = '87654321-1234-4234-8234-123456789abc';
+  assert.deepEqual(captureLink(new URL(`#request=${freshId}`, url), () => {}, state), {invalid: false, requestId: freshId});
+});
+
 test('recovery fragments stay separate from venue pairing and reject query or duplicate requests',()=>{
  const id='12345678-1234-4234-8234-123456789abc';let clean='';
  assert.deepEqual(captureLink(new URL(`https://cloud.example/recover#request=${id}`),v=>{clean=v;}),{invalid:false,recoveryId:id});assert.equal(clean,'/recover');

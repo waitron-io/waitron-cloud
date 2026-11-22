@@ -34,10 +34,18 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
       await page.emulateMedia({colorScheme:initialColorScheme});
     }
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()));
-    await page.goto(`${f.origin}/connect#request=${requestId}`);await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
+    const linkedCode = locale === 'en' ? `&code=${code}` : '';
+    await page.goto(`${f.origin}/connect#request=${requestId}${linkedCode}`);await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
     assert.ok(!page.url().includes(requestId));
+    if (linkedCode) {
+      await page.reload();
+      await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+    }
     await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
     await page.getByRole('heading',{name:c.connect,exact:true}).waitFor();
+    const codeField = page.getByRole('textbox', {name: c.pairCode, exact: true});
+    assert.equal(await codeField.inputValue(), '');
+    assert.equal(urls.filter(url => url.endsWith('/pairing/inspect')).length, 0);
     await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill('00000000');await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByText(c.pairUnavailable).waitFor();
     assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
     await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill(code);
@@ -71,7 +79,10 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByText(c.signedOut).waitFor();
     await page.reload();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
     await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
-    await page.getByRole('button',{name:c.signout,exact:true}).waitFor();
+    await page.getByRole('heading', {name: c.connect, exact: true}).waitFor();
+    assert.equal(await codeField.inputValue(), '');
+    assert.equal(await page.getByText(c.pairMissing).count(), 0);
+    await page.goto(`${f.origin}/account`);
     await page.goto(`${f.origin}/connect`);await page.getByText(c.pairMissing).waitFor();
   }finally{await f.close();}
 });
@@ -98,6 +109,7 @@ test('a linked code checks the venue once after sign-in and leaves approval to t
     await page.goto(`${f.origin}/connect#request=${requestId}&code=${code}`);
     await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
     assert.equal(new URL(page.url()).hash, '');
+    assert.deepEqual(await page.evaluate(() => history.state), {pairingRequestId: requestId});
     assert.equal(requests.filter(url => url.endsWith('/pairing/inspect')).length, 0);
     await page.getByLabel(c.email).fill(email);
     await page.locator('input[name=password]').fill(password);
@@ -109,6 +121,26 @@ test('a linked code checks the venue once after sign-in and leaves approval to t
     assert.equal(requests.filter(url => url.endsWith('/pairing/approve')).length, 0);
     assert.equal((await f.db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1', [requestId])).rows[0].cloud_account_id, null);
     assert.ok(requests.every(url => !url.includes(requestId) && !url.includes(code)));
+
+    await page.reload();
+    await page.getByRole('heading', {name: c.connect, exact: true}).waitFor();
+    const codeField = page.getByRole('textbox', {name: c.pairCode, exact: true});
+    assert.equal(await codeField.inputValue(), '');
+    assert.equal(requests.filter(url => url.endsWith('/pairing/inspect')).length, 1);
+    assert.equal(requests.filter(url => url.endsWith('/pairing/approve')).length, 0);
+    await codeField.fill(code);
+    await page.getByRole('button', {name: c.pairInspect, exact: true}).click();
+    await page.locator('.pairing-details').getByText(venueName, {exact: true}).waitFor();
+    assert.equal(requests.filter(url => url.endsWith('/pairing/inspect')).length, 2);
+
+    // Replace the address on the occupied entry so the malformed link meets its stored ID.
+    await page.evaluate(() => history.replaceState({...history.state, fixtureMarker: true}, '', '/connect#request=bad'));
+    await page.reload();
+    await page.getByText(c.pairMissing).waitFor();
+    assert.deepEqual(await page.evaluate(() => history.state), {fixtureMarker: true});
+    assert.equal(new URL(page.url()).hash, '');
+    await page.reload();
+    await page.getByText(c.pairMissing).waitFor();
   } finally { await f.close(); }
 });
 

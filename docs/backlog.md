@@ -2974,11 +2974,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   rechecks run in CI. Customer plan/setup/restart controls and membership changes
   still need real product paths and remain open.
 - R8 delivered: the no-eligible-business message explains the existing sign-out
-  and owning-account sign-in path in English and Spanish. Stubbed-browser checks
-  cover the same-page account switch, retained connection request and recoverable
-  sign-out failure. Reloading loses the in-memory request; reopen the connection
-  link from Waitron. Preserving it across reloads and same-account membership/business
-  creation remain separate missing capabilities.
+  and owning-account sign-in path in English and Spanish. You can reload the
+  connection or sign-in page and enter the code shown on the box to continue the
+  request. Same-account membership and business creation during connection remain open.
 - R9 private forwarding diagnostics now appear in Account for the current owner.
   The [approved plan](superpowers/plans/2026-10-26-private-forwarding-causes.md)
   keeps five fixed failure categories, separate success and unknown states,

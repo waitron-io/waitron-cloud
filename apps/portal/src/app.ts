@@ -151,8 +151,17 @@ export class PortalApp {
   #capture() {
     const url = new URL(location.href);
     this.setupPairing = captureSetupPairingLink(url);
-    const {pairingCode, ...link} = captureLink(url, path => history.replaceState(null, '', path));
+    const {pairingCode, ...link} = captureLink(url, path => history.replaceState(history.state, '', path),
+      this.pairing.requestId ? undefined : history.state);
     if (link.requestId || link.invalid) this.pairing.open(link.requestId, pairingCode);
+    if (url.pathname === '/connect' || url.pathname === '/login') {
+      // Browsers may persist history state. The code stays in memory.
+      const {pairingRequestId, ...state} = history.state ?? {};
+      const requestId = link.invalid ? undefined : this.pairing.requestId;
+      if (pairingRequestId !== requestId) {
+        history.replaceState(requestId ? {...state, pairingRequestId: requestId} : state, '');
+      }
+    }
     return link;
   }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
@@ -491,7 +500,7 @@ export class PortalApp {
     if (this.setupPairing && (result === 'authenticated' || result === 'reconcile')) {
       if (bindsSetup) { await this.returnToSetup(); return; }
       // An email or password-only session can enrol a stronger method. It cannot authorize the box.
-      history.replaceState({setupEnrollment: true}, '', location.pathname);
+      history.replaceState({...history.state, setupEnrollment: true}, '', location.pathname);
       this.#setupResumeAttempted = true;
       this.session.dispose(); this.session = this.#session();
       await this.session.check();
