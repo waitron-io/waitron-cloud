@@ -27,10 +27,32 @@ interface RelayV1Body extends RelayRequest {
 }
 type RoleFacts = {change: 'added' | 'removed'; editorName: string; at: string}
   & ({builtInKey: keyof typeof builtInRoles} | {roleName: string});
+type ClockFacts = {
+  code: 'clock.corrected';
+  before: string;
+  after: string;
+  beforeOffsetMinutes: number;
+  afterOffsetMinutes: number;
+  stepMs: number;
+  source: 'admin' | 'staff' | 'setup';
+  unverified: boolean;
+  person?: string;
+  device?: string;
+};
+type BoxAlertFacts =
+  | {code: 'storage.space_low' | 'storage.disk_full'}
+  | {code: 'backup.archives_deleted'; count: number; date: string; lastDate: string}
+  | {code: 'backup.run_stopped'; neededBytes: number; availableBytes: number}
+  | {code: 'upgrade.rolled_back'; fromVersion: string; toVersion: string}
+  | ClockFacts;
+type CertificateFacts = {date: string}
+  & ({stage: 'due'; daysLeft: number} | {stage: 'expired'});
 export type RelayStaffNotice = RelayRequest & {version: 2} & (
   | {class: 'email_changed'; facts: {editorName: string; at: string}}
   | {class: 'security_change'; facts: {change: keyof typeof securityChanges; at: string}}
   | {class: 'role_membership_changed'; facts: RoleFacts}
+  | {class: 'box_alert'; facts: BoxAlertFacts}
+  | {class: 'certificate_reminder'; facts: CertificateFacts}
 );
 export type RelayBody = RelayV1Body | RelayStaffNotice;
 export type RelayClass = RelayBody['class'];
@@ -53,6 +75,54 @@ function noticeLabel(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && [...value].length <= 80
     && !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(value);
 }
+function calendarDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && date(value + 'T00:00:00.000Z');
+}
+function whole(value: unknown, min: number, max = Number.MAX_SAFE_INTEGER): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+function releaseVersion(value: unknown): boolean {
+  // Match the release versions the box host accepts.
+  return typeof value === 'string' && value.length <= 50
+    && /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$/.test(value);
+}
+function validBoxAlert(facts: unknown): boolean {
+  if (!object(facts)) return false;
+  switch (facts.code) {
+    case 'storage.space_low':
+    case 'storage.disk_full':
+      return exact(facts, ['code']);
+    case 'backup.archives_deleted':
+      return exact(facts, ['code', 'count', 'date', 'lastDate']) && whole(facts.count, 1)
+        && calendarDate(facts.date) && calendarDate(facts.lastDate) && facts.date <= facts.lastDate;
+    case 'backup.run_stopped':
+      return exact(facts, ['code', 'neededBytes', 'availableBytes'])
+        && whole(facts.neededBytes, 0) && whole(facts.availableBytes, 0);
+    case 'upgrade.rolled_back':
+      return exact(facts, ['code', 'fromVersion', 'toVersion'])
+        && releaseVersion(facts.fromVersion) && releaseVersion(facts.toVersion);
+    case 'clock.corrected': {
+      const fields = ['code', 'before', 'after', 'beforeOffsetMinutes', 'afterOffsetMinutes',
+        'stepMs', 'source', 'unverified'];
+      if (Object.hasOwn(facts, 'person')) {
+        if (facts.unverified !== false || !noticeLabel(facts.person)) return false;
+        fields.push('person');
+      }
+      if (Object.hasOwn(facts, 'device')) {
+        if (facts.unverified !== false || facts.source !== 'staff' || !noticeLabel(facts.device)) return false;
+        fields.push('device');
+      }
+      return exact(facts, fields) && date(facts.before) && date(facts.after)
+        && whole(facts.beforeOffsetMinutes, -840, 840) && whole(facts.afterOffsetMinutes, -840, 840)
+        && whole(facts.stepMs, Number.MIN_SAFE_INTEGER)
+        && (facts.source === 'admin' || facts.source === 'staff' || facts.source === 'setup')
+        && typeof facts.unverified === 'boolean';
+    }
+    default:
+      return false;
+  }
+}
 function validNotice(kind: unknown, facts: unknown): boolean {
   switch (kind) {
     case 'email_changed':
@@ -70,6 +140,12 @@ function validNotice(kind: unknown, facts: unknown): boolean {
       }
       return exact(facts, [...fields, 'roleName']) && noticeLabel(facts.roleName);
     }
+    case 'box_alert':
+      return validBoxAlert(facts);
+    case 'certificate_reminder':
+      if (!object(facts) || !calendarDate(facts.date)) return false;
+      if (facts.stage === 'due') return exact(facts, ['stage', 'date', 'daysLeft']) && whole(facts.daysLeft, 0);
+      return facts.stage === 'expired' && exact(facts, ['stage', 'date']);
     default:
       return false;
   }

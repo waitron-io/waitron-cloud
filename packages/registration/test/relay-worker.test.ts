@@ -222,26 +222,30 @@ test('migration 033 preserves existing queue ciphertext without rewriting the ta
  assert.equal((await f.pool.query("SELECT relfilenode FROM pg_class WHERE oid='relay_messages'::regclass")).rows[0].relfilenode,node,'adding scheduling metadata rewrote the message table');
 });
 
-test('the worker sends a version 2 old-address warning through loopback',async t=>{
+test('the worker sends version 2 account, box and certificate notices through loopback',async t=>{
  const f=await setup(t),s=await smtp(t),v=await f.venue();
- const body=await v.submit({
-  version:2,class:'email_changed',recipient:'old@example.test',locale:'en-GB',
-  facts:{editorName:'Ana',at:new Date().toISOString()},
- });
  const worker=new Worker(f.pool,{...f.config,smtpPort:s.port});
- assert.equal(await worker.runOnce(),true);
- assert.equal((await f.row(body.messageId)).state,'accepted');
- assert.equal(s.captured.length,1);
- const raw=readable(s.captured[0]!);
- assert.match(raw,/^To: old@example\.test\r?$/m);
- assert.match(raw,/Your sign-in email was changed/);
- assert.match(raw,/Ana changed the email address/);
- assert.match(raw,/Content-Type: text\/plain/i);
- assert.match(raw,/Content-Type: text\/html/i);
- assert.doesNotMatch(raw,/https?:\/\//);
+ const cases=[
+  ['email_changed',{editorName:'Ana',at:new Date().toISOString()},/Your sign-in email was changed/,/Ana changed the email address/],
+  ['box_alert',{code:'storage.space_low'},/nearly out of disk space/,/Box status/],
+  ['certificate_reminder',{stage:'due',date:'2026-12-01',daysLeft:9},/AEAT certificate expires/,/1 Dec 2026/],
+ ] as const;
+ for(const [kind,facts,subject,text] of cases){
+  const body=await v.submit({version:2,class:kind,recipient:'old@example.test',locale:'en-GB',facts});
+  assert.equal(await worker.runOnce(),true);
+  assert.equal((await f.row(body.messageId)).state,'accepted');
+  const raw=readable(s.captured.at(-1)!);
+  assert.match(raw,/^To: old@example\.test\r?$/m);
+  assert.match(raw,subject);
+  assert.match(raw,text);
+  assert.match(raw,/Content-Type: text\/plain/i);
+  assert.match(raw,/Content-Type: text\/html/i);
+  assert.doesNotMatch(raw,/https?:\/\//);
+ }
+ assert.equal(s.captured.length,3);
 });
 
-test('migration 081 preserves and delivers a version 1 message already queued on schema 080',async t=>{
+test('migrations 081 and 082 preserve and deliver a version 1 message already queued on schema 080',async t=>{
  const release=await migrationRelease(80);t.after(()=>release.close());
  const f=await fixture(release.migrate);t.after(()=>f.close());
  const s=await smtp(t),v=await f.venue(),body=await v.submit();
@@ -252,7 +256,7 @@ test('migration 081 preserves and delivers a version 1 message already queued on
  await migrate(f.pool);
  const upgraded=await ledger();
  assert.deepEqual(upgraded.slice(0,80),old);
- assert.deepEqual(upgraded.slice(80).map(row=>row.name),['081_relay_staff_notices.sql']);
+ assert.deepEqual(upgraded.slice(80).map(row=>row.name),['081_relay_staff_notices.sql','082_relay_box_notices.sql']);
  const after=await f.row(body.messageId);
  assert.deepEqual(after.payload,before.payload);
  assert.equal(after.binding,before.binding);
