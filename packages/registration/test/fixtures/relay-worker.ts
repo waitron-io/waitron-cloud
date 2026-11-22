@@ -68,6 +68,7 @@ export async function fixture(initialise=migrate){
   }
   async function submit(change:Record<string,unknown>={}){
    const body:any={version:1,messageId:randomUUID(),grantId:grant.id,grantRevision:1,class:'password_reset',recipient:`${randomUUID()}@example.test`,displayName:'Ana & Bea',locale:'es-ES',timeZone:'Europe/Madrid',expiresAt:new Date(Date.now()+1800000).toISOString(),token:randomBytes(32).toString('base64url'),...change};
+   if(body.version===2)delete body.token;
    if(body.class==='email_change'){delete body.token;body.code='123456';body.codeExpiresAt=new Date(Date.now()+600000).toISOString();}
    await messages.execute('email-submit',proof('email-submit',body));return body;
   }

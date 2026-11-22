@@ -1,6 +1,7 @@
 import {connect,type Socket} from 'node:net';
 import nodemailer from 'nodemailer';
 import {relayBody,type RelayBody} from './relay-payload.ts';
+import {relayStaffNotice} from './relay-staff-notices.ts';
 export type RelayDelivery='accepted'|'temporary'|'refused'|'uncertain';
 export type RelayContent=RelayBody&{managementOrigin:string};
 
@@ -10,6 +11,11 @@ export function relayTemplate(content:RelayContent){
  relayBody(JSON.stringify(body),true);
  const origin=new URL(managementOrigin);
  if(origin.protocol!=='https:'||origin.origin!==managementOrigin)throw new Error('relay_unavailable');
+ if(body.version===2){
+  const {subject,text}=relayStaffNotice(body);
+  const escaped=text.trimEnd().replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+  return {subject,text,html:'<p>'+escaped.replaceAll('\n\n','</p><p>')+'</p>'};
+ }
  const spanish=body.locale.startsWith('es');
  const subject=body.class==='invitation'?(spanish?'Invitación a Waitron':'Your Waitron invitation')
   :body.class==='password_reset'?(spanish?'Restablece tu contraseña de Waitron':'Reset your Waitron password')

@@ -84,3 +84,19 @@ test('relay loses acknowledgement after DATA conservatively without a resend',as
   assert.equal(count,1);assert.equal(smtp.connections,1);
  }finally{await smtp.close();}
 });
+
+test('the TLS relay delivers version 2 as plain text and HTML',async()=>{
+ const smtp=await tlsSmtp();
+ try{
+  const {token: _token,...common}=content() as Extract<RelayContent,{version:1}>;
+  const body:RelayContent={...common,version:2,class:'role_membership_changed',
+   facts:{change:'added',editorName:'Ana',roleName:'Night service',at:new Date().toISOString()}};
+  const send=createSesRelaySender(config(),{...smtpConfig,port:smtp.port},{ca:smtp.cert});
+  assert.equal((await send(body,admission,new AbortController().signal)).outcome,'accepted');
+  assert.equal(smtp.captured.length,1);
+  const {raw}=smtp.captured[0]!;
+  assert.match(raw,/Content-Type: text\/plain/i);
+  assert.match(raw,/Content-Type: text\/html/i);
+  assert.match(raw,/Ana added you to Night service/);
+ }finally{await smtp.close();}
+});

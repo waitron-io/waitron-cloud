@@ -8,6 +8,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {SMTPServer,type SMTPServerOptions} from 'smtp-server';
 import * as registration from '../src/index.ts';
 import {fixture} from './fixtures/relay-worker.ts';
+import {migrationRelease} from './fixtures/migration-release.ts';
 const Worker=(registration as any).RelayWorker;
 async function setup(t:any){assert.equal(typeof Worker,'function','separate local relay worker must exist');const f=await fixture();t.after(()=>f.close());return f;}
 async function smtp(t:any,options:SMTPServerOptions={}){
@@ -219,4 +220,47 @@ test('migration 033 preserves existing queue ciphertext without rewriting the ta
  await migrate(f.pool);const after=await f.row(b.messageId);
  assert.deepEqual(after.payload,before.payload);assert.equal(after.state,'queued');assert.equal(after.binding,before.binding);
  assert.equal((await f.pool.query("SELECT relfilenode FROM pg_class WHERE oid='relay_messages'::regclass")).rows[0].relfilenode,node,'adding scheduling metadata rewrote the message table');
+});
+
+test('the worker sends a version 2 old-address warning through loopback',async t=>{
+ const f=await setup(t),s=await smtp(t),v=await f.venue();
+ const body=await v.submit({
+  version:2,class:'email_changed',recipient:'old@example.test',locale:'en-GB',
+  facts:{editorName:'Ana',at:new Date().toISOString()},
+ });
+ const worker=new Worker(f.pool,{...f.config,smtpPort:s.port});
+ assert.equal(await worker.runOnce(),true);
+ assert.equal((await f.row(body.messageId)).state,'accepted');
+ assert.equal(s.captured.length,1);
+ const raw=readable(s.captured[0]!);
+ assert.match(raw,/^To: old@example\.test\r?$/m);
+ assert.match(raw,/Your sign-in email was changed/);
+ assert.match(raw,/Ana changed the email address/);
+ assert.match(raw,/Content-Type: text\/plain/i);
+ assert.match(raw,/Content-Type: text\/html/i);
+ assert.doesNotMatch(raw,/https?:\/\//);
+});
+
+test('migration 081 preserves and delivers a version 1 message already queued on schema 080',async t=>{
+ const release=await migrationRelease(80);t.after(()=>release.close());
+ const f=await fixture(release.migrate);t.after(()=>f.close());
+ const s=await smtp(t),v=await f.venue(),body=await v.submit();
+ const before=await f.row(body.messageId);
+ const ledger=async()=>(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
+ const old=await ledger();assert.equal(old.length,80);
+
+ await migrate(f.pool);
+ const upgraded=await ledger();
+ assert.deepEqual(upgraded.slice(0,80),old);
+ assert.deepEqual(upgraded.slice(80).map(row=>row.name),['081_relay_staff_notices.sql']);
+ const after=await f.row(body.messageId);
+ assert.deepEqual(after.payload,before.payload);
+ assert.equal(after.binding,before.binding);
+ const replay=await f.messages.execute('email-submit',v.proof('email-submit',body));
+ assert.equal(replay.created,false);assert.equal(replay.status.state,'queued');
+ assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
+ assert.equal(await new Worker(f.pool,{...f.config,smtpPort:s.port}).runOnce(),true);
+ assert.equal((await f.row(body.messageId)).state,'accepted');
+ assert.equal(s.captured.length,1);
+ assert.match(readable(s.captured[0]!),new RegExp(body.token));
 });
