@@ -156,7 +156,7 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-Cloud pins `@waitron-io/ui-core@0.2.30` and Lit `3.3.3` in `apps/portal`,
+Cloud pins `@waitron-io/ui-core@0.2.34` and Lit `3.3.3` in `apps/portal`,
 `packages/ui-smoke` and the workspace lockfile. Install from that lockfile,
 then run:
 
@@ -173,9 +173,9 @@ autocomplete, button interaction and light/dark tokens. Its declaration check ke
 `skipLibCheck` disabled. A local file dependency fails the version check. The normal
 `pnpm test` includes this fixture; it is test infrastructure, not an account screen.
 
-Version `0.2.30` records Waitron source
-`c1ebdfed92f6d13d7e48dae191d2f9eacfc55972`, matching
-[publication run 43903273329](https://github.com/clintongormley/waitron/actions/runs/43903273329). Its installed `dist/LICENSE` and
+Version `0.2.34` records Waitron source
+`5e91f7a9ef2a0aede4ff5500c305b1477b907fc7`, matching
+[publication run 44434604443](https://github.com/clintongormley/waitron/actions/runs/44434604443). Its installed `dist/LICENSE` and
 `dist/LICENSE-GRANTS.md` match that source commit byte for byte. The source
 package's own version remains `0.1.0`; publication assigns the registry version
 without changing the source manifest. The earlier `0.2.1` local qualification used the GitHub CLI

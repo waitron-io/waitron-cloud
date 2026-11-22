@@ -21,8 +21,8 @@ importers:
         specifier: 14.0.0
         version: 14.0.0
       '@waitron-io/ui-core':
-        specifier: 0.2.30
-        version: 0.2.30(lit@3.3.3)
+        specifier: 0.2.34
+        version: 0.2.34(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -212,8 +212,8 @@ importers:
   packages/ui-smoke:
     dependencies:
       '@waitron-io/ui-core':
-        specifier: 0.2.30
-        version: 0.2.30(lit@3.3.3)
+        specifier: 0.2.34
+        version: 0.2.34(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -831,8 +831,8 @@ packages:
   '@waitron-io/contract@0.2.42':
     resolution: {integrity: sha512-I8sbUouB8rxGntiyZwfD5Gaf0KqoPS9/nsNgIj7nEg6eFu7E7DuZ2CC8suzfU1e9iru8HPI9SLUMru/UiECXig==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.42/f4c4472677aa5a1272b3a48bc86b04ead2909fa0}
 
-  '@waitron-io/ui-core@0.2.30':
-    resolution: {integrity: sha512-1PhncKtXnoXOLDGoGNRlUuYkF5kHrorjEUxkO7c7ZKAD3uLYtwPA/no5wSBid+WGjTuZQz/pWmWYmqXLvHC6AQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.30/7ea571c6a407a83e7b513020f086929dcb9b15fa}
+  '@waitron-io/ui-core@0.2.34':
+    resolution: {integrity: sha512-59/NOGjBOVcOoS6+/yR0c/5caZe3ZfC7lSfnFExs8fcmHMIXcJVRsbVmLNxAwB2Nn6IVzKI8jmeXi9aiSNXxgw==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.34/43f624221a8a7499dea2d9d49a93237f16b6ecca}
     peerDependencies:
       lit: ^3.2.0
 
@@ -1975,7 +1975,7 @@ snapshots:
 
   '@waitron-io/contract@0.2.42': {}
 
-  '@waitron-io/ui-core@0.2.30(lit@3.3.3)':
+  '@waitron-io/ui-core@0.2.34(lit@3.3.3)':
     dependencies:
       lit: 3.3.3
 
