@@ -50,7 +50,7 @@ handling will need corresponding Waitron changes once the contract is agreed.
 Cloud owns the [free address lookup scope](address-lookup-scope.md), the
 [test address lookup contract](address-lookup-trial.md), provider and account allowance decisions; Waitron owns the editable venue form and country-pack
 validation that any suggestion must pass.
-Cloud also owns the [version 1 transactional-email relay contract](transactional-email-relay-contract.md),
+Cloud also owns the [transactional-email relay contract](transactional-email-relay-contract.md),
 account grants, queue, provider and allowance policy. Waitron owns account-action
 validity, durable submission, explicit transport selection and local status screens.
 Its caller implementation must add a link back to this contract and a joint receipt;

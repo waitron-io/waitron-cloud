@@ -66,8 +66,11 @@ export class RelayMessages {
     if(reservation.replay)messageError('relay_unavailable');
     // Signed time already passed the 60-second proof window; keep the queue's own
     // deadline within 24 Cloud hours without rejecting a slightly fast venue clock.
-    const expiry=Math.min(Date.parse(submitted.expiresAt),submitted.codeExpiresAt?Date.parse(submitted.codeExpiresAt):Infinity,now+86400000);
-    if(expiry<=now||Date.parse(submitted.expiresAt)>claims.issuedAt+86400000||(submitted.codeExpiresAt&&Date.parse(submitted.codeExpiresAt)>claims.issuedAt+86400000))messageError('invalid_message');
+    const deadline=Date.parse(submitted.expiresAt);
+    const codeExpiresAt=submitted.version===1&&submitted.class==='email_change'?submitted.codeExpiresAt:undefined;
+    const codeDeadline=codeExpiresAt?Date.parse(codeExpiresAt):undefined;
+    const expiry=Math.min(deadline,codeDeadline??Infinity,now+86400000);
+    if(expiry<=now||deadline>claims.issuedAt+86400000||(codeDeadline!==undefined&&codeDeadline>claims.issuedAt+86400000))messageError('invalid_message');
     const counterEnd=await this.#bounds.reserve(client,{grantId,recipient:submitted.recipient});
     await recheck();
     if(expiry<=now)messageError('invalid_message');

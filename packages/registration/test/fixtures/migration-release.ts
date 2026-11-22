@@ -7,6 +7,7 @@ import {promisify} from 'node:util';
 import type {Pool} from 'pg';
 
 const revisions = {
+  80:'be3df93d816aec079bdb055177da3844c9e19be2',
   73:'8c490cdc7521e62d0b6467aeda7f4962d0f433cf',
   72:'5694a6906ebcad95ebb403cd479643c11edaac56',
   71:'22289fde3a235478388b981f632da5f7c51d258e',

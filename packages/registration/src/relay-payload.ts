@@ -1,30 +1,117 @@
 import {createCipheriv,createDecipheriv,createHmac,randomBytes} from 'node:crypto';
 import {normaliseEmail} from './account-input.ts';
 import {isPairingUuid} from './pairing-proof.ts';
+import {builtInRoles, securityChanges} from './relay-staff-notices.ts';
 export class RelayMessageError extends Error {
  readonly code:'invalid_message'|'relay_unavailable'|'grant_unavailable'|'message_conflict';
  constructor(code:RelayMessageError['code']){super(code);this.code=code;}
 }
 export function messageError(code:RelayMessageError['code']):never{throw new RelayMessageError(code);}
-export type RelayClass='invitation'|'password_reset'|'email_change';
-export interface RelayBody {version:1;messageId:string;grantId:string;grantRevision:number;class:RelayClass;recipient:string;displayName:string;locale:string;timeZone:string;expiresAt:string;token?:string;code?:string;codeExpiresAt?:string}
-function exact(v:unknown,fields:string[]):v is Record<string,unknown>{return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===fields.sort().join(',');}
-function date(v:unknown):v is string{return typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;}
-export function relayBody(text:string,submit:boolean):RelayBody|{version:1;messageId:string}{
- if(Buffer.byteLength(text)>4096)messageError('invalid_message');
- let v:unknown;try{v=JSON.parse(text);}catch{return messageError('invalid_message');}
- if(!submit){if(!exact(v,['version','messageId'])||v.version!==1||!isPairingUuid(v.messageId))messageError('invalid_message');return v as {version:1;messageId:string};}
- const kind=(v as RelayBody|null)?.class;
- const fields=['version','messageId','grantId','grantRevision','class','recipient','displayName','locale','timeZone','expiresAt',...(kind==='email_change'?['code','codeExpiresAt']:['token'])];
- if(!exact(v,fields)||v.version!==1||!isPairingUuid(v.messageId)||!isPairingUuid(v.grantId)||!Number.isSafeInteger(v.grantRevision)||Number(v.grantRevision)<1
-  ||!['invitation','password_reset','email_change'].includes(String(kind))||typeof v.recipient!=='string'||normaliseEmail(v.recipient)!==v.recipient||Buffer.byteLength(v.recipient)>254
-  ||typeof v.displayName!=='string'||[...v.displayName].length>200||/[\p{Cc}\p{Cf}<>]/u.test(v.displayName)
-  ||!['en','en-GB','en-US','es','es-ES'].includes(String(v.locale))||typeof v.timeZone!=='string'||v.timeZone.length>100||!date(v.expiresAt))messageError('invalid_message');
- try{new Intl.DateTimeFormat('en',{timeZone:v.timeZone});}catch{return messageError('invalid_message');}
- if(kind==='email_change'){
-  if(typeof v.code!=='string'||!/^\d{6}$/.test(v.code)||!date(v.codeExpiresAt))messageError('invalid_message');
- }else if(typeof v.token!=='string'||! /^[A-Za-z0-9_-]{43}$/.test(v.token)||Buffer.from(v.token,'base64url').toString('base64url')!==v.token)messageError('invalid_message');
- return v as unknown as RelayBody;
+type RelayV1Class = 'invitation' | 'password_reset' | 'email_change';
+interface RelayRequest {
+  messageId: string;
+  grantId: string;
+  grantRevision: number;
+  recipient: string;
+  displayName: string;
+  locale: string;
+  timeZone: string;
+  expiresAt: string;
+}
+interface RelayV1Body extends RelayRequest {
+  version: 1;
+  class: RelayV1Class;
+  token?: string;
+  code?: string;
+  codeExpiresAt?: string;
+}
+type RoleFacts = {change: 'added' | 'removed'; editorName: string; at: string}
+  & ({builtInKey: keyof typeof builtInRoles} | {roleName: string});
+export type RelayStaffNotice = RelayRequest & {version: 2} & (
+  | {class: 'email_changed'; facts: {editorName: string; at: string}}
+  | {class: 'security_change'; facts: {change: keyof typeof securityChanges; at: string}}
+  | {class: 'role_membership_changed'; facts: RoleFacts}
+);
+export type RelayBody = RelayV1Body | RelayStaffNotice;
+export type RelayClass = RelayBody['class'];
+
+function object(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+function exact(value: unknown, fields: string[]): value is Record<string, unknown> {
+  return object(value) && Object.keys(value).length === fields.length
+    && fields.every(field => Object.hasOwn(value, field));
+}
+function date(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+    && new Date(value).toISOString() === value;
+}
+function label(value: unknown, max: number): value is string {
+  return typeof value === 'string' && [...value].length <= max && !/[\p{Cc}\p{Cf}<>]/u.test(value);
+}
+function validNotice(kind: unknown, facts: unknown): boolean {
+  switch (kind) {
+    case 'email_changed':
+      return exact(facts, ['editorName', 'at']) && label(facts.editorName, 80) && date(facts.at);
+    case 'security_change':
+      return exact(facts, ['change', 'at']) && typeof facts.change === 'string'
+        && Object.hasOwn(securityChanges, facts.change) && date(facts.at);
+    case 'role_membership_changed': {
+      const fields = ['change', 'editorName', 'at'];
+      if (!object(facts) || (facts.change !== 'added' && facts.change !== 'removed')
+        || !label(facts.editorName, 80) || !date(facts.at)) return false;
+      if (Object.hasOwn(facts, 'builtInKey')) {
+        return exact(facts, [...fields, 'builtInKey']) && typeof facts.builtInKey === 'string'
+          && Object.hasOwn(builtInRoles, facts.builtInKey);
+      }
+      return exact(facts, [...fields, 'roleName']) && label(facts.roleName, 80);
+    }
+    default:
+      return false;
+  }
+}
+const submitFields = [
+  'version', 'messageId', 'grantId', 'grantRevision', 'class', 'recipient',
+  'displayName', 'locale', 'timeZone', 'expiresAt',
+];
+
+export function relayBody(text: string, submit: boolean): RelayBody | {version: 1; messageId: string} {
+  if (Buffer.byteLength(text) > 4096) messageError('invalid_message');
+  let value: unknown;
+  try {value = JSON.parse(text);} catch {return messageError('invalid_message');}
+  if (!submit) {
+    if (!exact(value, ['version', 'messageId']) || value.version !== 1 || !isPairingUuid(value.messageId)) {
+      messageError('invalid_message');
+    }
+    return {version: 1, messageId: value.messageId};
+  }
+  if (!object(value) || (value.version !== 1 && value.version !== 2)
+    || !isPairingUuid(value.messageId) || !isPairingUuid(value.grantId)
+    || !Number.isSafeInteger(value.grantRevision) || Number(value.grantRevision) < 1
+    || typeof value.recipient !== 'string' || normaliseEmail(value.recipient) !== value.recipient
+    || Buffer.byteLength(value.recipient) > 254 || !label(value.displayName, 200)
+    || typeof value.locale !== 'string' || !['en', 'en-GB', 'en-US', 'es', 'es-ES'].includes(value.locale)
+    || typeof value.timeZone !== 'string' || value.timeZone.length > 100 || !date(value.expiresAt)) {
+    messageError('invalid_message');
+  }
+  try {new Intl.DateTimeFormat('en', {timeZone: value.timeZone});}
+  catch {return messageError('invalid_message');}
+  if (value.version === 2) {
+    if (!exact(value, [...submitFields, 'facts']) || !validNotice(value.class, value.facts)) {
+      messageError('invalid_message');
+    }
+  } else if (value.class === 'email_change') {
+    if (!exact(value, [...submitFields, 'code', 'codeExpiresAt'])
+      || typeof value.code !== 'string' || !/^\d{6}$/.test(value.code) || !date(value.codeExpiresAt)) {
+      messageError('invalid_message');
+    }
+  } else if ((value.class !== 'invitation' && value.class !== 'password_reset')
+    || !exact(value, [...submitFields, 'token']) || typeof value.token !== 'string'
+    || !/^[A-Za-z0-9_-]{43}$/.test(value.token)
+    || Buffer.from(value.token, 'base64url').toString('base64url') !== value.token) {
+    messageError('invalid_message');
+  }
+  return value as unknown as RelayBody;
 }
 export interface RelayKeyConfig {activeKeyId:string;keys:Record<string,string>}
 export interface RelayPayloadBinding {installation_id:string;message_id:string;grant_id:string;grant_revision:number;class:RelayClass;key_id:string}

@@ -1,9 +1,10 @@
-# On-prem transactional email relay, version 1
+# On-prem transactional email relay
 
-Status: version 1 Cloud/Waitron contract, scoped on 2026-09-30. The internal
-local-proof grant, reservation, signed admission and encrypted queue are implemented.
+Version 1 was scoped on 2026-09-30. The internal local-proof grant, reservation,
+signed admission and encrypted queue are implemented.
 A separate local capture worker is implemented but is not wired into normal startup. Normal startup exposes no relay routes. Production remains disabled until the decisions and proofs
-below are complete.
+below are complete. The [version 2 test pilot](#version-2-account-notices) adds
+three account notices.
 
 You should be able to send ordinary Waitron account emails after connecting a free
 Cloud account, without buying remote access or backups. The relay accepts a small
@@ -70,13 +71,13 @@ addresses do not. This statement proves the paired box made the claim, not domai
 control or public reachability. Remote access is not a prerequisite, and delivery does not prove the recipient
 can reach the venue. The setup screen must explain that local access may be needed.
 
-## Only three message classes
+## Version 1 account actions
 
 Version 1 allows `invitation`, `password_reset` and `email_change`. Each request has
 one recipient and structured template fields. Reject arbitrary subject/body/HTML,
 attachments, CC/BCC, caller-selected headers, envelope sender, reply-to, provider
-credentials and marketing, receipts or bulk notices. A later class needs a versioned
-schema and its own authority review.
+credentials and marketing, receipts or bulk notices. Version 2 defines separate
+schemas for the three pilot notices.
 
 Cloud controls the fixed sender and template revision, validates text lengths and
 escapes display names. Use a verified Cloud sender domain; the venue name may appear
@@ -136,8 +137,11 @@ not install owner commands or SES startup.
 Send your choice when you save the email step on a configured test box. Get the
 grant before sending signed complete to file the venue. Leave the box unticked
 to keep your mail server and skip the grant request. Version 1 covers
-staff invitations, password resets and email changes. Adding guest email would
-require another consent version.
+staff invitations, password resets and email-change codes. For the version 2 test
+pilot, the setup choice also names the old-address warning, security changes and
+role changes. Use freshly opted-in synthetic venues and keep `local-v1` so existing
+grants can still send version 1 mail. Adding guest email would require another
+consent version.
 
 After [setup pairing version 5](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
 returns a provisional installation, renew its lease if needed. A new account
@@ -180,8 +184,9 @@ They are installed only when you inject local-proof relay configuration into the
 account app/server. The machine catalogue includes `email-submit`, `email-status`
 and `email-cancel`, with negative cross-action tests. They reuse the
 signed `waitron-cloud-machine-v1` envelope over HTTPS and its current time window,
-key-bound lease and origin checks. Each signed body's `version` is `1`. Unsupported
-versions and unknown fields fail before queueing.
+key-bound lease and origin checks. Status, cancel and all replies use version 1.
+Submit uses version 1 for account actions or version 2 for the three notices below.
+Unsupported versions and unknown fields fail before queueing.
 
 Persist a UUID `messageId` with the local action before the first network attempt.
 For submit, use it as the signed `operationId`. The box submits at most once per
@@ -254,6 +259,33 @@ revealing whether the message exists. Proposed errors: `400 invalid_message`,
 it does not permit resubmitting the original mail claim. A missing status is not proof that a
 concurrent submit failed. Keep the result unknown and reconcile status; never
 resubmit that claim or fall back to direct SMTP.
+
+## Version 2 account notices
+
+Use the same `email-submit` action and path. The signed JSON body has exactly
+`version` (2), `messageId`, `grantId`, `grantRevision`, `class`, `recipient`,
+`displayName` (the venue name), `locale`, `timeZone`, `expiresAt` and `facts`.
+The common fields use the version 1 bounds. Each `at` is a UTC ISO timestamp
+with milliseconds, as produced by `Date#toISOString()`. The box sets `expiresAt`
+to the earlier of its notice deadline and 24 hours after signing.
+
+| Class | Exact facts |
+| --- | --- |
+| `email_changed` | `editorName`, `at`. Send to the old address. |
+| `security_change` | `change`, `at` (when the box queued the notice). Use `password_changed`, `passkey_added`, `passkey_removed`, `authenticator_set_up`, `authenticator_removed`, `recovery_codes_regenerated`, `email_changed`, `google_connected` or `google_disconnected`. |
+| `role_membership_changed` | `change` (`added` or `removed`), `editorName`, `at`, and exactly one of `builtInKey` (`staff`, `supervisor`, `manager`, `admin`) or `roleName`. |
+
+Editor and custom role names are limited to 80 Unicode code points. Cloud writes
+the subject and plain-text body in English or Spanish and uses the venue time
+zone for the notice time. The old-address warning carries no new email address
+or action link. The notices use the same allowance as version 1 mail. The test
+pilot allows three messages per account per hour across both versions.
+
+On test Cloud, apply migration 081, start all email workers from the new release,
+then start the new HTTP API before the box submits a notice. Keep older workers
+away from the new queue. An older API returns `400 invalid_message` for version 2
+before charging allowance. Check delivery with the box against the synthetic
+test inbox before widening use.
 
 ## Queueing and uncertain delivery
 

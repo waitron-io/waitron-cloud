@@ -9,7 +9,7 @@ let f:Awaited<ReturnType<typeof relayFixture>>;
 before(async()=>{f=await relayFixture();});after(async()=>f?.close());
 beforeEach(async()=>{await f.db.pool.query('TRUNCATE account_rate_limits');});
 const lookup=(id:string)=>({version:1,messageId:id});
-async function submit(a:Awaited<ReturnType<typeof f.venue>>,body=a.body){return f.request('submit',a.proof('email-submit',body));}
+async function submit(a:Awaited<ReturnType<typeof f.venue>>,body:unknown=a.body){return f.request('submit',a.proof('email-submit',body));}
 async function read(a:Awaited<ReturnType<typeof f.venue>>,action='status',id=a.body.messageId){return f.request(action,a.proof('email-'+action,lookup(id)));}
 async function count(table:string){return Number((await f.db.pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count);}
 
@@ -33,6 +33,34 @@ test('three classes match current Waitron deadlines and email change uses its sh
   const r=await submit(a,body);assert.equal(r.status,202,r.text);assert.equal(r.body.expiresAt,body.codeExpiresAt??body.expiresAt);
  }
 });
+test('a signed v2 notice can be replayed, read and cancelled with v1 replies',async()=>{
+ const a=await f.venue(),n=await count('relay_reservations');
+ const {token: _token,...common}=a.body;
+ const body={...common,version:2,class:'email_changed',facts:{editorName:'Ana',at:new Date().toISOString()}};
+ const first=await submit(a,body);assert.equal(first.status,202,first.text);
+ assert.deepEqual(first.body,{version:1,messageId:body.messageId,state:'queued',statusRevision:1,expiresAt:body.expiresAt,reason:null});
+ const replay=await submit(a,body);assert.equal(replay.status,200,replay.text);assert.deepEqual(replay.body,first.body);
+ assert.deepEqual((await read(a)).body,first.body);
+ const changed=await submit(a,{...body,facts:{...body.facts,editorName:'Bea'}});
+ assert.equal(changed.status,409,changed.text);
+ const cancelled=await read(a,'cancel');
+ assert.equal(cancelled.status,200,cancelled.text);
+ assert.deepEqual(cancelled.body,{...first.body,state:'cancelled',statusRevision:2,reason:'cancelled'});
+ assert.equal(await count('relay_reservations'),n+1);
+});
+
+test('a signed v2 notice with extra facts never queues or reserves allowance',async()=>{
+ const a=await f.venue(),reservations=await count('relay_reservations'),messages=await count('relay_messages');
+ const {token: _token,...common}=a.body;
+ const body={...common,version:2,class:'email_changed',facts:{
+  editorName:'Ana',at:new Date().toISOString(),newEmail:'private@example.test',
+ }};
+ const response=await submit(a,body);
+ assert.equal(response.status,400,response.text);assert.deepEqual(response.body,{error:'invalid_message'});
+ assert.equal(await count('relay_messages'),messages);
+ assert.equal(await count('relay_reservations'),reservations);
+});
+
 test('parallel same-ID admissions debit once and a changed body conflicts',async()=>{
  const a=await f.venue(),before=await count('relay_reservations');
  const results=await Promise.all(Array.from({length:6},()=>submit(a)));
