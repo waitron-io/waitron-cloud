@@ -166,6 +166,11 @@ function relayBoxNotice(body: BoxNotice) {
     case 'backup.run_stopped': {
       const needed = bytes(body.locale, body.facts.neededBytes);
       const available = bytes(body.locale, body.facts.availableBytes);
+      if (needed === available && body.facts.availableBytes < body.facts.neededBytes) {
+        return spanish
+          ? render('No se hizo la copia por falta de espacio', `Hay menos espacio libre del que necesita la copia (unos ${needed}).`)
+          : render('Backup skipped due to low disk space', `There is less free space than the backup needs (about ${needed}).`);
+      }
       return spanish
         ? render('No se hizo la copia por falta de espacio', `La copia necesita ${needed} libres y el disco tiene ${available}.`)
         : render('Backup skipped due to low disk space', `The backup needs ${needed} free and the disk has ${available}.`);

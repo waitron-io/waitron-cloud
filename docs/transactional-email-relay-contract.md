@@ -77,7 +77,7 @@ Version 1 allows `invitation`, `password_reset` and `email_change`. Each request
 one recipient and structured template fields. Reject arbitrary subject/body/HTML,
 attachments, CC/BCC, caller-selected headers, envelope sender, reply-to, provider
 credentials and marketing, receipts or bulk notices. Version 2 defines separate
-schemas for the three pilot notices.
+schemas for the five staff notices.
 
 Cloud controls the fixed sender and template revision, validates text lengths and
 escapes display names. Use a verified Cloud sender domain; the venue name may appear
