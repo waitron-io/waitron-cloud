@@ -16,7 +16,7 @@ Invitations, password resets, email-change codes, status, cancel, replies and gr
 
 Lane D confirmed the fields and expiry mapping on 22 November at 02:51. The watcher cleared the three-class slice and pilot consent at 02:14 and confirmed the cut at 02:55. Lane D names the three notices in setup and uses freshly opted-in synthetic venues for the joint check. Keep the consent version so existing grants still admit v1 mail. [Setup consent](2026-11-21-setup-email-consent.md)
 
-Upgrade the Cloud schema, then every email worker, then the HTTP API before the box sends v2. Earlier Cloud returns `400 invalid_message` for v2 before reserving allowance. The box treats that submission as refused.
+Upgrade the Cloud schema, then every email worker, then the HTTP API before the box sends v2. Earlier Cloud returns `400 invalid_message` for v2 before reserving allowance. The box treats that submission as refused. Follow the [worker rollback steps](../../transactional-email-relay-contract.md#version-2-account-notices) before reverting.
 
 ## Build and check
 

@@ -141,7 +141,8 @@ staff invitations, password resets and email-change codes. For the version 2 tes
 pilot, the setup choice also names the old-address warning, security changes and
 role changes. Test version 2 with freshly opted-in synthetic venues that see
 the updated choice. The relay accepts both versions with a `local-v1` grant.
-Adding guest email would require another consent version.
+Wider rollout needs a separate consent decision. Adding guest email would
+require another consent version.
 
 After [setup pairing version 5](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
 returns a provisional installation, renew its lease if needed. A new account
@@ -275,8 +276,8 @@ to the earlier of its notice deadline and 24 hours after signing.
 | `security_change` | `change`, `at` (when the box queued the notice). Use `password_changed`, `passkey_added`, `passkey_removed`, `authenticator_set_up`, `authenticator_removed`, `recovery_codes_regenerated`, `email_changed`, `google_connected` or `google_disconnected`. |
 | `role_membership_changed` | `change` (`added` or `removed`), `editorName`, `at`, and exactly one of `builtInKey` (`staff`, `supervisor`, `manager`, `admin`) or `roleName`. |
 
-Editor and custom role names must occupy a single line and contain a name
-of at most 80 Unicode code points. They appear only in the plain-text body.
+Editor and custom role labels must be nonblank, single-line strings of at most
+80 Unicode code points. They appear only in the plain-text body.
 Cloud writes the subject and message in English or Spanish and shows the
 notice time in the venue's time zone. The old-address warning has no field
 for the new address, and Cloud adds no action link. The test pilot allows

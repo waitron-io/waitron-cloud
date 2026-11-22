@@ -90,6 +90,7 @@ test('notice labels must contain a name on a single line', () => {
     {...warning, facts: {...warning.facts, editorName: '  '}},
     {...warning, facts: {...warning.facts, editorName: 'Ana\u2028Manager'}},
     {...role, facts: {...role.facts, roleName: ''}},
+    {...role, facts: {...role.facts, editorName: '  ', builtInKey: 'staff'}},
   ];
   for (const notice of invalid) {
     assert.throws(() => relayBody(JSON.stringify({...common, locale: 'en-GB', ...notice}), true),
