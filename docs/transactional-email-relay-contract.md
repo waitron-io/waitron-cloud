@@ -139,9 +139,9 @@ grant before sending signed complete to file the venue. Leave the box unticked
 to keep your mail server and skip the grant request. Version 1 covers
 staff invitations, password resets and email-change codes. For the version 2 test
 pilot, the setup choice also names the old-address warning, security changes and
-role changes. Use freshly opted-in synthetic venues and keep `local-v1` so existing
-grants can still send version 1 mail. Adding guest email would require another
-consent version.
+role changes. Test version 2 with freshly opted-in synthetic venues that see
+the updated choice. The relay accepts both versions with a `local-v1` grant.
+Adding guest email would require another consent version.
 
 After [setup pairing version 5](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
 returns a provisional installation, renew its lease if needed. A new account
@@ -275,17 +275,21 @@ to the earlier of its notice deadline and 24 hours after signing.
 | `security_change` | `change`, `at` (when the box queued the notice). Use `password_changed`, `passkey_added`, `passkey_removed`, `authenticator_set_up`, `authenticator_removed`, `recovery_codes_regenerated`, `email_changed`, `google_connected` or `google_disconnected`. |
 | `role_membership_changed` | `change` (`added` or `removed`), `editorName`, `at`, and exactly one of `builtInKey` (`staff`, `supervisor`, `manager`, `admin`) or `roleName`. |
 
-Editor and custom role names are limited to 80 Unicode code points. Cloud writes
-the subject and plain-text body in English or Spanish and uses the venue time
-zone for the notice time. The old-address warning carries no new email address
-or action link. The notices use the same allowance as version 1 mail. The test
-pilot allows three messages per account per hour across both versions.
+Editor and custom role names must occupy a single line and contain a name
+of at most 80 Unicode code points. They appear only in the plain-text body.
+Cloud writes the subject and message in English or Spanish and shows the
+notice time in the venue's time zone. The old-address warning has no field
+for the new address, and Cloud adds no action link. The test pilot allows
+three messages per account per hour across both versions. A burst of notices
+can use the remaining allowance and delay a password reset until the next hour.
 
 On test Cloud, apply migration 081, start all email workers from the new release,
-then start the new HTTP API before the box submits a notice. Keep older workers
-away from the new queue. An older API returns `400 invalid_message` for version 2
-before charging allowance. Check delivery with the box against the synthetic
-test inbox before widening use.
+then start the new HTTP API before the box submits a notice. Before returning
+to earlier workers, stop version 2 submissions and let queued notices finish
+or cancel them. An earlier worker can fail a queued version 2 notice as
+`payload_unavailable` after admission has charged for it. An older API returns
+`400 invalid_message` for version 2 before charging allowance. Check delivery
+with the box against the synthetic test inbox before widening use.
 
 ## Queueing and uncertain delivery
 

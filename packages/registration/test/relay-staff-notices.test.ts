@@ -64,10 +64,12 @@ test('version 2 accepts only the declared classes and their exact bounded facts'
     {...warning, facts: {...warning.facts, editorName: 'Ana\nBcc: another@example.test'}},
     {...warning, facts: {...warning.facts, at: '2026-02-30T00:00:00.000Z'}},
     {...security, facts: {...security.facts, change: 'toString'}},
+    {...security, facts: {...security.facts, subject: 'A custom subject'}},
     {...role, facts: role.facts},
     {...role, facts: {...builtInRole, roleName: 'Stock Lead'}},
     {...role, facts: {...builtInRole, builtInKey: 'owner'}},
     {...role, facts: {...builtInRole, change: 'edited'}},
+    {...role, facts: {...role.facts, roleName: 'a'.repeat(81)}},
   ];
   for (const notice of invalid) {
     const body = {...common, locale: 'en-GB', ...notice};
@@ -81,4 +83,16 @@ test('the worker renderer revalidates decrypted notice facts', () => {
   assert.throws(() => relayTemplate({
     ...malformed as RelayBody, managementOrigin: 'https://manage.example.test',
   }), RelayMessageError);
+});
+
+test('notice labels must contain a name on a single line', () => {
+  const invalid = [
+    {...warning, facts: {...warning.facts, editorName: '  '}},
+    {...warning, facts: {...warning.facts, editorName: 'Ana\u2028Manager'}},
+    {...role, facts: {...role.facts, roleName: ''}},
+  ];
+  for (const notice of invalid) {
+    assert.throws(() => relayBody(JSON.stringify({...common, locale: 'en-GB', ...notice}), true),
+      RelayMessageError, JSON.stringify(notice));
+  }
 });

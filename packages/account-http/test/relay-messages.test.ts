@@ -33,6 +33,19 @@ test('three classes match current Waitron deadlines and email change uses its sh
   const r=await submit(a,body);assert.equal(r.status,202,r.text);assert.equal(r.body.expiresAt,body.codeExpiresAt??body.expiresAt);
  }
 });
+test('signed security and role notices are admitted to the database',async()=>{
+ const at=new Date().toISOString();
+ for(const notice of [
+  {class:'security_change',facts:{change:'google_disconnected',at}},
+  {class:'role_membership_changed',facts:{change:'removed',editorName:'Ana',at,roleName:'Stock Lead'}},
+ ]){
+  const a=await f.venue();
+  const {token: _token,...common}=a.body;
+  const response=await submit(a,{...common,version:2,...notice});
+  assert.equal(response.status,202,notice.class+' '+response.text);
+ }
+});
+
 test('a signed v2 notice can be replayed, read and cancelled with v1 replies',async()=>{
  const a=await f.venue(),n=await count('relay_reservations');
  const {token: _token,...common}=a.body;

@@ -239,7 +239,7 @@ test('the worker sends a version 2 old-address warning through loopback',async t
  assert.doesNotMatch(raw,/https?:\/\//);
 });
 
-test('migration 081 preserves and delivers a version 1 message queued by release 080',async t=>{
+test('migration 081 preserves and delivers a version 1 message already queued on schema 080',async t=>{
  const release=await migrationRelease(80);t.after(()=>release.close());
  const f=await fixture(release.migrate);t.after(()=>f.close());
  const s=await smtp(t),v=await f.venue(),body=await v.submit();

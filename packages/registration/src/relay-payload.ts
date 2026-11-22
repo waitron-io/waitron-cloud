@@ -49,22 +49,25 @@ function date(value: unknown): value is string {
 function label(value: unknown, max: number): value is string {
   return typeof value === 'string' && [...value].length <= max && !/[\p{Cc}\p{Cf}<>]/u.test(value);
 }
+function noticeLabel(value: unknown): value is string {
+  return label(value, 80) && value.trim().length > 0 && !/[\p{Zl}\p{Zp}]/u.test(value);
+}
 function validNotice(kind: unknown, facts: unknown): boolean {
   switch (kind) {
     case 'email_changed':
-      return exact(facts, ['editorName', 'at']) && label(facts.editorName, 80) && date(facts.at);
+      return exact(facts, ['editorName', 'at']) && noticeLabel(facts.editorName) && date(facts.at);
     case 'security_change':
       return exact(facts, ['change', 'at']) && typeof facts.change === 'string'
         && Object.hasOwn(securityChanges, facts.change) && date(facts.at);
     case 'role_membership_changed': {
       const fields = ['change', 'editorName', 'at'];
       if (!object(facts) || (facts.change !== 'added' && facts.change !== 'removed')
-        || !label(facts.editorName, 80) || !date(facts.at)) return false;
+        || !noticeLabel(facts.editorName) || !date(facts.at)) return false;
       if (Object.hasOwn(facts, 'builtInKey')) {
         return exact(facts, [...fields, 'builtInKey']) && typeof facts.builtInKey === 'string'
           && Object.hasOwn(builtInRoles, facts.builtInKey);
       }
-      return exact(facts, [...fields, 'roleName']) && label(facts.roleName, 80);
+      return exact(facts, [...fields, 'roleName']) && noticeLabel(facts.roleName);
     }
     default:
       return false;
