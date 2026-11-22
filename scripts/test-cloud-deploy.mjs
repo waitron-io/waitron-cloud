@@ -138,10 +138,29 @@ export async function execute(command,args,{input,environment={},signal}={}){
  return (await exec(command,args,{cwd:root,env,signal,timeout:180000,maxBuffer:1024*1024})).stdout;
 }
 export function parseLinuxListeners(ss){return ss.trim().split('\n').filter(Boolean).map(line=>{const fields=line.trim().split(/\s+/),match=/^(.*):(\d+)$/.exec(fields[4]);if(!match)throw new Error('test_cloud.inventory');return{address:match[1],port:Number(match[2]),protocol:fields[0]};});}
+const waitronContainers=['waitron-app-1','waitron-print-agent-1','waitron-mailpit-1'];
+const isCloudRow=row=>/(?:^|,)com\.docker\.compose\.project=waitron-cloud-test(?:,|$)/.test(row.Labels??'');
+const parseRows=output=>output.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+
+async function inspectWatchedContainers(run,rows){
+ const watched=rows.filter(row=>isCloudRow(row)||waitronContainers.includes(row.Names));
+ if(!watched.length)return [];
+ return parseRows(await run('docker',['inspect','--format','{"id":{{json .Id}},"oom":{{json .State.OOMKilled}},"health":{{with index .State "Health"}}{{json .Status}}{{else}}null{{end}}}',...watched.map(row=>row.ID)]));
+}
+function isCloudReplacement(error,rows){
+ if(error?.code!==1||typeof error.stderr!=='string')return false;
+ const lines=error.stderr.split('\n').map(line=>line.trim()).filter(Boolean);
+ return lines.length>0&&lines.every(line=>{
+  const missing=/^error: no such object: ([0-9a-f]{64})$/i.exec(line)?.[1];
+  return missing!==undefined&&rows.some(row=>row.ID===missing&&isCloudRow(row)&&!waitronContainers.includes(row.Names));
+ });
+}
+
 export async function inventory(run=execute){
+ const listContainers=async()=>parseRows(await run('docker',['ps','-a','--no-trunc','--format','{{json .}}']));
  const [compose,engine,disk,containers,networks]=await Promise.all([
   run('docker',['compose','version','--short']),run('docker',['info','--format','{{json .Architecture}}']),run('df',['-Pk',root]),
-  run('docker',['ps','-a','--no-trunc','--format','{{json .}}']),run('docker',['network','ls','-q'])
+  listContainers(),run('docker',['network','ls','-q'])
  ]);
  let availableMiB=freemem()/1048576,listeners=[];
  if(process.platform==='linux'){
@@ -150,9 +169,14 @@ export async function inventory(run=execute){
  }else{
   const output=await run('lsof',['-nP','-iTCP','-sTCP:LISTEN','-iUDP','-F','n']);listeners=output.split('\n').filter(line=>line.startsWith('n')).flatMap(line=>{const match=/:([0-9]+)(?:->.*)?$/.exec(line);return match?[{address:'host',port:Number(match[1]),protocol:'unknown'}]:[];});
  }
- const rows=containers.trim()?containers.trim().split('\n').map(line=>JSON.parse(line)):[];
- const watched=rows.filter(row=>/(?:^|,)com\.docker\.compose\.project=waitron-cloud-test(?:,|$)/.test(row.Labels??'')||['waitron-app-1','waitron-print-agent-1','waitron-mailpit-1'].includes(row.Names));
- const details=watched.length?JSON.parse('['+(await run('docker',['inspect','--format','{"id":{{json .Id}},"oom":{{json .State.OOMKilled}},"health":{{with index .State "Health"}}{{json .Status}}{{else}}null{{end}}}',...watched.map(row=>row.ID)])).trim().split('\n').join(',')+']'):[];
+ let rows=containers,details;
+ try{details=await inspectWatchedContainers(run,rows);}
+ catch(error){
+  if(!isCloudReplacement(error,rows))throw error;
+  // Compose may remove a Cloud container between list and inspect. Use one fresh sample.
+  rows=await listContainers();
+  details=await inspectWatchedContainers(run,rows);
+ }
  const ids=networks.trim().split(/\s+/).filter(Boolean);const subnets=ids.length?JSON.parse(await run('docker',['network','inspect','--format','{{json .IPAM.Config}}',...ids]).then(text=>'['+text.trim().split('\n').join(',')+']')).flat().filter(Boolean).map(n=>n.Subnet).filter(Boolean):[];
  const lines=disk.trim().split('\n'),fields=lines.at(-1).trim().split(/\s+/);
  return {composeVersion:compose.trim().replace(/^v/,''),architecture:['x86_64','amd64'].includes(JSON.parse(engine))?'amd64':JSON.parse(engine),availableMiB,freeGiB:Number(fields[3])/1048576,listeners,networks:subnets,containers:rows.map(row=>({id:row.ID,project:/(?:^|,)com\.docker\.compose\.project=([^,]+)/.exec(row.Labels??'')?.[1]??'',name:row.Names,state:row.State,...details.find(value=>value.id===row.ID)}))};
@@ -161,7 +185,7 @@ export async function inventory(run=execute){
 export function resourceGuard(baseline,sample,below=0,{target='lan'}={}){
  const limits=targetLimits(target);
  if(sample.containers.some(c=>c.project===project&&c.oom))throw new Error('test_cloud.oom');
- for(const before of baseline.containers.filter(c=>['waitron-app-1','waitron-print-agent-1','waitron-mailpit-1'].includes(c.name))){
+ for(const before of baseline.containers.filter(c=>waitronContainers.includes(c.name))){
   const after=sample.containers.find(c=>c.id===before.id);
   if(!after||after.state!==before.state||before.health==='healthy'&&after.health!=='healthy')throw new Error('test_cloud.waitron_health');
  }
@@ -242,6 +266,10 @@ export async function deploy(mode,options){
  if(failure)throw failure;
  return{project,image:options.image,ids:state.ids};
 }
+function printDeploymentError(error){
+ if(error?.message)console.error(error.message);
+ if(error instanceof AggregateError)for(const cause of error.errors)printDeploymentError(cause);
+}
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
   const [mode,image,target='lan']=process.argv.slice(2);if(![4,5].includes(process.argv.length))throw Error();
@@ -253,5 +281,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   try{console.log(JSON.stringify(await deploy(mode,{image,target,origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,backupVerifierImage:mode==='up'?process.env.CLOUD_TEST_AMAZON_VERIFIER_IMAGE:undefined,sesSettingsSource:mode==='up'?process.env.TEST_CLOUD_SES_SETTINGS_SOURCE:undefined,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
   finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
   });
- }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud refused or failed; check target, HTTPS origin, certificate folder, image, capacity, ports and recorded ownership. Amazon commands require an explicit amazon argument after the image ID.');process.exitCode=1;}
+ }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud refused or failed; check target, HTTPS origin, certificate folder, image, capacity, ports and recorded ownership. Amazon commands require an explicit amazon argument after the image ID.');printDeploymentError(error);process.exitCode=1;}
 }

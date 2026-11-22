@@ -73,6 +73,103 @@ test('read-only inventory handles host/none networks without inspecting private 
   throw Error('Unexpected external operation');
  });assert.deepEqual(value.networks,['172.17.0.0/16']);assert.equal(value.architecture,'amd64');assert.equal(value.freeGiB,30);
 });
+const cloudRow = (ID, Names) => ({ID, Names, Labels:'com.docker.compose.project=waitron-cloud-test', State:'running'});
+const oldAccount = cloudRow('a'.repeat(64), 'waitron-cloud-test-account-1');
+const newAccount = cloudRow('b'.repeat(64), oldAccount.Names);
+const waitron = cloudRow('c'.repeat(64), 'waitron-app-1');
+const noSuchObject = row => 'error: no such object: '+row.ID;
+
+function dockerInventory(snapshots, inspections) {
+ const calls = {lists:0, inspections:0};
+ const run = async (command,args) => {
+  if(command==='df')return 'root 40000000 1 31457280 1% /';
+  if(command==='ss'||command==='lsof')return '';
+  if(args[0]==='compose')return 'v5.7.0';
+  if(args[0]==='info')return '"amd64"';
+  if(args[0]==='network'&&args[1]==='ls')return '';
+  if(args[0]==='ps')return snapshots[calls.lists++].map(row=>JSON.stringify(row)).join('\n');
+  if(args[0]==='inspect'){
+   const result=inspections[calls.inspections++];
+   if(result instanceof Error)throw result;
+   assert.deepEqual(args.slice(3),result.map(row=>row.id));
+   return result.map(row=>JSON.stringify(row)).join('\n');
+  }
+  assert.fail('Unexpected external operation');
+ };
+ return {run,calls};
+}
+
+test('inventory takes a fresh sample when Compose removes Cloud containers during inspection',async()=>{
+ const {inventory}=await api();
+ const storage=cloudRow('d'.repeat(64),'waitron-cloud-test-storage-1');
+ const failure=Object.assign(new Error('Docker inspection failed'), {code:1,
+  stdout:'{"id":"partial","oom":true,"health":"unhealthy"}\n',
+  stderr:noSuchObject(oldAccount)+'\nError: No such object: '+storage.ID+'\n'});
+ const {run,calls}=dockerInventory([[oldAccount,storage],[newAccount]], [failure, [
+  {id:newAccount.ID,oom:false,health:'healthy'}
+ ]]);
+ assert.deepEqual((await inventory(run)).containers,[
+  {id:newAccount.ID,project:'waitron-cloud-test',name:newAccount.Names,state:'running',oom:false,health:'healthy'}
+ ]);
+ assert.deepEqual(calls,{lists:2,inspections:2});
+});
+
+test('inventory propagates inspection failures outside a single Cloud replacement retry',async()=>{
+ const {inventory}=await api();
+ const cases=[
+  {code:1,stderr:noSuchObject(oldAccount)+'\npermission denied'},
+  {code:1,stderr:'Cannot connect to the Docker daemon'},
+  {code:1,stderr:'error: no such object: '+'e'.repeat(64)},
+  {code:1,stderr:noSuchObject(waitron)},
+  {code:2,stderr:noSuchObject(oldAccount)}
+ ];
+ for(const error of cases){
+  const failure=Object.assign(new Error(error.stderr),error);
+  const {run,calls}=dockerInventory([[oldAccount,waitron]],[failure]);
+  await assert.rejects(inventory(run),error=>error===failure);
+  assert.deepEqual(calls,{lists:1,inspections:1});
+ }
+ const failures=[oldAccount,newAccount].map(row=>Object.assign(new Error('Docker inspection failed'),
+  {code:1,stderr:noSuchObject(row)}));
+ const {run,calls}=dockerInventory([[oldAccount],[newAccount]],failures);
+ await assert.rejects(inventory(run),error=>error===failures[1]);
+ assert.deepEqual(calls,{lists:2,inspections:2});
+});
+
+test('the deployment CLI prints the reason it refused a command',async()=>{
+ const {spawnSync}=await import('node:child_process');
+ const {mkdtemp,rm}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const {fileURLToPath}=await import('node:url');
+ const temporary=await mkdtemp(join(tmpdir(),'cloud-driver-error-'));
+ try{
+  const script=fileURLToPath(new URL('./test-cloud-deploy.mjs',import.meta.url));
+  const result=spawnSync(process.execPath,[script,'preflight','invalid-image'],
+   {encoding:'utf8',env:{...process.env,HOME:temporary}});
+  assert.equal(result.status,1);
+  assert.match(result.stderr,/test_cloud\.image/);
+ }finally{await rm(temporary,{recursive:true,force:true});}
+});
+
+test('the deployment CLI prints the cleanup reason and its underlying failures',async()=>{
+ const {spawnSync}=await import('node:child_process');
+ const {copyFile,mkdtemp,realpath,rm,writeFile}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const temporary=await mkdtemp(join(tmpdir(),'cloud-driver-cleanup-'));
+ try{
+  const script=join(await realpath(temporary),'test-cloud-deploy.mjs');
+  await copyFile(new URL('./test-cloud-deploy.mjs',import.meta.url),script);
+  await writeFile(join(temporary,'test-cloud-project-lock.mjs'),`export function withTestCloudProjectLock(){
+   throw new AggregateError([new Error('inventory failed'),new Error('stop failed')],'test_cloud.cleanup_incomplete');
+  }`);
+  const result=spawnSync(process.execPath,[script,'up',image],{encoding:'utf8'});
+  assert.equal(result.status,1);
+  for(const message of ['test_cloud.cleanup_incomplete','inventory failed','stop failed'])assert.ok(result.stderr.includes(message));
+ }finally{await rm(temporary,{recursive:true,force:true});}
+});
+
 test('running startup aborts and stops its created IDs when three monitored samples fall below the floor',async t=>{
  const {deploy}=await api();const id='b'.repeat(64),calls=[],saved=[];let samples=0;
  const services={account:{image,mem_limit:64*1024*1024},proxy:{image,mem_limit:64*1024*1024,ports:[{host_ip:'192.168.10.10',published:'3000',target:3000}]},postgres:{mem_limit:64*1024*1024,ports:[{host_ip:'127.0.0.1',published:'55432',target:5432}]},mailpit:{mem_limit:64*1024*1024,ports:[{host_ip:'127.0.0.1',published:'1125',target:1025},{host_ip:'127.0.0.1',published:'8125',target:8025}]}};
