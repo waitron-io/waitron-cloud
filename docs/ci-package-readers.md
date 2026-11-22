@@ -9,7 +9,7 @@ The saved package graph uses the exact reader versions in
 [`scripts/ci-package-readers.mjs`](../scripts/ci-package-readers.mjs). Each
 entry records its Git mode, object type and blob identifier, which identifies
 its complete bytes. When the graph visits a declaration, both saved revisions must match independently.
-In the current graph, an edit to any of the 40 declared readers also fails the required real-graph
+In the current graph, an edit to a declared reader also fails the required real-graph
 root check until you review the changed reader and renew its identifier. The
 planner keeps full package work on default/push ranges while that check is red.
 PR tests retain changed owners, and receipt audits keep the complete package scope.
@@ -40,12 +40,13 @@ for specific programs, not a complete JavaScript parser.
 | Gateway traffic runtime, collector and spool | Private runtime journals and signed JSON reports; the tests inspect their owned fixtures and child-process state. |
 | Backup verification child | Compiled Waitron migration-journal presence, outside the Cloud workspace. |
 | Backup verifier, transfer and claim tests | Owned temporary download, restore and staging directories. |
+| Status page command tests | Their own temporary output directories. |
 | Translation scorer and tests | Grade JSON, archived byte inventories and generated results within the translation package. |
 | Translation launcher test | Generated child discovery under `/proc` in its owned container. |
 | Capacity and storage fixtures | Temporary object-store, extraction and download state. |
 | Guard probes and deployment wrappers | Inert path-validation values, known mutation targets and fixture roots; literal helper/source files remain graph inputs. |
 
-The declaration file lists all 40 exact versions. These declarations leave every runtime reader and package
+The declaration file lists the exact versions. These declarations leave every runtime reader and package
 test unchanged. The new controls execute a real helper consumer,
 retain a base-only consumer through a helper cycle and dirty live files, and
 reject changed reader bytes, executable/link modes and unknown readers. The live

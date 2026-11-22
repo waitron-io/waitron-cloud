@@ -3,6 +3,7 @@
 export const reviewedDirectoryReaders = Object.freeze({
   "packages/remote-access/test/reconciler-files.test.ts": {"mode":"100644","type":"blob","id":"ad3e4636d9c1e84b7ba8e0066a8ee63593214e81","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/operations/test/status-page-cli.test.ts": {"mode":"100644","type":"blob","id":"e209a9baaac2ceacedb695d8b78811aa1882903f","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
+  "packages/operations/test/status-page-rehearsal-cli.test.ts": {"mode":"100644","type":"blob","id":"e59092b20dbd7e98080356f34326e2b13e284d0d","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "deploy/test-cloud/backup-worker.mjs": {"mode":"100644","type":"blob","id":"ef112584d12509c671b4fb8d02896a9af7a8ad9c","nonSourceDirectoryReads":false,"directoryReferences":["../"],"sourceReferences":[]},
   "deploy/test-cloud/storage-authority.mjs": {"mode":"100644","type":"blob","id":"a484d5a7fe1f1161eac6934d955c6d3c97af79d5","nonSourceDirectoryReads":false,"directoryReferences":[".",".."],"sourceReferences":[]},
   "deploy/test-cloud/verifier-controller.mjs": {"mode":"100644","type":"blob","id":"b9a42b7433d8ea301c3d127926713fb843a4016a","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
