@@ -57,7 +57,7 @@ test('verified signup atomically creates the first business and owner, then perm
   const message = await request();
   const result = await store.complete(message.token, details);
   const { rows } = await pool.query(`SELECT a.id, c.email_verified_at, c.password_hash, o.name, b.name AS business,
-    b.country_code, m.is_owner, m.can_register_venues FROM cloud_accounts a
+    b.country_code, m.is_owner, m.can_register_venues, to_jsonb(m)->>'owner_since' AS owner_since FROM cloud_accounts a
     JOIN cloud_credentials c ON c.account_id = a.id JOIN organisation_memberships m ON m.account_id = a.id
     JOIN organisations o ON o.id = m.organisation_id JOIN legal_businesses b ON b.organisation_id = o.id`);
   assert.equal(rows.length, 1);
@@ -68,6 +68,7 @@ test('verified signup atomically creates the first business and owner, then perm
   assert.equal(rows[0].business, details.legalBusinessName);
   assert.equal(rows[0].country_code, 'ES');
   assert.equal(rows[0].is_owner, true);
+  assert.ok(rows[0].owner_since, 'signup records when the owner took over');
   assert.equal(rows[0].can_register_venues, true);
   assert.equal(await count('platform_permissions'), 0);
   assert.equal(await count('venues'), 0);

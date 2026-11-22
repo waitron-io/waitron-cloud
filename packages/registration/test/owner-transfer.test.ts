@@ -211,7 +211,7 @@ test('upgrade refuses duplicate owners and preserves both rows until the duplica
   assert.deepEqual((await legacy.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner ORDER BY account_id',[org])).rows,[first,second].sort().map(account_id=>({account_id})));
   assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'67');
   await legacy.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1',[second]);await migrate(legacy.pool);
-  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'82');
+  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'83');
  }finally{await legacy.close();await old.close();}
 });
 
@@ -220,6 +220,36 @@ test('acceptance promotes an existing non-owner membership without a second owne
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,false,false)',[recipient.accountId,sender.organisationId]);
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept');
  assert.deepEqual((await db.pool.query('SELECT account_id,is_owner,can_register_venues FROM organisation_memberships WHERE organisation_id=$1',[sender.organisationId])).rows,[{account_id:recipient.accountId,is_owner:true,can_register_venues:true}]);
+ const {rows:[membership]}=await db.pool.query("SELECT to_jsonb(m)->>'owner_since' AS owner_since FROM organisation_memberships m WHERE organisation_id=$1 AND is_owner",[sender.organisationId]);
+ assert.ok(membership.owner_since, 'promotion records when ownership started');
+});
+
+test('handover records ownership time after waiting for the organisation lock and preserves it on replay',async()=>{
+ const sender=await signedAccount(),recipient=await signedAccount(),store=new OwnerTransferStore(db.pool,db.outbox);
+ const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
+ const blocker=await db.secondPool.connect();
+ let acceptance:ReturnType<OwnerTransferStore['decide']>|undefined;
+ try{
+  await blocker.query('BEGIN');
+  await blocker.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[sender.organisationId]);
+  const {rows:[{pid}]}=await blocker.query('SELECT pg_backend_pid() AS pid');
+  acceptance=store.decide(recipient.token,recipient.csrfToken,offer.id,'accept');
+  void acceptance.catch(()=>{});
+  let waiting=false;
+  for(let step=0;step<100&&!waiting;step++){
+   waiting=!!(await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,pid])).rowCount;
+   if(!waiting)await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.ok(waiting,'acceptance reached the organisation lock');
+  const {rows:[{at}]}=await blocker.query('SELECT clock_timestamp()::text AS at');
+  await blocker.query('COMMIT');
+  assert.equal((await acceptance).state,'accepted');
+  const membership=()=>db.pool.query("SELECT to_jsonb(m)->>'owner_since' AS owner_since, (to_jsonb(m)->>'owner_since')::timestamptz >= $2::timestamptz AS started_after_wait FROM organisation_memberships m WHERE organisation_id=$1 AND is_owner",[sender.organisationId,at]);
+  const before=(await membership()).rows[0];
+  assert.equal(before.started_after_wait,true);
+  assert.equal((await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept')).state,'accepted');
+  assert.deepEqual((await membership()).rows[0],before);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await acceptance?.catch(()=>{});}
 });
 
 test('a pending venue connection loses its former owner approval at handover',async()=>{

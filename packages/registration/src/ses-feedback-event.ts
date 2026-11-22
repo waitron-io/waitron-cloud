@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {normaliseEmail} from './account-input.ts';
+import {parseJsonWithUniqueFields} from './json-with-unique-fields.ts';
 import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 import type {SesFeedbackConfig} from './ses-feedback-config.ts';
 
@@ -21,19 +22,7 @@ function timestamp(value:unknown):string {
 }
 function json(value:unknown,limit:number):Record<string,unknown> {
   if(typeof value!=='string'||Buffer.byteLength(value,'utf8')>limit)return refuse();
-  let parsed:unknown;try{parsed=JSON.parse(value);}catch{return refuse();}
-  // JSON.parse keeps the last duplicate member; ambiguous attempt tags must instead refuse.
-  const stack:(Set<string>|null)[]=[];
-  const tokens=/"(?:[^"\\]|\\[\s\S])*"|[{}\[\]]/g;
-  for(const token of value.matchAll(tokens)) {
-    const t=token[0];
-    if(t==='{'||t==='[') {stack.push(t==='{'?new Set():null);if(stack.length>32)return refuse();}
-    else if(t==='}'||t===']')stack.pop();
-    else if(/^\s*:/.test(value.slice(token.index+t.length))) {
-      const keys=stack.at(-1);if(!keys)return refuse();
-      const key=JSON.parse(t) as string;if(keys.has(key))return refuse();keys.add(key);
-    }
-  }
+  let parsed:unknown;try{parsed=parseJsonWithUniqueFields(value);}catch{return refuse();}
   return object(parsed);
 }
 function tag(tags:Record<string,unknown>,key:string):string {

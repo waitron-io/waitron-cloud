@@ -124,6 +124,10 @@ The software version is separate from this fingerprint's schema version. Keeping
 the attachment outside the signed envelope preserves the shared envelope limits.
 Cloud verifies the digest and replies `{"received":true}` after committing.
 
+Set `time` from the box clock when you build the report preview. Freeze it in the
+body before sending. A retry preserves the body and operation ID while renewing
+the proof and lease.
+
 Use at most eight structural log objects with the automatic report's code,
 source and level rules. Empty logs are accepted. Details have exactly four fields:
 `device` is `till`, `dashboard`, `setup`, `server` or `unknown`; `equipment` holds
@@ -137,8 +141,8 @@ Unicode codepoints and 8,192 UTF-8 bytes. Malformed Unicode and control characte
 are refused, except newline and tab in descriptions. Senders convert Windows
 `\r\n` line endings to `\n` before signing, because a carriage return is refused.
 The decoded body is limited to 16,384 bytes; the outer request to 65,536 bytes
-and five seconds. Unknown fields
-are refused. Each staff action has ten requests per minute per installation,
+and five seconds. Both signed staff requests require unique JSON field names and
+refuse unknown fields. Each staff action has ten requests per minute per installation,
 sharing the existing report IP and account IP limits. Renewal is unchanged.
 
 ## Attach a description later
@@ -147,11 +151,14 @@ POST `/api/installations/staff-description`, signed as `staff-description`, with
 the same outer format and a fingerprint of this external `body`:
 
 ```json
-{"reportId":"00000000-0000-4000-8000-000000000001","description":"The printer stopped after the upgrade."}
+{"reportId":"00000000-0000-4000-8000-000000000001","description":"The printer stopped after the upgrade.","time":1700000001000}
 ```
 
 `reportId` is the original staff submission's operation ID. The description request
-has its own operation ID. If the report has not arrived, retry later: HTTP 404
+has its own operation ID. Set `time` when you create the description, using Unix
+milliseconds from the box clock. Keep it in the signed body across retries. Cloud
+uses the first successful receipt time when an older sender omits it. Cloud must
+accept the field before a box starts sending it. If the report has not arrived, retry later: HTTP 404
 `{"error":"report_not_found"}` inserts nothing. A foreign installation or
 environment, or an automatic report, has the same response. A description is
 write-once. Retry its identical operation and body for `{"received":true}`;
@@ -161,14 +168,32 @@ changed descriptions and operation IDs used by another report action return HTTP
 Cloud derives the venue from the authenticated installation. The receiver rechecks
 the key, venue, environment, lease, revocation and proof expiry around database
 waits. Staff rows never supply automatic error counts or release-hold predecessors.
-Neither report kind writes usage operations or contact times, and neither is
-automatically deleted. These are local receiver guarantees, not production or
-sender qualification. The A1047 sender contract remains provisional.
+Neither report kind writes usage operations or contact times. Report retention and
+the A1047 box sender remain separate work.
+
+## See what your venue sent
+
+Sign in to Cloud, open **Venues**, and choose **Sent reports** on your venue card.
+Open a report to see the exact body the box sent. A description sent separately
+appears below it. Choose **Older reports** to continue through the list.
+
+Cloud checks both the owner who held the venue when the report arrived and when
+the box made it. Reports from before your current ownership stay out of the list,
+even if they arrived later. A description sent separately must arrive under the
+same owner as the original, and its own time must fall within your current
+ownership. Reports stored before the Sent reports upgrade lack an exact copy and
+stay out of this view. For existing owners the cutoff starts at migration time.
+
+The cutoff compares the signed box time with the database time of the ownership
+write, which precedes the transfer commit. A fast box clock can date a delayed report or
+description from before a handover after the cutoff. A slow box clock can date a new report
+before the cutoff, so the receiver can confirm storage and the owner view can
+still hide it.
 
 Run the synthetic loopback HTTP, database wait, migration and owner-reader cases:
 
 ```sh
-node scripts/test-postgres.mjs exec node --test --test-concurrency=1 packages/account-http/test/staff-problem-reports.test.ts packages/registration/test/staff-problem-reports.test.ts packages/operations/test/staff-problem-reports.test.ts packages/account-http/test/box-error-reports.test.ts packages/registration/test/box-error-reports.test.ts
+node scripts/test-postgres.mjs exec node --test --test-concurrency=1 packages/account-http/test/staff-problem-reports.test.ts packages/account-http/test/sent-reports.test.ts packages/registration/test/staff-problem-reports.test.ts packages/operations/test/staff-problem-reports.test.ts packages/account-http/test/box-error-reports.test.ts packages/registration/test/box-error-reports.test.ts
 ```
 
 ## Measure storage and reads before sizing a service

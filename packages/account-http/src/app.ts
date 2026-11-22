@@ -44,6 +44,7 @@ import {ManagedStreamMachines,managedStreamResponse} from './managed-streams.ts'
 import {alertPreferencesResponse} from './alerts.ts';
 import {translationConsentResponse} from './translation-consent.ts';
 import {backupResponse} from './backups.ts';
+import {sentReportsResponse} from './sent-reports.ts';
 import {installationResponse} from './installations.ts';
 import {InstallationError,SecurityAuditError,UsageError,migrationNames,type LeaseIssuer} from '@waitron-cloud/registration';
 import {pairingResponse} from './pairing.ts';
@@ -208,6 +209,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(billingAccountPaths.includes(c.req.path))return billingAccountResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methodsEnabled:!!billingMethods});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
+    if(c.req.path.startsWith('/api/account/sent-reports/'))return sentReportsResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/installations/billing-display')return billingDisplayResponse(c,{machine:billingDisplay,ip,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys,setupPairing:config.setupPairing,country:config.countryCode??'ES',relayGrants:options.relay?.grants});

@@ -268,3 +268,84 @@ for(const action of ['staff-report','staff-description'] as const)for(const mode
   assert.deepEqual(rows,action==='staff-report'?[]:[{description:null}]);
  }finally{await lock.query('ROLLBACK');lock.release();await pending;await f.db.close();}
 });
+
+test('Sent reports captures the exact signed bodies and preserves description creation time on retry',async()=>{
+ const f=await fixture();try{
+  const id=randomUUID(),descriptionId=randomUUID(),time=Date.now()-1234;
+  const original=report(),later={reportId:id,description:'Impresora · tray\nStopped',time};
+  const rawReport=JSON.stringify(original,null,2)+'\n',rawDescription=' '+JSON.stringify(later)+'\n';
+  const accept=async(action:string,body:unknown,operationId:typeof id,raw:string)=>{
+   const reply=await f.request(action,f.signed(action,body,f.box,operationId,raw));
+   assert.equal(reply.status,200,await reply.clone().text());assert.deepEqual(await reply.json(),{received:true});
+  };
+  await accept('staff-report',original,id,rawReport);
+  for(const badTime of [-1,1.5,'1000',Date.now()+90_000]){
+   const invalid=await f.request('staff-description',f.signed('staff-description',{...later,time:badTime}));
+   assert.equal(invalid.status,400);
+   assert.deepEqual(await invalid.json(),{error:'invalid_input'});
+  }
+  await accept('staff-description',later,descriptionId,rawDescription);
+  await accept('staff-report',original,id,rawReport);
+  await accept('staff-description',later,descriptionId,rawDescription);
+  const {rows}=await f.db.pool.query(`SELECT staff_receipt_owner_id,staff_report_body,staff_description_body,staff_description_at
+   FROM installation_error_reports WHERE operation_id=$1`,[id]);
+  assert.deepEqual(rows,[{staff_receipt_owner_id:f.box.accountId,staff_report_body:rawReport,staff_description_body:rawDescription,staff_description_at:new Date(time)}]);
+ }finally{await f.db.close();}
+});
+
+test('Sent reports dates a legacy description at its first successful receipt',async()=>{
+ const f=await fixture();try{
+  const id=randomUUID(),descriptionId=randomUUID(),text='Legacy text';
+  assert.equal((await f.send(report(),f.box,id)).status,200);
+  const before=(await f.db.pool.query('SELECT clock_timestamp() AS at')).rows[0].at;
+  assert.equal((await f.describe(id,text,f.box,descriptionId)).status,200);
+  const read=async()=>(await f.db.pool.query('SELECT staff_description_at,staff_description_body FROM installation_error_reports WHERE operation_id=$1',[id])).rows[0];
+  const first=await read(),after=(await f.db.pool.query('SELECT clock_timestamp() AS at')).rows[0].at;
+  assert.ok(first.staff_description_at instanceof Date);
+  assert.ok(first.staff_description_at>=before&&first.staff_description_at<=after);
+  assert.equal(first.staff_description_body,JSON.stringify({reportId:id,description:text}));
+  assert.equal((await f.describe(id,text,f.box,descriptionId)).status,200);
+  assert.deepEqual(await read(),first);
+ }finally{await f.db.close();}
+});
+
+test('Sent reports attributes a receipt during handover to the committed owner and keeps later text separate',async()=>{
+ const f=await fixture(),holder=await f.db.secondPool.connect();
+ try{
+  const successor=await connectedVenue(f.db,f.issuer,origin),id=randomUUID(),legacyId=randomUUID();
+  await holder.query('BEGIN');
+  await holder.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[f.box.organisationId]);
+  await holder.query('DELETE FROM organisation_memberships WHERE organisation_id=$1',[f.box.organisationId]);
+  await holder.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,owner_since) VALUES($1,$2,true,clock_timestamp())',[successor.accountId,f.box.organisationId]);
+  const send=f.send(report(),f.box,id);
+  try{
+   const reply=await Promise.race([send,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('staff receipt waited for handover')),2500).unref())]);
+   assert.equal(reply.status,200,await reply.clone().text());
+  }finally{await holder.query('COMMIT');await send;}
+  assert.equal((await f.send(report(),f.box,legacyId)).status,200);
+  await f.db.pool.query('UPDATE installation_error_reports SET staff_receipt_owner_id=NULL,staff_report_body=NULL WHERE operation_id=$1',[legacyId]);
+  for(const reportId of [id,legacyId])assert.equal((await f.describe(reportId,'Successor text')).status,200);
+  const read=async(reportId:string)=>(await f.db.pool.query(`SELECT staff_receipt_owner_id,description,staff_description_body,staff_description_at
+   FROM installation_error_reports WHERE operation_id=$1`,[reportId])).rows[0];
+  assert.deepEqual(await read(id),{staff_receipt_owner_id:f.box.accountId,description:'Successor text',staff_description_body:null,staff_description_at:null});
+  assert.deepEqual(await read(legacyId),{staff_receipt_owner_id:null,description:'Successor text',staff_description_body:null,staff_description_at:null});
+ }finally{await holder.query('ROLLBACK');holder.release();await f.db.close();}
+});
+
+test('Sent reports refuses ambiguous signed JSON in either staff action',async()=>{
+ const f=await fixture();try{
+  const id=randomUUID(),r=report(),raw=JSON.stringify(r);
+  const duplicateReport=raw.replace('"version":"1.2.3"','"version":"1.2.3","version":"1.2.3"');
+  const first=await f.request('staff-report',f.signed('staff-report',r,f.box,id,duplicateReport));
+  assert.equal(first.status,400,await first.clone().text());
+  assert.deepEqual(await first.json(),{error:'invalid_input'});
+  assert.equal((await f.send(r,f.box,id)).status,200,'the ambiguous body wrote nothing');
+  const d={reportId:id,description:'Printer stopped'};
+  const duplicateDescription=JSON.stringify(d).replace('"description":"Printer stopped"','"description":"Printer stopped","description":"Printer stopped"');
+  const operation=randomUUID();
+  const later=await f.request('staff-description',f.signed('staff-description',d,f.box,operation,duplicateDescription));
+  assert.equal(later.status,400,await later.clone().text());
+  assert.deepEqual(await later.json(),{error:'invalid_input'});
+  assert.equal((await f.describe(id,d.description,f.box,operation)).status,200,'the ambiguous description wrote nothing');
+ }finally{await f.db.close();}
+});

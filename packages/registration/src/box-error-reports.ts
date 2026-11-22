@@ -4,6 +4,7 @@ import {isPairingUuid} from './pairing-proof.ts';
 import {InstallationStore} from './installations.ts';
 import {createLeaseTrust,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type SignedEnvelope} from './installation-proof.ts';
 import {transaction} from './transaction.ts';
+import {parseJsonWithUniqueFields} from './json-with-unique-fields.ts';
 
 type Action='error-report'|'release-held'|'staff-report'|'staff-description';
 interface Report {code:string;source:string;version:string;time:number;count:number;logs:{level:string;code:string;source:string}[]}
@@ -27,28 +28,34 @@ function version(value:unknown):number[]{
  const result=value.split('.').map(Number);if(result.some(n=>!Number.isSafeInteger(n)||n>2147483647))return invalid();return result;
 }
 interface StaffReport {version:string;time:number;logs:Report['logs'];details:{device:string;equipment:string[];upgradedAt:number|null;hosting:string};description?:string}
-interface StaffDescription {reportId:string;description:string}
+interface StaffDescription {reportId:string;description:string;time?:number}
+interface StaffAttachment {value:StaffReport|StaffDescription;text:string}
 // Node 26 provides this check; its type stays local to this validator.
 const isWellFormed=(text:string)=>(text as string & {isWellFormed():boolean}).isWellFormed();
 function description(value:unknown):value is string{
  return typeof value==='string'&&isWellFormed(value)&&value.trim().length>0&&[...value].length<=2000
   &&Buffer.byteLength(value)<=8192&&!/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u.test(value);
 }
-function staffBody(action:'staff-report'|'staff-description',signed:string,text:string|undefined,now:number):StaffReport|StaffDescription{
+function staffTime(value:unknown,now:number):value is number{
+ return typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<=now+60000;
+}
+function staffBody(action:'staff-report'|'staff-description',signed:string,text:string|undefined,now:number):StaffAttachment{
  let fingerprint:unknown,value:unknown;try{fingerprint=JSON.parse(signed);}catch{throw new InstallationError('invalid_proof');}
  if(!object(fingerprint,['version','bodySha256','bodyBytes'])||fingerprint.version!==1||typeof fingerprint.bodySha256!=='string'
   ||!/^[a-f0-9]{64}$/.test(fingerprint.bodySha256)||!Number.isSafeInteger(fingerprint.bodyBytes)||Number(fingerprint.bodyBytes)<1)throw new InstallationError('invalid_proof');
  if(Number(fingerprint.bodyBytes)>16384)return invalid();
  if(typeof text!=='string'||!isWellFormed(text)||Buffer.byteLength(text)!==fingerprint.bodyBytes
   ||createHash('sha256').update(text).digest('hex')!==fingerprint.bodySha256)throw new InstallationError('invalid_proof');
- try{value=JSON.parse(text);}catch{return invalid();}
+ try{value=parseJsonWithUniqueFields(text);}catch{return invalid();}
  if(action==='staff-description'){
-  if(!object(value,['reportId','description'])||!isPairingUuid(value.reportId)||!description(value.description))return invalid();
-  return value as unknown as StaffDescription;
+  const keys=['reportId','description'];
+  if(value&&typeof value==='object'&&'time' in value)keys.push('time');
+  if(!object(value,keys)||!isPairingUuid(value.reportId)||!description(value.description)||('time' in value&&!staffTime(value.time,now)))return invalid();
+  return {value:value as unknown as StaffDescription,text};
  }
  const keys=['version','time','logs','details'];
  if(value&&typeof value==='object'&&'description' in value)keys.push('description');
- if(!object(value,keys)||!Number.isSafeInteger(value.time)||Number(value.time)<0||Number(value.time)>now+60000
+ if(!object(value,keys)||!staffTime(value.time,now)
   ||!Array.isArray(value.logs)||value.logs.length>8)return invalid();
  version(value.version);
  for(const log of value.logs)if(!object(log,['level','code','source'])||typeof log.level!=='string'||!['debug','info','warn','error'].includes(log.level)||!code(log.code)||!source(log.source))return invalid();
@@ -58,7 +65,7 @@ function staffBody(action:'staff-report'|'staff-description',signed:string,text:
   ||typeof d.hosting!=='string'||!['hosted','on_prem','unknown'].includes(d.hosting)
   ||(d.upgradedAt!==null&&(!Number.isSafeInteger(d.upgradedAt)||Number(d.upgradedAt)<0||Number(d.upgradedAt)>now+60000))
   ||('description' in value&&!description(value.description)))return invalid();
- return value as unknown as StaffReport;
+ return {value:value as unknown as StaffReport,text};
 }
 function body(action:Action,text:string,now:number):Report|{version:string}{
  let v:unknown;try{v=JSON.parse(text);}catch{return invalid();}
@@ -101,8 +108,8 @@ export class BoxErrorReports{
    if(!row||!venue||row.venue_id!==initial.venue_id)throw new InstallationError('invalid_proof');
    const claims=this.#verify(action,envelope,row,venue.environment,routing.installationId);
    if(action==='staff-report'||action==='staff-description'){
-    const value=staffBody(action,claims.body,externalBody,Date.now());
-    await this.#staff(client,action,routing.installationId,venue.environment,claims.operationId,claims.body,value);
+    const attachment=staffBody(action,claims.body,externalBody,Date.now());
+    await this.#staff(client,action,routing.installationId,initial.venue_id,venue.environment,claims.operationId,claims.body,attachment);
     this.#verify(action,envelope,row,venue.environment,routing.installationId);return {received:true};
    }
    const value=body(action,claims.body,Date.now());
@@ -145,11 +152,11 @@ export class BoxErrorReports{
    return {version:value.version,held:result.rows[0]!.held};
   });
  }
- async #staff(client:PoolClient,action:'staff-report'|'staff-description',installationId:string,environment:string,operationId:string,signed:string,value:StaffReport|StaffDescription){
+ async #staff(client:PoolClient,action:'staff-report'|'staff-description',installationId:string,venueId:string,environment:string,operationId:string,signed:string,{value,text}:StaffAttachment){
   const digest=createHash('sha256').update(JSON.stringify([action,signed])).digest('hex');
-  let target:Record<string,unknown>|undefined;
+  let target:{description:string|null;staff_receipt_owner_id:string|null}|undefined;
   if(action==='staff-description'){
-   target=(await client.query("SELECT description FROM installation_error_reports WHERE installation_id=$1 AND operation_id=$2 AND environment=$3 AND kind='staff'",[installationId,(value as StaffDescription).reportId,environment])).rows[0];
+   target=(await client.query<{description:string|null;staff_receipt_owner_id:string|null}>("SELECT description,staff_receipt_owner_id FROM installation_error_reports WHERE installation_id=$1 AND operation_id=$2 AND environment=$3 AND kind='staff'",[installationId,(value as StaffDescription).reportId,environment])).rows[0];
    if(!target)throw new BoxErrorReportError('report_not_found');
   }
   // The installation lock serialises both operation-ID columns, including cross-kind retries.
@@ -159,14 +166,19 @@ export class BoxErrorReports{
     :prior.description_operation_id===operationId&&prior.description_digest===digest;
    if(!identical||prior.environment!==environment)throw new BoxErrorReportError('conflict');return;
   }
+  // A receipt can use the last committed owner while a handover is still writing.
+  const owner=(await client.query<{account_id:string}>(`SELECT m.account_id FROM organisation_memberships m
+   JOIN venues v ON v.organisation_id=m.organisation_id WHERE v.id=$1 AND m.is_owner`,[venueId])).rows[0]?.account_id??null;
   if(action==='staff-description'){
    if(target!.description!==null)throw new BoxErrorReportError('conflict');
-   const d=value as StaffDescription;
-   await client.query('UPDATE installation_error_reports SET description=$3,description_operation_id=$4,description_digest=$5 WHERE installation_id=$1 AND operation_id=$2',[installationId,d.reportId,d.description,operationId,digest]);
+   const d=value as StaffDescription,copy=owner!==null&&owner===target!.staff_receipt_owner_id;
+   await client.query(`UPDATE installation_error_reports SET description=$3,description_operation_id=$4,description_digest=$5,
+    staff_description_body=$6,staff_description_at=CASE WHEN $6::text IS NOT NULL THEN COALESCE($7::timestamptz,clock_timestamp()) END
+    WHERE installation_id=$1 AND operation_id=$2`,[installationId,d.reportId,d.description,operationId,digest,copy?text:null,d.time===undefined?null:new Date(d.time)]);
   }else{
    const r=value as StaffReport;
-   await client.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,kind,version_major,version_minor,version_patch,reported_at,logs,details,description)
-    VALUES($1,$2,$3,$4,'staff',$5,$6,$7,$8,$9,$10,$11)`,[installationId,operationId,environment,digest,...version(r.version),new Date(r.time),JSON.stringify(r.logs),JSON.stringify(r.details),r.description??null]);
+   await client.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,kind,version_major,version_minor,version_patch,reported_at,logs,details,description,staff_receipt_owner_id,staff_report_body)
+    VALUES($1,$2,$3,$4,'staff',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[installationId,operationId,environment,digest,...version(r.version),new Date(r.time),JSON.stringify(r.logs),JSON.stringify(r.details),r.description??null,owner,text]);
   }
  }
 }
