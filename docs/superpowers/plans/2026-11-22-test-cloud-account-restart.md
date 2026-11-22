@@ -14,21 +14,24 @@ hosted failure's cause remains unknown.
 
 1. In the private pairing-window rehearsal, pass a wrapper through the driver's
    existing `execute` option. Report the failed command and its error and
-   rethrow the original. Prove this on the disposable synthetic fixture. Keep
-   raw output in that rehearsal's receipts. No credentials or environment
-   contents go into logs. The deployment driver's public output stays as it is.
+   rethrow the original, including its exit status and standard error. Save
+   the private helper patch and `window-command-proof.log` beside the synthetic
+   replay for the watcher to check before the next window. Record raw output
+   only for synthetic settings. Use safe command labels and exclude credential
+   or environment values in the window's operator output.
 2. Add two tests in `scripts/test-cloud-deploy.test.mjs`. The first supplies
    Docker's observed missing-ID error with partial output and asserts that
    inventory returns the replacement container and its health from one fresh
-   list and inspect. The second verifies that mixed or unrelated errors and a
-   missing protected Waitron container still fail. If the fresh read fails,
-   propagate that error without another retry. Watch the first test fail before
-   editing the driver.
+   list and inspect. Exercise both spellings of Docker's error prefix. The
+   second checks that mixed output, unrelated errors and a missing protected
+   Waitron container propagate the original error. A second read failure
+   propagates the new error. Watch the first test fail before editing the driver.
 3. In `scripts/test-cloud-deploy.mjs`, retry only the list and watched-container
-   inspection, once, when inspect exits 1 and every stderr line names an exact
-   missing ID from the inspected Cloud project rows. Exclude the protected
-   Waitron names. Discard the partial output and use the existing guard on the
-   fresh inventory. Use the same ownership checks, deadlines and cleanup.
+   inspection, once, when inspect exits 1 and every nonblank stderr line
+   names an exact missing ID from the inspected Cloud project rows. Match the
+   Docker prefix without regard to case. Exclude the protected Waitron names.
+   Discard the partial output and use the existing guard on the fresh inventory.
+   Keep the existing scoped fallback for cleanup after a failed inventory.
 4. Run `node --test scripts/test-cloud-deploy.test.mjs scripts/test-cloud-project-admission.test.mjs`.
    Run `node --test deploy/test-cloud/deployment.test.mjs` through the test-box
    helper and repeat the disposable Compose replay. Check that the replacement
