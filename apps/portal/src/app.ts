@@ -25,6 +25,7 @@ import { captureLink, captureSetupPairingLink, forgetSetupPairingLink, type Capt
 import { chooseLocale, translations, type Copy, type Locale } from './locale.ts';
 import { PortalSession, type SessionState } from './session.ts';
 import { accountPages, screen } from './screens.ts';
+import {SentReportsController} from './sent-reports-controller.ts';
 export type Fields = {email: string; password: string};
 type PasskeyAddRequest = {accountId: string};
 
@@ -47,6 +48,7 @@ export class PortalApp {
   pairing: PairingController;
   installations: InstallationController;
   backups: BackupController;
+  sentReports: SentReportsController;
   recovery: RecoveryController;
   remote: RemoteController;
   alerts: AlertController;
@@ -125,19 +127,21 @@ export class PortalApp {
       else this.recovery.choose(this.backups.venueId,selected?.id);
       this.draw();
     });
+    this.sentReports = new SentReportsController(() => this.draw());
     this.installations = new InstallationController(() => {
       this.usage.organisation(this.installations.selectedOrganisation);
       if (this.accountPage === 'venues' && this.session?.state.kind === 'authenticated' && this.usage.organisationId && !this.usage.loaded) void this.usage.load();
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId
         &&i.canRevoke&&!i.portalRemovedAt&&(!i.revokedAt||this.remote.view?.revoked)))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
+      if(this.sentReports.venueId&&!this.installations.visible.some(i=>i.venueId===this.sentReports.venueId&&i.canRevoke))this.sentReports.close();
       this.draw();
     });
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (this.sessionPage) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (this.sessionPage) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.sentReports.account(undefined); this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -201,6 +205,7 @@ export class PortalApp {
     if (page === 'venues' && ordinary && !this.translationConsent.loaded && !this.translationConsent.loadAttempted) void this.translationConsent.load();
     this.remote.account(ordinary ? state.accountId : undefined);
     this.backups.account(ordinary ? state.accountId : undefined);
+    this.sentReports.account(ordinary ? state.accountId : undefined);
     this.installations.account(ordinary ? state.accountId : undefined);
     if ((page === 'venues' || page === 'remoteAccess' || this.path === '/recover') && ordinary && !this.installations.loaded) void this.installations.load();
     if (page === 'venues' && ordinary && this.usage.organisationId && !this.usage.loaded && !this.usage.error) void this.usage.load();
@@ -255,7 +260,7 @@ export class PortalApp {
     if (this.path === '/connect') return Math.max(this.pairing.waiting, this.session.waiting);
     switch (this.accountPage) {
       case 'account': return Math.max(this.session.waiting, this.authenticator.waiting, this.passkeys.waiting, this.security.waiting, this.transfers.waiting, this.businesses.waiting);
-      case 'venues': return Math.max(this.session.waiting, this.installations.waiting, this.backups.waiting, this.alerts.waiting, this.translationConsent.waiting, this.usage.waiting, this.diagnostics.waiting);
+      case 'venues': return Math.max(this.session.waiting, this.installations.waiting, this.backups.waiting, this.sentReports.waiting, this.alerts.waiting, this.translationConsent.waiting, this.usage.waiting, this.diagnostics.waiting);
       case 'remoteAccess': return Math.max(this.session.waiting, this.installations.waiting, this.remote.waiting, this.actionProof.waiting);
       case 'billing': return Math.max(this.session.waiting, this.billing.waiting, this.actionProof.waiting);
     }
@@ -292,6 +297,7 @@ export class PortalApp {
     return c.login;
   }
   navigate(path: string, push = true) {
+    this.sentReports.close();
     this.#signOutCheck = undefined;
     if (path !== '/connect' && (path !== '/login' || this.session.state.kind !== 'anonymous')) this.pairing.discardLinkedCode();
     if(path!=='/login')this.#operatorSignin=false;
@@ -624,7 +630,7 @@ export class PortalApp {
     const input=this.root.querySelector('wt-input[name=ownerTransferEmail]')?.shadowRoot?.querySelector('input')?.value;if(input!==undefined)this.transfers.email=input;
     if(!await this.#requireActionProof())return;
     if(await this.transfers.act(action,this.locale,id)){
-      for(const controller of [this.installations,this.backups,this.recovery,this.remote,this.alerts,this.translationConsent,this.usage,this.billing,this.diagnostics,this.businesses])controller.account(undefined);
+      for(const controller of [this.installations,this.backups,this.sentReports,this.recovery,this.remote,this.alerts,this.translationConsent,this.usage,this.billing,this.diagnostics,this.businesses])controller.account(undefined);
       await this.session.check({fresh:true});
     }
   }
@@ -638,6 +644,7 @@ export class PortalApp {
   get logoutDisabled() { return this.transfers.pending || (this.accountPage === 'account' && this.businesses.pending) || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
+    this.sentReports.close();
     this.#passkeyAddRequest = undefined;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;

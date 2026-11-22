@@ -54,8 +54,8 @@ export class SignupStore {
       await client.query('INSERT INTO organisations (id, name) VALUES ($1, $2)', [organisationId, organisationName]);
       await client.query('INSERT INTO legal_businesses (id, organisation_id, name, country_code) VALUES ($1, $2, $3, $4)',
         [legalBusinessId, organisationId, legalBusinessName, countryCode]);
-      await client.query(`INSERT INTO organisation_memberships (account_id, organisation_id, can_register_venues, is_owner)
-        VALUES ($1, $2, true, true)`, [accountId, organisationId]);
+      await client.query(`INSERT INTO organisation_memberships (account_id, organisation_id, can_register_venues, is_owner, owner_since)
+        VALUES ($1, $2, true, true, clock_timestamp())`, [accountId, organisationId]);
       return {organisationId,legalBusinessId};
     });
   }

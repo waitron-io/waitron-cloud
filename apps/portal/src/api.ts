@@ -6,6 +6,7 @@ import {validPasswordLogin,validFactorStatus,validFactorEnrolment,validFactorCha
 import {validRecoveryDate,validRecoveryView} from './recovery-types.ts';
 import {validRemoteView,validRemoteDns,validGuestMenuView} from './remote-types.ts';
 import {validBackupPage} from './backup-types.ts';
+import {validSentReportDetail, validSentReportsPage} from './sent-reports-types.ts';
 import {validInstallation} from './installation-types.ts';
 import { validBusinesses, validPairingView } from './pairing-types.ts';
 import {validAuthenticationOptions, validPasskeyList, validPasskeySummary, validRegistrationOptions} from './passkey-types.ts';
@@ -57,6 +58,8 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/usage/read')return validUsageSummary(value);
   if(path==='/diagnostics/read')return validDiagnosticExport(value);
   if(path==='/backups/list')return validBackupPage(value);
+  if(path==='/sent-reports/list')return status===200&&validSentReportsPage(value);
+  if(path==='/sent-reports/read')return status===200&&validSentReportDetail(value);
   if (path === '/pairing/businesses') return validBusinesses(data.businesses);
   if (path === '/pairing/authorize' || path === '/pairing/cancel') return status === 200 && typeof data.returnUrl === 'string';
   if (path === '/pairing/inspect' || path === '/pairing/approve') return validPairingView(data);
@@ -70,10 +73,11 @@ function validResult(path: string, value: unknown, status: number): boolean {
 }
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const installationWrite = path === '/installations/remove';
+  const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
   const businessPath = path === '/businesses' || path === '/organisations/rename';
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';
@@ -81,7 +85,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;

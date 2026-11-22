@@ -51,7 +51,14 @@ summary { cursor: pointer; }
 .usage dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem 1rem; margin-block: .4rem; }
 .usage dd { font-variant-numeric: tabular-nums; margin: 0; max-width: 14rem; overflow-wrap: anywhere; text-align: end; }
 
-.snapshot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+.snapshot-actions, .sent-reports-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+
+.sent-reports li { margin-block: .5rem; }
+.sent-reports pre {
+  color: var(--wt-color-text); background: var(--wt-color-bg);
+  border: 1px solid var(--wt-color-border); border-radius: .35rem; padding: .75rem;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
 
 .alert-choice { display: flex; align-items: flex-start; gap: .75rem; margin-block: 1rem; }
 .alert-choice input { flex: none; width: auto; margin-top: .25rem; }

@@ -880,15 +880,12 @@ order. Remote access matters most because Waitron's customer-facing features wai
    processing agreement with each venue, and the promises Cloud makes about how quickly a
    venue is recovered, how much data a failure can lose, and uptime.
 6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
-   reflects the owner's 2026-11-08 paired-box reporting, automatic sending with exact Sent
-   reports, country feature lists and standard 24-hour support access choices. Box forms,
-   checked Cloud sending, private bugs/status, features/votes/comments, GitHub links,
-   console/common country routes, grant integration and customer-visible staff history remain
-   unbuilt. A982's local preview/download is separate from Cloud sending. The owner approved the design, including no author name and staff hiding
-   personal-data text. The [first Cloud slice plan](superpowers/plans/2026-11-11-d633-box-reports-first-piece.md)
-   covers checked sending and exact Sent reports for the current owner's submissions;
-   implementation and the A1047 sender wait for D608. Joining country lists waits for a second country and
-   an owner decision; privacy/retention and qualified country support authority remain prerequisites.
+   covers paired-box reports, automatic sending, country feature lists and standard 24-hour
+   support access. Waitron's A1047 owns the staff form, checked sending and offline retries.
+   Cloud still needs automatic-report opt-in and Sent reports for automatic sends, private
+   bugs and status, country features with votes and comments, GitHub links, the operator
+   console and common country routes, grant integration and customer-visible staff history. Joining country lists waits for a second country and an
+   owner decision. Privacy, retention and qualified country support authority remain open.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 

@@ -93,8 +93,8 @@ export class OwnerTransferStore {
    await client.query(`UPDATE translation_jobs j SET state='failed',reason='consent_required',finished_at=clock_timestamp(),lease_id=NULL,lease_until=NULL,failed=total-done
     FROM venues v WHERE j.venue_id=v.id AND v.organisation_id=$1 AND j.state IN ('queued','running')`,[offer.organisation_id]);
    await client.query('DELETE FROM organisation_memberships WHERE organisation_id=$1 AND account_id=$2',[offer.organisation_id,offer.sender_id]);
-   await client.query(`INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,true,true)
-    ON CONFLICT(account_id,organisation_id) DO UPDATE SET is_owner=true,can_register_venues=true`,[session.accountId,offer.organisation_id]);
+   await client.query(`INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues,owner_since) VALUES($1,$2,true,true,clock_timestamp())
+    ON CONFLICT(account_id,organisation_id) DO UPDATE SET is_owner=true,can_register_venues=true,owner_since=EXCLUDED.owner_since`,[session.accountId,offer.organisation_id]);
    const done=(await client.query("UPDATE owner_transfers SET state='accepted' WHERE id=$1 RETURNING *",[id])).rows[0];
    await notices(client,this.#outbox,done);await finalAuthority(client,token,csrf,offer);return view(client,done,session.accountId);
   });

@@ -97,6 +97,9 @@ test('An account without memberships names its first group after the first busin
   assert.equal(data.organisations.length, 1);
   assert.match(data.organisations[0]!.name, /^(Second|Third) SL$/);
   assert.equal(data.businesses.length, 2);
+  const membership = await db.pool.query("SELECT to_jsonb(m)->>'owner_since' AS owner_since FROM organisation_memberships m WHERE account_id=$1 AND is_owner", [owner.accountId]);
+  assert.equal(membership.rowCount, 1);
+  assert.ok(membership.rows[0].owner_since, 'the new group records when ownership started');
 });
 
 test('Business reads and writes respect ownership and recovery scope', async () => {

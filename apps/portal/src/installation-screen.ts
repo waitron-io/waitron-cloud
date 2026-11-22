@@ -4,6 +4,7 @@ import {translationConsentScreen} from './translation-consent-screen.ts';
 import {remoteScreen} from './remote-screen.ts';
 import {alertScreen,monitoringScreen} from './alert-screen.ts';
 import {backupScreen} from './backup-screen.ts';
+import {sentReportsScreen} from './sent-reports-screen.ts';
 import {html,nothing} from 'lit';
 import {repeat} from 'lit/directives/repeat.js';
 import type {AccountInstallation} from './installation-types.ts';
@@ -42,6 +43,7 @@ export function installationScreen(app:PortalApp, remoteOnly = false){
     </details>
     ${monitoringScreen(app,i)}
     ${i.canRevoke?backupScreen(app,i.venueId):nothing}
+    ${i.canRevoke?sentReportsScreen(app,i.venueId):nothing}
     ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${controller.pending||app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
     ${app.diagnostics.error&&app.diagnostics.errorInstallationId===i.installationId?html`<p role="alert">${c[app.diagnostics.error]}</p>${permissionActions(app,app.diagnostics.error)}`:nothing}
