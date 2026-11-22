@@ -9,6 +9,7 @@ import type {Socket} from 'node:net';
 import {EmailOutbox} from '../src/email-outbox.ts';
 import {migrate} from '../src/migrate.ts';
 import {transaction} from '../src/transaction.ts';
+import {smtpConfig,tlsSmtp} from './fixtures/ses-smtp.ts';
 
 const url=process.env.TEST_DATABASE_URL;
 if(!url)throw new Error('Run through scripts/test-postgres.mjs');
@@ -124,3 +125,91 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
     }
   });
 }
+
+test('SIGTERM drains a silent production SMTP handoff after recording a delivery timeout',async(t)=>{
+  await pool.query('DELETE FROM email_outbox');
+  const recipients:string[][]=[];
+  // The server holds its reply past the watchdog so only the client can time out the delivery.
+  const smtp=await tlsSmtp({socketTimeout:35000,onData(stream,session,_callback){
+    stream.resume();
+    stream.once('end',()=>recipients.push(session.envelope.rcptTo.map(to=>to.address)));
+  }});
+  t.after(()=>smtp.close());
+  const first=await transaction(pool,client=>outbox.enqueue(client,'password_changed',{email:'first@example.test'}));
+  const name=`email_silent_signal_${randomUUID()}`;
+  const cli=new URL('../src/email-worker-cli.ts',import.meta.url);
+  const source=`
+    process.once('beforeExit',code=>console.log(JSON.stringify({drained:true,code})));
+    await import(${JSON.stringify(cli.href)});
+  `;
+  const child=spawn(process.execPath,['--input-type=module','-e',source],{
+    env:{PATH:process.env.PATH,DATABASE_URL:connection.href,PGAPPNAME:name,NODE_ENV:'production',
+      CLOUD_MAIL_TRANSPORT:'smtp',CLOUD_SMTP_HOST:smtpConfig.host,CLOUD_SMTP_PORT:String(smtp.port),
+      CLOUD_SMTP_USER:smtpConfig.user,CLOUD_SMTP_PASSWORD:smtpConfig.password,CLOUD_MAIL_FROM:smtpConfig.from,
+      CLOUD_PORTAL_ORIGIN:smtpConfig.portalOrigin,NODE_EXTRA_CA_CERTS:smtp.certPath,
+      CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify(keys)},
+    stdio:['ignore','pipe','pipe'],
+  });
+  let stdout='',stderr='',exitAt=0;
+  child.stdout.on('data',chunk=>{stdout+=chunk;});
+  child.stderr.on('data',chunk=>{stderr+=chunk;});
+  child.once('exit',()=>{exitAt=performance.now();});
+  const exited=new Promise<{code:number|null;signal:NodeJS.Signals|null}>((resolve,reject)=>{
+    child.once('error',reject);
+    child.once('close',(code,signal)=>resolve({code,signal}));
+  });
+  const row=async(id:string)=>(await pool.query(
+    'SELECT status,attempts,failures,payload,key_id,claim_id,lease_until,finished_at,last_error,available_at FROM email_outbox WHERE id=$1',[id])).rows[0];
+  let watchdog:ReturnType<typeof setTimeout>|undefined;
+  try{
+    const startupDeadline=performance.now()+6000;
+    while(!recipients.length&&performance.now()<startupDeadline){
+      assert.equal(child.exitCode,null,`worker exited before SMTP handoff: ${stderr}`);
+      assert.equal(child.signalCode,null);
+      await delay(20);
+    }
+    assert.deepEqual(recipients,[['first@example.test']],'the relay must receive the complete first message');
+    const held=await row(first);
+    assert.equal(held.status,'processing');
+    assert.notEqual(held.payload,null);
+    const beforeStop:Date=(await pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    const stoppedAt=performance.now();
+    assert.equal(child.kill('SIGTERM'),true);
+    watchdog=setTimeout(()=>child.kill('SIGKILL'),22000);
+    await delay(1000);
+    assert.equal(exitAt,0,'the worker must keep waiting for the relay after SIGTERM');
+    assert.equal(smtp.activeConnections,1,'the relay must keep the first connection open during the hold');
+    const later=await transaction(pool,client=>outbox.enqueue(client,'password_changed',{email:'later@example.test'}));
+    const result=await exited;
+    t.diagnostic(`Worker exited ${Math.round(exitAt-stoppedAt)} ms after SIGTERM`);
+    assert.deepEqual(result,{code:0,signal:null},'worker must exit before the 22-second shutdown watchdog');
+    assert.deepEqual({stdout,stderr},{stdout:'{"drained":true,"code":0}\n',stderr:''});
+    assert.deepEqual((await admin.query('SELECT state FROM pg_stat_activity WHERE application_name=$1',[name])).rows,[]);
+    const afterExit:Date=(await pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    const retried=await row(first);
+    assert.equal(retried.last_error,'delivery_timeout');
+    assert.equal(retried.status,'pending');
+    assert.equal(retried.attempts,1);
+    assert.equal(retried.failures,1);
+    assert.deepEqual(retried.payload,held.payload);
+    assert.equal(retried.key_id,'test');
+    assert.equal(retried.claim_id,null);
+    assert.equal(retried.lease_until,null);
+    assert.equal(retried.finished_at,null);
+    assert.ok(retried.available_at.getTime()>=beforeStop.getTime()+30000);
+    assert.ok(retried.available_at.getTime()<=afterExit.getTime()+30000);
+    const pending=await row(later);
+    assert.equal(pending.status,'pending');
+    assert.equal(pending.attempts,0);
+    assert.equal(pending.failures,0);
+    assert.notEqual(pending.payload,null);
+    assert.equal(pending.claim_id,null);
+    assert.equal(pending.finished_at,null);
+    assert.equal(smtp.connections,1,'shutdown must not reconnect to deliver later mail');
+    assert.deepEqual(recipients,[['first@example.test']]);
+  }finally{
+    clearTimeout(watchdog);
+    if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+    await exited;
+  }
+});

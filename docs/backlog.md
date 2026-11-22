@@ -277,10 +277,12 @@ maintenance pull requests unreviewed; receipts are in
 
 ## Worker shutdown during polling and error reporting (D459)
 
-**Open.** Qualify production shutdown, database failures, cancellation and provider
-behavior beyond the local fixtures, plus explicit database pool cleanup. Native
-polling, pending schedules and late error reports have shutdown controls;
-real-command checks cover the cases named in
+**Open.** Qualify the deployed account mail worker's stop allowance during a
+database claim and a silent handoff. In one loopback run, the command in
+production SMTP mode exited 14.9 seconds after SIGTERM during a handoff.
+The 10- and 15-second local allowances apply to different mail paths.
+Database failures, cancellation, real relay behavior and explicit pool cleanup
+remain open. Real-command checks and the allowance comparison are in
 [the worker shutdown detail and remaining limits](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 ## Historical CI observations without a recorded recurrence
