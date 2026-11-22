@@ -25,20 +25,25 @@ hosted failure's cause remains unknown.
    list and inspect. Exercise both spellings of Docker's error prefix. The
    second checks that mixed output, unrelated errors and a missing protected
    Waitron container propagate the original error. A second read failure
-   propagates the new error. Watch the first test fail before editing the driver.
+   propagates the new error. Run the CLI against a refused input and a cleanup
+   failure to check that it prints the original and underlying messages.
+   Watch the new tests fail before editing the driver.
 3. In `scripts/test-cloud-deploy.mjs`, retry only the list and watched-container
    inspection, once, when inspect exits 1 and every nonblank stderr line
    names an exact missing ID from the inspected Cloud project rows. Match the
    Docker prefix without regard to case. Exclude the protected Waitron names.
    Discard the partial output and use the existing guard on the fresh inventory.
    Keep the existing scoped fallback for cleanup after a failed inventory.
+   Print the deployment error and any errors it groups in the CLI.
 4. Run `node --test scripts/test-cloud-deploy.test.mjs scripts/test-cloud-project-admission.test.mjs`.
    Run `node --test deploy/test-cloud/deployment.test.mjs` through the test-box
    helper and repeat the disposable Compose replay. Check that the replacement
-   account starts and cleanup leaves no fixture resources. Add the verified
-   result to the existing LAN test Cloud entry in `docs/backlog.md`. Stockholm
-   stays parked until a fix lands.
+   account starts and cleanup leaves no fixture resources. Rehearse a settings
+   restart with the repository's real Compose stack on the test box, with
+   command diagnostics and ordinary timing. Bring any failure to the watcher
+   before fixing it. Update the LAN Test Cloud backlog entry and operator guide.
+   Stockholm needs the merged fix and the real-stack rehearsal.
 
-Expect 25–40 implementation lines and 45–70 test lines, plus a short backlog
+Expect 25–40 implementation lines and about 70 test lines, plus a short backlog
 note and the private rehearsal adjustment. The PR uses the existing driver and
 test files and adds no dependency.

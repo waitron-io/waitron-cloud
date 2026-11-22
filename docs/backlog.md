@@ -1102,7 +1102,12 @@ implementation or production evidence.
   an idle-stack observation. Sustained Amazon OS/disk/CPU headroom, pairing and
   email qualification remain open. Driver inventory's
   optional health handling is checked through Docker itself by
-  `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`. Signed configuration now discovers a
+  `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`.
+  A Linux Compose replay in which two listed Cloud containers disappeared
+  during inspection now passes. The driver takes one fresh sample. A second
+  removal during the retry still fails the run. The CLI reports the error
+  and any underlying cleanup errors. Stockholm's original restart cause and
+  the joint box email trial remain open. Signed configuration now discovers a
   relay-grant hint without advancing service configuration. The test-only private-origin
   approval core accepts a signed statement under the current key-bound lease and
   owner consent, with synthetic checks for production refusal. The
