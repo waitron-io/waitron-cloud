@@ -34,7 +34,7 @@ The local Kubernetes capture worker has a 15-second allowance. The Kubernetes
 services pod runs the account mail command in production SMTP mode and uses
 the platform's default 30-second allowance.
 [Compose email worker](../../compose.yaml#L118-L128),
-[local capture worker](../../deploy/kubernetes/local-checks.yaml#L90-L96),
+[local capture pod](../../deploy/kubernetes/local-checks.yaml#L15-L19),
 [services pod](../../deploy/kubernetes/services.mjs#L32-L35),
 [Kubernetes pod termination](https://kubernetes.io/docs/concepts/workloads/pods/pod-termination/#pod-termination-flow).
 
