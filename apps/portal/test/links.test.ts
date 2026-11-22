@@ -44,6 +44,8 @@ test('a clean pairing or sign-in page restores a valid request from history', ()
   assert.deepEqual(captureLink(new URL('/login', url), () => {}, state), {invalid: false, requestId: id});
   assert.deepEqual(captureLink(new URL('/account', url), () => {}, state), {invalid: false});
   assert.deepEqual(captureLink(new URL('#request=bad', url), () => {}, state), {invalid: true});
+  const freshId = '87654321-1234-4234-8234-123456789abc';
+  assert.deepEqual(captureLink(new URL(`#request=${freshId}`, url), () => {}, state), {invalid: false, requestId: freshId});
 });
 
 test('recovery fragments stay separate from venue pairing and reject query or duplicate requests',()=>{
