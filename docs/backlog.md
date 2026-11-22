@@ -833,7 +833,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    [local generator](incident-setup.md#generate-a-bundle-locally) produces the current
    post and optional dated resolved history. The [local rehearsal](incident-setup.md#rehearse-the-first-automatic-update-locally)
    turns a synthetic confirmed Cloud incident into the bilingual Investigating
-   update and hands both pages to a local stand-in for the uploader.
+   update and hands both pages to a local stand-in for the uploader. The live
+   caller will need to supply the confirmation time in whole-second UTC.
    Local Twilio/Vonage phone adapters now
    pass fake-provider text/call, delivery and press-1 checks. The local signed
    callback listener now binds accepted attempts, refuses forged events and suppresses

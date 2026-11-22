@@ -117,20 +117,19 @@ cleanup, inspect that new folder before trying another destination.
 ## Rehearse the first automatic update locally
 
 Use a made-up confirmed Cloud incident to check the first update in both
-languages. Save this as `rehearsal-incident.json`:
-
-```json
-{"service":"remote_access","impact":"some","confirmedAt":"2026-11-22T10:00:00Z"}
-```
-
-Run this from your checkout with a new output directory:
+languages. Supply `confirmedAt` in whole-second UTC (`YYYY-MM-DDTHH:mm:ssZ`).
+From your checkout, save the example and run the command in a temporary folder.
 
 ```sh
-node packages/operations/src/status-page-rehearsal-cli.ts rehearsal-incident.json /tmp/waitron-status-rehearsal
+rehearsal_dir=$(mktemp -d)
+cat > "$rehearsal_dir/incident.json" <<'JSON'
+{"service":"remote_access","impact":"some","confirmedAt":"2026-11-22T10:00:00Z"}
+JSON
+node packages/operations/src/status-page-rehearsal-cli.ts "$rehearsal_dir/incident.json" "$rehearsal_dir/status"
 ```
 
 The command prints `Wrote local status update bundle`. Open
-`/tmp/waitron-status-rehearsal/index.html` and follow **Español**. You'll see
+`status/index.html` in the temporary folder and follow **Español**. You'll see
 **Investigating** and **Investigando** for remote access, updated at 10:00 UTC
 with the next update due at 10:30 UTC. The rehearsal stands in for the upload by
 writing both pages to disk. Incident detection, live upload and later updates
