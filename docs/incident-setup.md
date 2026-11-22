@@ -114,6 +114,28 @@ If generation fails, you receive a fixed error without input details. The comman
 attempts to remove its own incomplete output. If a filesystem problem prevents
 cleanup, inspect that new folder before trying another destination.
 
+## Rehearse the first automatic update locally
+
+Use a made-up confirmed Cloud incident to check the first update in both
+languages. Save this as `rehearsal-incident.json`:
+
+```json
+{"service":"remote_access","impact":"some","confirmedAt":"2026-11-22T10:00:00Z"}
+```
+
+Run this from your checkout with a new output directory:
+
+```sh
+node packages/operations/src/status-page-rehearsal-cli.ts rehearsal-incident.json /tmp/waitron-status-rehearsal
+```
+
+The command prints `Wrote local status update bundle`. Open
+`/tmp/waitron-status-rehearsal/index.html` and follow **Español**. You'll see
+**Investigating** and **Investigando** for remote access, updated at 10:00 UTC
+with the next update due at 10:30 UTC. The rehearsal stands in for the upload by
+writing both pages to disk. Incident detection, live upload and later updates
+are separate launch work.
+
 ## Choose your phone routes
 
 Use **Twilio first, with Vonage as the independent backup**, subject to your
