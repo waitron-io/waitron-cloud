@@ -35,11 +35,15 @@ test('captures only a single fragment request on the connection route, always sc
   }
 });
 
-test('a history entry restores a pairing request only with a valid ID', () => {
+test('a clean pairing or sign-in page restores a valid request from history', () => {
   const url = new URL('https://cloud.example/connect');
   const id = '12345678-1234-4234-8234-123456789abc';
+  const state = {pairingRequestId: id};
   assert.deepEqual(captureLink(url, () => {}, {pairingRequestId: 'bad'}), {invalid: false});
-  assert.deepEqual(captureLink(url, () => {}, {pairingRequestId: id}), {invalid: false, requestId: id});
+  assert.deepEqual(captureLink(url, () => {}, state), {invalid: false, requestId: id});
+  assert.deepEqual(captureLink(new URL('/login', url), () => {}, state), {invalid: false, requestId: id});
+  assert.deepEqual(captureLink(new URL('/account', url), () => {}, state), {invalid: false});
+  assert.deepEqual(captureLink(new URL('#request=bad', url), () => {}, state), {invalid: true});
 });
 
 test('recovery fragments stay separate from venue pairing and reject query or duplicate requests',()=>{
