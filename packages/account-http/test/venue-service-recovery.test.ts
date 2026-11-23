@@ -56,8 +56,17 @@ async function fixture(source:Source,asTrial=false,initialLevel:BillingLevel='co
   const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
   function proof(issuedAt=Date.now()){return target.envelope('read',digest,issuedAt,origin,version);}
   function read(envelope=proof()){return app.request(origin+'/api/recovery/read',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(envelope)},bindings);}
-  async function state(){const value:Record<string,unknown>={};for(const table of ['backup_key_versions','backup_points','backup_recoveries','backup_managed_streams','installation_replacements'])value[table]=(await db.pool.query(`SELECT to_jsonb(t) AS row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;return value;}
-  return {...f,db,billing,scope,today,source,sourceNodeId,venueId,location,target,version,digest,requests,recovery,calls,level,proof,read,state,block(hook:()=>Promise<void>){wait=hook;},close:()=>db.close()};
+  async function state(){const value:Record<string,{row:Record<string,unknown>}[]>={};for(const table of ['backup_key_versions','backup_points','backup_recoveries','backup_managed_streams','installation_replacements'])value[table]=(await db.pool.query(`SELECT to_jsonb(t) AS row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;return value;}
+  function stateAfterRead(before:Awaited<ReturnType<typeof state>>){
+   if(source==='snapshot'){
+    const operation=before.backup_recoveries?.find(({row})=>row.id===target.id);
+    assert(operation);
+    assert.equal(operation.row.selection_open,true);
+    operation.row.selection_open=false;
+   }
+   return before;
+  }
+  return {...f,db,billing,scope,today,source,sourceNodeId,venueId,location,target,version,digest,requests,recovery,calls,level,proof,read,state,stateAfterRead,block(hook:()=>Promise<void>){wait=hook;},close:()=>db.close()};
  }catch(error){await db.close();throw error;}
 }
 
@@ -84,7 +93,7 @@ for(const source of ['snapshot','continuous'] as const)for(const level of ['conn
    const kit=JSON.parse(Buffer.from(body.recoveryKit.slice('WAITRON-RECOVERY-KIT-2:'.length),'base64url').toString());
    assert.equal(kit.version,2);assert.equal(kit.streamId,f.venueId);assert.equal(kit.bucket.secretAccessKey,'synthetic-reader-secret');assert.equal(body.source.kind,'continuous');assert.equal(body.source.sourceNodeId,f.sourceNodeId);
   }
-  assert.deepEqual(f.calls,{grant:source==='snapshot'?1:0,reader:source==='continuous'?1:0});assert.deepEqual(await f.state(),before);
+  assert.deepEqual(f.calls,{grant:source==='snapshot'?1:0,reader:source==='continuous'?1:0});assert.deepEqual(await f.state(),f.stateAfterRead(before));
   assert.equal((await f.db.pool.query('SELECT service_plan FROM organisations WHERE id=$1',[f.scope.organisationId])).rows[0].service_plan,'free');
  }finally{await f.close();}
 });
@@ -108,7 +117,7 @@ for(const source of ['snapshot','continuous'] as const)for(const change of ['rou
   for(const secret of ['synthetic-secret','synthetic-reader-secret','recoveryKey','recoveryKit'])assert.equal(text.includes(secret),false,text);
   assert.deepEqual(f.calls,{grant:source==='snapshot'?1:0,reader:source==='continuous'?1:0});
   const after=await f.state();for(const table of ['backup_key_versions','backup_points','backup_managed_streams','installation_replacements'])assert.deepEqual(after[table],before[table]);
-  if(change!=='operation-expiry'&&change!=='owner-close')assert.deepEqual(after.backup_recoveries,before.backup_recoveries);
+  if(change!=='operation-expiry'&&change!=='owner-close')assert.deepEqual(after.backup_recoveries,f.stateAfterRead(before).backup_recoveries);
  }finally{await f.close();}
 });
 
@@ -126,6 +135,6 @@ for(const source of ['snapshot','continuous'] as const)test(`venue ${source} rec
   const response=await f.read();
   assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});
   assert.deepEqual(f.calls,{grant:source==='snapshot'?1:0,reader:source==='continuous'?1:0});
-  assert.deepEqual(await f.state(),before);
+  assert.deepEqual(await f.state(),f.stateAfterRead(before));
  }finally{await f.close();}
 });
