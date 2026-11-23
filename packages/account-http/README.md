@@ -664,24 +664,25 @@ them. The installation entry in the portal provides the owner consent control. S
 
 ## Translation machine routes
 
-The four POST routes under `/api/installations/translation-` are `submit`, `status`,
-`collect` and `release`. They use installation signatures and current leases, reject
+The five POST routes under `/api/installations/translation-` are `submit`, `status`,
+`collect`, `release` and `abandon`. They use installation signatures and current leases, reject
 browser Origin headers, and retain the account API's request allowances and security
 headers. See the [wire contract](../../docs/waitron-integration-contract.md#translate-all-version-1)
 for request fields, cursor paging and refusals.
 
-Translation is off by default, returning 503 on all four routes. The account command
+Translation is off by default, returning 503 on all five routes. The account command
 accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires
 `CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until the remaining runtime and joint
 qualification are complete. Submit accepts up to 2,113,536 UTF-8 request bytes within
-60 seconds, so an escaped 1 MiB job fits inside its signed envelope. Status, collect
-and release keep 16 KiB and five seconds. Submit has four simultaneous places per
+60 seconds, so an escaped 1 MiB job fits inside its signed envelope. Status, collect, release
+and abandon keep 16 KiB and five seconds. Submit has four simultaneous places per
 process, at most one per client address, outside the eight ordinary account places.
 An additional submit receives 503 with `Retry-After: 1` before its body is read or
 its rate allowance is spent. Address grouping follows the existing trusted-proxy,
 IPv4 and IPv6 rules. Collect returns the same compact JSON that the page builder sizes, bounded to
 16,777,216 UTF-8 bytes. Collect retains results; release deletes them after your
-caller has durably stored every page.
+caller has durably stored every page. To discard work before or after it finishes, send
+abandon with the original submit operation ID.
 
 With `CLOUD_TRANSLATION=1`, the account command sweeps retained menu text at startup and
 every minute, including when no translation worker runs. Startup cleanup failure refuses
