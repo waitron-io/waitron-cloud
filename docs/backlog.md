@@ -1885,10 +1885,10 @@ implementation or production evidence.
   and recent log. Check the launch path with `node --test scripts/amazon-run.test.mjs
   scripts/kubernetes-remote.test.mjs`. Run 11's relay exit remains unconfirmed.
   A later Stockholm attempt reached the venue client, which exited before the
-  first machine stop because its private checkout supplied root-only scripts.
-  The fixture copies its runtime JavaScript with explicit read permissions.
-  The offline boot check starts the actual client as user 1000 from a private
-  checkout, checks venue readiness and opens each copied runtime script.
+  first machine stop with `EACCES` on its startup script. An offline x86 build
+  on 23 November reproduced the exit from mode-0600 sources. With explicit
+  copy modes, `node /proof/integration-control.mjs` returned `{"ready":true}`
+  inside the client container, and user 1000 opened all 15 copied scripts.
   Full Stockholm qualification remains open.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
