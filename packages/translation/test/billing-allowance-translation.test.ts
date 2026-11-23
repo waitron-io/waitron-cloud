@@ -50,6 +50,17 @@ test('translation allowance refuses three trial items with an exact two-item fit
  }finally{await f.db.close();}
 });
 
+test('abandon returns an untouched translation allowance to the venue',async()=>{
+ const f=await fixture();try{
+  const operationId=randomUUID();
+  await f.submit(2,operationId);
+  assert.equal(await f.total(),2n);
+  await f.machine.execute('translation-abandon',f.v.proof('translation-abandon',{version:1},operationId,f.v.lease));
+  assert.equal(await f.total(),0n);
+  assert.equal((await f.submit(2)).state,'queued');
+ }finally{await f.db.close();}
+});
+
 test('translation admission has no implicit allowance configuration',async()=>{
  const f=await fixture({configured:false});try{
   await assert.rejects(f.submit(1),{code:'allowance_unavailable'});

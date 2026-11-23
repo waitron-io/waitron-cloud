@@ -36,6 +36,14 @@ test('submit, status, collect and release follow the contract shapes',async()=>{
  assert.deepEqual(await (await post(v,'translation-release',reference(v,'translation-release',jobId))).json(),{version:1,jobId,state:'collected'});
  assert.deepEqual(await error(await post(v,'translation-collect',reference(v,'translation-collect',jobId))),[410,'translation_expired']);
 });
+test('abandon accepts a signed version-only request',async()=>{
+ const v=await venue(),operationId=randomUUID();
+ const request=(body:unknown)=>post(v,'translation-abandon',v.proof('translation-abandon',body,operationId,v.lease));
+ const response=await request({version:1});
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),{version:1});
+ assert.deepEqual(await error(await request({version:1,jobId:randomUUID()})),[400,'invalid_request']);
+});
 test('a resent submit returns the same job, and its operation with another body conflicts',async()=>{
  const v=await venue(),op=randomUUID(),envelope=v.submit(jobText(),op);
  const first=await (await post(v,'translation-submit',envelope)).json();
@@ -91,9 +99,9 @@ test('a job field that breaks a rule is an invalid request',async()=>{
  const v=await venue();
  assert.deepEqual(await error(await post(v,'translation-submit',v.submit(jobText([item('product:1',{kind:'dish'})])))),[400,'invalid_request']);
 });
-test('with translation off all four routes answer 503, and turning it on needs a lease issuer',async()=>{
+test('with translation off all translation routes answer 503, and turning it on needs a lease issuer',async()=>{
  const off=createAccountApp({pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,config:config()}),v=await venue();
- for(const action of ['translation-submit','translation-status','translation-collect','translation-release'])
+ for(const action of ['translation-submit','translation-status','translation-collect','translation-release','translation-abandon'])
   assert.deepEqual(await error(await post(v,action,{},{},off)),[503,'temporarily_unavailable']);
  assert.throws(()=>createAccountApp({translation:true,pool:db.pool,outbox:db.outbox,config:config()}),/translation\.installation_issuer_required/);
 });

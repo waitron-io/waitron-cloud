@@ -3,12 +3,12 @@ import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,r
 import {hasConsent,readAllowanceConsentActor} from './consent.ts';
 import {TranslationError} from './errors.ts';
 import {parseJob,writtenItems} from './job-body.ts';
-import {collectJob,createJob,findSubmitted,lockVenue,readJob,releaseJob,statusView,submitView} from './job-store.ts';
+import {abandonJob,collectJob,createJob,findSubmitted,lockVenue,readJob,releaseJob,statusView,submitView} from './job-store.ts';
 import {checkSubmitBody} from './submit-proof.ts';
 import {maxCollectBytes,validateCollectLimit} from './collect-page.ts';
-export type TranslationAction='translation-submit'|'translation-status'|'translation-collect'|'translation-release';
+export type TranslationAction='translation-submit'|'translation-status'|'translation-collect'|'translation-release'|'translation-abandon';
 function fail(code:'invalid_request'):never{throw new TranslationError(code);}
-const actions:readonly string[]=['translation-submit','translation-status','translation-collect','translation-release'];
+const actions:readonly string[]=['translation-submit','translation-status','translation-collect','translation-release','translation-abandon'];
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 function unambiguousReference(body:string):boolean{
  const fields=new Set<string>();let depth=0;
@@ -93,6 +93,11 @@ export class TranslationMachine {
    }
    if(this.#planMode!=='existing'){
     row=(await client.query(query+' FOR SHARE OF i',[routing.installationId])).rows[0];claims=authorize(row);
+   }
+   if(action==='translation-abandon'){
+    if(claims.body!=='{"version":1}')fail('invalid_request');
+    await abandonJob(client,row.id,claims.operationId);
+    return {version:1};
    }
    const reference=jobReference(claims.body,action==='translation-collect');
    const job=await readJob(client,row.id,reference.jobId);

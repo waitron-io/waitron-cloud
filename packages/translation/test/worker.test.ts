@@ -6,7 +6,7 @@ import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {collectJob,createJob,createLoopbackOpenAiClient,jobFingerprint,lockVenue,parseJob,readJob,writtenItems} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,responsesBody,startFakeOpenAi,type FakeReply} from './fake-openai.ts';
-import {TranslationWorker} from '../src/index.ts';
+import {TranslationMachine,TranslationWorker} from '../src/index.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 before(async()=>{db=await database();});after(async()=>db?.close());
@@ -19,10 +19,10 @@ type Venue=Awaited<ReturnType<typeof connectedVenue>>;
 const item=(ref:string,category:string,staffName:string,over:Record<string,unknown>={})=>({ref,kind:'product',family:ref,category,staffName,existing:{},missing:['ca','es'],...over});
 const many=(prefix:string,category:string,n:number,staff=(i:number)=>`${prefix}-${i}`)=>Array.from({length:n},(_,i)=>item(`${prefix}:${i}`,category,staff(i)));
 const body=(items:object[])=>JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:['ca','es']},items,houseStyle:[]});
-async function queue(items:object[]):Promise<{v:Venue;job:{id:string}}>{
+async function queue(items:object[],operationId=randomUUID()):Promise<{v:Venue;job:{id:string}}>{
  const v=await connectedVenue(db,issuer,origin),text=body(items);await giveConsent(db,v);
  const job=await transaction(db.pool,async c=>{await lockVenue(c,v.venueId);
-  return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId:randomUUID(),fingerprint:jobFingerprint(text),body:text,total:writtenItems(parseJob(text)).length});});
+  return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId,fingerprint:jobFingerprint(text),body:text,total:writtenItems(parseJob(text)).length});});
  return {v,job};
 }
 const worker=(baseUrl:string,options:{batchConcurrency?:number;maxLeases?:number}={},timeoutMs=100)=>
@@ -101,6 +101,52 @@ test('reaching the cap mid-job stops later batches without calling the provider'
   assert.deepEqual([ended.state,ended.reason,ended.done,ended.failed,ended.cost_micro_usd],['partly_done','limit_reached',60,120,'2000']);
   assert.equal(fake.requests.length,1);
   assert.deepEqual((await collected(v,job.id)).results.slice(0,2).map(r=>r.names),[{ca:'a-0 [ca]',es:'a-0 [es]'},{ca:'a-1 [ca]',es:'a-1 [es]'}]);
+ }finally{await fake.close();}
+});
+test('abandon during the spending check stops the first provider call',async()=>{
+ const operationId=randomUUID(),{v}=await queue(many('a','A',3),operationId);
+ const fake=await startFakeOpenAi(request=>isReview(request)?emptyReview():echoFirstPass(request));
+ try{
+  const blocker=await db.pool.connect();
+  let run:Promise<boolean>|undefined;
+  try{
+   await blocker.query('BEGIN');
+   await blocker.query('LOCK translation_policy IN ACCESS EXCLUSIVE MODE');
+   run=worker(fake.baseUrl,{},5000).runOnce(live());
+   await until(async()=>!!(await db.secondPool.query(
+    "SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%FROM translation_policy'",[db.schema])).rowCount);
+   const signed=v.proof('translation-abandon',{version:1},operationId,v.lease);
+   await new TranslationMachine(db.pool,issuer,origin).execute('translation-abandon',signed);
+  }finally{
+   try{await blocker.query('ROLLBACK');}finally{blocker.release();}
+   await run;
+  }
+  assert.equal(fake.requests.length,0);
+ }finally{await fake.close();}
+});
+test('a reply received after abandon adds cost without saving results or making another call',async()=>{
+ let release!:()=>void;const reply=new Promise<void>(resolve=>{release=resolve;});
+ const fake=await startFakeOpenAi(async request=>{
+  if(isReview(request))return emptyReview();
+  await reply;
+  return echoFirstPass(request,{input_tokens:1000,output_tokens:200});
+ });
+ try{
+  const operationId=randomUUID();
+  const {v,job}=await queue([...many('a','A',60),...many('b','B',60)],operationId);
+  const run=worker(fake.baseUrl,{batchConcurrency:1},10000).runOnce(live());
+  try{
+   await until(()=>fake.requests.length===1);
+   const signed=v.proof('translation-abandon',{version:1},operationId,v.lease);
+   await new TranslationMachine(db.pool,issuer,origin).execute('translation-abandon',signed);
+  }finally{
+   release();
+   await run;
+  }
+  const ended=await row(job.id);
+  assert.deepEqual([ended.state,ended.input_tokens,ended.output_tokens,ended.cost_micro_usd],['expired','1000','200','200']);
+  assert.equal(fake.requests.length,1);
+  assert.equal(await saved(job.id),undefined);
  }finally{await fake.close();}
 });
 test('a finished job records four usage events naming the job and no name',async()=>{
