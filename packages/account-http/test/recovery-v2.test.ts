@@ -139,6 +139,7 @@ test('signed box requests list and select a copy after venue-only approval',asyn
  assert.equal(operation.pointId,null);
  await expectError('info',t.envelope('info'),409,'selection_required');
  await expectError('read',t.envelope('read'),409,'selection_required');
+ await expectError('restored',t.envelope('restored'),401,'invalid_proof');
  assert.equal(f.grants(),0);
  const list=await f.post('points',t.envelope('points'));
  assert.equal(list.status,200);

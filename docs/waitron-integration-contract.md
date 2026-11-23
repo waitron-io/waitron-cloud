@@ -917,16 +917,20 @@ Save them together and show the returned copy for confirmation before starting
 the restore, including when it differs from a copy originally named in Cloud.
 Repeat the same selection after a lost reply. If
 `select` returns `400 invalid_input`, refresh the list and let the person
-choose again. The first admitted `read` or accepted `restored` fixes the
-choice. A different choice then gets `409 conflict`. Continue to sign the
+choose again. Choosing the same copy before download can pick up a newer
+successful check for that copy. The first admitted `read` or accepted `restored`
+fixes the copy and its check. A different choice then gets `409 conflict`. Continue to sign the
 archive digest for `read` and `restored` after selection.
 
 `points` and `select` return `409 approval_required` for an authenticated
 request awaiting owner approval, or `410 unavailable` when it expires or
 closes. An approved request without a selection returns `409 selection_required`
-on `info` or `read` signed with an empty value. If the approving sign-in has
+on `info` or `read` signed with an empty value. A `restored` report before
+selection returns `401 invalid_proof`. If the approving sign-in has
 ended, `select` returns `403 proof_required`. Approve the same operation
-again with fresh proof before retrying.
+again with fresh proof before retrying. During the rollout, inspect an existing
+request again to see its current choice before repeating a named approval.
+A named approval for a different copy returns `409 conflict`.
 
 ### External vault archive compatibility dependency
 

@@ -297,3 +297,19 @@ test('box listing and new selections share the entry and whole-response size lim
  assert.deepEqual(bounded.points.map(p=>p.id),large.slice(0,bounded.points.length));
  await assert.rejects(f.recovery.select(t.id,t.envelope('select',large[bounded.points.length])),/invalid_input/);
 });
+
+test('an explicit selection can refresh a superseded check until the first admitted read',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();
+ await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const original=await f.recovery.select(t.id,t.envelope('select',f.point.id));
+ await verifyPointFixture(db.pool,f.catalogue,f.point.id);
+ await assert.rejects(f.recovery.target(t.id,'read',t.envelope('read',f.point.digest)),/unverified/);
+ const updated=await f.recovery.select(t.id,t.envelope('select',f.point.id));
+ assert.equal(updated.point.id,original.point.id);
+ assert.equal(updated.operationExpiresAt,original.operationExpiresAt);
+ assert.notEqual(updated.verification?.requestDigest,original.verification?.requestDigest);
+ assert.deepEqual((await f.recovery.target(t.id,'read',t.envelope('read',f.point.digest))).verification,updated.verification);
+ await verifyPointFixture(db.pool,f.catalogue,f.point.id);
+ await assert.rejects(f.recovery.select(t.id,t.envelope('select',f.point.id)),/invalid_input/);
+});

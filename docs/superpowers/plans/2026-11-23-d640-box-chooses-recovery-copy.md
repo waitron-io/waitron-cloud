@@ -24,9 +24,11 @@ copy chosen there. Claude reviewed the plan. The watcher cleared the split at
   for the full response. `select` signs the point ID, checks eligibility again
   and returns the same verified metadata as `info`. Take the request lock first,
   then account, membership, saved-session proof, plan, verification policy and
-  venue locks. Save the point, target and check attempt together. Same-choice
-  retries reuse the saved binding. First admitted `read` freezes the choice before
-  the provider grant. Accepted `restored` freezes it too.
+  venue locks. Save the point, target and check attempt together. An explicit
+  same-copy selection adopts a superseding check while the choice is open,
+  as the watcher cleared at 23:43. Other retries reuse the saved binding.
+  First admitted `read` freezes the choice and check before the provider grant.
+  Accepted `restored` freezes them too.
 - In `packages/account-http/src/recovery.ts`, use the existing metadata rate
   limits. Authenticate using the request key and target before returning
   `approval_required`. For `info` and `read` before selection, authenticate the

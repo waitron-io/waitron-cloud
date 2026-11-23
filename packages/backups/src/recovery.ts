@@ -389,7 +389,8 @@ export class BackupRecovery {
         ?(await checkedRecoveryPoints(client,row.venue_id,target.digest,value))[0]
         :(await this.#pointList(client,row.venue_id,operationExpiresAt,target.digest)).choices.find(choice=>choice.point.id===value);
       if(!checked)backupFail('invalid_input');
-      if(!sameChoice){
+      // A fresh choice can adopt a new check until read fixes which evidence authorised the grant.
+      if(!sameChoice||(row.selection_open===true&&row.verification_attempt_id!==checked.attemptId)){
         await client.query('UPDATE backup_recoveries SET point_id=$2,verification_attempt_id=$3,verification_target=$4 WHERE id=$1',[id,value,checked.attemptId,target]);
         Object.assign(row,{point_id:value,verification_attempt_id:checked.attemptId,verification_target:target});
       }
