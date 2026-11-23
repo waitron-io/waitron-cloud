@@ -4,6 +4,7 @@ import {AllowanceError,reserveAllowance} from '@waitron-cloud/registration';
 import {TranslationError} from './errors.ts';
 import {collectPage,maxCollectBytes,validateCollectLimit,type BatchResults} from './collect-page.ts';
 import type {SubmitFingerprint} from './submit-proof.ts';
+import {expireLockedJobs} from './retention.ts';
 import {translationModel,translationPromptVersion,translationProvider} from './service.ts';
 function fail(code:ConstructorParameters<typeof TranslationError>[0],fits?:number):never{throw new TranslationError(code,fits);}
 export type JobState='queued'|'running'|'done'|'partly_done'|'failed'|'collected'|'expired';
@@ -69,4 +70,10 @@ export async function releaseJob(client:PoolClient,row:JobRow){
   await client.query("UPDATE translation_jobs SET state='collected',collected_at=clock_timestamp(),lease_id=NULL,lease_until=NULL WHERE id=$1",[row.id]);
  }
  return {version:1,jobId:row.id,state:'collected'};
+}
+
+export async function abandonJob(client:PoolClient,installationId:string,operationId:string):Promise<void>{
+ const row=(await client.query<Pick<JobRow,'id'|'state'>>(
+  'SELECT id,state FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2 FOR UPDATE',[installationId,operationId])).rows[0];
+ if(row&&row.state!=='collected'&&row.state!=='expired')await expireLockedJobs(client,[row.id],true);
 }

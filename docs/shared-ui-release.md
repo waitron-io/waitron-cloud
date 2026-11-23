@@ -98,12 +98,12 @@ existing package access and authenticated install and image build paths.
 ## Prepare private signing packages for disposable tests
 
 The signing package is published from Waitron as `@waitron-io/contract`. Cloud's
-registration package pins `0.2.42` and re-exports its signing functions. The
+registration package pins `0.2.45` and re-exports its signing functions. The
 disposable-test adapter recognizes the reviewed archive alongside the UI package.
 Historical captures continue to select their own approved releases.
-The package records Waitron source `60fd60e3f6d27d2a37ae5beddfa333eb0313f0cf`,
-matching [publication run 44888309533](https://github.com/clintongormley/waitron/actions/runs/44888309533).
-It adds signed version 5 for early setup and also accepts the existing versions 3 and 4.
+The package records Waitron source `ff647911ac88a15be1e167ea4cb336acaf9f2b7a`,
+matching [publication run 44991563432](https://github.com/clintongormley/waitron/actions/runs/44991563432).
+It adds the signed translation abandon action and accepts pairing proof versions 3, 4 and 5.
 
 For a future contract release, compare Cloud's retained `isPairingUuid`,
 base64url/SPKI public-key decoding and SHA-256 key-ID derivation with the new

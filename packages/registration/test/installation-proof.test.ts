@@ -51,7 +51,7 @@ test('managed stream actions use the same signed machine namespace',()=>{
 });
 
 test('translation actions use the same signed machine namespace and cannot cross actions',()=>{
-  for(const action of ['translation-submit','translation-status','translation-collect','translation-release'] as const){
+  for(const action of ['translation-submit','translation-status','translation-collect','translation-release','translation-abandon'] as const){
     const value={...claims,action};const signed=proof(value);
     assert.equal(readMachineClaims(signed).action,action);
     assert.equal(verifyMachine(signed,publicKey,origin,action,now).action,action);

@@ -5,7 +5,7 @@ import {readBoundedJsonObject} from './request.ts';
 import {AccountHttpError,type ErrorStatus} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
 export const maxSubmitRequestBytes=2*1048576+16384,submitRequestMs=60000,submitSlots=4,submitPath='/api/installations/translation-submit';
-export const translationPaths=['/api/installations/translation-submit','/api/installations/translation-status','/api/installations/translation-collect','/api/installations/translation-release'];
+export const translationPaths=['/api/installations/translation-submit','/api/installations/translation-status','/api/installations/translation-collect','/api/installations/translation-release','/api/installations/translation-abandon'];
 const codes:Record<TranslationError['code'],[ErrorStatus,string]>={invalid_request:[400,'invalid_request'],consent_required:[403,'translation_consent_required'],
  job_not_found:[404,'translation_job_not_found'],job_running:[409,'translation_job_running'],limit_reached:[409,'translation_limit_reached'],
  not_ready:[409,'translation_not_ready'],expired:[410,'translation_expired'],job_too_large:[413,'translation_job_too_large'],conflict:[409,'conflict'],forbidden:[403,'forbidden']};

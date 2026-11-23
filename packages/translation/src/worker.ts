@@ -140,11 +140,15 @@ export class TranslationWorker {
     // Concurrent batches share the first durable spend, but every later call checks its lease.
     costFailed=false;return admit();
    }}:{}),
-   mayCall:()=>transaction(this.#pool,async client=>(await monthSpend(client,job.venue_id))<(await spendingPolicy(client)).cap),
+   mayCall:()=>transaction(this.#pool,async client=>{
+    if((await monthSpend(client,job.venue_id))>=(await spendingPolicy(client)).cap)return false;
+    if(this.#planMode!=='existing'||this.#scope)return true;
+    return !!(await client.query("SELECT 1 FROM translation_jobs WHERE id=$1 AND lease_id=$2 AND state='running'",[job.id,leaseId])).rowCount;
+   }),
    spent:async usage=>{
     const cost=(BigInt(usage.inputTokens)*input+BigInt(usage.outputTokens)*output+999999n)/1000000n;
     try{await guarded(`UPDATE translation_jobs SET input_tokens=input_tokens+$3,output_tokens=output_tokens+$4,cost_micro_usd=cost_micro_usd+$5
-     WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,usage.inputTokens,usage.outputTokens,cost.toString()]);}
+     WHERE id=$1 AND lease_id=$2`,[job.id,leaseId,usage.inputTokens,usage.outputTokens,cost.toString()]);}
     catch(error){costFailed=true;throw error;}
    },
    attempted:attemptStartedAt=>this.#allowances?transaction(this.#pool,async client=>{

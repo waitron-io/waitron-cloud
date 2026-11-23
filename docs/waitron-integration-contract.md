@@ -1136,7 +1136,7 @@ checks; retirement does not authorize rewriting fiscal records or shipped histor
 
 ## Translate all, version 1
 
-Owner-approved design; Cloud store, worker and four HTTP routes are implemented, with
+Owner-approved design; Cloud store, worker and five HTTP routes are implemented, with
 translation off by default. Submit has its separate 2,113,536-byte, 60-second reader
 and admission limit. Current owner consent is enforced at submit and worker lease;
 the account and portal consent controls and bounded retention sweeps are implemented.
@@ -1152,19 +1152,20 @@ design approval does not claim runtime qualification or release readiness. The p
 both sides build against; both specs and both plans point here and do not restate it differently.
 The paging amendment supersedes conflicting collect examples in the original Cloud plan.
 
-Four machine actions use the existing `waitron-cloud-machine-v1` envelope and a current control
+Five machine actions use the existing `waitron-cloud-machine-v1` envelope and a current control
 lease: POST to `/api/installations/translation-submit`, `translation-status`,
-`translation-collect` and `translation-release`. The signed action is the final path segment.
+`translation-collect`, `translation-release` and `translation-abandon`. The signed action is the
+final path segment.
 The existing 60-second proof window, one-hour lease, per-installation and per-IP limits, and the
-refusal of browser Origin headers apply. While Cloud's operator has the service switched off, all
-four answer 503 `temporarily_unavailable`.
+refusal of browser Origin headers apply. While Cloud's operator has the service switched off,
+all five answer 503 `temporarily_unavailable`.
 
 ### Request limits
 
 | Action | Whole HTTP request at most | Received within |
 |---|---|---|
 | submit | 2,113,536 bytes (twice the 1 MiB job, plus 16 KiB) | 60 s |
-| status, collect, release | 16,384 bytes | 5 s |
+| status, collect, release, abandon | 16,384 bytes | 5 s |
 
 Every other account body reader refuses a body over 16,384 bytes or one not received within
 5 seconds. When translation is enabled, the server permits 60 seconds to receive a request;
@@ -1327,15 +1328,22 @@ The reply:
 { "version": 1, "jobId": "00000000-0000-4000-8000-000000000010", "state": "queued", "total": 358 }
 ```
 
-### Status, collect and release
+### Status, collect, release and abandon
 
 Status and release each sign exactly `{"version":1,"jobId":"<uuid>"}` with a fresh operation ID.
 Collect signs exactly those fields with an optional `cursor`, for example
 `{"version":1,"jobId":"00000000-0000-4000-8000-000000000010","cursor":2}`.
 Omitting `cursor` means 0. Other fields or invalid action bodies are 400 `invalid_request`.
 
-After proof and lease validation, look up the job scoped to the signing installation before
-checking cursor validity or range. An unknown or foreign job is always 404
+To discard a job, sign exactly `{"version":1}` with the original submit operation ID as
+`operationId`. Abandon expires an existing job owned by the signing installation, even while it
+is queued or running. Cloud returns HTTP 200 with `{"version":1}` after expiring the job,
+when it was already collected or expired, and when the operation is absent. An absent operation creates no record. If the original
+submit is still in progress, it can create the job after abandon returns. You can send abandon again
+with the original ID and a fresh proof.
+
+For status, collect and release, Cloud validates the proof and lease and looks up the job
+scoped to the signing installation before checking cursor validity or range. An unknown or foreign job is always 404
 `translation_job_not_found`, including with an invalid cursor. For an owned job, a supplied cursor
 must be a JSON number that is a safe integer with `0 <= cursor < total`; null, strings, booleans,
 fractions, negative, unsafe and out-of-range values are 400 `invalid_request`. Validate the cursor
@@ -1356,8 +1364,8 @@ no authority: the offset is already signed and installation-scoped.
 - `partly_done`: some have a result and the rest failed;
 - `failed`: none has a result;
 - `collected`: released by the box;
-- `expired`: the body and results were deleted 24 hours after the job finished, or 24 hours after
-  it was submitted if it never finished.
+- `expired`: the body and results were deleted after abandon, 24 hours after the job finished,
+  or 24 hours after it was submitted if it never finished.
 
 A `partly_done` or `failed` status also carries `reason`, one of this list:
 

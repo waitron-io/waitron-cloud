@@ -45,6 +45,23 @@ test('small machine still enforces proof lease ownership and feature-off gates',
  await setService(v,'unconfigured');
  const text=jobText(['new']);await assert.rejects(small.execute('translation-submit',envelopeOf(v.submit(text)),text),code('permission_denied'));
 });
+test('abandon frees only the owning installation’s job slot and preserves submit replay',async()=>{
+ const v=await venue(),other=await venue(),operationId=randomUUID(),text=jobText();
+ const abandon=(owner:Venue)=>machine().execute('translation-abandon',owner.proof('translation-abandon',{version:1},operationId,owner.lease));
+ assert.deepEqual(await abandon(v),{version:1});
+ assert.equal(await jobs(v),0);
+ const {jobId}=await submit(v,text,operationId);
+
+ assert.deepEqual(await abandon(other),{version:1});
+ assert.equal(await jobs(other),0);
+ assert.equal((await act(v,'translation-status',{version:1,jobId})).state,'queued');
+
+ assert.deepEqual(await abandon(v),{version:1});
+ assert.deepEqual(await abandon(v),{version:1});
+ assert.equal((await db.pool.query('SELECT 1 FROM translation_job_bodies WHERE job_id=$1',[jobId])).rowCount,0);
+ assert.deepEqual(await submit(v,text,operationId),{version:1,jobId,state:'expired',total:1});
+ assert.notEqual((await submit(v,text)).jobId,jobId);
+});
 test('machine construction and direct job collection reject invalid internal limits',async()=>{
  const v=await venue(),{jobId}=await submit(v);await outcomes(jobId,{0:{results:[result('product:1')],failed:[]}});await finish(jobId);
  for(const limit of [0,-1,0.5,Number.MAX_SAFE_INTEGER+1,NaN,Infinity,16777217]){
