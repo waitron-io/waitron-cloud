@@ -49,6 +49,7 @@ it('recaptures the authorised source and prepares recovery for its new archive',
   expect(artifact).toBeDefined();
   const archive=artifact!;
   const decrypted=decryptArtifact(archive,recoveryKey);
+  // The pinned image's backup writer still emits uncompressed archives.
   const plaintext=decrypted[0]===0x1f&&decrypted[1]===0x8b?gunzipSync(decrypted):decrypted;
   const manifest=JSON.parse(unpackArchive(plaintext).find(entry=>entry.name==='manifest.json')!.bytes.toString());
   await writeFile(join(directory,'selected.enc'),archive,{mode:0o600});
