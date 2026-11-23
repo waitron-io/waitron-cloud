@@ -403,15 +403,19 @@ test('the outside service relay binds account and store separately from the gate
 
 for (const exitsBeforeInspect of [true, false]) test(
   'a relay that exits ' + (exitsBeforeInspect ? 'at startup' : 'before cleanup') + ' reports its exit and logs before removal', async t => {
-    const calls = [], id = 'a'.repeat(64);
+    const calls = [], id = 'a'.repeat(64), cancelled = AbortSignal.abort();
     t.mock.method(process.stderr, 'write', chunk => {calls.push(['stderr', String(chunk)]); return true;});
     const relay = remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof',
       outside: true, services: true, nodes: ['a', 'b', 'c'].map(name => ({name})),
-      run: async (_binary, args) => {
+      run: async (binary, args, {signal = cancelled, timeout} = {}) => {
         calls.push(args);
+        if (binary === 'sh' || (args[0] === 'inspect' && args[2].includes('.State.ExitCode'))) {
+          signal?.throwIfAborted();
+          assert.equal(timeout, 5_000);
+        }
         if (args[0] === 'create') return id;
         if (args[0] === 'inspect') {
-          if (args[2].includes('.State.ExitCode')) return '1';
+          if (args[2].includes('.State.ExitCode')) return args[2].includes('.State.Status') ? 'exited 1' : '1';
           if (!args[2].includes('.State.Running')) return '172.30.250.8';
           return exitsBeforeInspect ? 'false 172.30.250.8' : 'true 172.30.250.8';
         }
@@ -423,6 +427,26 @@ for (const exitsBeforeInspect of [true, false]) test(
       ['stderr', 'D621 relay exit code 1\n'], ['-c', 'exec docker logs --tail 20 "$1" 2>&1', 'relay logs', id],
       ['stderr', 'MODULE_NOT_FOUND\n'], ['rm', '-f', id],
     ]);
+  });
+
+for (const inspectFails of [true, false]) test(
+  'a relay whose start was refused is removed ' + (inspectFails ? 'when diagnostics fail' : 'without claiming an exit'), async t => {
+    const failure = Error('Docker did not start the relay'), id = 'a'.repeat(64), calls = [];
+    t.mock.method(process.stderr, 'write', chunk => {calls.push(['stderr', String(chunk)]); return true;});
+    await assert.rejects(remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof',
+      outside: true, nodes: ['a', 'b', 'c'].map(name => ({name})),
+      run: async (_binary, args) => {
+        calls.push(args);
+        if (args[0] === 'create') return id;
+        if (args[0] === 'start') throw failure;
+        if (args[0] === 'inspect') {
+          if (inspectFails) throw Error('Docker inspect failed');
+          return args[2].includes('.State.Status') ? 'created 0' : '0';
+        }
+        assert.deepEqual(args, ['rm', '-f', id]);
+      }}), error => error === failure);
+    assert.deepEqual(calls.at(-1), ['rm', '-f', id]);
+    assert.equal(calls.some(args => args[0] === 'stderr'), false);
   });
 
 test('the next available control plane is selected after an API failure', async () => {
