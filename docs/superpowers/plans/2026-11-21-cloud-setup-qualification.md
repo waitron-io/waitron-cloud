@@ -1,5 +1,13 @@
 # Check first-time box setup on the shared test Cloud
 
+## Stockholm result, 21 November 2026
+
+One synthetic box opened Cloud sign-in after the administrator step and returned to the venue form in the same tab after signup, email verification and passkey sign-in. With Cloud staff email selected and the local mail server blank, the box finished setup. After restart it kept the same installation, venue, organisation and business IDs. Cloud filed the venue at Registered level without a trial, and a staff password reset reached private Mailpit. [Waitron build](https://github.com/clintongormley/waitron/commit/45587c84638ca87d620324898a10aac3e450d6cc) · [Cloud build](https://github.com/waitron-io/waitron-cloud/commit/931b732f73f2bb5d9a3687b3dd466b25c5ebe3b2)
+
+The cleanup step stopped at a 404 before sending a removal request. The disposable box and its keys were removed, but the synthetic installation record remained unrevoked. Its email grant expired, remote access was unconfigured and the shared test Cloud returned HTTP 200 on its readiness check after its settings were restored. Live address lookup and released-box qualification remain open.
+
+## Rehearsal plan
+
 Cloud already supports what Waitron #3965 sends. Cloud #1343 and #1350–#1353 supply installed-box pairing, early registration, same-tab signup and signed staff-email consent. Waitron #3953, #3957, #3960 and #3965 provide the setup screens. The box renews its provisional installation lease and sends `requestId`, `consent: true` and `consentVersion: local-v1` to signed `POST /api/pairing/email-grant` before filing the venue. [Sign-in contract](../../waitron-integration-contract.md#test-box-sign-in-before-the-venue-form) · [Staff email contract](../../transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
 
 The owner asked for sign-in or Skip after the administrator and before the venue form on 20 November at 13:49 and 13:54, and confirmed that order on 21 November at 18:01. The watcher recorded the original-tab route on 20 November at 14:16. Waitron #3978 puts Cloud sign-in after Admin in Prepare, and #3969 lets you finish Prepare with Cloud email and the local mail server left blank. Both are on Waitron main.

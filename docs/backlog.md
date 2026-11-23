@@ -1036,10 +1036,12 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 ## Cloud signup and business moves
 
-Qualify original-tab venue setup on the released Waitron box, including sign-in
-after Admin and the setup services. Confirm the rule for tax numbers when a venue
-reconnects under a new owner. Moving one business by itself and filing a new tax
-number when you own several organisations remain open.
+The [Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
+covered sign-in after Admin and return to the original tab on a synthetic box.
+Qualify the same setup on the released Waitron box, including the setup services.
+Confirm the rule for tax numbers when a venue reconnects under a new owner. Moving
+one business by itself and filing a new tax number when you own several organisations
+remain open.
 
 ## Free services for open-source Waitron
 
@@ -1053,8 +1055,9 @@ Cloud browser checks cover verified signup and a return to the same tab after en
 and fresh sign-in. The [test relay contract](transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
 covers Cloud's signed staff-email choice. The Mailpit rehearsal in
 `deploy/test-cloud/free-services-relay.test.mjs` covers delivery after sign-out.
-The Waitron setup screen, joint delivery check and live address qualification
-remain open.
+The [joint Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
+covered the Waitron setup screen and one staff password reset delivered to private
+Mailpit with the local mail server blank. Live address qualification remains open.
 Qualify providers, storage rights, account allowances and abuse limits against
 the [requirements and open work](backlog/free-services.md).
 Evaluate mobile notifications separately.
