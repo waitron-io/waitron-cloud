@@ -354,8 +354,11 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         await context.stopNode(context.nodes[2].name, {});
       }
       if (scenario === 'baseline measured stops') {
+        assert.equal(context.waitronImage, 'sha256:' + 'c'.repeat(64), 'outside Docker uses the inspected image ID');
+        assert.equal(context.image, 'sha256:' + 'f'.repeat(64), 'the outside peer uses the inspected Cloud image ID');
+        assert.equal(context.verifierImage, 'sha256:' + hashes, 'the classic verifier uses the bundle configuration digest');
         assert.deepEqual(diagnostics.filter(line => line.startsWith('Waitron rehearsal image ')),
-          ['Waitron rehearsal image ' + context.waitronImage + '\n']);
+          ['Waitron rehearsal image sha256:' + hashes + '\n']);
         const {name} = context.nodes[2];
         const resumed = await context.stopNode(name, {
           async whileStopped({holdMs}) {stopClock += holdMs; return {};},
@@ -458,7 +461,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'wg') return 'A'.repeat(43) + '=';
       if (binary === 'sudo' && args[1] === 'wg-quick' && args[2] === 'down' &&
           ++tunnelCloseAttempts === 1 && scenario === 'baseline cleanup failure') throw Error('synthetic tunnel close failure');
-      if (binary === 'docker' && args[0] === 'image' && args[1] === 'inspect') return JSON.stringify([{Id: 'sha256:' + 'c'.repeat(64), Architecture: 'amd64', Os: 'linux'}]);
+      if (binary === 'docker' && args[0] === 'image' && args[1] === 'inspect') {
+        const id = args[2].endsWith(':cloud') ? 'f' : 'c';
+        return JSON.stringify([{Id: 'sha256:' + id.repeat(64), Architecture: 'amd64', Os: 'linux'}]);
+      }
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);

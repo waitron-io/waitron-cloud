@@ -1069,7 +1069,9 @@ to that file. Its keys are `region` (explicitly `eu-north-1` for tonight; no def
 (the private key path on the test box), `operatorCidr` (that box’s public IPv4 `/32`),
 `stackRole` and `schedulerRole` (the two external role ARNs). For `measured-stops`,
 set `rehearsedWaitronImage` to the full Docker image ID loaded from the passing
-Linux rehearsal. For other launch modes, set `waitronCheckout` to the Waitron
+Linux rehearsal. The outside helpers use the launch host's inspected Docker
+image IDs. Kubernetes imports and the classic backup verifier use the saved
+bundle's configuration digests. For other launch modes, set `waitronCheckout` to the Waitron
 checkout containing the pinned verifier revision.
 No package token or AWS credential is copied to the three machines.
 The launcher saves only Linux/AMD64 images and checks that the selected image

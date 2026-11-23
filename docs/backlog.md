@@ -1872,8 +1872,10 @@ implementation or production evidence.
   database copies and a primary out of recovery. On 23 November the full
   saved-image Linux rehearsal passed all three individual stops and repairs
   and restored a new backup after the all-machine restart. The earlier
-  returning-store timeout remains unexplained. Stockholm still needs its
-  own measurements.
+  returning-store timeout remains unexplained. Stockholm run 10 stopped before
+  signup when launch-host Docker rejected the bundle configuration digest as a
+  local image ID. Repeat the measured runs from the corrected launcher to
+  qualify signup, individual machine stops and the all-machine restart there.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
   an overdue probe ran. HTTPS transport failures log the route and error. Run

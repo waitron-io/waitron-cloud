@@ -240,22 +240,23 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       await run('docker',['pull','--platform','linux/amd64',upstream]);
       ownedImages.push(tag);await run('docker',['tag',upstream,tag]);images.push(tag);
     }
-    const bundleImages = [cloud, waitron, store, ...images];
+    const bundleImages = [cloud, waitron, store, ...images], localIds = {};
     for (const image of bundleImages) {
       const [row] = JSON.parse(await run('docker', ['image', 'inspect', image]));
       assert.ok(row.Architecture === 'amd64' && row.Os === 'linux', 'amazon.image_architecture');
+      localIds[image] = row.Id;
     }
     await run('docker', ['save', '--platform', 'linux/amd64', '-o', join(directory, 'images.tar'), ...bundleImages], undefined, false, 300000);
     await checkAmazonArchive(join(directory, 'images.tar'), bundleImages, run);
-    const archive = JSON.parse(await run('tar', ['-xOf', join(directory, 'images.tar'), 'manifest.json'])), ids = {};
+    const archive = JSON.parse(await run('tar', ['-xOf', join(directory, 'images.tar'), 'manifest.json'])), archiveIds = {};
     for (const image of bundleImages) {
       const canonical = 'docker.io/' + (image.includes('/') ? image : 'library/' + image);
       const config = archive.find(row => row.RepoTags?.some(tag => tag === image || tag === canonical))?.Config;
       const digest = config?.split('/').at(-1).replace(/\.json$/, '');
       assert.match(digest ?? '', /^[a-f0-9]{64}$/, 'amazon.archive_image');
-      ids[image] = 'sha256:' + digest;
+      archiveIds[image] = 'sha256:' + digest;
     }
-    if (config.measuredStops) process.stderr.write('Waitron rehearsal image ' + ids[waitron] + '\n');
+    if (config.measuredStops) process.stderr.write('Waitron rehearsal image ' + archiveIds[waitron] + '\n');
     const bytes = parseInt(await run('wc', ['-c', join(directory, 'images.tar')]), 10);
     const archiveCopyTimeout = Math.ceil(bytes * 8 / 10000000 * 1000) + 60000;
     process.stderr.write('Image bundle ' + bytes + ' bytes; one upload and private copies each have ' + archiveCopyTimeout + ' ms (10 Mbit/s cutoff plus 60 seconds)\n');
@@ -346,7 +347,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
         if (config.measuredStops) for (const index of [1, 2]) await bootstrap(index, 'release-staging');
         for (let index = 0; index < 3; index++) {
           await ssh(index, ['sudo', 'ctr', '-n', 'k8s.io', 'images', 'import', '/tmp/d618-images.tar']);
-          for (const [image, id] of Object.entries(ids)) {
+          for (const [image, id] of Object.entries(archiveIds)) {
             const info = JSON.parse(await ssh(index, ['sudo', 'crictl', '--image-endpoint', 'unix:///run/containerd/containerd.sock', 'inspecti', '-o', 'json', image]));
             assert.equal(info.status.id, id, 'amazon.import_digest');
           }
@@ -380,7 +381,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
         target.phase = phase;
         await writeFile(join(directory, 'target.json'), JSON.stringify(target), {mode: 0o600});
         await copy(0, 'target.json', '/tmp/d618-target.json');
-        return JSON.parse(await ssh(0, ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(ids[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(ids[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'], undefined, 1200000));
+        return JSON.parse(await ssh(0, ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(archiveIds[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(archiveIds[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'], undefined, 1200000));
       },
       stopWorker: () => aws('ec2', ['stop-instances', '--skip-os-shutdown', '--instance-ids', outputs.C]),
       waitStopped: () => aws('ec2', ['wait', 'instance-stopped', '--instance-ids', outputs.C]),
@@ -545,7 +546,9 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           return {outage, stopTimesMs, bootTimesMs, recoveryMs: Math.round(performance.now() - bootStarted)};
         }
         const verificationTarget = await readRehearsalVerificationTarget();
-        const context = {cluster: name, nodes, directory, kube: outsideKube, run: local, image: ids[cloud], waitronImage: ids[waitron],
+        // The launch host can use a different Docker image store from the classic verifier.
+        const context = {cluster: name, nodes, directory, kube: outsideKube, run: local,
+          image: localIds[cloud], waitronImage: localIds[waitron], verifierImage: archiveIds[waitron],
           signal: limit, verificationTarget, amazon: {...target, phase: 'baseline', ...(config.measuredStops && {measuredStops: true})},
           baseline: true, databasePrepared: true,
           ...(config.measuredStops && {stopServiceNodes: true, stopNode, stopSignal, restartAll, holdMs: stockholmHoldMs})};
@@ -573,7 +576,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       await copy(0, 'target.json', '/tmp/d618-target.json');
       let stopMs, replacementMs;
       const result = await observe('ssh', [...sshOptions, 'admin@' + hosts[0],
-        ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(ids[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(ids[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'].map(quote).join(' ')], {
+        ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(archiveIds[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(archiveIds[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'].map(quote).join(' ')], {
         signal, timeout: 3600000, onReady: async send => {
           assert.ok(now() - baselineStarted <= 1200000, 'amazon.observer_baseline_late');
           const before = now();
