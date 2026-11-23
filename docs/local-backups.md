@@ -406,8 +406,10 @@ authorised status means download permission. It does not mean that restore has
 completed or trading is enabled.
 
 An unapproved request lasts fifteen minutes and permits five incorrect codes. An
-approved operation lasts one hour and stays bound to its original snapshot or
-continuous generation and its replacement key. If an approval reply is lost, the page checks the saved request
+approved operation lasts one hour and stays bound to its replacement key.
+The existing portal approves a named snapshot or a continuous generation. If
+your box offers the snapshot selector, choose a checked copy there before
+starting its download. Refresh the list if the copy is no longer available. If an approval reply is lost, the page checks the saved request
 instead of creating another operation. If you reload the page, reopen the link from
 the replacement and enter its code again.
 

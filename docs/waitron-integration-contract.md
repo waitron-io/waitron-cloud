@@ -895,6 +895,48 @@ checks that the replacement does not inherit `backup.env`, Cloud machine authori
 or staff TLS material. The replacement then registers with a fresh installation and
 machine public key.
 
+### Choosing a checked snapshot on the box
+
+For a test venue, Cloud can approve a version-2 recovery request with
+`source: "snapshot"` and `venueId`. A named `pointId` approval still starts with
+that snapshot selected, so the existing portal and rehearsal can keep using `info`.
+Release the box's chooser before changing the portal to approve the venue alone.
+
+Send `POST /api/recovery/points` and `POST /api/recovery/select` with the same
+version-2 envelope and rate limits as `info`. Sign the tuple
+`["waitron-cloud-recovery-v2", origin, requestId, action, value, targetDigest, timeMs]`
+with the key from the request. Use an empty value for `points` and a copy ID for
+`select`. `points` returns `version`, `venueId`, `operationExpiresAt` and
+`points`. Each entry has the same fields as `info.point`. Cloud returns only
+available snapshots from the approved venue with a current check for the exact
+target. The first entry is the newest. The list has at most 50 entries and the
+JSON reply fits in 65,536 UTF-8 bytes.
+
+`select` returns the full `info` reply, including the point and its check.
+Save them together and show the returned copy for confirmation before starting
+the restore, including when it differs from a copy originally named in Cloud.
+Repeat the same selection after a lost reply. If
+`select` returns `400 invalid_input`, refresh the list and let the person
+choose again. Choosing the same copy before download can pick up a newer
+successful check for that copy. The first admitted `read` or accepted `restored`
+fixes the copy and its check. A different choice then gets `409 conflict`.
+Continue to sign the archive digest for `read` and `restored` after selection.
+If `info` or `read` returns `400 unverified` before any read was admitted,
+select the copy again. After an admitted read, close the request and start
+another if the saved check becomes unverified.
+
+`points` and `select` return `409 approval_required` for an authenticated
+request awaiting owner approval, or `410 unavailable` when it expires or
+closes. An approved request without a selection returns `409 selection_required`
+on `info` or `read` signed with an empty value. A `restored` report before
+selection returns `401 invalid_proof`. If the approving sign-in has
+ended, `select` returns `403 proof_required`. Approve the same operation
+again with fresh proof before retrying. During the rollout, inspect the existing
+request to see its current choice before repeating a named approval. A named
+approval for a different copy returns `409 conflict`. If approval still returns
+a conflict because the selected copy's saved check was superseded, close the
+request and start another.
+
 ### External vault archive compatibility dependency
 
 No archive extension is needed for the current managed path because its encrypted

@@ -131,7 +131,7 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     assert.deepEqual((await p.query('SELECT current_evidence_id,last_attempt_id FROM backup_points')).rows, [{current_evidence_id: null, last_attempt_id: null}]);
     assert.equal((await p.query('SELECT current_verification FROM backup_point_qualification')).rows[0].current_verification, 'pending');
     assert.equal((await p.query("SELECT EXISTS(SELECT 1 FROM backup_verifications WHERE point_id=$1 AND outcome='verified') AS protected", [f.point])).rows[0].protected, true);
-    for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null});
+    for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null, selection_open: null});
     for(const entry of allBefore.venues as {row:Record<string,unknown>}[]){
       delete entry.row.local_venue_id;
       entry.row.display_name=null;
@@ -439,6 +439,17 @@ test('old_recovery_has_no_v2_identity', async () => {
     await rejected(f, () => f.c.query('UPDATE backup_recoveries SET verification_target=$1', [target]));
     await policy(f); const e = await evidence(f); const other = await seed(f.c);
     await rejected(f, () => f.c.query('UPDATE backup_recoveries SET point_id=$2,verification_attempt_id=$3,verification_target=$4 WHERE id=$1', [id, other.point, e.id, target]), ['23503']);
+  } finally {await f.close();}
+});
+
+test('only an open snapshot selection can omit its point', async () => {
+  const f = await fixture(); try {
+    const id = randomUUID();
+    await f.c.query("INSERT INTO backup_recoveries(id,venue_id,account_id,target_public_key,mode,selection_open) VALUES($1,$2,$3,$4,'failure',true)", [id, f.venue, f.account, randomUUID()]);
+    await rejected(f, () => f.c.query('UPDATE backup_recoveries SET selection_open=false WHERE id=$1', [id]), ['23514']);
+    const continuous="source_kind='continuous',stream_configuration_revision=1,stream_generation='generation',stream_recoverable_at=clock_timestamp(),stream_source_node_id=$2";
+    await rejected(f, () => f.c.query(`UPDATE backup_recoveries SET ${continuous} WHERE id=$1`, [id,f.node]), ['23514']);
+    await f.c.query(`UPDATE backup_recoveries SET ${continuous},selection_open=NULL WHERE id=$1`, [id,f.node]);
   } finally {await f.close();}
 });
 

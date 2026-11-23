@@ -4,8 +4,9 @@ import {prepareConnectionProof} from '../../registration/test/fixtures/action-pr
 import {transaction} from '@waitron-cloud/registration';
 import assert from 'node:assert/strict';
 import {createPublicKey,verify,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
+import {receipt} from '../src/storage.ts';
 import {ManagedStreams} from '../src/managed-streams.ts';
-import {verifyPointFixture} from './fixtures/verification.ts';
+import {admitPointFixture,verifyPointFixture} from './fixtures/verification.ts';
 import {requestPayloadV2,recoveryPayloadV2} from '../src/recovery-v2.ts';
 import {database} from '../../account-http/test/fixtures.ts';
 import {verifyRecoveryRequest,requestPayload} from '../src/recovery-request.ts';
@@ -204,4 +205,111 @@ test('v2 proof expiry during an acknowledged archive-key wait prevents key discl
   const until=now()+3000;let waiting=false;while(now()<until){if((await db.secondPool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,blockerId])).rowCount){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}assert(waiting,'delivery must reach the acknowledged key blocker');
   Date.now=()=>now()+61000;await blocker.query('COMMIT');await refused;
  }finally{Date.now=now;await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+async function anotherCopy(f:Awaited<ReturnType<typeof recoveryFixture>>,checked=true,modules:Record<string,number>={core:1},capturedAt=new Date().toISOString()) {
+ const capture=await f.catalogue.reserveCapture(f.installed.installationId,randomUUID());
+ const bytes=Buffer.from(capture.id);
+ f.objects.set(capture.incomingKey,bytes);
+ const point=await f.catalogue.publish(f.installed.installationId,capture.id,{...receipt(bytes),capturedAt,retention:'daily',sourceNodeId:randomUUID(),modules});
+ if(checked)await verifyPointFixture(db.pool,f.catalogue,point.id);
+ return point;
+}
+
+test('box sees eligible newest-first copies and can replace a named approval before read',async()=>{
+ const other=await recoveryFixture(db),f=await recoveryFixture(db),t=machineTarget();
+ const newer=await anotherCopy(f),stale=await anotherCopy(f),unchecked=await anotherCopy(f,false);
+ await f.requests.machine('start',t.envelope('start'));
+ const approval=await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const list=await f.recovery.points(t.id,t.envelope('points'));
+ assert.deepEqual(list.points.map(p=>p.id),[stale.id,newer.id,f.point.id]);
+ await db.pool.query('UPDATE backup_points SET deleting=true WHERE id=$1',[stale.id]);
+ for(const id of [other.point.id,unchecked.id,stale.id]){
+  await assert.rejects(f.recovery.select(t.id,t.envelope('select',id)),/invalid_input/);
+ }
+ const info=await f.recovery.target(t.id,'info',t.envelope('info'));
+ assert.equal(info.source.kind==='snapshot'&&info.source.pointId,f.point.id);
+ const selected=await f.recovery.select(t.id,t.envelope('select',newer.id));
+ assert.equal(selected.point.id,newer.id);
+ assert.equal(selected.verification?.archiveSha256,newer.digest);
+ assert.equal(selected.operationExpiresAt,approval.operation?.expiresAt);
+ await f.recovery.target(t.id,'restored',t.envelope('restored',newer.digest));
+ await assert.rejects(f.recovery.select(t.id,t.envelope('select',f.point.id)),/conflict/);
+});
+
+test('approval for the venue does not list copies checked for a different target',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget(otherTarget());
+ await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{...f.input,pointId:undefined,source:'snapshot',venueId:f.installed.venueId});
+ assert.deepEqual((await f.recovery.points(t.id,t.envelope('points'))).points,[]);
+ await assert.rejects(f.recovery.select(t.id,t.envelope('select',f.point.id)),/invalid_input/);
+});
+
+test('selection cannot change once a competing read acquires the venue lock first',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget(),other=await anotherCopy(f);
+ await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const blocker=await db.secondPool.connect();
+ const blockerId=(await blocker.query('SELECT pg_backend_pid() AS id')).rows[0].id;
+ const until=Date.now()+3000;
+ let read:Promise<unknown>|undefined,select:Promise<unknown>|undefined;
+ try{
+  await blocker.query('BEGIN');
+  await blocker.query('SELECT venue_id FROM backup_locations WHERE venue_id=$1 FOR UPDATE',[f.installed.venueId]);
+  read=f.recovery.target(t.id,'read',t.envelope('read',f.point.digest));
+  void read.catch(()=>{});
+  while(!(await db.secondPool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,blockerId])).rowCount){
+   assert(Date.now()<until,'read reached the venue lock after taking the account lock');
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  select=f.recovery.select(t.id,t.envelope('select',other.id));
+  const refused=assert.rejects(select,/conflict/);
+  void refused.catch(()=>{});
+  await blocker.query('COMMIT');
+  await read;
+  await refused;
+ }finally{
+  await blocker.query('ROLLBACK');
+  blocker.release();
+  await Promise.allSettled([read,select]);
+ }
+ const retry=await f.recovery.select(t.id,t.envelope('select',f.point.id));
+ assert.equal(retry.point.id,f.point.id);
+});
+
+test('box listing and new selections share the entry and whole-response size limits',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();
+ const copies=async(count:number,offset:number,modules:Record<string,number>)=>{
+  const points=await Promise.all(Array.from({length:count},(_,i)=>anotherCopy(f,false,modules,new Date(Date.parse(f.point.capturedAt)+offset+i).toISOString())));
+  await Promise.all(points.map(p=>admitPointFixture(db.pool,p.id)));
+  return points.reverse().map(p=>p.id);
+ };
+ const ids=await copies(50,1,{core:1});
+ await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{source:'snapshot',venueId:f.installed.venueId,oldServerUnavailable:true,acceptDataLoss:true});
+ const list=await f.recovery.points(t.id,t.envelope('points'));
+ assert.deepEqual(list.points.map(p=>p.id),ids);
+ const modules=Object.fromEntries(Array.from({length:64},(_,i)=>['owner-'+String(i).padStart(3,'0')+'a'.repeat(54),1]));
+ const large=await copies(16,51,modules);
+ const bounded=await f.recovery.points(t.id,t.envelope('points'));
+ assert(Buffer.byteLength(JSON.stringify(bounded))<=65536);
+ assert(bounded.points.length>0&&bounded.points.length<large.length);
+ assert.deepEqual(bounded.points.map(p=>p.id),large.slice(0,bounded.points.length));
+ await assert.rejects(f.recovery.select(t.id,t.envelope('select',large[bounded.points.length])),/invalid_input/);
+});
+
+test('an explicit selection can refresh a superseded check until the first admitted read',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();
+ await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const original=await f.recovery.select(t.id,t.envelope('select',f.point.id));
+ await verifyPointFixture(db.pool,f.catalogue,f.point.id);
+ await assert.rejects(f.recovery.target(t.id,'read',t.envelope('read',f.point.digest)),/unverified/);
+ const updated=await f.recovery.select(t.id,t.envelope('select',f.point.id));
+ assert.equal(updated.point.id,original.point.id);
+ assert.equal(updated.operationExpiresAt,original.operationExpiresAt);
+ assert.notEqual(updated.verification?.requestDigest,original.verification?.requestDigest);
+ assert.deepEqual((await f.recovery.target(t.id,'read',t.envelope('read',f.point.digest))).verification,updated.verification);
+ await verifyPointFixture(db.pool,f.catalogue,f.point.id);
+ await assert.rejects(f.recovery.select(t.id,t.envelope('select',f.point.id)),/invalid_input/);
 });

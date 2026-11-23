@@ -104,7 +104,7 @@ test('restored replacement preserves venue and history, retires old authority, a
 });
 test('a restored continuous operation keeps the existing owner-confirmed replacement path',async()=>{
  const f=await ready(),generation=`gen-2-${f.point.sourceNodeId}-20260925T190000Z`;
- await db.pool.query(`UPDATE backup_recoveries SET source_kind='continuous',point_id=NULL,verification_target=NULL,verification_attempt_id=NULL,stream_configuration_revision=2,
+ await db.pool.query(`UPDATE backup_recoveries SET source_kind='continuous',point_id=NULL,verification_target=NULL,verification_attempt_id=NULL,selection_open=NULL,stream_configuration_revision=2,
   stream_generation=$2,stream_recoverable_at=clock_timestamp(),stream_source_node_id=$3 WHERE id=$1`,[f.t.id,generation,f.point.sourceNodeId]);
  const proposal=await f.store.machine('prepare',f.envelope('prepare'));assert.equal(proposal.source.kind,'continuous');assert.equal(proposal.pointId,null);
  const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));assert.equal(result.state,'complete');assert.equal(result.registration.venueId,f.installed.venueId);
