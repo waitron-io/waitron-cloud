@@ -1136,8 +1136,8 @@ checks; retirement does not authorize rewriting fiscal records or shipped histor
 
 ## Translate all, version 1
 
-The Cloud store, worker and original four routes implement the owner-approved translation
-design. The watcher cleared the [follow-up abandon action](superpowers/plans/2026-11-22-translation-abandon.md)
+The owner approved the original translation design.
+The watcher cleared the [follow-up abandon action](superpowers/plans/2026-11-22-translation-abandon.md)
 on 22 November 2026. Translation is off by default. Submit has its separate 2,113,536-byte,
 60-second reader and admission limit. Current owner consent is enforced at submit and worker lease;
 the account and portal consent controls and bounded retention sweeps are implemented.

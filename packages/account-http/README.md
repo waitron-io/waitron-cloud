@@ -682,7 +682,8 @@ its rate allowance is spent. Address grouping follows the existing trusted-proxy
 IPv4 and IPv6 rules. Collect returns the same compact JSON that the page builder sizes, bounded to
 16,777,216 UTF-8 bytes. Collect retains results; release deletes them after your
 caller has durably stored every page. To discard work before or after it finishes, send
-abandon with the original submit operation ID.
+abandon with the original submit operation ID. Cloud returns an untouched allowance
+if no worker has leased the job.
 
 With `CLOUD_TRANSLATION=1`, the account command sweeps retained menu text at startup and
 every minute, including when no translation worker runs. Startup cleanup failure refuses
