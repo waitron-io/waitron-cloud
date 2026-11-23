@@ -919,8 +919,11 @@ Repeat the same selection after a lost reply. If
 `select` returns `400 invalid_input`, refresh the list and let the person
 choose again. Choosing the same copy before download can pick up a newer
 successful check for that copy. The first admitted `read` or accepted `restored`
-fixes the copy and its check. A different choice then gets `409 conflict`. Continue to sign the
-archive digest for `read` and `restored` after selection.
+fixes the copy and its check. A different choice then gets `409 conflict`.
+Continue to sign the archive digest for `read` and `restored` after selection.
+If `info` or `read` returns `400 unverified` before any read was admitted,
+select the copy again. After an admitted read, close the request and start
+another if the saved check becomes unverified.
 
 `points` and `select` return `409 approval_required` for an authenticated
 request awaiting owner approval, or `410 unavailable` when it expires or
@@ -928,9 +931,11 @@ closes. An approved request without a selection returns `409 selection_required`
 on `info` or `read` signed with an empty value. A `restored` report before
 selection returns `401 invalid_proof`. If the approving sign-in has
 ended, `select` returns `403 proof_required`. Approve the same operation
-again with fresh proof before retrying. During the rollout, inspect an existing
-request again to see its current choice before repeating a named approval.
-A named approval for a different copy returns `409 conflict`.
+again with fresh proof before retrying. During the rollout, inspect the existing
+request to see its current choice before repeating a named approval. A named
+approval for a different copy returns `409 conflict`. If approval still returns
+a conflict because the selected copy's saved check was superseded, close the
+request and start another.
 
 ### External vault archive compatibility dependency
 
