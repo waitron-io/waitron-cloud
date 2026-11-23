@@ -750,12 +750,14 @@ multi-gateway coordination remain production gates.
 
 ## Venue email from Cloud, sent as the venue's own domain
 
-**Open; direction agreed on 21 November 2026, no design yet.** A venue's own mail
-server always wins. Without one, the free relay pilot covers staff account emails
-and five staff notices. The owner chose the notice scope on 22 November 2026.
-A paid venue has Cloud send every email the box sends, as its own domain or a
-Waitron address. The hard part is a DNS step a non-technical owner can finish alone,
-with a PDF they can forward to whoever runs their domain. [Decisions and open points](backlog/venue-email.md).
+**Open.** The owner approved the
+[paid venue email design](superpowers/specs/2026-11-23-venue-email-paid-design.md)
+on 23 November 2026. Build after D621, for release soon after go-live. A venue's
+own mail server always wins. Without one, the free relay pilot covers staff
+account emails and five staff notices. The paid design covers every email the
+box sends, from the venue's own domain or a Waitron address. Start by checking
+whether Amazon SES accepts the one-record domain setup.
+[Decisions and open work](backlog/venue-email.md).
 
 ## Launch platform work, in priority order
 

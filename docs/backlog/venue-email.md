@@ -1,7 +1,8 @@
 # Venue email: who sends it, and as which address
 
-**Paid venue email is open.** The owner set the direction on 21 November 2026
-and chose the five free staff notices on 22 November 2026. The
+**Paid venue email is open.** The owner approved the
+[paid venue email design](../superpowers/specs/2026-11-23-venue-email-paid-design.md)
+on 23 November 2026. Build after D621, for release soon after go-live. The
 [relay contract](../transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
 tracks the free test pilot.
 
@@ -33,40 +34,19 @@ on takes them ahead of a saved mail server. Waitron's backlog records that the o
 Cloud still has to keep its own list of blocked addresses and tell the venue, because Amazon
 judges Cloud's sending account by every bounce (see *Abuse limits* below).
 
-**A "download this PDF and forward it" option** sits beside doing the DNS step themselves,
-never in place of it. The PDF holds the exact records and the steps for the venue's domain
-company, so whoever runs the domain — often a web agency — can do it from that one document.
-A PDF that is forwarded is more likely to be read than a link.
+## Set up the sending domain
 
-## The DNS step has to suit a non-technical owner
+The design puts the email and remote access records on one page in the Cloud
+portal. Whoever runs the venue's domain will be able to copy each value or
+download the same list as a PDF to forward. Cloud will send from a Waitron
+address while it checks the records, with replies going to the venue's mailbox.
+It will switch to the venue's address once all the records check out and fall
+back with a notice if a record disappears.
 
-The open question is how technical the domain's owner is. The aim is that they can finish the
-step alone. Each point below is a proposal, not a decision.
-
-1. **Only add records, never change an existing one.** Editing a record is where people break
-   things; a second SPF record, for example, makes both fail. Use only names nobody else uses:
-   a DKIM name, and a sub-name such as `mail.barpepe.es` for bounces. The screen could then say
-   "Adding these can't affect your existing email". **Assumption, not tested:** test it against
-   a real domain before putting that sentence on screen.
-2. **As few records as possible.** Amazon SES's standard setup for a sending domain is three
-   DKIM records, plus two if bounces go to a sub-name of the venue's domain. **Assumption, not
-   tested:** pointing those names at records Cloud hosts could cut this to one or two, as the
-   [one-record custom domain](../superpowers/specs/2026-11-17-custom-domain-one-record-design.md)
-   does for remote access.
-3. **Automatic setup where the domain company supports it.** Domain Connect is an open standard
-   in which the owner signs in at their domain company, sees what Waitron wants to add, and
-   approves. **Not checked:** which domain companies common in Spain support it, and what
-   registering Cloud with each one involves.
-4. **Instructions for the venue's own domain company.** Look up who runs the domain from the
-   domain name, then show that company's steps with a copy button for each value. The same
-   steps go in the PDF.
-5. **Nothing waits on the venue.** It sends from the Waitron address at once. Cloud keeps
-   checking the records, switches to the venue's domain once they are right, and shows a tick
-   per record. If a record later disappears, it falls back to the Waitron address and shows a
-   notice. Invoices never stop.
-6. **One flow for both domains.** Setting up the domain for email and the
-   [custom domain for remote access](../backlog.md#custom-domains-with-one-record-and-names-that-follow-the-venue)
-   should feel like the same task, done on the same page.
+First verify whether Amazon SES accepts a signing key held by Waitron behind
+one DNS record. If SES refuses, use its standard three-record setup. Instructions
+specific to each domain company, one-click setup and add-only records come
+later. See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).
 
 ## Abuse limits
 
