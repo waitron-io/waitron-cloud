@@ -6,6 +6,7 @@ import {mkdtemp,readFile,writeFile,rm,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {gunzipSync} from 'node:zlib';
 import {setTimeout as delay} from 'node:timers/promises';
 import {ALL_MODULES} from '@waitron/composition';
 import {openVenueDatabase,invoiceSeries} from '@waitron/db';
@@ -46,7 +47,10 @@ it('recaptures the authorised source and prepares recovery for its new archive',
    nodeId:node.nodeId,db:suite.db,node:suite.node,modules:ALL_MODULES,environment:'preproduction',resolvers:{},stateDir:directory,recoveryKey,stagingDir:join(directory,'staging'),retain:100,retainDays:3650,destinationTimeoutMs:60000,signal:new AbortController().signal,log:()=>{},archive:path=>suite.db.archiveTo(path),
   });
   expect(artifact).toBeDefined();
-  const archive=artifact!,manifest=JSON.parse(unpackArchive(decryptArtifact(archive,recoveryKey)).find(entry=>entry.name==='manifest.json')!.bytes.toString());
+  const archive=artifact!;
+  const decrypted=decryptArtifact(archive,recoveryKey);
+  const plaintext=decrypted[0]===0x1f&&decrypted[1]===0x8b?gunzipSync(decrypted):decrypted;
+  const manifest=JSON.parse(unpackArchive(plaintext).find(entry=>entry.name==='manifest.json')!.bytes.toString());
   await writeFile(join(directory,'selected.enc'),archive,{mode:0o600});
   await writeFile(join(directory,'manifest.json'),JSON.stringify(manifest),{mode:0o600});
   // Native Node loads the compiled verifier; Vite must not transform its release/runtime stamps.
