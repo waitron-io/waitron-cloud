@@ -10,7 +10,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {prepareKindOutsideBaseline} from './kubernetes-outside.mjs';
 import {withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
-import {runKubernetesCheck} from './kubernetes-check.mjs';
+import {loadVerifierImage, runKubernetesCheck} from './kubernetes-check.mjs';
+import {runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
+import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
+import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
 
 import * as servicesScript from './kubernetes-services.mjs';
 const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
@@ -496,6 +499,24 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
   assert.equal(services.operationsReady, true);
   assert.equal(services.verifierScratchBytes, 1024 ** 3);
   assert.deepEqual(services.cleanup.remaining, []);
+});
+
+test('the outside client uses its local image while the verifier restores using the saved image', {
+  skip: !process.env.TEST_KUBERNETES_OUTSIDE_VERIFIER_IMAGE, timeout: 35 * 60 * 1000,
+}, async () => {
+  const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage,
+    TEST_KUBERNETES_OUTSIDE_VERIFIER_IMAGE: verifierImage} = process.env;
+  assert.notEqual(waitronImage, verifierImage);
+  const verificationTarget = await readRehearsalVerificationTarget();
+  const {services} = await runKubernetesNodeLoss({outsideServices: true,
+    services: context => servicesScript.runKubernetesServices({...context, baseline: true,
+      image, waitronImage, verifierImage, verificationTarget, prepareOutside: prepareKindOutsideBaseline,
+      importVerifierImage: (id, args) => {
+        assert.equal(id, verifierImage, 'the verifier must load the saved image');
+        return loadVerifierImage(id, [...context.kubeTarget(), '-n', servicesNamespace, ...args], context.env, context.signal);
+      }})});
+  assert.equal(services.backup.workerVerification.status, 'passed');
+  assert.equal(services.backup.workerVerification.childAbsent, true);
 });
 
 test('an owned Linux Kind cell signs in and admits a genuine restored backup', {
