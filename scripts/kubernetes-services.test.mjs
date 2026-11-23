@@ -452,7 +452,19 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
   skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: (stopOutsideServiceNodes ? 54 : 48) * 60 * 1000,
 }, async () => {
   assert.equal(process.platform, 'linux');
-  const {services, nodes} = await runKubernetesCheck('kind-baseline', {stopServiceNodes: stopOutsideServiceNodes});
+  const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage,
+    TEST_KUBERNETES_OUTSIDE_VERIFIER_IMAGE: verifierImage} = process.env;
+  const {services, nodes} = verifierImage ? await runKubernetesNodeLoss({outsideServices: true,
+    services: async context => {
+      assert.notEqual(waitronImage, verifierImage);
+      return servicesScript.runKubernetesServices({...context, baseline: true, image, waitronImage, verifierImage,
+        verificationTarget: await readRehearsalVerificationTarget(), prepareOutside: prepareKindOutsideBaseline,
+        stopServiceNodes: stopOutsideServiceNodes, restartAll: stopOutsideServiceNodes ? context.restartAll : undefined,
+        importVerifierImage: (id, args) => {
+          assert.equal(id, verifierImage, 'the verifier must load the saved image');
+          return loadVerifierImage(id, [...context.kubeTarget(), '-n', servicesNamespace, ...args], context.env, context.signal);
+        }});
+    }}) : await runKubernetesCheck('kind-baseline', {stopServiceNodes: stopOutsideServiceNodes});
   if (stopOutsideServiceNodes) {
     const legs = services.serviceStops;
     assert.deepEqual(legs.map(leg => leg.stopped).sort(), nodes.map(node => node.name).sort());
@@ -499,24 +511,6 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
   assert.equal(services.operationsReady, true);
   assert.equal(services.verifierScratchBytes, 1024 ** 3);
   assert.deepEqual(services.cleanup.remaining, []);
-});
-
-test('the outside client uses its local image while the verifier restores using the saved image', {
-  skip: !process.env.TEST_KUBERNETES_OUTSIDE_VERIFIER_IMAGE, timeout: 35 * 60 * 1000,
-}, async () => {
-  const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage,
-    TEST_KUBERNETES_OUTSIDE_VERIFIER_IMAGE: verifierImage} = process.env;
-  assert.notEqual(waitronImage, verifierImage);
-  const verificationTarget = await readRehearsalVerificationTarget();
-  const {services} = await runKubernetesNodeLoss({outsideServices: true,
-    services: context => servicesScript.runKubernetesServices({...context, baseline: true,
-      image, waitronImage, verifierImage, verificationTarget, prepareOutside: prepareKindOutsideBaseline,
-      importVerifierImage: (id, args) => {
-        assert.equal(id, verifierImage, 'the verifier must load the saved image');
-        return loadVerifierImage(id, [...context.kubeTarget(), '-n', servicesNamespace, ...args], context.env, context.signal);
-      }})});
-  assert.equal(services.backup.workerVerification.status, 'passed');
-  assert.equal(services.backup.workerVerification.childAbsent, true);
 });
 
 test('an owned Linux Kind cell signs in and admits a genuine restored backup', {
