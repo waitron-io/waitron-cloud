@@ -2,7 +2,7 @@
 
 The Stockholm rehearsal reached the outside paired venue and stopped as the
 fixture checked `ping -V`, before the first measured machine stop. In the
-exact x86 Cloud image, `/bin/ping` resolves to BusyBox. The version command
+x86 Cloud image rebuilt from the same commit and recipe, `/bin/ping` resolves to BusyBox. The version command
 exits 1 with “unrecognized option: V”. A single ping to loopback with the
 same flags used by the fixture succeeded with networking disabled.
 
@@ -15,20 +15,26 @@ D621 limits.
 
 - In `deploy/test-cloud/test-fixtures/integration-waitron-tunnel.test.mjs`,
   extend the existing peer tests. Exercise `measureWithVenuePeer` with a
-  fixture peer and a Docker boundary that refuses `ping -V`. Assert that
-  the stop callback runs once after a successful loopback ping. Check that
-  a failed loopback ping still refuses the stop. Run this file first and
-  observe the old version command block the successful case.
+  fixture peer. At the Docker boundary, expect exactly `exec <peer> ping
+  -n -I lo -c 1 -W 1 127.0.0.1` with the `remote-ping-tool` phase and
+  accept the subsequent `wg-cloud` ping. Assert one stop callback after
+  success. Return a phase-labelled error when the loopback ping fails
+  and assert that error and zero stop callbacks. Run this file before
+  changing the fixture and observe the old command fail the success case.
 - In `deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`, run one
   ping on the peer's loopback interface at the current `remote-ping-tool`
   check, using the same `-n -I … -c 1 -W 1` flags as the later traffic.
   This exercises the capability the fixture uses without depending on a
   particular ping implementation or an already-reachable gateway.
 - Rerun `node --test deploy/test-cloud/test-fixtures/integration-waitron-tunnel.test.mjs`.
-  Repeat the exact probe in the x86 Cloud image with networking disabled.
-  Update the D621 entry in `docs/backlog.md` with the hosted failure,
-  offline result and still-open qualification. No new dependency or image
-  change is needed.
+  Repeat the probe in the rebuilt x86 image with its peer sharing a
+  second, network-disabled container's namespace, with the fixture's
+  user, NET_ADMIN and 64 MiB limit. This verifies the tool and permissions.
+  Use the hosted run for the WireGuard traffic and recovery evidence.
+- Update D621 in `docs/backlog.md` with the failure, offline result and
+  open qualification. In `docs/aws-infrastructure.md`, replace the
+  iputils-specific instruction with the ping flags the fixture requires.
+  Run `node --test scripts/ci-docs.test.mjs` and `git diff --check`.
 
-Expected diff: about 1 fixture line replaced, 20–35 test lines added and
-a short backlog update.
+Expect one fixture line replaced, 20–35 test lines added and brief guide
+and backlog updates.
