@@ -1074,7 +1074,7 @@ image IDs. Kubernetes imports and the classic backup verifier use the saved
 bundle's configuration digests. For other launch modes, set `waitronCheckout` to the Waitron
 checkout containing the pinned verifier revision.
 No package token or AWS credential is copied to the three machines.
-Image build inputs must keep their recorded permissions when you launch from a private checkout.
+Image build inputs must not inherit the caller's file-permission setting.
 The launcher saves only Linux/AMD64 images and checks that the selected image
 manifest, configuration and layer files are in the archive before creating machines.
 A missing file stops the run there (`node --test scripts/amazon-run.test.mjs`).
