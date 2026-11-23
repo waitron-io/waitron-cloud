@@ -415,8 +415,7 @@ for (const exitsBeforeInspect of [true, false]) test(
         }
         if (args[0] === 'create') return id;
         if (args[0] === 'inspect') {
-          if (args[2].includes('.State.ExitCode')) return args[2].includes('.State.Status') ? 'exited 1' : '1';
-          if (!args[2].includes('.State.Running')) return '172.30.250.8';
+          if (args[2].includes('.State.ExitCode')) return 'exited 1';
           return exitsBeforeInspect ? 'false 172.30.250.8' : 'true 172.30.250.8';
         }
         if (args[1]?.includes('docker logs')) return 'MODULE_NOT_FOUND';
@@ -441,7 +440,7 @@ for (const inspectFails of [true, false]) test(
         if (args[0] === 'start') throw failure;
         if (args[0] === 'inspect') {
           if (inspectFails) throw Error('Docker inspect failed');
-          return args[2].includes('.State.Status') ? 'created 0' : '0';
+          return 'created 0';
         }
         assert.deepEqual(args, ['rm', '-f', id]);
       }}), error => error === failure);

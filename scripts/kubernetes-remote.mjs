@@ -184,7 +184,7 @@ export async function startRemoteRelay({cluster, nodes, run, tag, outside, servi
     const options = {signal: null, timeout: 5_000};
     const [state, exit] = (await run('docker', ['inspect', '--format',
       '{{.State.Status}} {{.State.ExitCode}}', relayId], options).catch(() => '')).split(' ');
-    if (state === 'exited' || state === 'dead') {
+    if (state === 'exited') {
       process.stderr.write('D621 relay exit code ' + exit + '\n');
       const log = await run('sh', ['-c', 'exec docker logs --tail 20 "$1" 2>&1', 'relay logs', relayId], options).catch(() => '');
       if (log) process.stderr.write(log + '\n');
