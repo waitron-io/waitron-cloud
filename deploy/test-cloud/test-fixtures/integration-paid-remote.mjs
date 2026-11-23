@@ -54,7 +54,7 @@ export async function measureWithVenuePeer({docker, peerId, peer, waitronTunnelI
 }
 
 async function withFixturePeerTraffic({docker, peerId, peer, signal}, measure) {
-  await docker(['exec', peerId, 'ping', '-V'], '', 'remote-ping-tool');
+  await docker(['exec', peerId, 'ping', '-n', '-I', 'lo', '-c', '1', '-W', '1', '127.0.0.1'], '', 'remote-ping-tool');
   const trafficStop = new AbortController();
   const trafficSignal = AbortSignal.any([trafficStop.signal, ...[signal].filter(Boolean)]);
   process.stderr.write('D621 fixture traffic: one venue ping through the paired peer every five seconds\n');

@@ -1510,8 +1510,10 @@ TEST_KUBERNETES_REMOTE_MACHINE_LOSS=1 node --test scripts/kubernetes-remote.test
 
 With the companion image set, the venue uses the companion's own traffic and
 checks that the original container, tunnel interface and peer key survive.
-Clear the companion image variable and include `iputils-ping` in the Cloud
-image to run the fixture control, which sends a marked ping every five seconds.
+Clear the companion image variable to run the fixture control, which sends
+a marked ping every five seconds. The Cloud image's `ping` must support
+`-n -I <interface> -c 1 -W 1`. The fixture checks those flags on loopback
+before it starts the measured stops.
 Both paths keep the account machine up. HTTPS and WireGuard go through
 one private relay address. The relay resolves all three node names and
 checks their TCP paths to the gateway Service. The socket test exercises
