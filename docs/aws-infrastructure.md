@@ -1392,16 +1392,17 @@ has fewer than two calls left. It starts the next machine stop once there
 is room for a request and a retry. The allowance is eight calls in 15 minutes.
 That pause happens before the 90-second recovery clock starts. The local
 machine-stop test has a 54-minute timeout. The guest’s separate 55-minute
-limit also covers setup. Long signup pauses and the database readiness wait
-can push the whole job past the guest limit before the test’s own timeout.
+limit also covers setup.
 
-Before opening the database restart check, the outside rehearsal waits up to
-180 seconds for the operator to report three ready copies and for the named
-primary to confirm it can write. Read the `D621 restart readiness` line for
-the first reported count, the final observation and any command error. If the
-check runs out of time or the restart cutoff intervenes, it reports
-`cold_restart.initial_primary` before writing the witness row or starting
-the full stop.
+Before writing the database witness row, the outside rehearsal waits up to
+180 seconds for the database controller to report three ready copies and
+for the named primary to report it is out of recovery. Read the
+`D621 restart readiness` line for the first reported count, the final
+observation and the most recent command error, if any. If the wait expires
+or is cancelled before it starts the write, it reports
+`cold_restart.initial_primary`. On Amazon the wait also observes the
+all-machine stop cutoff. Long signup pauses and this wait can push the local
+job past the guest limit before the test’s own timeout.
 
 Before the same journey stops all three machines, look in the rehearsal log
 for `D621 all-machine stop inventory`. It records which machine holds the
