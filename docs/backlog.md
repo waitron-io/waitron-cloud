@@ -1884,6 +1884,13 @@ implementation or production evidence.
   archive with readable source modes and captures a stopped relay’s exit code
   and recent log. Check the launch path with `node --test scripts/amazon-run.test.mjs
   scripts/kubernetes-remote.test.mjs`. Run 11's relay exit remains unconfirmed.
+  A later Stockholm attempt reached the venue client, which exited with
+  `integration.client_exited:EACCES` before the first machine stop. An offline
+  x86 build on 23 November reproduced the startup error from mode-0600 sources.
+  With explicit copy modes, passing `{"phase":"ready"}` to
+  `docker exec -i <client> node /proof/integration-control.mjs` with the venue's
+  TLS certificate trusted returned `{"ready":true}` on attempt 46. User 1000
+  opened the entrypoint and all 14 other runtime scripts in the same container.
   Full Stockholm qualification remains open.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
