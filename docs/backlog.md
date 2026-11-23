@@ -1863,9 +1863,11 @@ implementation or production evidence.
   work. Each rejoin checks the returning store peers and requires the repair
   report to clear offline or missing shards before the next stop. After a
   healthy return, the local rehearsal waits for room for a signup request
-  and retry before the next recovery clock starts. The returning store
-  port timeout and the timed dry run remain open. Stockholm still needs
-  its own measurements.
+  and retry before the next recovery clock starts. Before the all-machine
+  stop, the outside rehearsal now waits up to 180 seconds for three ready
+  database copies and a writable primary. The returning store port timeout,
+  a passing full exact-image dry run and Stockholm’s own measurements remain
+  open.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
   an overdue probe ran. HTTPS transport failures log the route and error. Run

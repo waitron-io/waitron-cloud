@@ -1,6 +1,6 @@
 # D621 restart readiness proposal
 
-The 22 November disposable Linux capture reproduced the refusal before the all-machine stop. At each of three returns, direct SQL confirmed one writable primary and two read-only copies, and CloudNativePG counted two ready. After the third storage repair, the restart witness still counted two and confirmed the reported primary was writable. A readiness probe on the returning standby reported HTTP 500. The samples do not show why the readiness probe failed, whether the count reached three between samples, or when it would have reached three. [Witness](../../../scripts/kubernetes-cold-restart.mjs#L19)
+The 22 November disposable Linux capture reproduced the refusal before the all-machine stop. At each of three returns, direct SQL confirmed one writable primary and two read-only copies, and CloudNativePG counted two ready. After the third storage repair, the restart witness still counted two and confirmed the reported primary was writable. A readiness probe on the returning standby reported HTTP 500. The samples do not show why the readiness probe failed, whether the count reached three between samples, or when it would have reached three. [Witness](../../../scripts/kubernetes-cold-restart.mjs)
 
 The bounded wait tests whether the third copy becomes ready within the existing recovery allowance. The watcher cleared one disposable Linux trial on 22 November at 00:28.
 
