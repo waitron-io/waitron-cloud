@@ -84,7 +84,7 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
 }
 
 import {execFile, spawn} from 'node:child_process';
-import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {isIPv4} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -196,6 +196,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   assert.equal(await run('git', ['status', '--porcelain']), '', 'Use a clean, committed Cloud checkout');
   const name = 'd618-' + randomUUID();
   const directory = await mkdtemp(join(tmpdir(), 'd618-')), ownedImages = [];
+  const sourceArchive = join(directory, 'source.tar'), sourceDirectory = join(directory, 'source');
   const cloud = name + ':cloud', waitron = name + ':waitron', store = name + ':store';
   let hosts, mesh, networkId, failure;
   const closeHost = async () => {
@@ -212,10 +213,14 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
     '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=yes', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
   try {
+    // The relay reads the image as user 1000 even when the launch checkout is private.
+    await run('git', ['-c', 'tar.umask=0022', 'archive', '--format=tar', '-o', sourceArchive, 'HEAD']);
+    await mkdir(sourceDirectory, {mode: 0o700});
+    await run('tar', ['-xpf', sourceArchive, '-C', sourceDirectory]);
     ownedImages.push(cloud);
     await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',
       '--secret', 'id=npm_token,env=NODE_AUTH_TOKEN', '--build-arg', 'SEAWEED_AMD64_SHA256=31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d',
-      '-f', 'deploy/local-stack/Dockerfile', '-t', cloud, '.'], undefined, false, 900000);
+      '-f', join(sourceDirectory, 'deploy/local-stack/Dockerfile'), '-t', cloud, sourceDirectory], undefined, false, 900000);
     ownedImages.push(waitron);
     if (config.measuredStops) await run('docker', ['tag', config.rehearsedWaitronImage, waitron]);
     else await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
@@ -260,7 +265,6 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
     const bytes = parseInt(await run('wc', ['-c', join(directory, 'images.tar')]), 10);
     const archiveCopyTimeout = Math.ceil(bytes * 8 / 10000000 * 1000) + 60000;
     process.stderr.write('Image bundle ' + bytes + ' bytes; one upload and private copies each have ' + archiveCopyTimeout + ' ms (10 Mbit/s cutoff plus 60 seconds)\n');
-    await run('git', ['archive', '--format=tar', '-o', join(directory, 'source.tar'), 'HEAD']);
     // Stockholm's 150-minute limit includes five minutes to confirm deletion.
     const expiry = now() + (config.measuredStops ? 145 : 90) * 60_000;
     if (config.measuredStops) {

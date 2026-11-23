@@ -1877,10 +1877,14 @@ implementation or production evidence.
   database copies and a primary out of recovery. On 23 November the full
   saved-image Linux rehearsal passed all three individual stops and repairs
   and restored a new backup after the all-machine restart. The earlier
-  returning-store timeout remains unexplained. Stockholm run 10 stopped before
-  signup when launch-host Docker rejected the bundle configuration digest as a
-  local image ID. Repeat the measured runs from the corrected launcher to
-  qualify signup, individual machine stops and the all-machine restart there.
+  returning-store timeout remains unexplained. Stockholm run 11 passed image
+  loading and Git publication, then timed out at outside account readiness.
+  A free control reproduced the timeout with a private checkout whose image
+  could not start the unprivileged relay. The launcher stages the committed
+  archive with readable source modes and captures a stopped relay’s exit code
+  and recent log. Check the launch path with `node --test scripts/amazon-run.test.mjs
+  scripts/kubernetes-remote.test.mjs`. Run 11's relay exit remains unconfirmed.
+  Full Stockholm qualification remains open.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
   an overdue probe ran. HTTPS transport failures log the route and error. Run

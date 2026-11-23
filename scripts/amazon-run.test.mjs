@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readFile} from 'node:fs/promises';
+import {readFile, stat} from 'node:fs/promises';
+import {dirname, join} from 'node:path';
 import {existsSync} from 'node:fs';
 const api = await import('./amazon-run.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
 
@@ -289,6 +290,14 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
+  const checksSource = scenario === 'baseline measured stops';
+  const relayPath = 'deploy/kubernetes/remote-relay.mjs';
+  let sourceArchive, sourceBytes;
+  const underPrivateUmask = (binary, args) => {
+    const result = spawnSync('sh', ['-c', 'umask 077; exec "$@"', 'private source', binary, ...args]);
+    assert.equal(result.status, 0, result.stderr?.toString());
+    return result.stdout;
+  };
   const imageHash = tag => scenario === 'baseline measured stops' && tag.endsWith(':cloud') ? 'd'.repeat(64) : hashes;
   const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false, tunnelCloseAttempts = 0;
@@ -444,6 +453,33 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         transports.push({binary,args,input,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
       if (binary === 'uname') return 'x86_64';
+      if (checksSource && binary === 'git' && args.includes('archive')) {
+        assert.equal(sourceArchive, undefined, 'write the source archive once');
+        sourceArchive = args[args.indexOf('-o') + 1];
+        underPrivateUmask('git', ['-c', 'tar.umask=user', ...args]);
+        sourceBytes = await readFile(sourceArchive);
+        return '';
+      }
+      if (checksSource && binary === 'tar' && args.includes('-C')) {
+        assert.equal(args[1], sourceArchive, 'extract the archive used for machine uploads');
+        underPrivateUmask('tar', args);
+        return '';
+      }
+      if (checksSource && binary === 'docker' && args[0] === 'buildx' && args.at(-2).endsWith(':cloud')) {
+        assert.ok(sourceArchive, 'archive the committed source before the Cloud image build');
+        const stage = join(dirname(sourceArchive), 'source');
+        assert.equal(args.at(-1), stage);
+        assert.equal(args[args.indexOf('-f') + 1], join(stage, 'deploy/local-stack/Dockerfile'));
+        assert.equal(args[args.indexOf('--secret') + 1], 'id=npm_token,env=NODE_AUTH_TOKEN');
+        assert.equal(existsSync(join(stage, 'source.tar')), false);
+        assert.equal((await stat(join(stage, 'deploy'))).mode & 0o777, 0o755);
+        assert.equal((await stat(join(stage, relayPath))).mode & 0o777, 0o644);
+        assert.deepEqual(await readFile(join(stage, relayPath)), underPrivateUmask('tar', ['-xOf', sourceArchive, relayPath]));
+      }
+      if (checksSource && binary === 'scp' && args.at(-1).endsWith(':/tmp/d618-source.tar')) {
+        assert.equal(args.at(-2), sourceArchive);
+        assert.deepEqual(await readFile(args.at(-2)), sourceBytes, 'upload the same source bytes');
+      }
       if (binary === 'docker' && args[0] === 'tag' && args[1] === rehearsedWaitronImage &&
         scenario === 'baseline missing rehearsal image') throw Error('saved image unavailable');
       if (binary === 'docker' && args[0] === 'network' && args[1] === 'create') return 'd'.repeat(64);

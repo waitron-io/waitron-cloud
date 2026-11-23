@@ -1074,6 +1074,8 @@ image IDs. Kubernetes imports and the classic backup verifier use the saved
 bundle's configuration digests. For other launch modes, set `waitronCheckout` to the Waitron
 checkout containing the pinned verifier revision.
 No package token or AWS credential is copied to the three machines.
+Image build inputs must not inherit the caller's file-permission setting.
+The launcher takes the image’s source files from the committed archive.
 The launcher saves only Linux/AMD64 images and checks that the selected image
 manifest, configuration and layer files are in the archive before creating machines.
 A missing file stops the run there (`node --test scripts/amazon-run.test.mjs`).
@@ -1355,6 +1357,8 @@ existing remote-access check sends signed staff and public HTTPS through the
 relay, whose upstreams are the three private addresses.
 
 ### Rehearse the full service journey from outside the cell
+
+Build the free rehearsal image from committed source with its recorded file modes. The outside relay runs as user 1000 and must be able to read its script.
 
 Use the same pinned Cloud and Waitron images as the services rehearsal
 and run on the disposable Linux host used for the outside networking check.
