@@ -895,7 +895,36 @@ checks that the replacement does not inherit `backup.env`, Cloud machine authori
 or staff TLS material. The replacement then registers with a fresh installation and
 machine public key.
 
-### External vault archive compatibility dependency
+### Choosing a checked snapshot on the box
+
+For a test venue, Cloud can approve a version-2 recovery request with
+`source: "snapshot"` and `venueId`. A named `pointId` approval still starts with
+that snapshot selected, so the existing portal and rehearsal can keep using `info`.
+Release the box's chooser before changing the portal to approve the venue alone.
+
+Send `POST /api/recovery/points` and `POST /api/recovery/select` with the same
+version-2 envelope and rate limits as `info`. Sign the tuple
+`["waitron-cloud-recovery-v2", origin, requestId, action, value, targetDigest, timeMs]`
+with the key from the request. Use an empty value for `points` and a copy ID for
+`select`. `points` returns `version`, `venueId`, `operationExpiresAt` and
+`points`. Each entry has the same fields as `info.point`. Cloud returns only
+available snapshots from the approved venue with a current check for the exact
+target. The first entry is the newest. The list has at most 50 entries and the
+JSON reply fits in 65,536 UTF-8 bytes.
+
+`select` returns the full `info` reply, including the point and its check.
+Save them together. Repeat the same selection after a lost reply. If
+`select` returns `400 invalid_input`, refresh the list and let the person
+choose again. The first admitted `read` or accepted `restored` fixes the
+choice. A different choice then gets `409 conflict`. Continue to sign the
+archive digest for `read` and `restored` after selection.
+
+`points` and `select` return `409 approval_required` for an authenticated
+request awaiting owner approval, or `410 unavailable` when it expires or
+closes. An approved request without a selection returns `409 selection_required`
+on `info` or `read` signed with an empty value.
+
+## External vault archive compatibility dependency
 
 No archive extension is needed for the current managed path because its encrypted
 Waitron state contains the application vault key. A future hosted target that keeps

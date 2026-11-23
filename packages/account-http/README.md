@@ -718,7 +718,10 @@ authorise it again.
 
 Replacement POST routes under `/api/recovery/` require signed fresh-key proof and reject
 browser Origin headers. `start` and `status` carry matching request proof; `info`, `read`
-and `restored` carry operation proof. New requests allow ten calls per fifteen minutes
+and `restored` carry operation proof. A version-2 box can also use signed `points`
+and `select` with the same limits as `info`. Owner approval may name only the venue
+with `source: "snapshot"` and `venueId`. See the [copy selection contract](../../docs/waitron-integration-contract.md#choosing-a-checked-snapshot-on-the-box)
+for reply bounds, selection and refusal codes. New requests allow ten calls per fifteen minutes
 per IP and proven key. Other machine calls share thirty per minute per IP and proven
 key; owner calls allow thirty per minute per account. The global IP allowance also applies.
 Execution rechecks authority after any provider wait. Expiry uses the database clock.

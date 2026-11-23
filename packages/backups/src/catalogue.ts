@@ -209,6 +209,17 @@ export async function venuePoints(
   );
   return rows.rows.map(decodedPoint);
 }
+export async function checkedRecoveryPoints(client:PoolClient,venueId:string,targetDigest:string,pointId?:string) {
+  const {rows}=await client.query<StoredPoint & {attemptId:string}>(
+    `SELECT ${pointColumns},q.verification_id AS "attemptId" FROM ${qualifiedPoints}
+      WHERE p.venue_id=$1 AND q.current_verification='verified' AND q.qualified_target_digest=$2
+        AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL
+        AND p.object_key='snapshots/' || p.id::text AND ($3::uuid IS NULL OR p.id=$3)
+      ORDER BY p.captured_at DESC,p.id DESC LIMIT 50`,
+    [venueId,targetDigest,pointId??null],
+  );
+  return rows.map(({attemptId,...row})=>({point:decodedPoint(row),attemptId}));
+}
 export async function pointKeys(
   client: PoolClient,
   vault: BackupKeyVault,

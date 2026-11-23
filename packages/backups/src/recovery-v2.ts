@@ -17,8 +17,10 @@ export function recoveryNegotiation(proof:RecoveryMachineEnvelope){
 export function requestPayloadV2(origin:string,id:string,action:'start'|'status',key:string,code:string,targetDigest:string,issuedAt:number){
  return Buffer.from(JSON.stringify(['waitron-cloud-recovery-request-v2',origin,id,action,key,code,targetDigest,issuedAt]));
 }
-export function recoveryPayloadV2(origin:string,id:string,action:'info'|'read'|'restored',digest:string,targetDigest:string,issuedAt:number){
- return Buffer.from(JSON.stringify(['waitron-cloud-recovery-v2',origin,id,action,digest,targetDigest,issuedAt]));
+export type RecoverySelectionAction = 'points' | 'select';
+export type RecoveryAction = 'info' | 'read' | 'restored' | RecoverySelectionAction;
+export function recoveryPayloadV2(origin:string,id:string,action:RecoveryAction,value:string,targetDigest:string,issuedAt:number){
+ return Buffer.from(JSON.stringify(['waitron-cloud-recovery-v2',origin,id,action,value,targetDigest,issuedAt]));
 }
 export function readRecoveryMachineEnvelope(raw:string,withId:boolean):RecoveryMachineEnvelope&{id?:string}{
  const value=parseBackupVerificationJson(raw,65536);

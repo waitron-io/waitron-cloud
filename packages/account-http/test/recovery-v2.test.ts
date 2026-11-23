@@ -120,3 +120,40 @@ for(const fault of ['version','missing-id','start-id','payload-bound','signature
  const headers={'content-type':fault==='content-type'?'text/plain':'application/json',...(fault==='encoding'?{'content-encoding':'gzip'}:{})};
  await assert.rejects(readRecoveryMachineBody(new Request(origin,{method:'POST',headers,body:JSON.stringify(proof)}),fault==='missing-id'),e=>e instanceof Error&&'status' in e&&e.status===(fault==='content-type'||fault==='encoding'?415:400));
 });
+
+test('signed box requests list and select a copy after venue-only approval',async()=>{
+ const f=await fixture(),t=machineTarget();
+ const expectError=async(action:string,body:unknown,status:number,error:string)=>{
+  const response=await f.post(action,body);
+  assert.equal(response.status,status);
+  assert.deepEqual(await response.json(),{error});
+ };
+ assert.equal((await f.post('start',t.envelope('start'))).status,200);
+ await expectError('points',t.envelope('points'),409,'approval_required');
+ const forged=t.envelope('points');
+ forged.signature=machineTarget().sign(Buffer.from(forged.payload,'base64url'));
+ await expectError('points',forged,401,'invalid_proof');
+ const approval=await f.post('approve',{requestId:t.id,code:t.code,source:'snapshot',venueId:f.installed.venueId,oldServerUnavailable:'true',acceptDataLoss:'true'},true);
+ assert.equal(approval.status,200);
+ const {operation}=await approval.json();
+ assert.equal(operation.pointId,null);
+ await expectError('info',t.envelope('info'),409,'selection_required');
+ await expectError('read',t.envelope('read'),409,'selection_required');
+ assert.equal(f.grants(),0);
+ const list=await f.post('points',t.envelope('points'));
+ assert.equal(list.status,200);
+ assert.deepEqual(await list.json(),{version:2,venueId:f.installed.venueId,operationExpiresAt:operation.expiresAt,points:[{...f.point,verification:'verified'}]});
+ await expectError('select',t.envelope('select',f.point.id,Date.now(),origin,1),401,'invalid_proof');
+ const selected=await f.post('select',t.envelope('select',f.point.id));
+ assert.equal(selected.status,200);
+ const metadata=await selected.json();
+ assert.equal(metadata.point.id,f.point.id);
+ assert.deepEqual(metadata.verification.target,t.target);
+ assert.deepEqual(await (await f.post('info',t.envelope('info'))).json(),metadata);
+ const read=await f.post('read',t.envelope('read',f.point.digest));
+ assert.equal(read.status,200);
+ assert.equal((await read.json()).recoveryKey,f.capture.keys.recoveryKey);
+ assert.equal(f.grants(),1);
+ assert.equal((await f.post('close',{requestId:t.id,code:t.code},true)).status,200);
+ await expectError('points',t.envelope('points'),410,'unavailable');
+});

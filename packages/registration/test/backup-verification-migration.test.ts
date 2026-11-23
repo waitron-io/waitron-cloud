@@ -131,7 +131,7 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     assert.deepEqual((await p.query('SELECT current_evidence_id,last_attempt_id FROM backup_points')).rows, [{current_evidence_id: null, last_attempt_id: null}]);
     assert.equal((await p.query('SELECT current_verification FROM backup_point_qualification')).rows[0].current_verification, 'pending');
     assert.equal((await p.query("SELECT EXISTS(SELECT 1 FROM backup_verifications WHERE point_id=$1 AND outcome='verified') AS protected", [f.point])).rows[0].protected, true);
-    for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null});
+    for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null, selection_open: null});
     for(const entry of allBefore.venues as {row:Record<string,unknown>}[]){
       delete entry.row.local_venue_id;
       entry.row.display_name=null;
