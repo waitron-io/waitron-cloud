@@ -48,4 +48,6 @@ continuous choice and both confirmations. Drop the snapshot picker and show the
 loss warning in English and Spanish. Add browser checks and inspect both
 languages and themes at 390 and 1280 pixels. Update the operator guide and backlog.
 Estimate 60–90 production lines and 60–90 test lines. Release order is Cloud server,
-Waitron PR 6e, Cloud approval page.
+Waitron PR 6e, Cloud approval page. The watcher's 23:39 review decision keeps
+named approvals changeable and permits an empty list. PR 6e shows and confirms
+the final copy, with a case where it differs from the copy first named in Cloud.

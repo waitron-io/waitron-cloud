@@ -442,6 +442,17 @@ test('old_recovery_has_no_v2_identity', async () => {
   } finally {await f.close();}
 });
 
+test('only an open snapshot selection can omit its point', async () => {
+  const f = await fixture(); try {
+    const id = randomUUID();
+    await f.c.query("INSERT INTO backup_recoveries(id,venue_id,account_id,target_public_key,mode,selection_open) VALUES($1,$2,$3,$4,'failure',true)", [id, f.venue, f.account, randomUUID()]);
+    await rejected(f, () => f.c.query('UPDATE backup_recoveries SET selection_open=false WHERE id=$1', [id]), ['23514']);
+    const continuous="source_kind='continuous',stream_configuration_revision=1,stream_generation='generation',stream_recoverable_at=clock_timestamp(),stream_source_node_id=$2";
+    await rejected(f, () => f.c.query(`UPDATE backup_recoveries SET ${continuous} WHERE id=$1`, [id,f.node]), ['23514']);
+    await f.c.query(`UPDATE backup_recoveries SET ${continuous},selection_open=NULL WHERE id=$1`, [id,f.node]);
+  } finally {await f.close();}
+});
+
 test('concurrent_upgrade_is_once_and_applied_sql_unchanged', async () => {
   assert.equal(migrationNames.at(45), '046_venue_service_authority.sql', 'the release includes venue service authority');
   assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrationNames.at(53),'054_staff_problem_reports.sql');assert.equal(migrationNames.at(54),'055_billing_method_setups.sql');assert.equal(migrationNames.at(55),'056_sign_in_checks.sql');assert.equal(migrationNames.at(56),'057_recognised_browsers.sql');assert.equal(migrationNames.at(57),'058_account_recovery_codes.sql');assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(60),'061_connection_action_proof.sql');assert.equal(migrationNames.at(61),'062_billing_method_action_proof.sql');assert.equal(migrationNames.at(62),'063_recovery_action_proof.sql');assert.equal(migrationNames.at(63),'064_cloud_pairing_v2.sql');assert.equal(migrationNames.at(64),'065_guest_menus.sql');assert.equal(migrationNames.at(65),'066_guest_menu_languages.sql');

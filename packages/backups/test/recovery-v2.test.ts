@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {createPublicKey,verify,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {receipt} from '../src/storage.ts';
 import {ManagedStreams} from '../src/managed-streams.ts';
-import {verifyPointFixture} from './fixtures/verification.ts';
+import {admitPointFixture,verifyPointFixture} from './fixtures/verification.ts';
 import {requestPayloadV2,recoveryPayloadV2} from '../src/recovery-v2.ts';
 import {database} from '../../account-http/test/fixtures.ts';
 import {verifyRecoveryRequest,requestPayload} from '../src/recovery-request.ts';
@@ -207,11 +207,11 @@ test('v2 proof expiry during an acknowledged archive-key wait prevents key discl
  }finally{Date.now=now;await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 });
 
-async function anotherCopy(f:Awaited<ReturnType<typeof recoveryFixture>>,checked=true,modules={core:1} as Record<string,number>) {
+async function anotherCopy(f:Awaited<ReturnType<typeof recoveryFixture>>,checked=true,modules:Record<string,number>={core:1},capturedAt=new Date().toISOString()) {
  const capture=await f.catalogue.reserveCapture(f.installed.installationId,randomUUID());
  const bytes=Buffer.from(capture.id);
  f.objects.set(capture.incomingKey,bytes);
- const point=await f.catalogue.publish(f.installed.installationId,capture.id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules});
+ const point=await f.catalogue.publish(f.installed.installationId,capture.id,{...receipt(bytes),capturedAt,retention:'daily',sourceNodeId:randomUUID(),modules});
  if(checked)await verifyPointFixture(db.pool,f.catalogue,point.id);
  return point;
 }
@@ -279,15 +279,18 @@ test('selection cannot change once a competing read acquires the venue lock firs
 
 test('box listing and new selections share the entry and whole-response size limits',async()=>{
  const f=await recoveryFixture(db),t=machineTarget();
- const ids=[f.point.id];
- for(let i=0;i<50;i++)ids.unshift((await anotherCopy(f)).id);
+ const copies=async(count:number,offset:number,modules:Record<string,number>)=>{
+  const points=await Promise.all(Array.from({length:count},(_,i)=>anotherCopy(f,false,modules,new Date(Date.parse(f.point.capturedAt)+offset+i).toISOString())));
+  await Promise.all(points.map(p=>admitPointFixture(db.pool,p.id)));
+  return points.reverse().map(p=>p.id);
+ };
+ const ids=await copies(50,1,{core:1});
  await f.requests.machine('start',t.envelope('start'));
  await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{source:'snapshot',venueId:f.installed.venueId,oldServerUnavailable:true,acceptDataLoss:true});
  const list=await f.recovery.points(t.id,t.envelope('points'));
- assert.deepEqual(list.points.map(p=>p.id),ids.slice(0,50));
+ assert.deepEqual(list.points.map(p=>p.id),ids);
  const modules=Object.fromEntries(Array.from({length:64},(_,i)=>['owner-'+String(i).padStart(3,'0')+'a'.repeat(54),1]));
- const large=[];
- for(let i=0;i<16;i++)large.unshift((await anotherCopy(f,true,modules)).id);
+ const large=await copies(16,51,modules);
  const bounded=await f.recovery.points(t.id,t.envelope('points'));
  assert(Buffer.byteLength(JSON.stringify(bounded))<=65536);
  assert(bounded.points.length>0&&bounded.points.length<large.length);

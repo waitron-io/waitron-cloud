@@ -913,7 +913,9 @@ target. The first entry is the newest. The list has at most 50 entries and the
 JSON reply fits in 65,536 UTF-8 bytes.
 
 `select` returns the full `info` reply, including the point and its check.
-Save them together. Repeat the same selection after a lost reply. If
+Save them together and show the returned copy for confirmation before starting
+the restore, including when it differs from a copy originally named in Cloud.
+Repeat the same selection after a lost reply. If
 `select` returns `400 invalid_input`, refresh the list and let the person
 choose again. The first admitted `read` or accepted `restored` fixes the
 choice. A different choice then gets `409 conflict`. Continue to sign the
@@ -922,9 +924,11 @@ archive digest for `read` and `restored` after selection.
 `points` and `select` return `409 approval_required` for an authenticated
 request awaiting owner approval, or `410 unavailable` when it expires or
 closes. An approved request without a selection returns `409 selection_required`
-on `info` or `read` signed with an empty value.
+on `info` or `read` signed with an empty value. If the approving sign-in has
+ended, `select` returns `403 proof_required`. Approve the same operation
+again with fresh proof before retrying.
 
-## External vault archive compatibility dependency
+### External vault archive compatibility dependency
 
 No archive extension is needed for the current managed path because its encrypted
 Waitron state contains the application vault key. A future hosted target that keeps

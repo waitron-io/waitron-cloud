@@ -121,7 +121,6 @@ function validateProof(
     if(!Array.isArray(v)||v.length!==(persisted?7:6)||!Number.isSafeInteger(v[time])||Math.abs(Date.now()-v[time])>60000)throw Error();
     const signedValue=action==='select'?v[4]:value;
     if(action==='select'&&!uuid(signedValue))throw Error();
-    if(!persisted&&(action==='points'||action==='select'))throw Error();
     const expected=persisted?recoveryPayloadV2(origin,id,action,signedValue,persisted.digest,v[time]):recoveryPayload(origin,id,action as 'info'|'read'|'restored',signedValue,v[time]);
     if(!expected.equals(bytes)||!verify(null,bytes,publicKey(key),decode(proof.signature,86)))throw Error();
     return signedValue as string;
