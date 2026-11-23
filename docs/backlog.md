@@ -1891,7 +1891,13 @@ implementation or production evidence.
   `docker exec -i <client> node /proof/integration-control.mjs` with the venue's
   TLS certificate trusted returned `{"ready":true}` on attempt 46. User 1000
   opened the entrypoint and all 14 other runtime scripts in the same container.
-  Full Stockholm qualification remains open.
+  The next Stockholm attempt reached the paired venue and stopped before any
+  machine stop. The rebuilt x86 Cloud image reproduced BusyBox rejecting `ping -V`
+  and passed a loopback ping with networking disabled. The fixture now checks the
+  flags it needs by sending that ping. Run
+  `node --test deploy/test-cloud/test-fixtures/integration-waitron-tunnel.test.mjs`
+  to check that a failed probe prevents measured stops. Full Stockholm
+  qualification remains open.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
   an overdue probe ran. HTTPS transport failures log the route and error. Run
