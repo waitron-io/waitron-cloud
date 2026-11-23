@@ -1075,7 +1075,7 @@ bundle's configuration digests. For other launch modes, set `waitronCheckout` to
 checkout containing the pinned verifier revision.
 No package token or AWS credential is copied to the three machines.
 Image build inputs must not inherit the caller's file-permission setting.
-The Cloud image uses only files from the committed source archive.
+The launcher takes the image’s source files from the committed archive.
 The launcher saves only Linux/AMD64 images and checks that the selected image
 manifest, configuration and layer files are in the archive before creating machines.
 A missing file stops the run there (`node --test scripts/amazon-run.test.mjs`).
