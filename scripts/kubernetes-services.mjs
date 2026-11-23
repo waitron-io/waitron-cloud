@@ -28,6 +28,7 @@ const require = createRequire(new URL('../packages/backups/package.json', import
 const {CreateBucketCommand} = require('@aws-sdk/client-s3');
 const asset = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 const timeout = 185_000;
+const databaseRejoinMs = 180_000;
 const resource = (kind, name, body) => ({
   apiVersion: kind === 'Job' ? 'batch/v1' : 'v1', kind, metadata: {name, namespace: servicesNamespace}, ...body,
 });
@@ -457,7 +458,7 @@ export async function runKubernetesServices(context) {
             "SELECT pg_is_in_recovery() || ':' || current_setting('transaction_read_only')"], undefined, signal),
         ]));
         return states.every(([pod, state]) => state === (pod === writer.pod ? 'false:off' : 'true:on')) && writer.node;
-      }, expected.length === 3 ? 180_000 : 90_000, limit, 'one_writable_primary');
+      }, expected.length === 3 ? databaseRejoinMs : 90_000, limit, 'one_writable_primary');
       const outsideStore = signal => run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
         servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
         'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal});
@@ -469,7 +470,8 @@ export async function runKubernetesServices(context) {
           restartAll, inventory, probes, checkStore: outsideStore, signal,
           async inspectionReady(limit) {return (await readyServices(limit, 'inspect')).length > 0;},
           storeOutage: signal => readOutsideStore({host: remoteTarget.gatewayIp, ca: store.ca, signal}),
-          prepare: () => prepareDatabaseWitness({kube: context.kube, signal}),
+          prepare: () => prepareDatabaseWitness({kube: context.kube, signal,
+            initialReadiness: {ms: databaseRejoinMs, signal: stopSignal}}),
           async restore(witness) {
             const started = performance.now();
             const limit = AbortSignal.any([signal, AbortSignal.timeout(240_000)]);

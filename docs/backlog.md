@@ -1115,9 +1115,12 @@ implementation or production evidence.
   The driver takes one fresh sample when inspection exits with code 1 and
   every error names a missing listed Cloud container. A second removal
   during the retry still fails the run. The same command checks that the CLI
-  prints the error and its underlying cleanup errors. The real-stack settings
-  restart, Stockholm's original restart cause and the joint box email trial
-  remain open. Signed configuration now discovers a relay-grant hint without
+  prints the error and its underlying cleanup errors. A disposable Linux
+  run of the real Compose files passed both same-image account replacements
+  and restored the synthetic Billing list. Each replacement interrupted
+  five sampled HTTPS requests before readiness returned. Stockholm's
+  original restart cause and the joint box email trial remain open.
+  Signed configuration now discovers a relay-grant hint without
   advancing service configuration. The test-only private-origin
   approval core accepts a signed statement under the current key-bound lease and
   owner consent, with synthetic checks for production refusal. The
@@ -1863,9 +1866,13 @@ implementation or production evidence.
   work. Each rejoin checks the returning store peers and requires the repair
   report to clear offline or missing shards before the next stop. After a
   healthy return, the local rehearsal waits for room for a signup request
-  and retry before the next recovery clock starts. The returning store
-  port timeout and the timed dry run remain open. Stockholm still needs
-  its own measurements.
+  and retry before the next recovery clock starts. Before the all-machine
+  stop, the outside rehearsal now waits up to 180 seconds for three ready
+  database copies and a primary out of recovery. On 23 November the full
+  saved-image Linux rehearsal passed all three individual stops and repairs
+  and restored a new backup after the all-machine restart. The earlier
+  returning-store timeout remains unexplained. Stockholm still needs its
+  own measurements.
   The saved-image Linux run reached the third stop before an HTTPS probe
   failed after recovery. The observer keeps the failure and reports how long
   an overdue probe ran. HTTPS transport failures log the route and error. Run

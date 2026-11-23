@@ -3,28 +3,61 @@ import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {installStockholmDatabase} from './kubernetes-data.mjs';
+import {untilRemote} from './kubernetes-remote.mjs';
 
 const namespace = 'd621-data', database = 'cloud-db';
 const recoveryLimitMs = 240_000;
 const before = 'before-restart', after = 'after-restart';
 
-export async function prepareDatabaseWitness({kube, signal}) {
+export async function prepareDatabaseWitness({kube, signal, initialReadiness}) {
   const table = 'cold_restart_probe_' + randomUUID().replaceAll('-', '');
   const insert = marker => `INSERT INTO ${table} VALUES ('${marker}') RETURNING marker`;
   const select = marker => `SELECT marker FROM ${table} WHERE marker = '${marker}'`;
   const command = (args, active) => kube(['-n', namespace, ...args], {signal: active});
   const sql = (pod, query, active) => command(['exec', pod, '-c', 'postgres', '--', 'psql',
     '-XAtq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'app', '-c', query], active);
-  async function findPrimary(active, readiness = "SELECT NOT pg_is_in_recovery()") {
+  async function findPrimary(active, readiness = "SELECT NOT pg_is_in_recovery()", observe) {
     const {status} = JSON.parse(await command(['get', 'clusters.postgresql.cnpg.io', database, '-o', 'json'], active));
     const primary = status?.currentPrimary;
-    if (status?.readyInstances === 3 && /^cloud-db-\d+$/.test(primary) &&
-      await sql(primary, readiness, active) === 't') return primary;
+    observe?.({ready: status?.readyInstances ?? null, primary: primary ?? null, writable: null});
+    if (status?.readyInstances !== 3 || !/^cloud-db-\d+$/.test(primary)) return;
+    const writable = await sql(primary, readiness, active) === 't';
+    observe?.({writable});
+    if (writable) return primary;
   }
-  const primary = await findPrimary(signal);
-  assert.ok(primary, 'cold_restart.initial_primary');
+  let primary, preparation = signal;
+  if (initialReadiness) {
+    preparation = AbortSignal.any([signal, initialReadiness.signal].filter(Boolean));
+    const started = performance.now(), observed = {initialReady: null, ready: null, primary: null, writable: null};
+    let lastCommand;
+    try {
+      primary = await untilRemote(async active => {
+        let stage = 'cluster';
+        try {
+          return await findPrimary(active, undefined, sample => {
+            if (stage === 'cluster') observed.initialReady ??= sample.ready;
+            Object.assign(observed, sample);
+            stage = 'primary_sql';
+          });
+        } catch (error) {
+          if (!active.aborted) lastCommand = {stage, code: error.code ?? error.name};
+          throw error;
+        }
+      }, initialReadiness.ms, preparation, 'cold_restart.initial_primary');
+      preparation.throwIfAborted();
+    } catch (cause) {
+      throw Error('cold_restart.initial_primary', {cause});
+    } finally {
+      process.stderr.write('D621 restart readiness ' + JSON.stringify({
+        elapsedMs: Math.round(performance.now() - started), ...observed, lastCommand,
+      }) + '\n');
+    }
+  } else {
+    primary = await findPrimary(signal);
+    assert.ok(primary, 'cold_restart.initial_primary');
+  }
   assert.equal(await sql(primary, `CREATE TABLE ${table} (marker text PRIMARY KEY); ${insert(before)}`,
-    signal), before, 'cold_restart.acknowledged_row');
+    preparation), before, 'cold_restart.acknowledged_row');
 
   return async () => {
     const started = performance.now();
