@@ -465,7 +465,7 @@ export async function runKubernetesServices(context) {
       const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...mode, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
-        stockholmRemote: remoteTarget, verifier, amazon, signal,
+        stockholmRemote: remoteTarget, verifier, verifierImage: context.verifierImage, amazon, signal,
         ...(restartAll && {restartServices: probes => measureServiceRestart({
           restartAll, inventory, probes, checkStore: outsideStore, signal,
           async inspectionReady(limit) {return (await readyServices(limit, 'inspect')).length > 0;},

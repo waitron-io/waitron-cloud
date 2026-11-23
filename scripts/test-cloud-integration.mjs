@@ -322,7 +322,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
-  if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
+  const verifierImage = kubernetes?.verifierImage ?? waitronImage;
+  if (!digest.test(image) || !digest.test(waitronImage) || !digest.test(verifierImage)) throw Error('integration.image_invalid');
   if (sourceProvenance) assert.ok(typeof waitronCheckout === 'string' && waitronCheckout.length > 0, 'integration.waitron_checkout_required');
   const source = sourceProvenance ? await captureIntegrationSource(root) : undefined;
   const runId = randomUUID(), project = fixedProject ?? 'waitron-cloud-test-integration-' + runId.slice(0, 8);
@@ -365,7 +366,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
   const readVerifierScope = async () => {
     if (!verifierWorker || !verifierStarted) return;
     const path = join(directory, 'verifier-identity.json');
-    if (kubernetes) {verifierScope = verifierIdentityScope(await kubernetes.verifier.identity(), waitronImage); return;}
+    if (kubernetes) {verifierScope = verifierIdentityScope(await kubernetes.verifier.identity(), verifierImage); return;}
     await docker(['cp', verifierWorker + ':/run/backup-verifier/verifier-controller/identity.json', path], '', 'verifier-identity');
     const identity = parseIntegrationJson(await readFile(path, 'utf8'));
     verifierScope = verifierIdentityScope(identity, waitronImage);
@@ -376,7 +377,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     for (const id of children) {
       assert.match(id, /^[a-f0-9]{64}$/);
       const [info] = parseIntegrationJson(await verifierDocker(['inspect', id]));
-      checkVerifierChild(info, {id, image: waitronImage, scope: verifierScope});
+      checkVerifierChild(info, {id, image: verifierImage, scope: verifierScope});
     }
     return children;
   };
@@ -652,7 +653,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           journeyStage = 'verification';
           const acknowledged = []; let verificationConfigured = false;
           const verify = async (point = captured) => {
-          const verification = {image: waitronImage, revision, nativeTarget};
+          const verification = {image: verifierImage, revision, nativeTarget};
           if (!verificationConfigured) {await accountPhase('configure-verification', verification); verificationConfigured = true;}
           if (kubernetes) {verifierWorker = await kubernetes.verifier.start(point.pointId, verification); verifierStarted = true;}
           else {

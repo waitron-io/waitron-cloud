@@ -10,7 +10,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {prepareKindOutsideBaseline} from './kubernetes-outside.mjs';
 import {withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
-import {runKubernetesCheck} from './kubernetes-check.mjs';
+import {loadVerifierImage, runKubernetesCheck} from './kubernetes-check.mjs';
+import {runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
+import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
+import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
 
 import * as servicesScript from './kubernetes-services.mjs';
 const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
@@ -449,7 +452,19 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
   skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: (stopOutsideServiceNodes ? 54 : 48) * 60 * 1000,
 }, async () => {
   assert.equal(process.platform, 'linux');
-  const {services, nodes} = await runKubernetesCheck('kind-baseline', {stopServiceNodes: stopOutsideServiceNodes});
+  const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage,
+    TEST_KUBERNETES_OUTSIDE_VERIFIER_IMAGE: verifierImage} = process.env;
+  const {services, nodes} = verifierImage ? await runKubernetesNodeLoss({outsideServices: true,
+    services: async context => {
+      assert.notEqual(waitronImage, verifierImage);
+      return servicesScript.runKubernetesServices({...context, baseline: true, image, waitronImage, verifierImage,
+        verificationTarget: await readRehearsalVerificationTarget(), prepareOutside: prepareKindOutsideBaseline,
+        stopServiceNodes: stopOutsideServiceNodes, restartAll: stopOutsideServiceNodes ? context.restartAll : undefined,
+        importVerifierImage: (id, args) => {
+          assert.equal(id, verifierImage, 'the verifier must load the saved image');
+          return loadVerifierImage(id, [...context.kubeTarget(), '-n', servicesNamespace, ...args], context.env, context.signal);
+        }});
+    }}) : await runKubernetesCheck('kind-baseline', {stopServiceNodes: stopOutsideServiceNodes});
   if (stopOutsideServiceNodes) {
     const legs = services.serviceStops;
     assert.deepEqual(legs.map(leg => leg.stopped).sort(), nodes.map(node => node.name).sort());
