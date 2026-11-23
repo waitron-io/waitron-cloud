@@ -180,10 +180,21 @@ export async function startRemoteRelay({cluster, nodes, run, tag, outside, servi
     primary, '31820', '51820', '0.0.0.0', '30443', ...standbys,
     ...(services ? ['--tcp=3000:3000', '--tcp=9000:30900'] : [])]);
   assert.match(relayId, /^[a-f0-9]{64}$/);
-  const close = () => run('docker', ['rm', '-f', relayId], {signal: null});
+  const close = async () => {
+    const options = {signal: null, timeout: 5_000};
+    const exit = await run('docker', ['inspect', '--format', '{{if not .State.Running}}{{.State.ExitCode}}{{end}}', relayId], options).catch(() => '');
+    if (/^\d+$/.test(exit)) {
+      process.stderr.write('D621 relay exit code ' + exit + '\n');
+      const log = await run('sh', ['-c', 'exec docker logs --tail 20 "$1" 2>&1', 'relay logs', relayId], options).catch(() => '');
+      if (log) process.stderr.write(log + '\n');
+    }
+    return run('docker', ['rm', '-f', relayId], {signal: null});
+  };
   try {
     await run('docker', ['start', relayId]);
-    const gatewayIp = await run('docker', ['inspect', '--format', '{{(index .NetworkSettings.Networks "' + cluster + '").IPAddress}}', relayId]);
+    const [running, gatewayIp] = (await run('docker', ['inspect', '--format',
+      '{{.State.Running}} {{(index .NetworkSettings.Networks "' + cluster + '").IPAddress}}', relayId])).split(' ');
+    assert.equal(running, 'true', 'remote.relay_stopped');
     assert.match(gatewayIp, /^172\.30\.250\.\d{1,3}$/, 'remote.relay_ip');
     return {gatewayIp, close};
   } catch (error) {
