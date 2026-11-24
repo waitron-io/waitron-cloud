@@ -34,6 +34,9 @@ vi.mock('@waitron/fiscal-verifactu/src/hour-clock-internet.js', () => ({
 
 it('prepares ordinary recovery for the privately delivered paired source and preserves its records', async () => {
   const input = JSON.parse(await readFile('/tmp/cloud-integration-authorised-input.json', 'utf8'));
+  const {variable: keyVariable, wrongKey} = currentRecovery
+    ? await (await import('./cloud-integration-current-recovery.mjs')).integrationRestoreKey(input.authority)
+    : {variable: 'WAITRON_NODE_RECOVERY_KEY', wrongKey: 'wrong node key'};
   const artifact = Buffer.from(input.delivery.archive, 'base64');
   const sha256 = createHash('sha256').update(artifact).digest('hex');
   expect(sha256).toBe(input.sha256); expect(input.delivery.digest).toBe(sha256);
@@ -68,8 +71,12 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
       expect(installationCodes.length).toBeGreaterThan(0);
       if (currentRecovery) {
         const source = await openVenueDatabase(dirname(copy.databasePath));
-        try {expect(await verifyBreakGlass(source.node, selected.nodeId, input.authority.secret)).toBe(true);}
-        finally {await source.close();}
+        try {
+          const verified = keyVariable === 'WAITRON_MASTER_KEY'
+            ? await verifyBreakGlass(source.venue, input.authority.secret)
+            : await verifyBreakGlass(source.node, selected.nodeId, input.authority.secret);
+          expect(verified).toBe(true);
+        } finally {await source.close();}
         const {prepareCurrentIntegrationRecovery} = await import('./cloud-integration-current-recovery.mjs');
         outcome = await prepareCurrentIntegrationRecovery({copy, sourceId: selected.sourceId, binding, secret: input.authority.secret,
           roots: {stateDir, venueDir, migrationsRoot: restore.migrationsRoot, modules: ALL_MODULES}});
@@ -103,10 +110,10 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
     await writeFile(operationPath, JSON.stringify({binding, input: outcome!.input}), {mode: 0o600});
     const env = {WAITRON_ENV: 'dev', WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: venueDir,
       WAITRON_MIGRATIONS_DIR: restore.migrationsRoot, WAITRON_BACKUP_RECOVERY_KEY: input.delivery.recoveryKey,
-      WAITRON_RECOVERY_OPERATION_FILE: operationPath, WAITRON_NODE_RECOVERY_KEY: input.authority.secret};
+      WAITRON_RECOVERY_OPERATION_FILE: operationPath, [keyVariable]: input.authority.secret};
     const argv = ['restore', artifactPath, '--confirm-old-box-gone', '--confirm-sole-recovery'];
     let wrongOutput = '';
-    expect(await runRestore({argv, env: {...env, WAITRON_NODE_RECOVERY_KEY: 'wrong node key'}, out: line => {wrongOutput += line;}})).toBe(1);
+    expect(await runRestore({argv, env: {...env, [keyVariable]: wrongKey}, out: line => {wrongOutput += line;}})).toBe(1);
     expect(wrongOutput.includes('promotion.break_glass_invalid')).toBe(true);
     let denied: {code?: string; params?: {reason?: string}} | undefined;
     try {await restoreFromArtifact({...restore, withModuleOperations: createRecoveryRestoreRunner(ALL_MODULES, {binding, input: outcome!.input}, input.authority.secret)});}

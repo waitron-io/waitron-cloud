@@ -2064,8 +2064,10 @@ implementation or production evidence.
   implemented; paused-parent verifier checks retain diagnostic-input ordering. On local Linux,
   `node --test scripts/test-cloud-paid-stream.test.mjs` passes with the pinned ec91 and
   explicitly selected 3ff92a10 Waitron images; the latter also passes
-  `scripts/test-cloud-paid-continuous-recovery.test.mjs`. Production custody, release
-  qualification, provider isolation, capacity and lifecycle policies remain open.
+  `scripts/test-cloud-paid-continuous-recovery.test.mjs`. The authorised archive
+  fixture still needs to check invoice numbers derived from recorded sales and
+  the current invoice series. Production custody, release qualification, provider
+  isolation, capacity and lifecycle policies remain open.
   The venue-level test worker can use bounded disk scratch. Raising the 512 MiB
   ceiling still needs year-sized recovery, and fiscal verification still needs
   VERIFIER-CERT-OPEN. See [the requirements and deliberate limits](backlog/data-lifecycle.md).

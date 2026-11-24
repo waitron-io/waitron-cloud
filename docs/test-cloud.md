@@ -1272,10 +1272,12 @@ node --test scripts/test-cloud-paid-authorised-recovery.test.mjs
 ```
 
 This extension creates the source's membership identity and recovery key through
-Waitron's normal helpers before capture. The verifier then checks that actual
-archive. After owner approval, the compiled version 2 client delivers it privately
-inside the target, before the deliberate fiscal refusal. Archive bytes and keys
-stay inside the disposable containers.
+Waitron's helpers before capture. With a Waitron image that uses a venue master
+key for recovery, the fixture creates that key and tests refusal with a different
+valid master key. Older images still exercise their node recovery key. The
+verifier checks the captured archive. After owner approval, the compiled version 2
+client delivers it privately inside the target, before the deliberate fiscal
+refusal. Archive bytes and keys stay inside the disposable containers.
 
 The ordinary restore fixture reads the source's installation codes from the
 delivered database and prepares recovery for those exact bytes. It uses the
