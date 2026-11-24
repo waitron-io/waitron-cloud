@@ -1,5 +1,5 @@
-// Mounted into the unchanged pinned Waitron image; its existing helper owns setup and teardown.
-import {archiveHost,archiveCommand,agreeInternet,bases,clock,suite,node,key} from '../test/hour-recovery-host.js';
+// Both verifier builds use Waitron's archive recovery helper for setup and teardown.
+import {archiveHost,archiveCommand,agreeInternet,clock,suite,node,key} from '../test/hour-recovery-host.js';
 import {it,expect} from 'vitest';
 import {recoverySelectPastWaits} from './testing/hour-test-clock.js';
 import {mkdtemp,readFile,writeFile,rm,rename} from 'node:fs/promises';
@@ -118,12 +118,14 @@ it('recaptures the authorised source and prepares recovery for its new archive',
    // The pinned verifier still stores the counter, and current Waitron derives it from sales.
    const deriveNextNumber=Reflect.get(waitronDb,'nextInvoiceNumberOf');
    const nextNumber=deriveNextNumber ? deriveNextNumber(invoiceSeries.id) : Reflect.get(invoiceSeries,'nextNumber');
+   // Current Waitron has a separate corrective series for full invoices.
+   const seriesCount=deriveNextNumber ? 4 : 3;
    const series=await restored.venue.select({retiredAt:invoiceSeries.retiredAt,nextNumber}).from(invoiceSeries);
    const retiredCounters=series.filter(row=>row.retiredAt!==null).map(row=>row.nextNumber);
    const activeCounters=series.filter(row=>row.retiredAt===null).map(row=>row.nextNumber);
    const allocations=(await restored.venue.select().from(fiscalAllocations)).length;
-   expect(retiredCounters).toEqual(bases.map(()=>123));
-   expect(activeCounters).toEqual(bases.map(()=>1));
+   expect(retiredCounters).toEqual(Array(seriesCount).fill(123));
+   expect(activeCounters).toEqual(Array(seriesCount).fill(1));
    expect(allocations).toBe(2);
    console.log('CLOUD_AUTHORISED_ARCHIVE='+JSON.stringify({verification,ordinaryRestore:{exit,preparationBoundToRecapture,retiredCounters,activeCounters,allocations},refusals:{wrongNodeKey,missingPreparation},...(delivery?{delivery}:{})}));
   }finally{await restored.close();}
