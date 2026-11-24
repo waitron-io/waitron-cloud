@@ -11,7 +11,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {ALL_MODULES} from '@waitron/composition';
 import * as waitronDb from '@waitron/db';
 import {loadKeyRing} from '@waitron/credentials';
-import {fiscalAllocations} from '../../../packages/fiscal-verifactu/src/schema/allocations.js';
+import {sql} from 'drizzle-orm';
 import {makeAuthority} from '../../../packages/fiscal-verifactu/test/certificate-fixtures.js';
 import {sealAeatSecret} from '../../../packages/fiscal-verifactu/src/provisioning-secret.js';
 import {ensureBoxSecrets} from './box-secrets.js';
@@ -123,7 +123,12 @@ it('recaptures the authorised source and prepares recovery for its new archive',
    const series=await restored.venue.select({retiredAt:invoiceSeries.retiredAt,nextNumber}).from(invoiceSeries);
    const retiredCounters=series.filter(row=>row.retiredAt!==null).map(row=>row.nextNumber);
    const activeCounters=series.filter(row=>row.retiredAt===null).map(row=>row.nextNumber);
-   const allocations=(await restored.venue.select().from(fiscalAllocations)).length;
+   // Older verifiers store approval separately. Fi9 stores it on the identity row.
+   const hasIdentityApprovals=restored.venue.get(sql`SELECT name FROM pragma_table_info('verifactu_identities') WHERE name='event_key'`);
+   const allocationCount=hasIdentityApprovals
+    ? sql`SELECT count(*) AS total FROM verifactu_identities WHERE event_key IS NOT NULL`
+    : sql`SELECT count(*) AS total FROM fiscal_allocations`;
+   const allocations=restored.venue.get<{total:number}>(allocationCount)?.total;
    expect(retiredCounters).toEqual(Array(seriesCount).fill(123));
    expect(activeCounters).toEqual(Array(seriesCount).fill(1));
    expect(allocations).toBe(2);
