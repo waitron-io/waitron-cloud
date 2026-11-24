@@ -60,6 +60,7 @@ test('backup download preserves the account enrollment event and distinguishes C
   await f.controller.download(false);
   assert.equal(enrollment,1);
   assert.equal(f.controller.error,'pairEnrollment');
+  assert.equal(f.controller.downloadProof,true);
   f.replies.push({status:403,body:{error:'forbidden'}});
   await f.controller.download(false);
   assert.equal(f.controller.error,'forbidden');
@@ -68,6 +69,22 @@ test('backup download preserves the account enrollment event and distinguishes C
   assert.equal(f.controller.error,'permissionBusiness');
   assert.equal(f.controller.page,undefined);
   assert.equal(f.controller.selected,undefined);
+});
+
+test('changing snapshot clears a download refusal and keeps a catalogue refusal visible',async t=>{
+  const f=fixture(t);
+  f.replies.push({body:{...page,exitDownloadAvailable:true,points:[page.points[0],olderPage.points[0]]}});
+  await f.controller.open(venueId);
+  f.replies.push({status:403,body:{error:'proof_required'}});
+  await f.controller.download(true);
+  assert.equal(f.controller.error,'snapshotDownloadProof');
+  f.controller.select(olderPointId);
+  assert.equal(f.controller.error,undefined);
+  assert.equal(f.controller.downloadProof,false);
+  f.replies.push({status:503,body:{error:'temporarily_unavailable'}});
+  await f.controller.load();
+  f.controller.select(pointId);
+  assert.equal(f.controller.error,'unavailable');
 });
 
 function assertRequest(request: {url: string; init: RequestInit}, cursor?: string) {

@@ -163,7 +163,7 @@ test('exit download returns the verified archive and its matching key while the 
  assert.equal(archive.headers.get('content-type'),'application/octet-stream');
  assert.deepEqual(Buffer.from(await archive.arrayBuffer()),bytes);
  assert.equal(disposals,1);
- await db.pool.query('INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,2,$2)',[f.installed.venueId,f.vault.create(f.installed.venueId,2)]);
+ assert.equal(await f.catalogue.rotate(f.installed.installationId),2);
  const key=await send('download-key');
  assert.equal(key.status,200);
  assert.match(key.headers.get('cache-control')??'',/\bno-store\b/);

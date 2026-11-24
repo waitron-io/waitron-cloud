@@ -91,8 +91,8 @@ export class PortalApp {
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.recovery?.error==='pairEnrollment')this.recovery.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.recovery?.error==='actionProofUnavailable'||this.recovery?.error==='recoveryProofRequired'))this.recovery.error=undefined;
       if(!this.actionProof.pending&&this.backups?.downloadProof){
-        if(this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.backups.error==='pairEnrollment')this.backups.error=undefined;
-        if(this.actionProof.status?.freshUntil&&(this.backups.error==='actionProofUnavailable'||this.backups.error==='snapshotDownloadProof'))this.backups.error=undefined;
+        if(this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.backups.downloadError==='pairEnrollment')this.backups.downloadError=undefined;
+        if(this.actionProof.status?.freshUntil&&(this.backups.downloadError==='actionProofUnavailable'||this.backups.downloadError==='snapshotDownloadProof'))this.backups.downloadError=undefined;
       }
       this.draw();
     });
@@ -406,8 +406,8 @@ export class PortalApp {
     b.downloadProof=true;
     const route=this.#route,proved=await this.#requireActionProof();
     if(route!==this.#route||page!==b.page||point!==b.selected||!b.downloadProof)return;
-    if(this.actionProof.status?.methods.every(method=>method==='email'))b.error='pairEnrollment';
-    else if(!proved)b.error=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
+    if(this.actionProof.status?.methods.every(method=>method==='email'))b.downloadError='pairEnrollment';
+    else if(!proved)b.downloadError=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
     else{b.downloadProof=false;await b.download(key);return;}
     this.draw();
   }
