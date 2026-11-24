@@ -1,6 +1,6 @@
 # Deliver snapshots from a connected Waitron server
 
-A paired test installation can now obtain upload credentials and publish its archive
+A paired test installation can reserve an upload and publish its archive
 through the account HTTP service. You still provision its storage with the trusted
 operator API. The installation cannot choose its destination, read retained archives
 or mark an upload as verified.
@@ -21,8 +21,8 @@ in your local storage provider. Treat this setting as a secret. The executable
 for you; this does not configure an AWS account.
 
 Run `pnpm account:serve`. With no backup settings, capture endpoints return 503.
-Partial settings fail startup. Both object access and token exchange are restricted
-to the operator's configured endpoint and region.
+Partial settings fail startup. Cloud pins object access, upload signing and token
+exchange to the operator's configured storage endpoint and region.
 
 ## Reserve, upload, publish
 
@@ -37,23 +37,39 @@ Call `uploadCloudCapture(grant, bytes)` in Waitron, then
 published result starts with `verification: "pending"`; the background restore worker
 supplies verification separately.
 
-Keep the same UUID, bytes and metadata when retrying. Reserve renews temporary
-credentials against the original key version, even after key rotation. A repeated
+Keep the same UUID, bytes and metadata when retrying. Reserve renews temporary upload access
+against the original key version, even after key rotation. A repeated
 upload can receive an object-exists response; publication checks its actual digest
 and size. Changed metadata conflicts. Exact publication retries return the saved point,
 including after the capture's ordinary deadline. Waitron now runs scheduled delivery
 for a configured test installation on its serving primary.
 
-Captures expire after 24 hours. New storage credentials last at most 15 minutes. Stopping
-Cloud access or disabling the service prevents new grants and publication, but already
-issued storage credentials remain usable until they expire. Abandoned upload cleanup
-waits beyond that expiry. Archives remain bounded to 512 MiB in this local adapter.
+Captures expire after 24 hours. Upload grants last at most 15 minutes. Stopping
+Cloud access or disabling the service prevents new grants and publication. Issued
+grants remain usable until they expire. Abandoned upload cleanup waits beyond that
+expiry. Cloud enforces the 512 MiB archive ceiling at publication for direct uploads.
 
 ## Wire contract
 
 POST `/api/installations/backup-reserve` or `/api/installations/backup-publish` with the
 existing canonical signed machine envelope. Use the capture UUID as `operationId`.
-Reserve's signed body is exactly `{}`; publish's body is the metadata JSON string.
+The signed reserve body is exactly `{}` for a scoped storage session or
+`{"upload":"presigned-put-v1"}` for a signed upload URL. Publish signs the metadata JSON string.
+
+A box that can reach direct HTTPS storage can opt in to receive `uploadUrl` in
+place of `credentials`. Cloud signs a PUT for the reserved bucket and exact
+`incoming/<captureId>` key with `If-None-Match: *`. Send that header with the
+archive and treat HTTP 412 as an existing upload to check through publication.
+Keep the URL in memory and out of logs. Cloud rechecks the installation's
+permission and storage destination before it returns the URL. The URL uses
+Cloud's existing storage identity, so the reserve does not need to mint a
+temporary storage session.
+
+Older Cloud releases and the HTTPS upload proxy return HTTP 400
+`invalid_metadata` for this opt-in. A box can retry with `{}` on that response.
+A signing failure returns HTTP 503 `temporarily_unavailable`. The disposable
+test-cloud withdrawal proof explicitly signs a `{}` reserve so it can observe
+the expiry of a legacy storage session after a downgrade.
 Include the current bound control lease. Browser Origin headers are refused.
 Both endpoints share existing installation/IP allowances and return no-store responses.
 In test venue-level mode, publication has up to 45 seconds from the account

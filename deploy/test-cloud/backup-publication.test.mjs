@@ -17,6 +17,7 @@ import {EmailOutbox,createLeaseIssuer,encodeMachine} from '../../packages/regist
 import {venueServiceFixture,set} from '../../packages/registration/test/fixtures/venue-service.ts';
 import {diskUsage} from '../../scripts/backup-capacity-fixture.mjs';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
+import {putIntegrationSnapshot} from './test-fixtures/integration-snapshot-client.mjs';
 
 const {getRequestListener}=createRequire(new URL('../../packages/account-http/package.json',import.meta.url))('@hono/node-server');
 const MiB=1024*1024, bytes=Number(process.env.TEST_CLOUD_PUBLISH_BYTES??4*MiB);
@@ -47,7 +48,8 @@ test('signed publication retries an interrupted retained copy through real TLS a
    if(loseCopyReply){loseCopyReply=false;copied=true;throw Error('fixture_lost_copy_reply');}
    return result;
   },
- }),grant:(target,scope)=>storage.authority.grant(target,scope,storage.ca)};
+ }),grant:(target,scope)=>storage.authority.grant(target,scope,storage.ca),
+ signUpload:(_target,key)=>objects.signCaptureUpload(key)};
  const server=createServer({key:await readFile(join(storage.root,'key.pem')),cert:storage.ca});
  server.listen(0,'127.0.0.1');await once(server,'listening');
  t.after(()=>new Promise(resolve=>server.close(resolve)));
@@ -56,17 +58,17 @@ test('signed publication retries an interrupted retained copy through real TLS a
  const app=createAccountApp({pool:db.pool,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:randomBytes(32).toString('hex')}}),
   config:{portalOrigin:origin,production:true,rateKey:randomBytes(32).toString('hex'),trustedProxyIps:[]},leaseIssuer:issuer,planMode:mode,captures});
  server.on('request',getRequestListener(app.fetch,{overrideGlobalObjects:false}));
- function proof(action,body){
-  const payload=encodeMachine({origin,action,installationId,operationId:id,issuedAt:Date.now(),lease:JSON.stringify(lease),body:JSON.stringify(body)});
+ function proof(action,body,operationId){
+  const payload=encodeMachine({origin,action,installationId,operationId,issuedAt:Date.now(),lease:JSON.stringify(lease),body:JSON.stringify(body)});
   return {payload:payload.toString('base64url'),signature:sign(null,payload,key.privateKey).toString('base64url')};
  }
- function submit(action,body){
+ function submit(action,body,operationId=id){
   return new Promise((resolve,reject)=>{
    const req=request(origin+'/api/installations/'+action,{method:'POST',headers:{'content-type':'application/json'},ca:storage.ca,signal:AbortSignal.timeout(50_000)},async response=>{
     try{resolve({status:response.statusCode,body:JSON.parse(Buffer.concat(await response.toArray()).toString())});}
     catch(error){reject(error);}
    });
-   req.on('error',reject);req.end(JSON.stringify(proof(action,body)));
+   req.on('error',reject);req.end(JSON.stringify(proof(action,body,operationId)));
   });
  }
  const reserved=await submit('backup-reserve',{});assert.equal(reserved.status,200);
@@ -110,4 +112,18 @@ test('signed publication retries an interrupted retained copy through real TLS a
  }
  const legacy=new BackupCatalogue(db.pool,vault,()=>objects,'test-free-paid');
  await assert.rejects(legacy.publish(installationId,id,{...metadata,size:MAX_LEGACY_BACKUP_BYTES+1}),{message:'backup.invalid_metadata'});
+
+ await t.test('a direct reservation accepts one PUT and publishes it',async()=>{
+  const captureId=randomUUID();
+  const reserved=await submit('backup-reserve',{upload:'presigned-put-v1'},captureId);
+  assert.equal(reserved.status,200);
+  assert.ok(typeof reserved.body.uploadUrl==='string');
+  const archive=Buffer.from('signed capture fixture');
+  const put=()=>putIntegrationSnapshot(reserved.body,archive,join(storage.root,'cert.pem'));
+  assert.equal(await put(),200);
+  assert.equal(await put(),412);
+  const published=await submit('backup-publish',{...metadata,size:archive.length,digest:createHash('sha256').update(archive).digest('hex')},captureId);
+  assert.equal(published.status,200);
+  assert.equal(published.body.id,captureId);
+ });
 });

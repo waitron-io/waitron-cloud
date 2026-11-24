@@ -4,13 +4,13 @@ import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createLeaseIssuer,encodeMachine,transaction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {venueServiceFixture,set,trial,event} from '../../registration/test/fixtures/venue-service.ts';
-import {BackupCaptures,type CaptureAction} from '../src/captures.ts';
+import {BackupCaptures,type CaptureAction,type CaptureOptions} from '../src/captures.ts';
 import {BackupCatalogue,pointKeys} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
 import {receipt,type StorageLocation,type StorageScope} from '../src/storage.ts';
 
 const origin='https://capture.example.test';
-async function fixture(uploadOrigin?:string){
+async function fixture(uploadOrigin?:string,signUpload?:CaptureOptions['signUpload'],planMode:CaptureOptions['planMode']='test-venue-levels'){
  const f=await venueServiceFixture();
  try{
   const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
@@ -20,7 +20,7 @@ async function fixture(uploadOrigin?:string){
   const location={endpoint:'https://storage.example.test',bucket:'venue-'+f.venues[0],region:'local'};
   const storage=()=>({async read(k:string){const bytes=objects.get(k);if(!bytes)throw Error('NoSuchKey');return Buffer.from(bytes);},async put(k:string,bytes:Uint8Array){objects.set(k,Buffer.from(bytes));return receipt(bytes);},async remove(k:string){objects.delete(k);}});
   let wait:undefined|(()=>Promise<void>);
-  const captures=new BackupCaptures(f.pool,issuer,origin,{vault,objects:storage,planMode:'test-venue-levels',uploadOrigin,async grant(l,s){grants.push({location:l,scope:s});await wait?.();return {credentials:{accessKeyId:'synthetic-access',secretAccessKey:'synthetic-secret',sessionToken:'synthetic-token'},expiresAt:new Date(Date.now()+900000).toISOString()};}});
+  const captures=new BackupCaptures(f.pool,issuer,origin,{vault,objects:storage,planMode,uploadOrigin,signUpload,async grant(l,s){grants.push({location:l,scope:s});await wait?.();return {credentials:{accessKeyId:'synthetic-access',secretAccessKey:'synthetic-secret',sessionToken:'synthetic-token'},expiresAt:new Date(Date.now()+900000).toISOString()};}});
   const catalogue=new BackupCatalogue(f.pool,vault,storage,'test-venue-levels'),legacyCatalogue=new BackupCatalogue(f.pool,vault,storage);
   function lease(expiresAt=Date.now()+3600000){return issuer.issue({origin,leaseId:randomUUID(),installationId:installation,venueId:f.venues[0]!,environment:'test',publicKey,issuedAt:Date.now(),expiresAt});}
   const currentLease=lease();
@@ -67,6 +67,63 @@ test('a public capture address changes only the signed reservation reply',async(
   f.objects.set('incoming/'+id,bytes);
   const point=await f.captures.execute('backup-publish',f.proof('backup-publish',id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}}));
   assert.equal(point.id,id);
+ }finally{await f.close();}
+});
+
+const directUpload={upload:'presigned-put-v1'};
+function signedUpload(location:StorageLocation,key:string){
+ return {uploadUrl:new URL(location.bucket+'/'+key,location.endpoint).href,expiresAt:new Date(Date.now()+60_000).toISOString()};
+}
+for(const mode of ['existing','test-venue-levels'] as const)test(`direct reserve returns an upload URL without a session exchange in ${mode} mode`,async()=>{
+ const f=await fixture(undefined,async(location,key)=>({
+  ...signedUpload(location,key),credentials:{accessKeyId:'fixture-only',secretAccessKey:'fixture-only',sessionToken:'fixture-only'},
+ }),mode);try{
+  if(mode==='existing')await f.legacyCatalogue.provision(f.installation,f.location);else await provision(f);
+  const id=randomUUID(),result=await f.captures.execute('backup-reserve',f.proof('backup-reserve',id,directUpload));
+  assert.ok('uploadUrl' in result);
+  assert.equal(result.uploadUrl,f.location.endpoint+'/'+f.location.bucket+'/incoming/'+id);
+  assert.ok('recoveryKey' in result&&result.recoveryKey);
+  assert.equal('credentials' in result,false);
+  assert.equal(f.grants.length,0);
+  const legacy=await f.captures.execute('backup-reserve',f.proof('backup-reserve',id));
+  assert.ok('credentials' in legacy);
+  assert.equal('uploadUrl' in legacy,false);
+  assert.equal(f.grants.length,1);
+ }finally{await f.close();}
+});
+for(const [mode,change] of [['test-venue-levels','permission'],['test-venue-levels','location'],['existing','location']] as const)
+test(`direct reserve withholds the URL when ${change} changes during signing in ${mode} mode`,async()=>{
+ const f=await fixture(undefined,async(location,key)=>{
+  if(change==='permission'){
+   const peer={...f,store:new f.api.BillingStore(f.peer)};
+   await set(peer,'registered');await set(peer);await provision(f);
+  }else await f.peer.query('UPDATE backup_locations SET bucket=$2 WHERE venue_id=$1',[f.venues[0],'different-bucket']);
+  return signedUpload(location,key);
+ },mode);
+ try{
+  if(mode==='existing')await f.legacyCatalogue.provision(f.installation,f.location);else await provision(f);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.conflict'});
+ }finally{await f.close();}
+});
+test('direct reserve refuses an empty upload address',async()=>{
+ const f=await fixture(undefined,async(location,key)=>({...signedUpload(location,key),uploadUrl:''}));try{
+  await provision(f);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.storage_grant'});
+ }finally{await f.close();}
+});
+test('direct reserve refuses an upload address valid for more than 900 seconds',async(t)=>{
+ const f=await fixture(undefined,async(location,key)=>({...signedUpload(location,key),expiresAt:new Date(Date.now()+901_000).toISOString()}));try{
+  await provision(f);
+  const now=Date.now();
+  t.mock.method(Date,'now',()=>now);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.storage_grant'});
+ }finally{await f.close();}
+});
+test('the HTTPS upload proxy refuses the opt-in before requesting a grant',async()=>{
+ const f=await fixture('https://cloud.example.test',async()=>{assert.fail('proxy must not sign');});try{
+  await provision(f);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.invalid_metadata'});
+  assert.equal(f.grants.length,0);
  }finally{await f.close();}
 });
 

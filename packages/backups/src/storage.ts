@@ -8,6 +8,7 @@ import {
   DeleteObjectCommand,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   STSClient,
   AssumeRoleWithWebIdentityCommand,
@@ -184,6 +185,31 @@ export class BackupObjects {
       requestHandler: { httpsAgent: new Agent({ ca }) },
     };
     this.#client = new S3Client(options);
+  }
+  async signCaptureUpload(key: string) {
+    const { endpoint, region, bucket } = this.location;
+    if (!scopeValid({ kind: "capture", bucket, scope: key }))
+      throw new Error("backup.storage_scope");
+    const client = new S3Client({
+      endpoint,
+      region,
+      credentials: this.#client.config.credentials,
+      forcePathStyle: true,
+      // The box streams bytes after signing, so the URL cannot carry an empty-body checksum.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+    });
+    try {
+      const signingDate = new Date(Math.floor(Date.now() / 1000) * 1000);
+      const expiresIn = 900;
+      const uploadUrl = await getSignedUrl(client, new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        IfNoneMatch: "*",
+      }), { signingDate, expiresIn, signableHeaders: new Set(["if-none-match"]) });
+      return { uploadUrl, expiresAt: new Date(signingDate.getTime() + expiresIn * 1000).toISOString() };
+    } finally {
+      client.destroy();
+    }
   }
   async stage(
     key: string,

@@ -7,8 +7,6 @@ import {randomUUID, createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {dirname} from 'node:path';
 import {createRequire} from 'node:module';
-import {Agent} from 'node:https';
-import {lookup} from 'node:dns';
 import {createCloudConnection} from '/waitron/apps/server/src/cloud-client.ts';
 import {pendingRequest} from '/waitron/apps/server/src/cloud-installation.ts';
 const require = createRequire('/waitron/apps/server/package.json');
@@ -102,7 +100,12 @@ const control = createServer(async (req, res) => {
       if (altered) assert.ok(process.env.CLOUD_TEST_STORE_CA, 'integration.altered_snapshot_scope');
       assert.equal(process.env.CLOUD_TEST_BACKUP_STATE, '1');
       const requestedAt = Date.now();
-      const grant = await cloud.reserveCapture(randomUUID());
+      const {putIntegrationSnapshot,reserveLegacyIntegrationSnapshot}=await import('/proof/integration-snapshot-client.mjs');
+      const captureId=randomUUID();
+      // The stream withdrawal proof observes the lifetime of a legacy session.
+      const grant=process.env.CLOUD_TEST_STREAM==='1'
+        ?await reserveLegacyIntegrationSnapshot(root,captureId)
+        :await cloud.reserveCapture(captureId);
       const metadata = await new Promise((resolve, reject) => {
         const scratch = dirname(root);
         const child = spawn(process.execPath, ['--permission', '--allow-fs-read=*', '--allow-fs-write=' + scratch,
@@ -130,25 +133,15 @@ const control = createServer(async (req, res) => {
       const storeCa = process.env.CLOUD_TEST_STORE_CA;
       const uploaded = altered ? Buffer.from(bytes) : bytes;
       if (altered) uploaded[0] ^= 1;
-      const {S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
-      const storage = new S3Client({endpoint: grant.location.endpoint, region: grant.location.region,
-        credentials: grant.credentials, forcePathStyle: true, maxAttempts: 1,
-        // The API hostname is pinned to the proxy; storage keeps that TLS name on its own service.
-        requestHandler: {httpsAgent: new Agent({ca: await readFile(storeCa ?? '/proof/ca.pem'),
-          ...(storeCa ? {} : {lookup: (hostname, options, done) => lookup(hostname === 'waitron.local' ? 'storage' : hostname, options, done)}),
-        })}});
-      try {
-        const written = await storage.send(new PutObjectCommand({Bucket: grant.location.bucket, Key: grant.incomingKey, Body: uploaded}), {abortSignal: AbortSignal.timeout(10000)});
-        assert.equal(written.$metadata.httpStatusCode, 200);
-        if (!altered) {
-          const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
-          await writeFile(root + '/snapshot-access.json', JSON.stringify({id: grant.id, venueId: grant.venueId, installationId: grant.installationId,
-            identitySha256: createHash('sha256').update(state.publicKey).digest('hex'), archiveSha256: digest,
-            location: grant.location, incomingKey: grant.incomingKey, credentials: grant.credentials,
-            expiresAt: grant.expiresAt, requestedAt, acceptedAt: Date.now(), writeStatus: written.$metadata.httpStatusCode}), {mode: 0o600});
-        }
+      const written=await putIntegrationSnapshot(grant,uploaded,storeCa);
+      assert.equal(written,200);
+      if (!altered && grant.credentials) {
+        const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
+        await writeFile(root + '/snapshot-access.json', JSON.stringify({id: grant.id, venueId: grant.venueId, installationId: grant.installationId,
+          identitySha256: createHash('sha256').update(state.publicKey).digest('hex'), archiveSha256: digest,
+          location: grant.location, incomingKey: grant.incomingKey, credentials: grant.credentials,
+          expiresAt: grant.expiresAt, requestedAt, acceptedAt: Date.now(), writeStatus: written}), {mode: 0o600});
       }
-      finally {storage.destroy();}
       const publication = () => cloud.publishCapture(grant.id, {digest, size: bytes.length, capturedAt: metadata.manifest.createdAt,
         retention: 'daily', sourceNodeId: metadata.sourceNodeId, modules: metadata.manifest.modules});
       if (altered) {
