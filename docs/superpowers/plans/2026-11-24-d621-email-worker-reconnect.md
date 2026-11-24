@@ -9,4 +9,5 @@ A surviving worker should send fresh sign-in mail after it reconnects to Postgre
 - `schema-consumer.test.mjs` owns migration ledger checks. Worker-loop tests own retry policy. The new file owns the email command's reconnect and refusal. Run it and the shutdown, natural exit and local mailer files through `scripts/test-postgres.mjs` with `--test-concurrency=1`. Run `deploy/local-stack/schema-consumer.test.mjs` and `pnpm typecheck`.
 - After landing, replay the free machine stop from the landed Cloud source with the shared inbox from #1393. Record the source, zero restarts on both surviving workers and whether a fresh send follows confirmed database writes within 10 seconds for dropped connections. Keep the historical Stockholm zero-attempt row open in `docs/backlog.md`.
 
-Estimate 55–65 code lines and 250–280 test lines.
+On 24 November the watcher cleared the 25–40 code and 150–200 test line estimate at 17:48.
+The result adds 61 product lines, 264 test lines and two source-pin updates cleared at 18:43.

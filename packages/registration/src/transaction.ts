@@ -1,4 +1,4 @@
-import {DatabaseError,type Pool,type PoolClient} from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 export type TransactionOptions = {discardOnReadOnly?: boolean};
 
@@ -14,7 +14,7 @@ export async function transaction<T>(pool: Pool, action: (client: PoolClient) =>
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    if(options?.discardOnReadOnly&&error instanceof DatabaseError&&error.code==='25006')discard=true;
+    if(options?.discardOnReadOnly&&error instanceof Error&&'code' in error&&error.code==='25006')discard=true;
     try {
       await client.query('ROLLBACK');
     } catch {

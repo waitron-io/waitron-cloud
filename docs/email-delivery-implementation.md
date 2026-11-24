@@ -78,10 +78,10 @@ You can process at most one due message with `pnpm mail:worker --once`, or print
 JSON summary with `pnpm mail:status`. Status needs only `DATABASE_URL`, without
 encryption keys or delivery credentials. If PostgreSQL becomes unavailable during
 continuous delivery, the worker logs a fixed diagnostic and retries. An incompatible
-migration ledger stops it before it claims more mail. The one-shot commands exit
-nonzero on database failure. Temporary provider failures are saved for retry;
-permanent rejections finish as failed. Apply migrations separately before you start
-the worker.
+migration ledger stops the worker when a new connection first tries to claim mail.
+The one-shot commands exit nonzero on database failure. Temporary provider failures
+are saved for retry. Permanent rejections finish as failed. Apply migrations
+separately before you start the worker.
 
 An empty queue produces:
 

@@ -1954,8 +1954,7 @@ implementation or production evidence.
   [reconnect tests](../packages/registration/test/email-worker-reconnect.test.ts),
   the same worker delivered fresh mail after dropped, silent or read-only
   connections. It recorded an accepted send before refusing new work against an
-  incompatible schema. The [reconnect plan](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md)
-  sets the shared-inbox replay target for the country-cell email worker.
+  incompatible schema. See the [shared-inbox replay plan](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md).
   To reproduce the older failure, start with just the first in-cluster journey
   on disposable Debian 13 x86-64 using the paid Cloud revision `f19c12c7` and its
   pinned Waitron image. If it passes on one node, match the original three-node

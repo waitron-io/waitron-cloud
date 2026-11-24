@@ -71,8 +71,9 @@ Run `pnpm mail:worker` continuously or `pnpm mail:worker --once` for one due mes
 are saved with fixed diagnostic codes; `--once` exits successfully after recording
 such a failure, so inspect the returned counts and row status. The continuous
 worker retries failed database operations and logs `check database, key and mail
-configuration`. It exits nonzero when it detects an incompatible migration ledger
-or cannot load its startup configuration. Database failures still exit nonzero in
+configuration`. An incompatible migration ledger stops the worker when a new
+connection first tries to claim mail. The worker also exits nonzero if it cannot
+load its startup configuration. Database failures still exit nonzero in
 the one-shot commands. No automatic fallback to another relay occurs.
 
 The worker supplies the queue ID and an abort signal to the adapter. It saves the
