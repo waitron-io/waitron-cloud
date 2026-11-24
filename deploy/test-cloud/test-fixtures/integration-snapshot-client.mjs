@@ -21,9 +21,11 @@ export async function observeBackupReservation(request, record) {
     if (body?.credentials && body.uploadUrl === undefined) observed.uploadMethod = 'storage-session';
   }
   if (response.status === 403) {
-    const body = await response.clone().json();
-    observed.error = body.error === 'permission_denied' ? 'permission_denied' : 'unexpected';
-    observed.grantIssued = Object.keys(body).some(key => key !== 'error');
+    const body = await response.clone().json().catch(() => null);
+    if (body && typeof body === 'object') {
+      observed.error = body.error === 'permission_denied' ? 'permission_denied' : 'unexpected';
+      observed.grantIssued = Object.keys(body).some(key => key !== 'error');
+    }
   }
   await record(observed);
   return response;

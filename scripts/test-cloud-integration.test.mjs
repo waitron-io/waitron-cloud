@@ -326,7 +326,10 @@ test('the venue records a dropped reserve and keeps reply bodies private', async
     assert.equal(await observeBackupReservation(async () => response, record), response);
     assert.equal(await response.text(), body);
   }
-  assert.deepEqual(replies, [{status: 0}, {status: 200}, {status: 200, uploadMethod: 'signed-put'}]);
+  const refused = new Response('upstream denied', {status: 403});
+  assert.equal(await observeBackupReservation(async () => refused, record), refused);
+  assert.equal(await refused.text(), 'upstream denied');
+  assert.deepEqual(replies, [{status: 0}, {status: 200}, {status: 200, uploadMethod: 'signed-put'}, {status: 403}]);
 });
 
 test('after a full restart the last acknowledged backup is read before restoring a different capture', async () => {

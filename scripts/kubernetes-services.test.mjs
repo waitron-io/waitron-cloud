@@ -78,13 +78,15 @@ test('measured stops cover all three machines and the live roles before returnin
   await t.test('signed reservation evidence brackets only the database primary stop', async () => {
     changes.length = 0;
     const windows = [];
-    const legs = await run('c', publication, {context: {probes: {async signedBackupReservations() {
+    const legs = await run('c', publication, {context: {requireSignedUpload: true, probes: {async signedBackupReservations() {
       windows.push([...changes]);
       return async () => windows.push([...changes]);
     }}}});
     assert.equal(legs[0].stopped, 'c');
     assert.deepEqual(windows, [changes.slice(0, -2), changes]);
     assert.deepEqual(changes.slice(-2), ['off:b', 'return:b']);
+    await assert.rejects(run('c', publication, {context: {requireSignedUpload: true, probes: {}}}),
+      /services\.signed_backup_probe_missing/);
   });
 
   await t.test('signup spacing finishes after each rejoin and before the next inventory or observation', async () => {

@@ -193,8 +193,9 @@ export async function readServicesInbox(pods, fetch, path, authorization) {
 }
 
 export async function measureServiceStops({nodes, inventory, stopNode, restore, healthy, reconcile, probes, holdMs,
-  signal, spaceSignup, observe = observeP1}) {
+  signal, spaceSignup, requireSignedUpload = false, observe = observeP1}) {
   assert.ok(nodes.length === 3 && new Set(nodes).size === 3, 'services.stop_three_nodes');
+  if (requireSignedUpload) assert.equal(typeof probes?.signedBackupReservations, 'function', 'services.signed_backup_probe_missing');
   const uncovered = new Set(['primary', 'gateway', 'operator', 'fluxSource', 'fluxApply']);
   const remaining = [...nodes], legs = [];
   while (remaining.length) {
@@ -202,7 +203,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     const score = node => [...uncovered].filter(role => roles[role] === node).length;
     const node = remaining.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best);
     remaining.splice(remaining.indexOf(node), 1);
-    const checkReservations = roles.primary === node ? await probes?.signedBackupReservations?.() : undefined;
+    const checkReservations = requireSignedUpload && roles.primary === node ? await probes.signedBackupReservations() : undefined;
     process.stderr.write('D621 stop inventory ' + JSON.stringify({node, roles}) + '\n');
     const survivors = nodes.filter(name => name !== node);
     const stopped = Promise.withResolvers();
@@ -490,7 +491,7 @@ export async function runKubernetesServices(context) {
             path, authorization);
         }}),
         ...(stopServiceNodes && {stopServices: (probes, spaceSignup) => measureServiceStops({nodes: names, inventory, signal: stopSignal, probes, holdMs,
-          spaceSignup,
+          spaceSignup, requireSignedUpload: process.env.TEST_CLOUD_INTEGRATION_REQUIRE_SIGNED_UPLOAD === '1',
           stopNode: (node, options) => stopNode(node, {...options, whileStopped(fault) {
             stopped = node;
             return options.whileStopped(fault);

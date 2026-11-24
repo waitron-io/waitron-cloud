@@ -1,7 +1,6 @@
 // Observe native exchanges without replacing transport, signatures or responses.
 import assert from 'node:assert/strict';
 import {fixtureFailureDiagnostic} from '/proof/integration-renewal.mjs';
-import {observeBackupReservation} from '/proof/integration-snapshot-client.mjs';
 import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomUUID, createHash} from 'node:crypto';
@@ -22,6 +21,7 @@ globalThis.fetch = async (url, options) => {
   const record = observed => appendFile(process.env.CLOUD_TEST_ROOT + '/exchanges.jsonl',
     JSON.stringify({path: target.pathname, ...observed}) + '\n', {mode: 0o600});
   if (target.origin === origin && target.pathname === '/api/installations/backup-reserve') {
+    const {observeBackupReservation} = await import('/proof/integration-snapshot-client.mjs');
     return observeBackupReservation(() => nativeFetch(url, options), record);
   }
   const response = await nativeFetch(url, options);
