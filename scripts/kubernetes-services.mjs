@@ -193,8 +193,9 @@ export async function readServicesInbox(pods, fetch, path, authorization) {
 }
 
 export async function measureServiceStops({nodes, inventory, stopNode, restore, healthy, reconcile, probes, holdMs,
-  signal, spaceSignup, observe = observeP1}) {
+  signal, spaceSignup, requireSignedUpload = false, observe = observeP1}) {
   assert.ok(nodes.length === 3 && new Set(nodes).size === 3, 'services.stop_three_nodes');
+  if (requireSignedUpload) assert.equal(typeof probes?.signedBackupReservations, 'function', 'services.signed_backup_probe_missing');
   const uncovered = new Set(['primary', 'gateway', 'operator', 'fluxSource', 'fluxApply']);
   const remaining = [...nodes], legs = [];
   while (remaining.length) {
@@ -202,6 +203,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     const score = node => [...uncovered].filter(role => roles[role] === node).length;
     const node = remaining.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best);
     remaining.splice(remaining.indexOf(node), 1);
+    const checkReservations = requireSignedUpload && roles.primary === node ? await probes.signedBackupReservations() : undefined;
     process.stderr.write('D621 stop inventory ' + JSON.stringify({node, roles}) + '\n');
     const survivors = nodes.filter(name => name !== node);
     const stopped = Promise.withResolvers();
@@ -240,6 +242,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     if (roles.primary === node) assert.ok(publication?.worker && Number.isFinite(publication.completedMs), 'services.stop_publication');
     for (const role of uncovered) if (roles[role] === node) uncovered.delete(role);
     const rejoin = await healthy(node, signal);
+    await checkReservations?.();
     legs.push({...receipt, roles, rejoin});
     if (remaining.length && spaceSignup) {
       await spaceSignup(signal);
@@ -488,7 +491,7 @@ export async function runKubernetesServices(context) {
             path, authorization);
         }}),
         ...(stopServiceNodes && {stopServices: (probes, spaceSignup) => measureServiceStops({nodes: names, inventory, signal: stopSignal, probes, holdMs,
-          spaceSignup,
+          spaceSignup, requireSignedUpload: process.env.TEST_CLOUD_INTEGRATION_REQUIRE_SIGNED_UPLOAD === '1',
           stopNode: (node, options) => stopNode(node, {...options, whileStopped(fault) {
             stopped = node;
             return options.whileStopped(fault);

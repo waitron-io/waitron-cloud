@@ -1,4 +1,4 @@
-// Observe successful native exchanges without replacing transport, signatures or responses.
+// Observe native exchanges without replacing transport, signatures or responses.
 import assert from 'node:assert/strict';
 import {fixtureFailureDiagnostic} from '/proof/integration-renewal.mjs';
 import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
@@ -17,20 +17,21 @@ if (process.env.CLOUD_TEST_STREAM === '1') {
 const origin = process.env.CLOUD_TEST_ORIGIN ?? 'https://waitron.local:3000';
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
-  const response = await nativeFetch(url, options);
   const target = new URL(url);
+  const record = observed => appendFile(process.env.CLOUD_TEST_ROOT + '/exchanges.jsonl',
+    JSON.stringify({path: target.pathname, ...observed}) + '\n', {mode: 0o600});
+  if (target.origin === origin && target.pathname === '/api/installations/backup-reserve') {
+    const {observeBackupReservation} = await import('/proof/integration-snapshot-client.mjs');
+    return observeBackupReservation(() => nativeFetch(url, options), record);
+  }
+  const response = await nativeFetch(url, options);
   if (target.origin === origin && /^\/api\/(pairing|installations)\/[a-z-]+$/.test(target.pathname)) {
-    const observed = {path: target.pathname, status: response.status};
-    if (target.pathname === '/api/installations/backup-reserve' && response.status === 403) {
-      const body = await response.clone().json();
-      observed.error = body.error === 'permission_denied' ? 'permission_denied' : 'unexpected';
-      observed.grantIssued = Object.keys(body).some(key => key !== 'error');
-    }
+    const observed = {status: response.status};
     if (process.env.CLOUD_TEST_STORE_CA && target.pathname === '/api/installations/backup-publish' && response.status === 409) {
       const body = await response.clone().json();
       observed.error = body.error === 'object_mismatch' ? 'object_mismatch' : 'unexpected';
     }
-    await appendFile(process.env.CLOUD_TEST_ROOT + '/exchanges.jsonl', JSON.stringify(observed) + '\n', {mode: 0o600});
+    await record(observed);
   }
   return response;
 };

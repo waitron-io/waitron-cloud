@@ -1932,9 +1932,9 @@ implementation or production evidence.
   of the venue's HTTP 503 and the manifest restarts remain unknown. Cloud pairing
   changed between the two runs. Paid Stockholm qualification and billing
   reconciliation remain open. Cloud's [signed upload reply](authenticated-captures.md#wire-contract)
-  lets a test box opt in to a direct upload for one reserved object. The next
-  free rehearsal needs the matching Waitron build. After stopping the database
-  primary, verify that the first fresh reserve returns a signed URL with zero
+  lets a test box opt in to a direct upload for one reserved object. Use the
+  matching Waitron build and the [signed-upload rehearsal check](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell).
+  After stopping the database primary, verify that the first fresh reserve returns a signed URL with zero
   storage session calls and zero reserve HTTP 503 responses. Require independent
   backup verification within five minutes and signup email within 90 seconds.
   Repeat the outside rehearsal on the exact Cloud commit and Waitron image

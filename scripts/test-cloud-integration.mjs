@@ -228,6 +228,14 @@ export async function measureOutsideBackup({original, capture, verify, inspect},
   return {...evidence, retained: true};
 }
 
+export function checkSignedBackupReservations(replies) {
+  assert.ok(replies[0]?.status === 200 && replies[0].uploadMethod === 'signed-put', 'integration.signed_backup_first_reserve');
+  assert.ok(replies.every(reply => reply.status !== 200 || reply.uploadMethod === 'signed-put'), 'integration.signed_backup_unsigned_reserve');
+  const reserve503s = replies.filter(reply => reply.status === 503).length;
+  assert.equal(reserve503s, 0, 'integration.signed_backup_reserve_503');
+  return {uploadMethod: 'signed-put', reserves: replies.length, reserve503s};
+}
+
 export async function measureOutsideColdBackup({original, capture, verify, inspect}, signal) {
   assert.deepEqual(await readOutsideRetainedBackup(() => inspect(original), signal), {retainedSnapshotUnchanged: true},
     'integration.cold_backup_retained');
@@ -747,6 +755,15 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             };
             const withLimit = (signal, action) => cancellation.run({...cancellation.getStore(),
               signal: AbortSignal.any([runSignal(), signal].filter(Boolean))}, action);
+            const reserveReplies = async () => (await docker(['exec', id, 'cat', venueRoot + '/exchanges.jsonl'], '', 'client-reserve-replies'))
+              .split('\n').map(parseIntegrationJson).filter(row => row.path === '/api/installations/backup-reserve');
+            const signedBackupReservations = async () => {
+              const before = (await reserveReplies()).length;
+              return async () => {
+                const evidence = checkSignedBackupReservations((await reserveReplies()).slice(before));
+                process.stderr.write('D621 fresh backup reservations ' + JSON.stringify(evidence) + '\n');
+              };
+            };
             proveServiceStops = (remote, publication, cold) => observeRetainedClients({paid: {id}, browser, api, docker, control, login,
               remote: signal => remote(signal),
               signupMail: async signal => {
@@ -766,7 +783,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                   }
                   runSignal().throwIfAborted();
                 }));
-                const serviceStops = await kubernetes.stopServices({...probes, publication}, spaceSignup);
+                const serviceStops = await kubernetes.stopServices({...probes, publication, signedBackupReservations}, spaceSignup);
                 const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({

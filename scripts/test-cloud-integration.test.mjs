@@ -305,6 +305,33 @@ test('a fresh outside backup keeps the original verification bound to its origin
   await assert.rejects(async () => run(async () => original, true), /integration\.fault_backup_not_new/);
 });
 
+test('the signed upload rehearsal checks the first fresh reply and any later reserve failures', async () => {
+  const {checkSignedBackupReservations} = await load();
+  const signed = {status: 200, uploadMethod: 'signed-put'};
+  const legacy = {status: 200, uploadMethod: 'storage-session'};
+  assert.deepEqual(checkSignedBackupReservations([signed]), {uploadMethod: 'signed-put', reserves: 1, reserve503s: 0});
+  for (const replies of [[], [{status: 0}, signed], [{status: 400}, signed], [legacy, signed], [signed, legacy], [signed, {status: 503}]]) {
+    assert.throws(() => checkSignedBackupReservations(replies), /integration\.signed_backup_/);
+  }
+});
+
+test('the venue records a dropped reserve and keeps reply bodies private', async () => {
+  const {observeBackupReservation} = await import('../deploy/test-cloud/test-fixtures/integration-snapshot-client.mjs');
+  const replies = [], record = async reply => replies.push(reply);
+  const error = new Error('connection dropped');
+  await assert.rejects(observeBackupReservation(async () => {throw error;}, record), cause => cause === error);
+  for (const body of ['upstream error', JSON.stringify({uploadUrl: 'https://store.example.test/backup?synthetic-signature',
+    recoveryKey: 'synthetic-key'})]) {
+    const response = new Response(body);
+    assert.equal(await observeBackupReservation(async () => response, record), response);
+    assert.equal(await response.text(), body);
+  }
+  const refused = new Response('upstream denied', {status: 403});
+  assert.equal(await observeBackupReservation(async () => refused, record), refused);
+  assert.equal(await refused.text(), 'upstream denied');
+  assert.deepEqual(replies, [{status: 0}, {status: 200}, {status: 200, uploadMethod: 'signed-put'}, {status: 403}]);
+});
+
 test('after a full restart the last acknowledged backup is read before restoring a different capture', async () => {
   const {measureOutsideColdBackup} = await load();
   const original = {pointId: 'last-acknowledged', workerVerification: {attemptId: 'verified-before'}};
