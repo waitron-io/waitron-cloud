@@ -739,7 +739,10 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             // The venue account uses an authenticator. A separate sign-in exercises email challenge delivery.
             const loginEmail = `integration-observer-${runId}@example.test`, loginPassword = 'Disposable observer ' + randomUUID();
             await signupAccount(loginEmail, loginPassword);
-            const login = createObserverLogin({api, mailbox, readMail, email: loginEmail, password: loginPassword, replaceStranded: true});
+            const login = createObserverLogin({api, mailbox, readMail, email: loginEmail, password: loginPassword,
+              replaceStranded: true, onStage: event => {
+                process.stderr.write('D621 sign-in stage ' + JSON.stringify({at: Date.now(), ...event}) + '\n');
+              }});
             let lastAcknowledged = original;
             const backupOperations = {
               capture: () => control(id, 'snapshot-publish'),
@@ -1144,34 +1147,48 @@ export async function observeRetainedClients({observe, paid, browser, api, login
 }
 
 export function createObserverLogin({api, mailbox, readMail, email, password, cookie, rememberBrowser = false, replaceStranded = false,
-  now = () => performance.now()}) {
+  now = () => performance.now(), onStage}) {
+  const expiryFormat = new Intl.DateTimeFormat('en', {dateStyle: 'medium', timeStyle: 'long', timeZone: 'UTC'});
+  const normalizeWhitespace = text => text.replace(/\s+/gu, ' ').trim();
+  const trace = async (stage, action, details = {}) => {
+    onStage?.({stage, outcome: 'started', ...details});
+    try {
+      const result = await action();
+      onStage?.({stage, outcome: result.status ?? 'completed', ...details});
+      return result;
+    } catch (error) {
+      const name = error?.name;
+      onStage?.({stage, outcome: /^[A-Za-z]+Error$/.test(name) ? name : 'Error', ...details});
+      throw error;
+    }
+  };
   let pending;
   return async signal => {
     // A worker can leave an undelivered challenge claimed for up to sixty seconds.
-    const replacing = replaceStranded && pending && now() - pending.started >= 60_000;
-    if (replacing) pending = undefined;
+    if (replaceStranded && pending && now() - pending.started >= 60_000) pending = undefined;
     if (!pending) {
-      const seen = new Set((await mailbox(signal)).messages?.map(message => message.ID));
-      const reply = await api('/api/account/login', {email, password}, cookie ? {cookie} : {}, undefined, undefined, signal);
+      const seen = new Set((await trace('mailbox-before-password', () => mailbox(signal))).messages?.map(message => message.ID));
+      const reply = await trace('password', () =>
+        api('/api/account/login', {email, password}, cookie ? {cookie} : {}, undefined, undefined, signal));
       if (reply.status === 200) return reply;
       assert.ok(reply.status === 202 && reply.body.emailRequired, 'p1.password_signin');
-      pending = {seen, challengeToken: reply.body.challengeToken, started: now(), replacing: Boolean(replacing)};
+      const expiryLine = normalizeWhitespace('This single-use code expires at ' + expiryFormat.format(new Date(reply.body.expiresAt)) + '.');
+      pending = {seen, challengeToken: reply.body.challengeToken, started: now(), expiryLine};
     }
     const challenge = pending;
-    let refused;
-    for (;;) {
-      const message = await readMail(email, challenge.seen, signal).catch(error => {
-        if (!refused || error?.message !== 'integration.mail_missing' || signal?.aborted) throw error;
-      });
-      if (!message && refused) return refused;
-      const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
-      pending = undefined;
-      const reply = await api('/api/account/login/email', {challengeToken: challenge.challengeToken, code, ...(rememberBrowser ? {rememberBrowser} : {})}, {}, undefined, undefined, signal);
-      if (reply.status !== 401 || !challenge.replacing || !message.ID) return reply;
-      // Once per replacement, discard mail that arrived after its original challenge was replaced.
-      challenge.seen.add(message.ID);
-      challenge.replacing = false;
-      refused = reply;
-    }
+    const message = await trace('mail-delivered', async () => {
+      for (;;) {
+        const candidate = await readMail(email, challenge.seen, signal);
+        if (candidate.Text.split('\n').some(line => normalizeWhitespace(line) === challenge.expiryLine)) return candidate;
+        assert.ok(candidate.ID && !challenge.seen.has(candidate.ID), 'p1.signin_mail_id');
+        challenge.seen.add(candidate.ID);
+      }
+    });
+    const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
+    const messageId = /^<?([a-f0-9-]{36}@[A-Za-z0-9.-]{1,253})>?$/.exec(message.MessageID)?.[1];
+    // Two challenges can have the same printed expiry. Only the endpoint can confirm a code.
+    pending = undefined;
+    return trace('confirmation', () => api('/api/account/login/email',
+      {challengeToken: challenge.challengeToken, code, ...(rememberBrowser ? {rememberBrowser} : {})}, {}, undefined, undefined, signal), {messageId});
   };
 }
