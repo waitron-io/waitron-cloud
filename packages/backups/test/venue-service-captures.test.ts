@@ -75,7 +75,9 @@ function signedUpload(location:StorageLocation,key:string){
  return {uploadUrl:new URL(location.bucket+'/'+key,location.endpoint).href,expiresAt:new Date(Date.now()+60_000).toISOString()};
 }
 for(const mode of ['existing','test-venue-levels'] as const)test(`direct reserve returns an upload URL without a session exchange in ${mode} mode`,async()=>{
- const f=await fixture(undefined,async(location,key)=>signedUpload(location,key),mode);try{
+ const f=await fixture(undefined,async(location,key)=>({
+  ...signedUpload(location,key),credentials:{accessKeyId:'fixture-only',secretAccessKey:'fixture-only',sessionToken:'fixture-only'},
+ }),mode);try{
   if(mode==='existing')await f.legacyCatalogue.provision(f.installation,f.location);else await provision(f);
   const id=randomUUID(),result=await f.captures.execute('backup-reserve',f.proof('backup-reserve',id,directUpload));
   assert.ok('uploadUrl' in result);
@@ -110,9 +112,9 @@ test('direct reserve refuses an empty upload address',async()=>{
  }finally{await f.close();}
 });
 test('direct reserve refuses an upload address valid for more than 900 seconds',async(t)=>{
- const now=Date.now();
- const f=await fixture(undefined,async(location,key)=>({...signedUpload(location,key),expiresAt:new Date(now+901_000).toISOString()}));try{
+ const f=await fixture(undefined,async(location,key)=>({...signedUpload(location,key),expiresAt:new Date(Date.now()+901_000).toISOString()}));try{
   await provision(f);
+  const now=Date.now();
   t.mock.method(Date,'now',()=>now);
   await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.storage_grant'});
  }finally{await f.close();}
