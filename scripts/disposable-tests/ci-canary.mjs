@@ -676,7 +676,8 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    pending.sourceSha===ci.sourceSha && pending.workflowSha===ci.workflowSha,'Ordinary CI needs its recorded concrete Mac intent');
  }
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
- let completion,admissionQuotaRetryAt,registration5xx=false;
+ const serverRefused=error=>Number.isInteger(error.status) && error.status>=500 && error.status<=599;
+ let completion,admissionQuotaRetryAt,admission5xx=false;
  let result=await runLocal({leases,request:ciRequest(lane,ci),signal,transport:{
   healthy:options=>transport.healthy({...options,...memory}),transfer:(lease,options)=>transport.transfer(lease,options),
   prepare:(lease,options)=>transport.prepare(lease,options),
@@ -690,13 +691,14 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    assert.equal((await namedRunners(api,repository,name,options.signal)).length,0,'CI runner name already registered; do not remint');
    }catch(error){
     if([403,429].includes(error.status) && Number.isSafeInteger(error.retryAt))admissionQuotaRetryAt=error.retryAt;
+    admission5xx=serverRefused(error);
     throw error;
    }
    // Match hosted checkouts because coverage blobs key source files by absolute path.
    let registration;
    try{registration=await api.post(`${base}/runners/generate-jitconfig`,{
     name,runner_group_id:1,labels:['self-hosted',routingLabel(ci)],work_folder:'/home/runner/work'},options);}
-   catch(error){registration5xx=Number.isInteger(error.status) && error.status>=500 && error.status<=599;throw error;}
+   catch(error){admission5xx=serverRefused(error);throw error;}
    assert.ok(registration.runner?.name===name && Number.isSafeInteger(registration.runner.id) && registration.runner.id>0 &&
     typeof registration.encoded_jit_config==='string' && registration.encoded_jit_config.length>0 && registration.encoded_jit_config.length<=64000,'Invalid CI registration response');
    assert.ok(leases.bindRunner(lease,registration.runner.id),'CI runner lease changed before binding');
@@ -783,7 +785,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
  if(completion)result={...result,completion};
  try{
   if(admissionQuotaRetryAt!==undefined)leases.recordCIRetryFailure(result,admissionQuotaRetryAt);
-  else if(registration5xx)leases.recordCIRetryFailure(result,'registration-5xx');
+  else if(admission5xx)leases.recordCIRetryFailure(result,'registration-5xx');
   else leases.recordBusyRunnerFailure(result);
  }
  finally{

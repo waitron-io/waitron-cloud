@@ -66,6 +66,41 @@ for(const status of [403,429])test(`a pre-registration quota refusal (${status})
  assert.equal(f.events.filter(event=>event==='register').length,1);
  assert.equal(f.leases.reserveLocal(ciRequest('I',identity)).code,75,'a completed retry cannot gain a third guest');
 });
+for(const [read,endpoint,registrationFails] of [
+ ['run','/runs/789',false],['job','/jobs/901',false],['runner list','/runners?per_page=100&page=1',false],
+ ['run followed by a registration 5xx','/runs/789',true],
+])test(`a received 503 on the pre-registration ${read} gets one replay after cleanup`,async t=>{
+ const {runCI}=await import('./ci-canary.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml'},f=fixture(t,{identity}),get=f.api.get;
+ const now=Date.now();f.leases.now=()=>now;
+ f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,
+  route:'server',createdAt:now,runId:789,attempt:1,jobId:901});
+ let refuseRead=true;
+ f.api.get=async(path,options)=>{
+  if(refuseRead && path.endsWith(endpoint)){
+   refuseRead=false;
+   throw Object.assign(new Error('GitHub GET refused (503)'),{status:503});
+  }
+  return get(path,options);
+ };
+ if(registrationFails)f.api.post=async()=>{
+  f.events.push('register');
+  throw Object.assign(new Error('GitHub POST refused (503)'),{status:503});
+ };
+ const run=()=>runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});
+ const failed=await run();
+ assert.equal(failed.code,125);assert.equal(failed.cleanup,'absent');
+ assert.match(failed.error,/GitHub GET refused \(503\)/);
+ assert.equal(f.events.includes('register'),false);
+ assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+ f.leases.now=()=>now+59999;
+ assert.equal((await run()).code,75);
+ f.leases.now=()=>now+60000;
+ assert.equal((await run()).code,registrationFails?125:0);
+ f.leases.now=()=>now+120000;
+ assert.equal(f.leases.reserveLocal(ciRequest('I',identity)).code,75,'a replay cannot grant a third guest');
+ assert.equal(f.events.filter(event=>event==='register').length,1);
+});
 test('lost registration never remints and reconciliation removes the recorded name after VM destruction',async t=>{
  const {runCI}=await import('./ci-canary.mjs');const f=fixture(t,{lost:true});
  const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud'});assert.equal(result.code,125);
@@ -86,7 +121,7 @@ test('a quota refusal from registration remains retired after reset',async t=>{
  assert.equal(f.events.filter(event=>event==='register').length,1);
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
-test('only a received registration 5xx records a retry, after exact-name runner removal',async t=>{
+test('registration retries only a received 5xx, after exact-name runner removal',async t=>{
  const {runCI}=await import('./ci-canary.mjs');
  for(const [status,retry] of [[500,true],[503,true],[599,true],[422,false],[499,false],[600,false],['invalid-success',false],['lost',false]]){
   const identity={...ci,workflowPath:'.github/workflows/ci.yml'},f=fixture(t,{identity,lost:true}),post=f.api.post,remove=f.api.delete;
