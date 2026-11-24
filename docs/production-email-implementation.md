@@ -69,8 +69,12 @@ before sending message data; a trusted certificate alone is not enough.
 Run `pnpm mail:worker` continuously or `pnpm mail:worker --once` for one due message.
 `pnpm mail:status` reads queue counts using only `DATABASE_URL`. Provider failures
 are saved with fixed diagnostic codes; `--once` exits successfully after recording
-such a failure, so inspect the returned counts and row status. Database and startup
-configuration failures exit nonzero. No automatic fallback to another relay occurs.
+such a failure, so inspect the returned counts and row status. The continuous
+worker retries failed database operations and logs `check database, key and mail
+configuration`. An incompatible migration ledger stops the worker when a new
+connection first tries to claim mail. The worker also exits nonzero if it cannot
+load its startup configuration. Database failures still exit nonzero in
+the one-shot commands. No automatic fallback to another relay occurs.
 
 The worker supplies the queue ID and an abort signal to the adapter. It saves the
 SMTP Message-ID on acceptance, then removes the encrypted recipient and token.

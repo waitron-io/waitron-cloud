@@ -12,7 +12,7 @@ const auditedInputs = [
   '100644 blob a8e639db9004f362aabb26ad4371fb01885c4dff\tscripts/ci-scope.mjs',
   '100644 blob 6dd88448dffd6cbe14a72ba4d3b24fbc21e6801d\t.github/workflows/ci.yml',
   '100644 blob e06930b7229ac44a14187f449a582497e9df177d\tpackages/registration/src/migrate.ts',
-  '100644 blob 499fc6c5da992a85931d8e9b3b1c8ed7bb7bbf46\tpackages/registration/src/transaction.ts',
+  '100644 blob 56407d3f644f6ff76de902a33707f726563351d5\tpackages/registration/src/transaction.ts',
   '100644 blob 39ebcc2a20fb61bb8a606d79459f5f922330e39f\tscripts/database-recovery-fixture.mjs',
   '100644 blob 59ccb5b2c8976529682613bc8af332f8bc7e4f9a\tscripts/database-recovery-migrations.mjs',
   '100644 blob cc1885e25382c212367a77cc03954c6698e0dd0f\tscripts/database-recovery-migrations.test.mjs',
