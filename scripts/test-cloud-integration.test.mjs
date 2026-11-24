@@ -117,13 +117,17 @@ const staleSignInMail = {ID: 'inbox-stale', MessageID: '22222222-2222-4222-8222-
 
 test('observer password sign-in completes its real email challenge and retains it across a mail wait', async () => {
   const {createObserverLogin} = await load(); assert.equal(typeof createObserverLogin, 'function');
-  const requests = []; let currentDelivered = false;
+  const requests = [], events = [];
+  const olderMail = [staleSignInMail, {...staleSignInMail, ID: 'inbox-stale-copy'}];
+  let currentDelivered = false;
   const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic password', cookie: 'recognised', rememberBrowser: true,
+    onStage: event => events.push(event),
     mailbox: async () => ({messages: [{ID: 'old'}]}),
     readMail: async (email, seen) => {
       assert.equal(email, 'owner@example.test');
       assert.ok(seen.has('old'));
-      if (!seen.has(staleSignInMail.ID)) return staleSignInMail;
+      const stale = olderMail.find(message => !seen.has(message.ID));
+      if (stale) return stale;
       if (!currentDelivered) throw Error('mail delayed');
       return currentSignInMail;
     },
@@ -136,6 +140,10 @@ test('observer password sign-in completes its real email challenge and retains i
   currentDelivered = true;
   assert.deepEqual(await login(), {status: 200});
   assert.deepEqual(requests, ['/api/account/login', '/api/account/login/email']);
+  assert.deepEqual(events.filter(event => event.stage === 'mail-delivered' && event.outcome !== 'started'), [
+    {stage: 'mail-delivered', outcome: 'Error', skipped: 2},
+    {stage: 'mail-delivered', outcome: 'completed', skipped: 0},
+  ]);
 });
 
 test('a lost email-code submission reply starts a fresh sign-in instead of replaying the used code', async () => {
@@ -166,7 +174,7 @@ for (const {name, messages, status, malformedId = false} of [
     onStage: event => events.push(event),
     async api(path, body) {
       if (path === '/api/account/login') {
-        if (++starts === 1) throw Error('reply lost with private error text 654321');
+        if (++starts === 1) throw Object.assign(Error('reply lost with private text 654321'), {name: 'Private 123456'});
         return {status: 202, body: {emailRequired: true, challengeToken: 'current-challenge', expiresAt: observerExpiry}};
       }
       assert.equal(path, '/api/account/login/email');
@@ -177,15 +185,20 @@ for (const {name, messages, status, malformedId = false} of [
   assert.deepEqual(await login(), {status});
   assert.deepEqual(submissions, [{challengeToken: 'current-challenge', code: '123456'}]);
   const messageId = malformedId ? undefined : currentSignInMail.MessageID;
-  assert.deepEqual(events.filter(event => event.stage === 'confirmation'), [
+  assert.deepEqual(events, [
+    {stage: 'mailbox-before-password', outcome: 'started'},
+    {stage: 'mailbox-before-password', outcome: 'completed'},
+    {stage: 'password', outcome: 'started'},
+    {stage: 'password', outcome: 'Error'},
+    {stage: 'mailbox-before-password', outcome: 'started'},
+    {stage: 'mailbox-before-password', outcome: 'completed'},
+    {stage: 'password', outcome: 'started'},
+    {stage: 'password', outcome: 202},
+    {stage: 'mail-delivered', outcome: 'started', skipped: 0},
+    {stage: 'mail-delivered', outcome: 'completed', skipped: messages[0] === staleSignInMail ? 1 : 0},
     {stage: 'confirmation', outcome: 'started', messageId},
     {stage: 'confirmation', outcome: status, messageId},
   ]);
-  assert.ok(events.some(event => event.stage === 'password' && event.outcome === 'Error'));
-  assert.ok(events.some(event => event.stage === 'password' && event.outcome === 202));
-  assert.deepEqual(events.find(event => event.stage === 'mail-delivered' && event.outcome === 'completed'),
-    {stage: 'mail-delivered', outcome: 'completed', skipped: messages[0] === staleSignInMail ? 1 : 0});
-  assert.doesNotMatch(JSON.stringify(events), /123456|654321|current-challenge|verification code|private error text/);
 });
 
 for (const status of [200, 401]) test('a stranded sign-in starts over after the mail worker lease expires: ' + status, async () => {
