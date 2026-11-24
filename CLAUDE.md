@@ -121,6 +121,21 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
 - **Name the test files you mean.** A bare `node --test` searches every folder under where you are.
   Cost: on 2026-11-04 a review ran one from near the top of the Mac, and about 5,900 other people's
   test files ran. Nothing enforces this.
+- **Run tests from their package.** Some registration tests start `src/…-cli.ts` from your working
+  directory. Use `pnpm --dir packages/registration exec node --test test/pairing-codes.test.ts`
+  to avoid `MODULE_NOT_FOUND`.
+- **Run database test files one at a time with `--test-concurrency=1`** when several share the test
+  database. Concurrent schema work can fill PostgreSQL's lock table (`53200`, out of shared memory).
+- **Build the portal before running browser tests directly.** Run `pnpm --dir apps/portal build`
+  because the tests load `apps/portal/dist`, which can be missing or stale.
+- **Clear `NODE_TEST_CONTEXT` when a test launches another `node --test`.** Delete it from the
+  child environment or Node treats the run as recursive and can exit zero without running the files.
+- **Filter by the test names you want.** A negative lookahead can also match the file name and
+  let excluded cases run. An empty `--test-name-pattern=` errors, and a filter that matches no
+  cases can still report a passing file. Check which cases ran as well as the count.
+- **Import scripts from standard input with `node --input-type=module`.** With a trailing `-`,
+  `scripts/cloud-cost/conformance.mjs` tries to resolve a file named `-` during import. You can
+  also use `-e` or a `.mjs` file for the probe.
 - **Read the test count, never just the exit status.** `pnpm --filter <mistyped name> test` prints "No
   projects matched" and exits 0, having run nothing.
 - **Use the real database wherever locking or transactions matter**, through
