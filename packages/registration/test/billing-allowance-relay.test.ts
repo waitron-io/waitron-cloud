@@ -103,19 +103,21 @@ for(const mode of ['existing','test-free-paid','test-venue-levels'])test('absent
 test('monthly relay refuses a grant that expires during its allowance bucket wait',async t=>{
  const f=await setup(t),v=await f.venue(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
-  const grant=(await f.pool.query("UPDATE relay_grants SET expires_at=clock_timestamp()+interval '300 milliseconds' WHERE id=$1 RETURNING expires_at",[v.grant.id])).rows[0];
+  let time=(await f.pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
+  const clock=databaseClock(f.pool,()=>time);
+  const grant=(await f.pool.query('UPDATE relay_grants SET expires_at=$2 WHERE id=$1 RETURNING expires_at',[v.grant.id,new Date(time+300)])).rows[0];
   const month=(await f.pool.query("SELECT date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date::text AS month")).rows[0].month;
   await holder.query('BEGIN');await holder.query('SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext($1))',['allowance-account:'+v.account+':transactional_email:'+month]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let done=false;
-  const grants=new api.RelayGrantStore(f.pool,f.config.grants,mode,options);
+  const grants=new api.RelayGrantStore(clock,f.config.grants,mode,options);
   const publicKey=(await f.pool.query('SELECT public_key FROM installations WHERE id=$1',[v.installation])).rows[0].public_key;
-  pending=transaction(f.pool,c=>grants.reserve(c,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:randomUUID(),binding:'fixed-binding'}));
+  pending=transaction(clock,c=>grants.reserve(c,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:randomUUID(),binding:'fixed-binding'}));
   // Authentication uses the stored current key, independently of the grant selector.
   void pending.then(()=>{done=true;},()=>{done=true;});
   let waiting=false;const until=performance.now()+5000;
   while(!done&&performance.now()<until){waiting=!!(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount;if(waiting)break;await setImmediate();}
   assert.equal(waiting,true,'admission must reach its monthly account lock');
-  while(Date.now()<=grant.expires_at.getTime())await new Promise(resolve=>setTimeout(resolve,10));
+  time=grant.expires_at.getTime()+1;
   await holder.query('COMMIT');await assert.rejects(pending,{code:'grant_unavailable'});assert.deepEqual(await f.rows(),[]);
   assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'0');
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}

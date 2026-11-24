@@ -2266,6 +2266,8 @@ controls cross a one-second period while that query waits, with monthly
 allowances enabled and disabled. A reservation now records the same database
 time used to check its period, grant and installation after lock waits. The
 existing monthly-wait, expiry, replay, allowance and rollback assertions remain.
+The grant-expiry case advances its test clock only after PostgreSQL reports the
+monthly account lock wait.
 An independent database-time observation immediately before releasing the monthly
 wait also requires a period that ends after that observation; this prevents the
 shared stored timestamp from hiding a period chosen before the wait.
