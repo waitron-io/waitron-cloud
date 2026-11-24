@@ -109,28 +109,49 @@ test('retained-client adapter checks sign-in responses, identity and process wit
   }
 });
 
+const observerExpiry = '2026-11-24T14:05:20.123Z';
+const currentSignInMail = {ID: 'inbox-current', MessageID: '11111111-1111-4111-8111-111111111111@example.test',
+  Text: 'Your Waitron Cloud verification code\n\n123456\n\nThis single-use code expires at Nov 24, 2026, 2:05:20\u202fPM UTC.\n'};
+const staleSignInMail = {ID: 'inbox-stale', MessageID: '22222222-2222-4222-8222-222222222222@example.test',
+  Text: 'Your Waitron Cloud verification code\n\n654321\n\nThis single-use code expires at Nov 24, 2026, 2:05:05 PM UTC.\n'};
+
 test('observer password sign-in completes its real email challenge and retains it across a mail wait', async () => {
   const {createObserverLogin} = await load(); assert.equal(typeof createObserverLogin, 'function');
-  const requests = []; let reads = 0;
+  const requests = [], events = [];
+  const olderMail = [staleSignInMail, {...staleSignInMail, ID: 'inbox-stale-copy'}];
+  let currentDelivered = false;
   const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic password', cookie: 'recognised', rememberBrowser: true,
+    onStage: event => events.push(event),
     mailbox: async () => ({messages: [{ID: 'old'}]}),
-    readMail: async (email, seen) => {assert.equal(email, 'owner@example.test'); assert.ok(seen.has('old')); if (++reads === 1) throw Error('mail delayed'); return {Text: 'Your Waitron Cloud verification code\n\n123456\n'};},
+    readMail: async (email, seen) => {
+      assert.equal(email, 'owner@example.test');
+      assert.ok(seen.has('old'));
+      const stale = olderMail.find(message => !seen.has(message.ID));
+      if (stale) return stale;
+      if (!currentDelivered) throw Error('mail delayed');
+      return currentSignInMail;
+    },
     api: async (path, body, headers) => {
       requests.push(path);
-      if (path === '/api/account/login') {assert.equal(headers.cookie, 'recognised'); return {status: 202, body: {emailRequired: true, challengeToken: 'private-challenge'}};}
+      if (path === '/api/account/login') {assert.equal(headers.cookie, 'recognised'); return {status: 202, body: {emailRequired: true, challengeToken: 'private-challenge', expiresAt: observerExpiry}};}
       assert.equal(path, '/api/account/login/email'); assert.deepEqual(body, {challengeToken: 'private-challenge', code: '123456', rememberBrowser: true}); return {status: 200};
     }});
   await assert.rejects(login(), /mail delayed/);
+  currentDelivered = true;
   assert.deepEqual(await login(), {status: 200});
   assert.deepEqual(requests, ['/api/account/login', '/api/account/login/email']);
+  assert.deepEqual(events.filter(event => event.stage === 'mail-delivered' && event.outcome !== 'started'), [
+    {stage: 'mail-delivered', outcome: 'Error', skipped: 2},
+    {stage: 'mail-delivered', outcome: 'completed', skipped: 0},
+  ]);
 });
 
 test('a lost email-code submission reply starts a fresh sign-in instead of replaying the used code', async () => {
   const {createObserverLogin} = await load(); let starts = 0, submissions = 0;
   const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic', cookie: 'recognised',
-    mailbox: async () => ({messages: []}), readMail: async () => ({Text: '\n123456\n'}),
+    mailbox: async () => ({messages: []}), readMail: async () => currentSignInMail,
     api: async (path, body) => {
-      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts, expiresAt: observerExpiry}};
       assert.equal(body.challengeToken, 'challenge-' + starts);
       if (++submissions === 1) throw Error('reply lost'); return {status: starts === 2 ? 200 : 400};
     }});
@@ -138,44 +159,83 @@ test('a lost email-code submission reply starts a fresh sign-in instead of repla
   assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
 });
 
-for (const replacementStatus of [200, 401, undefined]) test(
-  'a replaced sign-in handles late mail with replacement status ' + replacementStatus, async () => {
+for (const {name, messages, status, malformedId = false} of [
+  {name: 'stale mail arrives first', messages: [staleSignInMail, currentSignInMail], status: 200},
+  {name: 'current mail arrives first', messages: [currentSignInMail, staleSignInMail], status: 200},
+  {name: 'confirmation refuses the selected code', messages: [currentSignInMail, staleSignInMail], status: 401},
+  {name: 'a malformed Message-ID stays private', messages: [{...currentSignInMail, MessageID: 'private 123456'}], status: 200, malformedId: true},
+]) test('after a lost password reply, ' + name, async () => {
   const {createObserverLogin} = await load();
-  let clock = 0, starts = 0, completions = 0;
-  const messages = [{ID: 'stranded', Text: '\n100001\n'}];
-  if (replacementStatus) messages.push({ID: 'replacement', Text: '\n100002\n'}, {ID: 'surplus', Text: '\n100003\n'});
+  const submissions = [], events = [];
+  let starts = 0;
+  const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
+    mailbox: async () => ({messages: []}),
+    readMail: async (_email, seen) => messages.find(message => !seen.has(message.ID)),
+    onStage: event => events.push(event),
+    async api(path, body) {
+      if (path === '/api/account/login') {
+        if (++starts === 1) throw Object.assign(Error('reply lost with private text 654321'), {name: 'Private 123456'});
+        return {status: 202, body: {emailRequired: true, challengeToken: 'current-challenge', expiresAt: observerExpiry}};
+      }
+      assert.equal(path, '/api/account/login/email');
+      submissions.push(body);
+      return {status: body.code === '123456' ? status : 401};
+    }});
+  await assert.rejects(login(), /reply lost/);
+  assert.deepEqual(await login(), {status});
+  assert.deepEqual(submissions, [{challengeToken: 'current-challenge', code: '123456'}]);
+  const messageId = malformedId ? undefined : currentSignInMail.MessageID;
+  assert.deepEqual(events, [
+    {stage: 'mailbox-before-password', outcome: 'started'},
+    {stage: 'mailbox-before-password', outcome: 'completed'},
+    {stage: 'password', outcome: 'started'},
+    {stage: 'password', outcome: 'Error'},
+    {stage: 'mailbox-before-password', outcome: 'started'},
+    {stage: 'mailbox-before-password', outcome: 'completed'},
+    {stage: 'password', outcome: 'started'},
+    {stage: 'password', outcome: 202},
+    {stage: 'mail-delivered', outcome: 'started', skipped: 0},
+    {stage: 'mail-delivered', outcome: 'completed', skipped: messages[0] === staleSignInMail ? 1 : 0},
+    {stage: 'confirmation', outcome: 'started', messageId},
+    {stage: 'confirmation', outcome: status, messageId},
+  ]);
+});
+
+for (const status of [200, 401]) test('a stranded sign-in starts over after the mail worker lease expires: ' + status, async () => {
+  const {createObserverLogin} = await load();
+  let clock = 0, starts = 0;
+  const submissions = [];
   const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
     replaceStranded: true, now: () => clock, mailbox: async () => ({messages: starts ? [{ID: 'already-delivered'}] : []}),
     async readMail(_email, seen) {
       if (starts === 1) throw Error('mail stranded');
       assert.ok(seen.has('already-delivered'));
-      const message = messages.find(message => !seen.has(message.ID));
-      if (!message) throw Error('integration.mail_missing');
-      return message;
+      if (!seen.has(staleSignInMail.ID)) return staleSignInMail;
+      return currentSignInMail;
     },
     async api(path, body) {
-      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
-      assert.equal(body.challengeToken, 'challenge-2');
-      completions++;
-      return {status: body.code === '100002' ? replacementStatus : 401};
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true,
+        challengeToken: 'challenge-' + ++starts, expiresAt: starts === 1 ? '2026-11-24T14:04:20.123Z' : observerExpiry}};
+      submissions.push(body);
+      return {status: body.code === '123456' ? status : 400};
     }});
   await assert.rejects(login(), /mail stranded/);
   clock = 59_999;
   await assert.rejects(login(), /mail stranded/);
   assert.equal(starts, 1);
   clock = 60_000;
-  assert.deepEqual(await login(), {status: replacementStatus ?? 401});
-  assert.equal(completions, replacementStatus ? 2 : 1);
+  assert.deepEqual(await login(), {status});
+  assert.deepEqual(submissions, [{challengeToken: 'challenge-2', code: '123456'}]);
   assert.equal(starts, 2);
 });
 
 test('the outside observer can start email sign-in without a recognised browser', async () => {
   const {createObserverLogin} = await load();
   const login = createObserverLogin({email: 'observer@example.test', password: 'synthetic',
-    mailbox: async () => ({messages: []}), readMail: async () => ({Text: '\n123456\n'}),
+    mailbox: async () => ({messages: []}), readMail: async () => currentSignInMail,
     api: async (path, _body, headers) => {
       assert.deepEqual(headers, {});
-      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'new-challenge'}};
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'new-challenge', expiresAt: observerExpiry}};
       return {status: 200};
     }});
   assert.deepEqual(await login(), {status: 200});
