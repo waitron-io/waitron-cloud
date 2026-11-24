@@ -35,10 +35,10 @@ that a snapshot of that size fits this verifier configuration.
 
 ## Build the verifier for the Amazon test box
 
-Build the verifier from the same Waitron release as the test box. The
-[Amazon test target](../deploy/backup-verifier/amazon-test-target.json) records
-the full revision and the expected backup format read from the installed image.
-The build checks that the compiled verifier reports the same target.
+The Stockholm and Kind service rehearsals share the [Amazon test target](../deploy/backup-verifier/amazon-test-target.json).
+It pins the Waitron revision and backup format, which the build checks against the compiled verifier.
+For the single-host test Cloud upgrade, move the box to the pinned Waitron release and
+update the Cloud image, verifier image, saved verifier state and database policy together.
 
 On your isolated Linux Docker host, set `WAITRON_CHECKOUT` to a checkout that
 contains the pinned commit and set `NODE_AUTH_TOKEN` as for a local verifier
