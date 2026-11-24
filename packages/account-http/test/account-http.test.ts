@@ -102,7 +102,7 @@ test('a sign-up waiting to attach a handover does not delay an unrelated sign-up
   try {
     await locker.query('BEGIN');
     await locker.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE', [sender.organisationId]);
-    pending = request('/signup/complete', {token: invitee, password});
+    pending = Promise.resolve(request('/signup/complete', {token: invitee, password}));
     let waiting = false;
     for (let attempt = 0; attempt < 200 && !waiting; attempt++) {
       waiting = (await db.pool.query(`SELECT EXISTS (
@@ -112,7 +112,7 @@ test('a sign-up waiting to attach a handover does not delay an unrelated sign-up
       if (!waiting) await delay(20);
     }
     assert.equal(waiting, true, 'the invitee is waiting while the organisation is locked');
-    unrelated = request('/signup/complete', {token: other, password}, {peer: '198.51.100.9'});
+    unrelated = Promise.resolve(request('/signup/complete', {token: other, password}, {peer: '198.51.100.9'}));
     const status = await Promise.race([unrelated.then(reply => reply.status), delay(3000, 'waiting on another sign-up', {ref: false})]);
     assert.equal(status, 201);
   } finally {
