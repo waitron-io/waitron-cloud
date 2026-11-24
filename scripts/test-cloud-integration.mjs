@@ -201,8 +201,8 @@ export async function readOutsideSignupMail(readMail, recipient, origin, signal,
   const message = await untilRemote(limit => readMail(recipient, new Set(), limit), 90_000, signal, 'outside_signup_mail');
   const token = readSignupToken(message.Text, origin);
   if (!recordWorker) return token;
-  assert.ok(message.worker, 'integration.outside_mail_worker');
-  return {token, worker: message.worker};
+  assert.ok(message.Username, 'integration.outside_mail_worker');
+  return {token, worker: message.Username};
 }
 
 export async function readOutsideRetainedBackup(read, signal) {
@@ -261,7 +261,7 @@ export async function runTestCloudClients(options = {}) {
       'integration.stockholm_machine_loss_binding');
     const k = options.kubernetes, remote = options.stockholmRemote, baseline = options.stockholmBaseline;
     const mode = baseline ? 'stockholm_baseline' : remote ? 'stockholm_remote' : 'services';
-    assert.ok(baseline || (!k?.readInbox && !k?.stopServices && !k?.restartServices), 'integration.services_binding');
+    assert.ok(baseline || (!k?.stopServices && !k?.restartServices), 'integration.services_binding');
     assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery',
       'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
       'schemaRollback', 'pairedExpiry', 'fixedProject'].some(key => options[key]) && !(remote && (options.services || options.paidVerification)) &&
@@ -269,7 +269,7 @@ export async function runTestCloudClients(options = {}) {
     if (baseline && k?.amazon) assertAmazonBinding(k.amazon, ['baseline']);
     const ownedCluster = baseline && k?.amazon ? k.amazon.cluster === k.cluster : /^d621-[a-f0-9]{32}$/.test(k?.cluster ?? '');
     const accountRoute = baseline ? /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') &&
-      k.proxyIp === k.stockholmRemote?.gatewayIp && k.port === 3000 && typeof k.readInbox === 'function' &&
+      k.proxyIp === k.stockholmRemote?.gatewayIp && k.port === 3000 && Number.isInteger(k.mailPort) && k.mailPort > 0 && k.mailPort <= 65535 &&
       (!k.stopServices || typeof k.stopServices === 'function' && (!k.amazon || k.amazon.measuredStops === true)) &&
       (!k.restartServices || typeof k.restartServices === 'function' && typeof k.stopServices === 'function') :
       /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') && Number.isInteger(k.port) && Number.isInteger(k.mailPort);
@@ -491,8 +491,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const ca = kubernetes?.ca ?? await docker(['exec', await compose(['ps', '-q', 'proxy']), 'cat', '/run/local-stack/lan/ca.pem']);
     assert.match(ca, /BEGIN CERTIFICATE/); assert.doesNotMatch(ca, /PRIVATE/);
     let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
-    const mailPort = stockholmBaseline ? undefined :
-      kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
+    const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const measured = Boolean(kubernetes?.stopServices);
     const budget = kubernetes?.observe || measured ? createP1Budget() : undefined;
     const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal, fresh = false) => {
@@ -520,16 +519,13 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const organisations = [], restarts = [], remoteClients = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence, paidRemoteEvidence;
     const fetchInbox = (path, signal, authorization = kubernetes?.mailAuthorization) => {
       const limit = AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)]);
-      return stockholmBaseline ? kubernetes.readInbox(path, authorization, limit) :
-        fetch(`http://127.0.0.1:${mailPort}/api/v1/${path}`, {signal: limit,
+      return fetch(`http://127.0.0.1:${mailPort}/api/v1/${path}`, {signal: limit,
           ...(authorization ? {headers: {authorization}} : {})});
     };
     const readInbox = async (path, signal) => {
       const response = await fetchInbox(path, signal);
       if (services) assert.equal(response.status, 200, 'integration.inbox_read');
-      const value = parseIntegrationJson(await response.text());
-      const worker = measured ? response.headers.get('x-rehearsal-mail-worker') : undefined;
-      return worker ? {...value, worker} : value;
+      return parseIntegrationJson(await response.text());
     };
     if (services) {
       const request = await fetchInbox('messages', undefined, '');
@@ -537,6 +533,15 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       await request.body?.cancel();
     }
     const mailbox = signal => readInbox('messages', signal);
+    const inboxWitness = async signal => {
+      const id = (await mailbox(signal)).messages?.[0]?.ID;
+      assert.ok(id, 'integration.inbox_witness_missing');
+      return async limit => {
+        const message = await readInbox('message/' + encodeURIComponent(id), limit);
+        assert.equal(message.ID, id, 'integration.inbox_witness_changed');
+        return true;
+      };
+    };
     const readMail = async (email, seen, signal) => {
       let message;
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -786,8 +791,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                   }
                   runSignal().throwIfAborted();
                 }));
-                const serviceStops = await kubernetes.stopServices({...probes, publication, signedBackupReservations}, spaceSignup);
-                const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, remote: cold.healthy,
+                const serviceStops = await kubernetes.stopServices({...probes, inboxWitness, publication, signedBackupReservations}, spaceSignup);
+                const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, inboxWitness, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({
                     ...backupOperations, original: lastAcknowledged,
@@ -1188,9 +1193,10 @@ export function createObserverLogin({api, mailbox, readMail, email, password, co
     }, mailTrace);
     const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
     const messageId = /^<?([a-f0-9-]{36}@[A-Za-z0-9.-]{1,253})>?$/.exec(message.MessageID)?.[1];
+    const username = /^[a-z0-9][a-z0-9.-]{0,252}$/.test(message.Username ?? '') ? message.Username : undefined;
     // Two challenges can have the same printed expiry. Only the endpoint can confirm a code.
     pending = undefined;
     return trace('confirmation', () => api('/api/account/login/email',
-      {challengeToken: challenge.challengeToken, code, ...(rememberBrowser ? {rememberBrowser} : {})}, {}, undefined, undefined, signal), {messageId});
+      {challengeToken: challenge.challengeToken, code, ...(rememberBrowser ? {rememberBrowser} : {})}, {}, undefined, undefined, signal), {messageId, ...(username && {username})});
   };
 }

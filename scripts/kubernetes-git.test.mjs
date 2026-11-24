@@ -336,3 +336,39 @@ for (const binding of ['10.77.0.4:18001', '10.77.0.4:18000:18001']) {
     assert.deepEqual(cleanup[0].args, ['rm', '-f', id]);
   });
 }
+
+for (const fault of ['none', 'binding', 'start']) {
+  test('outside Mailpit publishes only private SMTP and loopback inbox and cleans up: ' + fault, async t => {
+    const {startOutsideInbox} = await import('./kubernetes-outside.mjs');
+    const directory = await mkdtemp(join(tmpdir(), 'outside-inbox-test-'));
+    t.after(() => rm(directory, {recursive: true, force: true}));
+    const calls = [], id = 'f'.repeat(64), imageId = 'sha256:' + 'e'.repeat(64);
+    const options = {name: 'd621-test', directory, interfaceName: 'd621abc', files: {'smtp-auth': 'node:synthetic'},
+      async run(binary, args) {
+        calls.push({binary, args});
+        if (args[0] === 'image') return imageId;
+        if (args[0] === 'create') return id;
+        if (args[0] === 'start' && fault === 'start') throw Error('synthetic Mailpit start failure');
+        if (args[0] === 'port') return args.at(-1) === '1025/tcp' ? '10.77.0.4:1025' :
+          fault === 'binding' ? '0.0.0.0:39025' : '127.0.0.1:39025';
+      }};
+    assert.equal(typeof startOutsideInbox, 'function');
+    if (fault === 'none') {
+      const inbox = await startOutsideInbox(options);
+      assert.equal(inbox.port, 39025);
+      await inbox.close();
+    } else {
+      await assert.rejects(startOutsideInbox(options), fault === 'start' ? /synthetic Mailpit start failure/ : /outside.inbox_binding/);
+    }
+    const publish = calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'create');
+    assert.deepEqual(calls[publish].args.flatMap((arg, index, args) => arg === '-p' ? [args[index + 1]] : []),
+      ['10.77.0.4:1025:1025', '127.0.0.1::8025']);
+    assert.ok(calls[publish].args.includes(imageId));
+    const filters = calls.slice(0, publish).filter(({args}) => args.includes('DOCKER-USER'));
+    assert.equal(filters.length, 2);
+    assert.ok(filters.every(({args}) => args[args.indexOf('--ctorigdstport') + 1] === '1025'));
+    const cleanup = calls.filter(({args}) => args[0] === 'rm' || args.includes('-D'));
+    assert.deepEqual(cleanup.map(({binary}) => binary), ['docker', 'sudo', 'sudo']);
+    assert.deepEqual(cleanup[0].args, ['rm', '-f', id]);
+  });
+}

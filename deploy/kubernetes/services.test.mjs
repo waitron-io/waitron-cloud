@@ -47,6 +47,16 @@ test('outside services run one restarting copy per cell machine with a scoped in
   assert.deepEqual(envFrom, [{secretRef: {name: 'services-backup'}}]);
 });
 
+test('outside workers use the shared inbox and authenticate with their node name', () => {
+  const {spec: {template: {spec}}} = deployment.servicesDaemonSet('owned:cloud', ['node-a', 'node-b', 'node-c'], 'fixture-cell');
+  const {env} = spec.containers.find(row => row.name === 'email');
+  assert.equal(env.find(row => row.name === 'CLOUD_SMTP_HOST').value, '10.77.0.4');
+  assert.equal(env.find(row => row.name === 'CLOUD_SMTP_PORT').value, '1025');
+  assert.deepEqual(env.find(row => row.name === 'CLOUD_SMTP_USER').valueFrom, {fieldRef: {fieldPath: 'spec.nodeName'}});
+  assert.equal(spec.containers.some(row => row.name === 'mailpit'), false);
+  assert.equal(spec.volumes.some(row => row.name === 'mail'), false);
+});
+
 test('Mailpit accepts only authenticated TLS mail to synthetic addresses', () => {
   const {spec} = deployment.servicesPod('owned:cloud', 'owned-control-plane');
   const mail = spec.containers.find(row => row.name === 'mailpit');
