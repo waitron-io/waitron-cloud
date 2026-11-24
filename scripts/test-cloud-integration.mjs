@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {createHash, createHmac, randomUUID} from 'node:crypto';
 import {request} from 'node:https';
+import {solveBrowserCheck} from '../deploy/test-cloud/test-fixtures/browser-check.ts';
 import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
 import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fixtures/integration-recovery-evidence.mjs';
@@ -612,8 +613,14 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       }
       assert.ok(message, 'integration.mail_missing'); return message;
     };
+    const requestSignupEmail = async (email, signal) => {
+      const form = '/signup/request';
+      const challenge = await api('/api/account/browser-check', {form}, {}, undefined, undefined, signal);
+      assert.equal(challenge.status, 200, 'integration.signup_browser_check');
+      return api(`/api/account${form}`, {email}, solveBrowserCheck(challenge.body), undefined, undefined, signal);
+    };
     const signupAccount = async (email, password, signal) => {
-      assert.equal((await api('/api/account/signup/request', {email}, {}, undefined, undefined, signal)).status, 202);
+      assert.equal((await requestSignupEmail(email, signal)).status, 202);
       const message = await readMail(email, new Set(), signal);
       const token = readSignupToken(message.Text, origin);
       const signup = await api('/api/account/signup/complete', {token, password}, {}, undefined, undefined, signal);
@@ -851,7 +858,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               remote: signal => remote(signal),
               signupMail: async signal => {
                 const recipient = 'integration-stop-' + randomUUID() + '@example.test';
-                assert.equal((await api('/api/account/signup/request', {email: recipient}, {}, ca, cloudHostname, signal)).status,
+                assert.equal((await requestSignupEmail(recipient, signal)).status,
                   202, 'integration.fault_mail_request');
                 const {worker} = await readOutsideSignupMail(readMail, recipient, origin, signal, true);
                 return {worker};

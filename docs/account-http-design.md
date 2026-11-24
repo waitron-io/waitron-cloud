@@ -35,7 +35,9 @@ All account routes live under `/api/account`. POST bodies must be JSON objects.
 
 | Method and path | Input | Successful result |
 | --- | --- | --- |
-| POST `/signup/request` | `email` | 202, `{ status: "accepted" }` |
+| POST `/browser-check` | `form`, the path of the email request | 200, `{ challenge, difficulty }` |
+| GET `/browser-check.js` | No body | 200, the browser worker script |
+| POST `/signup/request` | `email` and browser proof header | 202, `{ status: "accepted" }` |
 | POST `/signup/complete` | `token`, `password` | 201 with the account ID |
 | POST `/login` | `email`, `password` | 200, account ID and cookies; or 202, bounded factor challenge with no cookies |
 | GET `/session` | Session cookie | 200, account ID and expiry; no idle extension |
@@ -43,10 +45,15 @@ All account routes live under `/api/account`. POST bodies must be JSON objects.
 | GET `/sessions` | Session cookie | 200, account-scoped live session summaries; no idle extension |
 | POST `/sessions/revoke` | Session cookie, CSRF header and session row UUID | 204, idempotent account-scoped revocation |
 | POST `/logout` | Session cookie and CSRF header | 204, end the session and clear both cookies |
-| POST `/password-reset/request` | `email` | 202, `{ status: "accepted" }` |
+| POST `/password-reset/request` | `email` and browser proof header | 202, `{ status: "accepted" }` |
 | POST `/password-reset/complete` | `token`, `password` | 200, `{ status: "completed" }`; no session |
 
-Reading an email link never consumes its token. Screens will submit those tokens in
+The browser obtains a fresh challenge for each sign-up or reset email. The worker
+finds a solution and the form sends it in `X-Waitron-Browser-Proof`. A signed challenge
+binds the solution to the form, portal origin and the same connection group as the
+rate limiter. PostgreSQL accepts it once across the account servers.
+
+Reading an email link never consumes its token. Screens submit those tokens in
 POST bodies; the API rejects token-bearing query parameters and does not redirect
 to caller-provided URLs. Signup and reset completion do not automatically sign in.
 Session activity is explicit so background polling cannot keep a session alive.

@@ -8,6 +8,8 @@ import {CloudActions} from '@waitron-cloud/registration';
 import {CloudActionError} from '@waitron-cloud/registration';
 import {cloudActionsResponse} from './cloud-actions.ts';
 import {GuestMenuMachine} from '@waitron-cloud/remote-access/guest-menu';
+import {browserCheckWorker} from '@waitron-cloud/remote-access/browser-check';
+import {emailBrowserCheck, isEmailRequest} from './browser-check.ts';
 import {guestMenuDeliveryResponse,guestMenuResponse} from './guest-menu.ts';
 import {validateGuestOrigin} from './guest-menu-server.ts';
 import {AccountActionProofStore,AccountActionProofError,AccountSecurityStore,AccountSecurityError} from '@waitron-cloud/registration';
@@ -67,6 +69,7 @@ import { readAccountBody } from './request.ts';
 import { readSessionCookie, writeSessionCookies, readBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
 const paths: Record<string, readonly string[]> = {
+  '/browser-check': ['form'],
   '/signup/request': ['email'], '/signup/complete': ['token', 'password'],
   '/login': ['email', 'password'], '/session/activity': [], '/logout': [],
   '/password-reset/request': ['email'], '/password-reset/complete': ['token', 'password'],
@@ -139,6 +142,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const guestMenus=options.guestOrigin&&options.leaseIssuer?new GuestMenuMachine(pool,options.leaseIssuer,config.portalOrigin,options.guestOrigin,options.leaseTrust,options.planMode):undefined;
   const boxErrors=options.leaseIssuer?new BoxErrorReports(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
+  const browserCheck = emailBrowserCheck(config.rateKey, config.portalOrigin, limiter);
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
@@ -218,6 +222,10 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys,setupPairing:config.setupPairing,country:config.countryCode??'ES',relayGrants:options.relay?.grants});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
+    if (path === '/browser-check.js') {
+      if (c.req.method !== 'GET') throw new AccountHttpError(405, 'method_not_allowed');
+      return c.body(browserCheckWorker, 200, {'Content-Type': 'text/javascript; charset=utf-8'});
+    }
     const fields = paths[path];
     if (path !== '/session' && !fields) throw new AccountHttpError(404, 'not_found');
     if (c.req.method !== (path === '/session' ? 'GET' : 'POST')) throw new AccountHttpError(405, 'method_not_allowed');
@@ -227,6 +235,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
     const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
+    if (path === '/browser-check') return c.json(browserCheck.issue(body.form, ip));
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
     const started = performance.now();
@@ -251,7 +260,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         writeSessionCookies(c, secure, credentials);
         return c.json({accountId: credentials.accountId});
       }
-      if (path.endsWith('/request')) {
+      if (isEmailRequest(path)) {
+        await browserCheck.spend(c.req.header('x-waitron-browser-proof'), path, ip);
         if (path === '/signup/request') {
           const decision = await limiter.consume([{scope: 'signup-request-hour-ip', subject: ip, limit: config.signupLimits.requestsPerHour, windowSeconds: 3600}]);
           if (!decision.allowed) throw new AccountHttpError(429, 'signup_rate_limited', decision.retryAfterSeconds);

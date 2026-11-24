@@ -43,7 +43,7 @@ export function screen(app: PortalApp) {
     </wt-input>`;
   const password = () => field('password', app.completion ? 'newPassword' : 'password', app.reveal ? 'text' : 'password', app.completion ? 'new-password' : 'current-password');
   const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending || (app.path === '/login' && app.passkeys.pending)}
-    .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
+    .loading=${app.pending} @click=${fn}>${app.checkingBrowser ? c.browserChecking : app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   const accountPage = app.accountPage;
   const state = app.session.state;
@@ -101,9 +101,10 @@ export function screen(app: PortalApp) {
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
   const signupRefusal = app.error === 'signupConnectionLimited' || app.error === 'signupDomainLimited' ? c[app.error] : undefined;
+  const formRefusal = app.error === 'browserCheckFailed' ? c.browserCheckFailed : signupRefusal;
   const waiting = app.waiting;
   const minutes = app.waitingForSignupEmail && waiting >= 60 ? Math.ceil(waiting / 60) : 0;
-  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error && !signupRefusal ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
+  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error && !formRefusal ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>
@@ -114,7 +115,7 @@ export function screen(app: PortalApp) {
             <nav>${link('/login', c.login)} ${link('/signup', c.signup)}</nav>`}` : html`
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
-        ${signupRefusal ? html`<p id="signup-refusal" role="alert" tabindex="-1">${signupRefusal}</p>`
+        ${formRefusal ? html`<p id="form-refusal" role="alert" tabindex="-1">${formRefusal}</p>`
           : html`<wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>`}
         ${app.setupPairing && app.path === '/login' && !app.enrollmentPage && !app.authenticator.challenge && !app.factorCodes.length ? html`<p class="help">${c.pairSetupMethods}</p>` : nothing}
         ${content}

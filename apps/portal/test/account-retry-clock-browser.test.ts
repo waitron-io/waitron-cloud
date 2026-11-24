@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
@@ -56,6 +57,7 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
         unexpected.push(path); return route.fulfill({status: 500, json: {error: 'unplanned_request'}});
       });
       const path = scenario === 'reset' ? '/forgot-password' : ['signup', 'email'].includes(scenario) ? '/signup' : anonymous ? '/login' : '/account';
+      await mockEmailBrowserCheck(page);
       await page.goto('https://portal.test' + path);
       await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await page.waitForFunction(() => (window as any).app.session.state.kind !== 'checking');

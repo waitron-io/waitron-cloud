@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -36,6 +37,7 @@ async function open(browser:Browser, flow:Flow, locale:Locale, theme:'light'|'da
   if(failure===0)return route.abort('connectionreset');
   return route.fulfill({status:failure,json:{error:failure===401?'credentials_invalid':failure===429?'rate_limited':'temporarily_unavailable'}});
  });
+ await mockEmailBrowserCheck(page);
  await page.goto(`https://portal.test${flow.path}${'completion' in flow?'#token='+token:''}`);
  await page.addStyleTag({content:styles});
  await page.addScriptTag({content:bundle.outputFiles[0]!.text});

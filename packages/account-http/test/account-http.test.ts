@@ -9,6 +9,7 @@ import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupSto
 import { createAccountApp } from '../src/app.ts';
 import {database,completeEmailProof,emailLoginPolicy,signupVerification} from './fixtures.ts';
 import {createMailCapture} from './mail-capture.ts';
+import {solveBrowserCheck} from '../../../deploy/test-cloud/test-fixtures/browser-check.ts';
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
 const origin = 'https://cloud.example.test';
@@ -29,6 +30,11 @@ function request(path: string, body?: unknown, options: {headers?: Record<string
   const bindings = {incoming: {socket: {remoteAddress: options.peer ?? '192.0.2.4'}}} as HttpBindings;
   return (options.target ?? app).request(options.url ?? `${origin}/api/account${path}`,
     {method, headers, ...(body === undefined ? {} : {body: JSON.stringify(body)})}, bindings);
+}
+async function emailRequest(path: string, body: unknown, options: Parameters<typeof request>[2] = {}) {
+  const challenge = await request('/browser-check', {form: path}, options);
+  assert.equal(challenge.status, 200);
+  return request(path, body, {...options, headers: {...options.headers, ...solveBrowserCheck(await challenge.json())}});
 }
 async function signIn(email:string, secret=password, options:Parameters<typeof request>[2]={}) {
   return completeEmailProof(db,await request('/login',{email,password:secret},options),body=>request('/login/email',body,
@@ -228,7 +234,7 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,
     mailer: createLocalAccountMailer({port: Number(process.env.MAILPIT_TEST_SMTP_PORT)})});
   const worker = new EmailWorker(db.pool, db.outbox, capture.mailer);
-  const requested = await request('/signup/request', {email}); assert.equal(requested.status, 202);
+  const requested = await emailRequest('/signup/request', {email}); assert.equal(requested.status, 202);
   assert.deepEqual(await requested.json(), {status: 'accepted'}); protectedHeaders(requested);
   await capture.runOnce(worker); const token = await capture.tokenFromMail(email, 'Verify your Waitron Cloud email');
   assert.equal((await request(`/signup/complete?token=${token}`)).status, 400);
@@ -260,7 +266,7 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   const activity = await request('/session/activity', {}, {headers: {...headers, 'x-csrf-token': session.csrf}});
   assert.equal(activity.status, 200);
   assert.ok((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime() > oldSeen);
-  const resetRequest = await request('/password-reset/request', {email}); assert.equal(resetRequest.status, 202);
+  const resetRequest = await emailRequest('/password-reset/request', {email}); assert.equal(resetRequest.status, 202);
   while(await capture.runOnce(worker)) {} const resetToken = await capture.tokenFromMail(email, 'Reset your Waitron Cloud password');
   const newPassword = 'A different long café password';
   const reset = await request('/password-reset/complete', {token: resetToken, password: newPassword});
@@ -276,7 +282,7 @@ test('a forced reset-mail miss reports real queue and SMTP outcomes without priv
   const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,
     mailer: createLocalAccountMailer({port: Number(process.env.MAILPIT_TEST_SMTP_PORT)})});
   const worker = new EmailWorker(db.pool, db.outbox, capture.mailer);
-  assert.equal((await request('/password-reset/request', {email})).status, 202);
+  assert.equal((await emailRequest('/password-reset/request', {email})).status, 202);
   assert.equal(await capture.runOnce(worker), true);
   const missingRecipient = `missing-${randomUUID()}@example.test`;
   await assert.rejects(capture.tokenFromMail(missingRecipient, 'Reset your Waitron Cloud password'), error => {
@@ -296,7 +302,7 @@ test('a forced reset-mail miss reports real queue and SMTP outcomes without priv
   });
 });
 test('every mutation rejects missing, null and foreign Origin before changing state', async () => {
-  const paths = ['/signup/request', '/signup/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
+  const paths = ['/browser-check', '/signup/request', '/signup/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
   for (const path of paths) for (const badOrigin of [undefined, 'null', 'https://elsewhere.example.test']) {
     const headers = new Headers({'content-type': 'application/json'});
     if (badOrigin) headers.set('origin', badOrigin);
@@ -413,7 +419,9 @@ test('unknown/wrong logins and eligible/ineligible/cooldown email requests have 
     assert.equal(response.status, 401); assert.deepEqual(await response.json(), {error: 'credentials_invalid'});
     assert.ok(performance.now() - start >= 285);
     for (let i = 0; i < 2; i++) {
-      const started = performance.now(); const reset = await request('/password-reset/request', {email});
+      const challenge = await request('/browser-check', {form: '/password-reset/request'});
+      const headers = solveBrowserCheck(await challenge.json());
+      const started = performance.now(); const reset = await request('/password-reset/request', {email}, {headers});
       assert.equal(reset.status, 202); assert.deepEqual(await reset.json(), {status: 'accepted'});
       assert.ok(performance.now() - started >= 285);
     }
@@ -427,14 +435,49 @@ test('IP limits are shared across apps and cannot be bypassed with untrusted for
   const blocked = await request('/login', {email: 'missing@example.test', password: 'wrong'});
   assert.equal(blocked.status, 429); assert.ok(Number(blocked.headers.get('retry-after')) > 0); protectedHeaders(blocked);
   await db.pool.query('TRUNCATE account_rate_limits');
-  for (let i = 0; i < 5; i++) assert.equal((await request('/signup/request', {email: `a${i}@example.test`}, {peer: `2001:db8:1:2::${i + 1}`})).status, 202);
-  const refusal = await request('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:2:abcd::1'});
+  for (let i = 0; i < 5; i++) assert.equal((await emailRequest('/signup/request', {email: `a${i}@example.test`}, {peer: `2001:db8:1:2::${i + 1}`})).status, 202);
+  const refusal = await emailRequest('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:2:abcd::1'});
   assert.equal(refusal.status, 429);
   assert.deepEqual(await refusal.json(), {error: 'signup_rate_limited'});
   const retryAfter = Number(refusal.headers.get('retry-after'));
   assert.ok(retryAfter > 3500 && retryAfter <= 3600);
   assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'verification'")).rows[0].count, '5');
-  assert.equal((await request('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:3::1'})).status, 202);
+  assert.equal((await emailRequest('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:3::1'})).status, 202);
+});
+test('each email form requires a browser proof before spending any form allowance', async () => {
+  const owner = await account();
+  const signup = await request('/signup/request', {email: 'new@example.test'});
+  const reset = await request('/password-reset/request', {email: owner.email});
+  assert.deepEqual([signup.status, reset.status], [403, 403]);
+  for (const response of [signup, reset]) assert.deepEqual(await response.json(), {error: 'browser_check_required'});
+  assert.equal((await db.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count, '0');
+  assert.deepEqual((await db.pool.query('SELECT attempts FROM account_rate_limits')).rows, [{attempts: 2}]);
+});
+test('a browser proof is bound to the form, portal origin and IPv6 connection group', async () => {
+  const alternateOrigin = 'https://other.example.test';
+  const alternateApp = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.secondPool, outbox: db.outbox,
+    config: {...config(), portalOrigin: alternateOrigin}});
+  const peer = '2001:db8:1:2::1';
+  const challenge = await request('/browser-check', {form: '/signup/request'}, {peer});
+  assert.equal(challenge.status, 200);
+  const headers = solveBrowserCheck(await challenge.json());
+  const body = {email: 'proof@example.test'};
+  assert.equal((await request('/password-reset/request', body, {headers, peer})).status, 403);
+  assert.equal((await request('/signup/request', body, {headers, peer: '2001:db8:1:3::1'})).status, 403);
+  assert.equal((await request('/signup/request', body, {headers: {...headers, origin: alternateOrigin}, peer,
+    target: alternateApp, url: `${alternateOrigin}/api/account/signup/request`})).status, 403);
+  assert.equal((await request('/signup/request', body, {headers, peer: '2001:db8:1:2::2'})).status, 202);
+  assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'verification'")).rows[0].count, '1');
+});
+test('two account servers can spend a browser proof only once', async () => {
+  const other = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.secondPool, outbox: db.outbox, config: config()});
+  const challenge = await request('/browser-check', {form: '/signup/request'});
+  assert.equal(challenge.status, 200);
+  const headers = solveBrowserCheck(await challenge.json());
+  const responses = await Promise.all([app, other].map((target, index) =>
+    request('/signup/request', {email: `proof-${index}@example.test`}, {target, headers})));
+  assert.deepEqual(responses.map(response => response.status).sort(), [202, 403]);
+  assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'verification'")).rows[0].count, '1');
 });
 test('address login limits survive case changes and different IPs', async () => {
   for (let i = 0; i < 30; i++) assert.equal((await request('/login', {email: i % 2 ? 'OWNER@EXAMPLE.TEST' : ' owner@example.test ', password: 'wrong'}, {peer: `192.0.2.${i + 1}`})).status, 401);
@@ -521,7 +564,7 @@ test('locale is optional and strictly validated only on email-producing routes',
   for (const path of ['/signup/request', '/password-reset/request']) {
     for (const locale of [null, 1, 'fr']) assert.equal((await request(path, {email: 'owner@example.test', locale})).status, 400);
     assert.equal((await request(path, {email: 'owner@example.test', locale: 'es', extra: ''})).status, 400);
-    assert.equal((await request(path, {email: 'owner@example.test', locale: 'es'})).status, 202);
+    assert.equal((await emailRequest(path, {email: 'owner@example.test', locale: 'es'})).status, 202);
   }
   assert.equal((await request('/signup/complete', {token: 'a'.repeat(43), password, locale: 'en'})).status, 400);
   assert.equal((await request('/password-reset/complete', {token: 'a'.repeat(43), password, locale: 'fr'})).status, 400);

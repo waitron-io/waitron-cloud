@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -53,6 +54,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
         return route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
       });
+      await mockEmailBrowserCheck(page);
       await page.goto(`https://portal.test${flow.path}`);
       await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const input = page.locator('input[name=email]');

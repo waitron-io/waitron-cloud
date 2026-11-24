@@ -14,6 +14,7 @@ import {pairingPayload, type PairingClaims} from '../../registration/src/pairing
 import {verifyCloudAbuseReceipt} from './abuse-receipt.ts';
 import {createAccountApp} from '../src/app.ts';
 import {database} from './fixtures.ts';
+import {solveBrowserCheck} from '../../../deploy/test-cloud/test-fixtures/browser-check.ts';
 
 const origin = 'https://cloud.example.test';
 const password = 'A distinct café password';
@@ -134,7 +135,13 @@ test('account limits serialize under contention and the response floor covers kn
   assert.equal(legitimate.status, 429);
 
   await db.pool.query('DELETE FROM account_rate_limits; DELETE FROM email_outbox; DELETE FROM password_reset_requests');
-  const cooldownResponses = await Promise.all(Array.from({length: 8}, (_, index) => request('/api/account/password-reset/request', {email: owner.email}, `203.0.113.${index + 1}`, {origin}, index % 2 ? other : app)));
+  const cooldownResponses = await Promise.all(Array.from({length: 8}, async (_, index) => {
+    const peer = `203.0.113.${index + 1}`, target = index % 2 ? other : app;
+    const form = '/password-reset/request';
+    const challenge = await request('/api/account/browser-check', {form}, peer, {origin}, target);
+    assert.equal(challenge.status, 200);
+    return request(`/api/account${form}`, {email: owner.email}, peer, {origin, ...solveBrowserCheck(await challenge.json())}, target);
+  }));
   assert.ok(cooldownResponses.every(response => response.status === 202));
   const messagesQueued = Number((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind='password_reset'")).rows[0].count);
   assert.equal(messagesQueued, 1);

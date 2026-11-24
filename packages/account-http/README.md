@@ -97,17 +97,28 @@ check and Prometheus export.
 
 Every POST requires `Content-Type: application/json` and an `Origin` header exactly
 matching `CLOUD_PORTAL_ORIGIN`. Requests must reach that configured host and port.
-There is no cross-origin credential access. For local development:
+There is no cross-origin credential access. Open the portal's sign-up or password
+reset page to request an email. Each attempt runs a browser check before it sends
+the email request. The check does not receive your email address.
+
+To inspect the first step locally, ask for a challenge for the sign-up form.
 
 ```sh
-curl -i http://localhost:3000/api/account/signup/request \
+curl -i http://localhost:3000/api/account/browser-check \
   -H 'Origin: http://localhost:3000' \
   -H 'Content-Type: application/json' \
-  --data '{"email":"owner@example.test"}'
+  --data '{"form":"/signup/request"}'
 ```
 
-The response is `202` with `{"status":"accepted"}`. Account existence and the
-per-address email cooldown do not change this result. Delivery happens in the worker.
+The response is `200` with a signed `challenge` and numeric `difficulty`. The portal
+passes both to the same-origin worker and sends its JSON answer in the
+`X-Waitron-Browser-Proof` header. You have two minutes to use the challenge, once,
+for the same form, portal and connection group. A missing or refused proof gets
+`403 {"error":"browser_check_required"}` before it spends a form attempt.
+
+An admitted email request returns `202 {"status":"accepted"}`. Account existence and
+the per-address email cooldown do not change this result. Delivery happens in the
+email worker.
 
 All paths below have the `/api/account` prefix. Examples use placeholders for emailed
 tokens and generated IDs. Each body requires the listed string fields; activity
@@ -119,7 +130,9 @@ parameters remain rejected, so tokens belong only in completion bodies.
 
 | Request | JSON body | Successful response |
 | --- | --- | --- |
-| POST `/signup/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
+| POST `/browser-check` | `{"form":"/signup/request"}` or `{"form":"/password-reset/request"}` | 200 with the challenge and difficulty |
+| GET `/browser-check.js` | No body | 200 with the browser worker script |
+| POST `/signup/request` | `{"email":"owner@example.test"}` and the browser proof header | 202 `{"status":"accepted"}` |
 | POST `/signup/complete` | `{"token":"<emailed token>","password":"a long unique password"}` | 201 `{"accountId":"<uuid>"}` |
 | POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}` with cookies, or 202 app or email challenge without cookies |
 | GET `/session` | No body; session cookie | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
@@ -130,7 +143,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/security/password` | Fresh proof window, live session, CSRF, `{"password":"a different long password","locale":"en"}` | 204; ends sessions and clears cookies |
 | POST `/security/email` | Fresh proof window, live session, CSRF, `{"email":"new@example.test","locale":"en"}` | 202 `{"status":"accepted"}`; queues verification when available |
 | POST `/security/email/verify` | Original live session and CSRF, `{"token":"<email change token>"}` | 204; replaces the verified email, ends sessions and clears cookies |
-| POST `/password-reset/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
+| POST `/password-reset/request` | `{"email":"owner@example.test"}` and the browser proof header | 202 `{"status":"accepted"}` |
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
 | POST `/security-audit/read` | `{"organisationId":"<uuid>","limit":50,"cursor":"<optional next cursor>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 security event page |
 | POST `/usage/read` | `{"organisationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 decimal-string usage totals and measurement freshness |

@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
@@ -14,6 +15,7 @@ test('pending requests, language changes, resend cooldown and Retry-After do not
       if (calls === 1) { await new Promise<void>(resolve => {release=resolve;}); await route.fulfill({status:202,json:{status:'accepted'}}); }
       else await route.fulfill({status:429,headers:{'Retry-After':'90'},json:{error:'rate_limited'}});
     });
+    await mockEmailBrowserCheck(page);
     await page.goto(`${f.origin}/signup`); await page.getByLabel('Email', {exact:false}).fill('owner@example.test');
     await Promise.all([page.waitForRequest('**/signup/request'), page.getByRole('button',{name:'Continue',exact:true}).click()]);
     await page.locator('#submit').evaluate((el: HTMLElement) => {el.click();el.click();});

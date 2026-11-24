@@ -12,7 +12,10 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     const c=translations[locale];const email=`portal-${randomUUID()}@example.test`;const password='A real café account password';
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()+' '+(r.headers()['referer']??'')));
     await page.goto(`${f.origin}/signup`);await page.getByLabel(c.email).fill(email);
-    await page.getByRole('button',{name:c.continue,exact:true}).click();await page.getByRole('heading',{name:c.checkEmail}).waitFor();
+    const [signupReply] = await Promise.all([page.waitForResponse('**/api/account/signup/request'),
+      page.getByRole('button',{name:c.continue,exact:true}).click()]);
+    assert.equal(signupReply.status(), 202);
+    await page.getByRole('heading',{name:c.checkEmail}).waitFor();
     await f.drainMail();
     const verification=await mailFor(email,locale==='es'?'Verifica tu correo de Waitron Cloud':'Verify your Waitron Cloud email',f.mailEvidence);
     const signupLink=verification.match(/http:\/\/[^\s]+\/signup#token=[^\s]+/)?.[0];assert.ok(signupLink);
@@ -42,7 +45,10 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();
     const old=await f.browser.newContext({storageState:await context.storageState()});
     await page.getByRole('link',{name:c.forgot,exact:true}).click();await page.getByLabel(c.email).fill(email);
-    await page.getByRole('button',{name:c.sendReset,exact:true}).click();await page.getByRole('heading',{name:c.checkEmail}).waitFor();
+    const [resetReply] = await Promise.all([page.waitForResponse('**/api/account/password-reset/request'),
+      page.getByRole('button',{name:c.sendReset,exact:true}).click()]);
+    assert.equal(resetReply.status(), 202);
+    await page.getByRole('heading',{name:c.checkEmail}).waitFor();
     await f.drainMail();
     const resetMail=await mailFor(email,locale==='es'?'Restablece tu contraseña de Waitron Cloud':'Reset your Waitron Cloud password',f.mailEvidence);
     const resetLink=resetMail.match(/http:\/\/[^\s]+\/reset-password#token=[^\s]+/)?.[0];assert.ok(resetLink);

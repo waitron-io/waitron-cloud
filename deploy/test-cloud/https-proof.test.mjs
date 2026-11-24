@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {request} from 'node:https';
 import {randomUUID} from 'node:crypto';
 import test from 'node:test';
+import {solveBrowserCheck} from './test-fixtures/browser-check.ts';
 const execute=promisify(execFile),root=new URL('../../',import.meta.url).pathname;
 const image=process.env.TEST_CLOUD_DOCKER_PROOF_IMAGE;
 test('real HTTPS signup, proxy authority, private restart identity and owned rollback', {skip:!image,timeout:240000},async t=>{
@@ -37,7 +38,10 @@ test('real HTTPS signup, proxy authority, private restart identity and owned rol
  assert.equal((await fetchTLS()).status,200);await assert.rejects(fetchTLS({trust:null}),/certificate|issuer|verify/i);await assert.rejects(fetchTLS({servername:'wrong.local'}),/Hostname\/IP does not match|certificate/i);
  assert.equal((await fetchTLS({headers:{host:'wrong.local:3000'}})).status,403);assert.equal((await fetchTLS({headers:{origin:'https://wrong.local:3000'}})).status,403);
  assert.equal((await fetchTLS({headers:{origin:'https://waitron.local:3000','x-forwarded-for':'garbage','x-forwarded-host':'evil.test','x-forwarded-proto':'http',forwarded:'for=evil'}})).status,200);
- const signup=await fetchTLS({path:'/api/account/signup/request',method:'POST',headers:{origin:'https://waitron.local:3000','content-type':'application/json'},body:JSON.stringify({email:'lan-proof@example.test',locale:'en'})});assert.equal(signup.status,202,signup.body);
+ const headers={origin:'https://waitron.local:3000','content-type':'application/json'};
+ const form='/signup/request';
+ const challenge=await fetchTLS({path:'/api/account/browser-check',method:'POST',headers,body:JSON.stringify({form})});assert.equal(challenge.status,200);
+ const signup=await fetchTLS({path:`/api/account${form}`,method:'POST',headers:{...headers,...solveBrowserCheck(JSON.parse(challenge.body))},body:JSON.stringify({email:'lan-proof@example.test',locale:'en'})});assert.equal(signup.status,202,signup.body);
  let message;for(let n=0;n<80;n++){const inbox=await(await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`)).json();if(inbox.messages?.length){message=await(await fetch(`http://127.0.0.1:${mailPort}/api/v1/message/${inbox.messages[0].ID}`)).json();break;}await new Promise(r=>setTimeout(r,250));}
  assert.match(message?.Text??'',/https:\/\/waitron\.local:3000\/signup#token=/);
  assert.equal((await fetchTLS({path:'/signup'})).status,200);

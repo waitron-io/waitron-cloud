@@ -16,6 +16,7 @@ import {migrationNames,createLeaseIssuer} from '@waitron-cloud/registration';
 import {connectedVenue} from '../../translation/test/fixtures.ts';
 import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import { database } from './fixtures.ts';
+import {solveBrowserCheck} from '../../../deploy/test-cloud/test-fixtures/browser-check.ts';
 let db: Awaited<ReturnType<typeof database>>;
 before(async () => {db = await database();});
 after(async () => {await db.close();});
@@ -249,19 +250,24 @@ test('CLI rejects malformed installation issuer trust without exposing its value
 });
 test('CLI shutdown and restart preserve committed work and shared request limits', async () => {
   let running = cli();
+  const signUp = async (port: number, email: string) => {
+    const challenge = await send(port, '/browser-check', JSON.stringify({form: '/signup/request'})).result;
+    assert.equal(challenge.status, 200);
+    return send(port, '/signup/request', JSON.stringify({email}), solveBrowserCheck(JSON.parse(challenge.body)));
+  };
   try {
     let port = await running.ready();
-    const interrupted = send(port, '/signup/request', JSON.stringify({email: 'restart@example.test'}));
+    const interrupted = await signUp(port, 'restart@example.test');
     await until(async () => await queued() === 1); interrupted.abort();
     const exit = await running.stop(); assert.equal(exit.code, 0); assert.equal(exit.stderr, '');
     running = cli(); port = await running.ready();
-    const draining = send(port, '/signup/request', JSON.stringify({email: 'drain@example.test'}));
+    const draining = await signUp(port, 'drain@example.test');
     await until(async () => await queued() === 2);
     const shutdown = running.stop();
     assert.equal((await draining.result).status, 202); assert.equal((await shutdown).code, 0);
     running = cli(); port = await running.ready();
-    for (let i = 0; i < 3; i++) assert.equal((await send(port, '/signup/request', JSON.stringify({email: 'restart@example.test'})).result).status, 202);
-    assert.equal(await queued(), 2); assert.equal((await send(port, '/signup/request', JSON.stringify({email: 'restart@example.test'})).result).status, 429);
+    for (let i = 0; i < 3; i++) assert.equal((await (await signUp(port, 'restart@example.test')).result).status, 202);
+    assert.equal(await queued(), 2); assert.equal((await (await signUp(port, 'restart@example.test')).result).status, 429);
     assert.equal((await running.stop()).code, 0);
   } finally {if (running.child.exitCode === null) await running.stop();}
 });

@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -33,6 +34,7 @@ async function open(browser: Browser, flow: typeof flows[number], locale: Locale
       : route.fulfill({status: 202, json: {status: 'accepted'}});
     return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
   });
+  await mockEmailBrowserCheck(page);
   await page.goto('https://portal.test' + flow.path);
   await page.addStyleTag({content: styles});
   await page.addScriptTag({content: bundle.outputFiles[0]!.text});

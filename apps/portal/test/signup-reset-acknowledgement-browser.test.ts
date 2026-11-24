@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -40,6 +41,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             return route.fulfill({status: refusalStatus ?? (valid || responseError ? flow.status : flow.status === 200 ? 202 : 200),
               json: responseError ? {error: responseError} : flow.value});
           });
+          await mockEmailBrowserCheck(page);
           await page.goto(`https://portal.test${flow.path}${completion ? '#token=' + token : ''}`);
           await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
           if (completion) await page.locator('input[name=password]').fill(password);

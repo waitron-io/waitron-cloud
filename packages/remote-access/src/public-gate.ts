@@ -1,4 +1,4 @@
-import {createHmac,randomBytes,timingSafeEqual,createHash} from 'node:crypto';
+import {browserCheckDifficulty,browserCheckLifetimeMs,browserCheckTokens,browserCheckWorker,solvedBrowserCheck} from './browser-check.ts';
 import {isIP} from 'node:net';
 import {publicUnavailable} from './public-unavailable.ts';
 import {request} from 'node:https';
@@ -18,7 +18,6 @@ function sourceBucket(ip:string):string{
  if(words.slice(0,5).every(word=>word===0)&&words[5]===0xffff)return [words[6]!>>>8,words[6]!&255,words[7]!>>>8,words[7]!&255].join('.');
  return words.slice(0,4).map(word=>word.toString(16)).join(':')+'/64';
 }
-const worker=`onmessage=async({data})=>{try{const encoder=new TextEncoder(),until=performance.now()+20000;for(let nonce=0;nonce<1000000000&&performance.now()<until;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}postMessage({error:'exhausted'});}catch{postMessage({error:'unsupported'});}};`;
 const script=`(async()=>{
  const guidance=document.querySelector('#browser-guidance');if(guidance)guidance.hidden=true;
  const staticGuidance=document.querySelector('#browser-static-guidance');if(staticGuidance)staticGuidance.hidden=true;
@@ -47,15 +46,10 @@ const rejectionText:Record<number,[string,string]>={
 /** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */
 export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOptions<R>){
  if(options.key.length!==32)throw new Error('invalid_gate_key');
- const difficulty=options.difficulty??16;if(!Number.isInteger(difficulty)||difficulty<8||difficulty>22)throw new Error('invalid_difficulty');
+ const difficulty=options.difficulty??browserCheckDifficulty;if(!Number.isInteger(difficulty)||difficulty<8||difficulty>22)throw new Error('invalid_difficulty');
  const now=options.now??Date.now,buckets=new Map<string,{count:number;until:number}>();let active=0;
  const counters={challenged:0,rejected:0,forwarded:0,unavailable:0};
- function token(purpose:string,host:string,ip:string,lifetime:number){const payload=Buffer.from(JSON.stringify([purpose,host,ip,now()+lifetime,randomBytes(16).toString('base64url')])).toString('base64url');return payload+'.'+createHmac('sha256',options.key).update(payload).digest('base64url');}
- function valid(value:string,purpose:string,host:string,ip:string){
-  try{if(value.length>1024)return false;const parts=value.split('.');if(parts.length!==2)return false;const [payload,signature]=parts as [string,string];const expected=createHmac('sha256',options.key).update(payload).digest();const received=Buffer.from(signature,'base64url');if(received.length!==32||received.toString('base64url')!==signature||!timingSafeEqual(received,expected))return false;
-   const bytes=Buffer.from(payload,'base64url');if(bytes.toString('base64url')!==payload)return false;const claims=JSON.parse(bytes.toString());return Array.isArray(claims)&&claims.length===5&&claims[0]===purpose&&claims[1]===host&&claims[2]===ip&&Number.isSafeInteger(claims[3])&&claims[3]>now();
-  }catch{return false;}
- }
+ const tokens=browserCheckTokens(options.key,now);
  async function handle(req:IncomingMessage,res:ServerResponse){
   const reply=(status:number,body='',type='text/plain; charset=utf-8',headers:Record<string,string>={})=>{
    const mode=req.headers['sec-fetch-mode'];
@@ -80,17 +74,16 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
    if(!['/public/availability','/_cloud/challenge','/_cloud/solve','/_cloud/challenge.js','/_cloud/worker.js'].includes(path??'')){counters.rejected++;reply(404);return;}
    if(req.method!==(path==='/_cloud/solve'?'POST':'GET')){counters.rejected++;reply(405);return;}
    if(path==='/_cloud/challenge.js'){reply(200,script,'application/javascript');return;}
-   if(path==='/_cloud/worker.js'){reply(200,worker,'application/javascript');return;}
-   if(path==='/_cloud/challenge'){reply(200,JSON.stringify({challenge:token('challenge',host!,ip,120000),difficulty}),'application/json');return;}
+   if(path==='/_cloud/worker.js'){reply(200,browserCheckWorker,'application/javascript');return;}
+   if(path==='/_cloud/challenge'){reply(200,JSON.stringify({challenge:tokens.issue('challenge',host!,ip,browserCheckLifetimeMs),difficulty}),'application/json');return;}
    if(path==='/_cloud/solve'){
     let body='';for await(const chunk of req){body+=chunk.toString();if(Buffer.byteLength(body)>2048){counters.rejected++;reply(413);return;}}
     let value;try{value=JSON.parse(body);}catch{reply(400);return;}
-    if(!value||Object.keys(value).sort().join(',')!=='challenge,nonce'||typeof value.challenge!=='string'||!Number.isSafeInteger(value.nonce)||value.nonce<0||value.nonce>=1000000000
-     ||!valid(value.challenge,'challenge',host!,ip)||createHash('sha256').update(`${value.challenge}:${value.nonce}`).digest().readUInt32BE(0)>=2**(32-difficulty)){counters.rejected++;reply(403);return;}
-    res.setHeader('Set-Cookie',`__Host-waitron-public=${token('access',host!,ip,300000)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=300`);reply(204);return;
+    if(!solvedBrowserCheck(value,difficulty,challenge=>tokens.accepts(challenge,'challenge',host!,ip))){counters.rejected++;reply(403);return;}
+    res.setHeader('Set-Cookie',`__Host-waitron-public=${tokens.issue('access',host!,ip,300000)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=300`);reply(204);return;
    }
    const cookies=(req.headers.cookie??'').split(';').map(s=>s.trim()).filter(s=>s.startsWith('__Host-waitron-public='));
-   if(cookies.length!==1||!valid(cookies[0]!.slice('__Host-waitron-public='.length),'access',host!,ip)){
+   if(cookies.length!==1||!tokens.accepts(cookies[0]!.slice('__Host-waitron-public='.length),'access',host!,ip)){
     counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>Checking your browser / Comprobando tu navegador</title><body><main><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><div hidden role="status"><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p></div><p id="browser-guidance"><a href="/public/availability">Reload page / <span lang="es">Volver a cargar</span></a><span id="browser-static-guidance"><br>Allow JavaScript or try another browser to open this page. / <span lang="es">Permite JavaScript o prueba con otro navegador para abrir esta página.</span></span></p><script src="/_cloud/challenge.js" defer></script></main></body></html>','text/html; charset=utf-8');return;
    }
    if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;

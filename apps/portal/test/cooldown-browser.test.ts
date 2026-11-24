@@ -1,3 +1,4 @@
+import {mockEmailBrowserCheck} from './browser-check-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -30,6 +31,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(endpoint.endsWith('/signup/request'))return route.fulfill({status:429,headers:{'Retry-After':'2'},json:{error:'rate_limited'}});
     return route.fulfill({status:503,json:{error:'unavailable'}});
    });
+   await mockEmailBrowserCheck(page);
    await page.goto('https://portal.test'+path);await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
    {await page.locator('input[name=email]').fill('owner@example.test');await page.getByRole('button',{name:c.continue,exact:true}).click();}
    const prefix=c.cooldown,status=page.getByRole('status').filter({hasText:prefix});

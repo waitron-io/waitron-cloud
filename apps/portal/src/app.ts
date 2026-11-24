@@ -21,6 +21,7 @@ import {BillingController} from './billing-controller.ts';
 import {DiagnosticController} from './diagnostic-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
+import {checkEmailBrowser} from './browser-check.ts';
 import { captureLink, captureSetupPairingLink, forgetSetupPairingLink, type CapturedLink, type SetupPairingLink } from './links.ts';
 import { chooseLocale, translations, type Copy, type Locale } from './locale.ts';
 import { PortalSession, type SessionState } from './session.ts';
@@ -67,6 +68,8 @@ export class PortalApp {
   diagnostics: DiagnosticController;
   cloudActions:CloudActionsController;
   #route = 0;
+  #browserCheck: AbortController | undefined;
+  get checkingBrowser() {return this.#browserCheck !== undefined;}
   #passkeyAddRequest: PasskeyAddRequest | undefined;
   #operatorSignin=false;
   #passkeyOffered = false;
@@ -335,6 +338,7 @@ export class PortalApp {
     this.locale = this.link.locale ?? this.locale;
     this.fields = {email: '', password: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
+    this.#browserCheck?.abort(); this.#browserCheck = undefined;
     this.pending = false; this.reveal = false;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.installations.showRecovery(path==='/recover');
@@ -381,7 +385,7 @@ export class PortalApp {
     queueMicrotask(() => {
       const field = Object.keys(this.errors)[0];
       if (field) this.root.querySelector<HTMLElement>(`wt-input[name="${field}"]`)?.focus();
-      else this.root.querySelector<HTMLElement>('#signup-refusal, wt-form-error-summary')?.focus();
+      else this.root.querySelector<HTMLElement>('#form-refusal, wt-form-error-summary')?.focus();
     });
   }
   async submitPairing() {
@@ -467,8 +471,14 @@ export class PortalApp {
     } else if (this.path === '/reset-password') { path = '/password-reset/complete'; body = {token: this.link.token!, password: f.password, locale: this.locale}; }
     else { path = this.path === '/signup' ? '/signup/request' : '/password-reset/request'; body = {email: f.email, locale: this.locale}; }
     this.pending = true; const route = this.#route;
+    const check = path.endsWith('/request') ? new AbortController() : undefined;
+    this.#browserCheck = check;
     this.draw();
-    const result = await accountRequest(path, body);
+    const proof = check && await checkEmailBrowser(path, check.signal);
+    if (route !== this.#route) return;
+    this.#browserCheck = undefined;
+    if (check) this.draw();
+    const result = proof && !proof.ok ? proof : await accountRequest(path, body, undefined, proof?.value);
     // A late reply still sets the wait for the operation that sent it.
     if (!result.ok && result.code !== 'signup_rate_limited') this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
     if (route !== this.#route) return;
@@ -486,6 +496,7 @@ export class PortalApp {
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'signup_rate_limited' ? 'signupConnectionLimited'
         : result.code === 'signup_domain_limited' ? 'signupDomainLimited'
+        : result.code === 'browser_check_required' ? 'browserCheckFailed'
         : result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'

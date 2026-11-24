@@ -22,6 +22,7 @@
     "@types/pg": "^8.23.1"
   },
   "exports": {
+    "./browser-check": "./src/browser-check.ts",
     "./dns-lookup": "./src/dns-lookup.ts",
     "./guest-menu": "./src/guest-menu.ts",
     "./staff-exchange": "./src/staff-exchange.ts",

@@ -15,6 +15,7 @@ import {validUsageSummary} from './usage-types.ts';
 import {validDiagnosticExport} from './diagnostic-types.ts';
 import {validBillingView,validMethodPresentation,validMethodResult} from './billing-types.ts';
 export const enrollmentRequiredEvent = 'cloud-enrollment-required';
+export type BrowserChallenge = {challenge: string; difficulty: number};
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number; recoveryExpiresAt?: string};
 function validResult(path: string, value: unknown, status: number): boolean {
   if(path.startsWith('/owner-recovery/'))return status===200&&validOwnerRecoveryResult(path,value);
@@ -67,6 +68,8 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/installations/remove') return status===200&&validInstallation(data)&&typeof data.portalRemovedAt==='string';
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
   if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt)) && (data.billingTrialAvailable === undefined || data.billingTrialAvailable === true) && (data.enrollmentRequired === undefined || data.enrollmentRequired === true);
+  if (path === '/browser-check') return status === 200 && typeof data.challenge === 'string' && data.challenge.length > 0 && data.challenge.length <= 1024
+    && typeof data.difficulty === 'number' && Number.isInteger(data.difficulty) && data.difficulty >= 8 && data.difficulty <= 22;
   if (path === '/signup/complete') return status === 201 && typeof data.accountId === 'string' && data.accountId.trim().length > 0;
   if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
   return path === '/password-reset/complete' && status === 200 && data.status === 'completed';
@@ -76,7 +79,7 @@ function browserCsrfToken() {
  const values=document.cookie.split(';').map(value=>value.trim()).filter(value=>value.startsWith(name+'='));
  return values.length===1?values[0]!.slice(name.length+1):'';
 }
-export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<ApiResult<T>> {
+export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal, browserProof?: string): Promise<ApiResult<T>> {
   const keyDownload = path === '/backups/download-key';
   const download = keyDownload || path === '/backups/download';
   const installationWrite = path === '/installations/remove';
@@ -84,6 +87,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   const businessPath = path === '/businesses' || path === '/organisations/rename';
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
+  if (browserProof && (path === '/signup/request' || path === '/password-reset/request')) headers['X-Waitron-Browser-Proof'] = browserProof;
   if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     headers['X-CSRF-Token'] = browserCsrfToken();
   }
@@ -108,6 +112,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
     if (response.status === 429 && ['/signup/request', '/signup/complete'].includes(path)) codes.push('signup_rate_limited');
+    if (response.status === 403 && (path === '/signup/request' || path === '/password-reset/request')) codes.push('browser_check_required');
     if (response.status === 429 && path === '/signup/complete') codes.push('signup_domain_limited');
     if(download&&response.status===413)codes.push('download_too_large');
     if(path==='/installations/remove'&&response.status===503)codes.push('guest_menu_takedown_failed');

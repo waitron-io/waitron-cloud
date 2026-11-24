@@ -5,7 +5,9 @@ bilingual portal to verify your email and set your password.
 
 ## Journey and boundary
 
-1. Supply your email address. The backend commits a verification request and an
+1. Supply your email address. The portal runs a browser check before requesting an
+   email. If the check fails, try again or use another browser. Password-reset email
+   requests use the same check. The backend commits a verification request and an
    encrypted pending email together. The request result is `accepted`, without
    contacting the mail provider. Verification records store the random 32-byte token
    as a SHA-256 hash; the queue holds its encrypted delivery copy until delivery ends.
