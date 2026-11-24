@@ -1,71 +1,52 @@
 # Address service implementation plan · 24 November 2026
 
-On `feat/j-address-service`, turn the landed trial (#1398) into an opt-in Spanish address service for
-any eligible connected box. Keep editable manual entry, Google Maps attribution, Save as confirmation
-and the existing signed suggest/validate contract. The service stores no query, address or provider
-reply. Signup-abuse runs independently.
+The signed route lets eligible paired boxes look up Spanish addresses side by side in the test stack.
+Keep the suggest and validate replies, editable manual entry, Google attribution and Save as
+confirmation. Keep production off until both changes below, Google billing and the privacy wording
+are ready and the owner enables it. Cloud stores request counts and binding metadata.
 
-**Signed route.** In `packages/account-http/src/{app,address-lookup,rate-limit}.ts`, use the existing
-installation signature and lease, current verified owner and matching venue. Keep nonce replay
-protection for provider requests and bind each workflow to its installation, venue and owner, with
-fifteen-minute expiry capped at the UTC month end and one validation. Carry forward existing workflow
-bindings so a spent or expired workflow cannot reopen. Lane E sends signed
-`{"version":1,"kind":"available"}` to `POST /api/installations/address-lookup`. Return `200
-{"available":true}` only when enabled, the key file is usable, the box is eligible and both call types
-fit current caps and minute limits. Otherwise use ordinary refusal. This is a snapshot. Route the
-bounded availability body before `all-ip` is charged (`app.ts:183`). Read that counter and the
-installation network and box counters (`address-lookup.ts:172–176`) alongside the account limit. Never
-write a counter, nonce, workflow or notice or call the provider for availability. Preserve the usual
-write-path rate gates (120/min outer IP, 60/min installation network, 30/min box) and propose 60/min per
-owner account.
+**First change.** In `packages/account-http/src/{app,address-lookup,server-cli}.ts` and `deploy/test-cloud/{runtime.mjs,account-worker.mjs,compose.yaml}`, add an opt-in `CLOUD_ADDRESS_LOOKUP_SETTINGS` with integer venue, budget and per-call price limits. Refuse invalid settings and check the account service's secret for a usable Google key before charging. Use the existing account secret and synthetic provider paths. Require the current verified owner, active installation and matching signed lease in the correct environment. Use current billing authority and classify a box without a paid plan or with a cardless trial as free. A missing billing profile is free. The new setting governs the route. Preserve old trial allowance rows and unrelated allowance behavior.
 
-**Admission and cost.** Append `085_address_service.sql` in `packages/registration/migrations/` and
-register it in `migrate.ts`. Keep small address-only workflow, counter and venue-stop records. In
-`packages/registration/src/address-admission.ts`, reuse the transaction and billing authority patterns
-in `billing-allowances.ts`. A paying venue gets 100 validations and 500 suggestions per UTC month by
-default. Free use gets 20 and 100 shared per verified account, including trials without a card. Use
-current billing facts and keep the validation limit configurable, with suggestions at five times that
-limit. Every admitted attempt counts, including abandoned searches and ambiguous failures. In one short
-transaction lock the applicable UTC buckets in fixed order, check and debit all caps, and recheck
-authority, proof expiry and bucket time after contention. Commit and release the connection before
-provider I/O. Remove the trial slot and delay. An acknowledged stop blocks new admissions.
+Add `address-lookup-admission.ts`, a migration, and its manifest entry under `packages/registration/`.
+One call table holds binding, kind, admitted time and price. Use the first suggestion to bind and
+expire the workflow at 15 minutes or UTC month end. Keep one validation per workflow and reject
+replayed operation IDs. Let old private trial workflows expire. Reuse the owner, membership, billing,
+venue and installation locks from `billing-allowances.ts` before a single short accounting lock.
+Recheck authority, proof and clock after waits. Charge before committing, release all locks and the
+connection before Google, and keep the debit for an ambiguous result. Give lookups their own minute
+limits derived from the call table (30 per box, 60 per network and 60 per account proposed).
+Use the existing IPv6 /64 and store a keyed network digest.
 
-Apply three independent money checks: EUR 10/month total (configurable), one tenth/day and a free share
-of one third of both, rounded down. The free share leaves the rest available to paid venues. Propose
-reserving the full marginal price even for calls Google might bill at zero, so prior use of Google's
-free units changes nothing. Per 1,000, reserve Autocomplete at USD 2.83 and Validation at USD 25
-(Enterprise) until billing confirms USD 17 (Pro). Use integer millionths of a euro, rounding each call
-up at a watcher-approved upper bound for exchange, tax and fees. An illustrative EUR 1.10/USD reserves
-3,113 and 27,500 per call. Keep the service off if the actual billing category or all-in rate exceeds
-the reservation. Google sets Places limits per API method per project. At rollout read the existing
-project's Autocomplete quota and check expected aggregate traffic against it and Validation's 6,000
-queries/minute. Watcher owns billing verification, key IP/API restrictions and provider-side daily caps.
-[Places limits](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing) ·
-[Validation
-limits](https://developers.google.com/maps/documentation/address-validation/usage-and-billing) ·
-[Prices](https://developers.google.com/maps/billing-and-pricing/pricing)
+A paying venue gets 100 validations and 500 suggestions per UTC month by default. A verified free
+account gets 20 and 100 across all its venues. A search must leave room for one validation in the
+quantity and price caps together. Another till can use that room before a choice is made. Lane E
+sends signed `{"version":1,"kind":"available"}` to the same POST route. `200 {"available":true}` means
+eligible and enough room for both calls, with the normal ingress limit still applied. Availability
+reads address limits and spends no address quota, workflow, replay record or Google call.
 
-**Operations.** Wire opt-in settings through `packages/account-http/src/server-cli.ts` and
-`deploy/test-cloud/{runtime,account-worker}.mjs`. Reuse `test-box-address-lookup.ts` and its protected
-key-file checks. In the existing operator console
-(`apps/portal/src/cloud-actions-{controller,screen}.ts` and
-`packages/{account-http,registration}/src/cloud-actions.ts`), reuse operator/session/write-proof checks
-for a direct venue stop switch. Record the first cap hit once per scope and UTC window in the accounting
-transaction and show it as an operator notice. Watcher choice is whether the console notice needs email
-delivery. `packages/registration/src/email-outbox.ts:305–309` requires a pending Cloud action for
-existing operator mail, so email would need a dedicated cap notice through the outbox. Update the signed
-contract in `docs/address-lookup-trial.md` and the open work in `docs/backlog.md`. Name Google for
-address lookup in the Cloud privacy notice and the processor and subprocessor material in
-`docs/cloud-data-processing-register.md` and `docs/cloud-processing-annexes.md`.
+Cap conservatively priced usage at EUR 10 per month, one tenth per day and one third of both for
+free use. Use Pacific usage dates to match Google and integer millionths of a euro. Propose charging
+the full list price even when Google might apply a discount. Per 1,000 calls it is USD 2.83 for
+Autocomplete and USD 25 for Validation Enterprise until billing confirms USD 17 for Pro. Configure
+the all-in euro price with exchange rate, taxes and fees stated separately. At an illustrative EUR
+1.10 per USD all-in, five searches and one validation cost EUR 0.043065. That allows 232 such
+lookups a month and 23 a day across Cloud. A single paying venue can exhaust the day. Google lists
+6,000 validations per minute and separate Places quotas by project and method. Read the numeric
+Autocomplete quota from the existing project before enabling and check both provider daily quotas.
+[Places limits](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing) · [Validation limits](https://developers.google.com/maps/documentation/address-validation/usage-and-billing) · [Prices](https://developers.google.com/maps/billing-and-pricing/pricing) · [Usage dates](https://docs.cloud.google.com/billing/docs/how-to/reports)
 
-**Focused tests.** Write failing cases first in `packages/account-http/test/address-lookup.test.ts`
-using PostgreSQL and a blocked synthetic provider. Name them `availability never spends counters`, `two
-boxes and two tills on one box overlap at the provider`, `last unit admits exactly one`, and `a cap
-notifies once and a venue stop blocks admission`. Keep authority, reply, expiry, replay, rollback and
-one-validation assertions. Replace the trial-only slot, allowlist and quota assertions deliberately. Run
-key-file, operator permission, migration and default-off runtime checks alongside. In the synthetic
-trial stack, report accepted attempts by type and USD/EUR equivalents for one venue/account and for many
-invented free accounts. Reference ceilings are 500 suggestions plus 100 validations per paying venue
-(USD 3.915/EUR 4.3065 at Enterprise) and 1,070 abandoned free suggestions per month, at most 107/day
-(USD 3.0281/EUR 3.33091 per month at the illustrative rate), with paid capacity still available.
-Estimated size is 450–600 lines of code and 220–320 lines of tests.
+**Second change.** Reuse `CloudActions` operator and current-session proof checks in the account
+route and `apps/portal/src/cloud-actions-{controller,screen}.ts`. Find a venue by its existing ID,
+stop or resume it under the venue lock, and derive cap notices from the call counts. Use the existing
+operator mail path only with an approved notice purpose. Add the Google wording to the Cloud
+processing register and annexes and draft the missing Cloud privacy notice with the watcher. Update
+the signed contract and backlog as each piece lands.
+
+**Checks.** `packages/account-http/test/address-lookup.test.ts` owns signed authorization, replay,
+expiry, date changes, zero address debit on availability, two boxes and two tills reaching the
+provider together, and one admission at the last unit. Keep its existing security assertions.
+Run the listener with PostgreSQL and the fake provider for the one-venue and many-free-account runs.
+Record attempts, costs and a paying request after free exhaustion. Runtime tests cover default-off
+and missing key. Operator and portal tests cover permissions, stop, resume and the first cap notice.
+Plan for 320–450 code and 200–300 test lines in the first change, and 180–280 code and 100–180 test
+lines in the second.
