@@ -97,7 +97,7 @@ test('completed sign-ups share a private domain cap across connections while a p
   assert.equal(replies.slice(0, 6).filter(reply => reply.status === 201).length, 5);
   const refusal = replies.slice(0, 6).find(reply => reply.status === 429)!;
   assert.equal(refusal.headers.has('retry-after'), false);
-  assert.deepEqual(await refusal.json(), {error: 'signup_rate_limited'});
+  assert.deepEqual(await refusal.json(), {error: 'signup_domain_limited'});
   assert.deepEqual(replies.slice(6).map(reply => reply.status), Array(6).fill(201));
 });
 

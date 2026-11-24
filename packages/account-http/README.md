@@ -348,7 +348,8 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |
-| 429 | `signup_rate_limited` | Sign-up limit reached. Hourly refusals include `Retry-After`. Daily refusals leave the verification link usable until it expires. |
+| 429 | `signup_rate_limited` | Connection limit reached. Hourly refusals include `Retry-After`. Daily refusals leave the verification link usable until it expires. |
+| 429 | `signup_domain_limited` | Daily private email domain limit reached. The verification link remains usable until it expires. |
 | 503 | `temporarily_unavailable`, `password_screening_unavailable` (credential password change only) | Database or password-screening failure, admission limit or shutdown; retry after the advertised delay |
 
 Bodies are limited to 16 KiB, including streamed bodies, except for translation

@@ -33,8 +33,9 @@ production email provider is not connected yet.
 By default, a connection can request five sign-up emails per hour and finish five
 new accounts per UTC day. Each private email domain can finish five per day across
 connections. The [account API guide](../packages/account-http/README.md) lists the
-public email domains exempt from that cap. If Cloud refuses a sign-up, use another
-connection or request a fresh link tomorrow. The same message covers both limits.
+public email domains exempt from that cap. If your connection hits its limit,
+try again later or use another connection. If your email domain hits its limit,
+request a fresh link tomorrow.
 Above ten completed sign-ups in one UTC day, Cloud logs a warning and queues a
 notice for its configured verified operator. The warning leaves sign-up available.
 

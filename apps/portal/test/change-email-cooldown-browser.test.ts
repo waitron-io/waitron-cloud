@@ -37,6 +37,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.route('https://portal.test/**', route => {
         const endpoint = new URL(route.request().url()).pathname.replace('/api/account', '');
         if (endpoint === '/session') return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
+        if (endpoint === '/signup/complete') return route.fulfill({status: 429, json: {error: 'signup_domain_limited'}});
         if (endpoint === flow.endpoint) {
           calls.push(route.request().postDataJSON());
           if (limited === 'signup') return route.fulfill({
@@ -64,6 +65,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await input.fill('owner@exmaple.test'); await submit.click();
       await page.getByRole('heading', {name: c.checkEmail, exact: true}).waitFor();
       assert.equal(await resend.isDisabled(), true);
+      if (flow.path === '/signup') await t.test('the five-minute resend wait is shown in minutes', async () => {
+        const notice = locale === 'en' ? 'You can try again in 5 minutes.' : 'Puedes volver a intentarlo en 5 minutos.';
+        assert.equal(await wait.textContent(), notice);
+      });
       if (flow.path === '/signup' && receiptDirectory) {
         await mkdir(receiptDirectory, {recursive: true});
         await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-accepted.png`, fullPage: true});
@@ -152,12 +157,28 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         limited = 'signup';
         await input.fill('sixth@example.test');
         await submit.click();
-        const message = locale === 'en' ? 'Try again tomorrow or use another internet connection.'
-          : 'Vuelve a intentarlo mañana o usa otra conexión a internet.';
-        await page.getByRole('alert').filter({hasText: message}).waitFor();
+        const message = locale === 'en' ? 'Too many sign-ups from this internet connection. Try again later, or use another connection.'
+          : 'Demasiados registros desde esta conexión a internet. Vuelve a intentarlo más tarde o usa otra conexión.';
+        const alert = page.getByRole('alert').filter({hasText: message});
+        await alert.waitFor();
+        assert.equal(await alert.textContent(), message);
+        assert.equal(await alert.getByRole('list').count(), 0);
         assert.equal(await submit.isEnabled(), true);
         assert.equal(await wait.count(), 0);
         if (receiptDirectory) await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-refused.png`, fullPage: true});
+      });
+      if (flow.path === '/signup') await t.test('a provider refusal explains the daily wait without blaming the form', async () => {
+        await page.goto(`https://portal.test/signup#token=${'a'.repeat(43)}`);
+        await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+        await page.locator('input[name=password]').fill('a synthetic long password');
+        await page.getByRole('button', {name: c.create, exact: true}).click();
+        const message = locale === 'en' ? 'Too many new accounts with this email provider today. Try again tomorrow.'
+          : 'Hoy se han creado demasiadas cuentas con este proveedor de correo. Vuelve a intentarlo mañana.';
+        const alert = page.getByRole('alert').filter({hasText: message});
+        await alert.waitFor();
+        assert.equal(await alert.textContent(), message);
+        assert.equal(await alert.getByRole('list').count(), 0);
+        if (receiptDirectory) await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-domain-refused.png`, fullPage: true});
       });
     } finally { await browser.close(); }
   });

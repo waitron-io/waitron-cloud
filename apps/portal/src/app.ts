@@ -376,7 +376,7 @@ export class PortalApp {
     queueMicrotask(() => {
       const field = Object.keys(this.errors)[0];
       if (field) this.root.querySelector<HTMLElement>(`wt-input[name="${field}"]`)?.focus();
-      else this.root.querySelector<HTMLElement>('wt-form-error-summary')?.focus();
+      else this.root.querySelector<HTMLElement>('#signup-refusal, wt-form-error-summary')?.focus();
     });
   }
   async submitPairing() {
@@ -479,7 +479,8 @@ export class PortalApp {
       const cause = bodyRefusal(result);
       if (cause) this.error = `${path.startsWith('/signup/')&&path.endsWith('/complete')?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
-      else this.error = result.code === 'signup_rate_limited' ? 'signupLimited'
+      else this.error = result.code === 'signup_rate_limited' ? 'signupConnectionLimited'
+        : result.code === 'signup_domain_limited' ? 'signupDomainLimited'
         : result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'

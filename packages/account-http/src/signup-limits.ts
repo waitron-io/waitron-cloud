@@ -15,9 +15,14 @@ export async function admitSignup(client: PoolClient, limiter: AccountRateLimite
   const domain = email.split('@')[1]!;
   const daily = (scope: string, subject: string, limit: number): RateRule =>
     ({scope, subject: JSON.stringify([day, subject]), limit, windowSeconds: 86400});
-  const rules = [daily('signup-account-ip', ip, limits.accountsPerConnectionPerDay)];
-  if (!publicMailDomains.has(domain)) rules.push(daily('signup-account-domain', domain, limits.accountsPerDomainPerDay));
-  if (!(await limiter.consume(rules, client)).allowed) throw new AccountHttpError(429, 'signup_rate_limited');
+  // Every completion locks the connection before the domain and the shared count.
+  if (!(await limiter.consume([daily('signup-account-ip', ip, limits.accountsPerConnectionPerDay)], client)).allowed) {
+    throw new AccountHttpError(429, 'signup_rate_limited');
+  }
+  if (!publicMailDomains.has(domain)
+    && !(await limiter.consume([daily('signup-account-domain', domain, limits.accountsPerDomainPerDay)], client)).allowed) {
+    throw new AccountHttpError(429, 'signup_domain_limited');
+  }
   // The count only triggers a warning. Admission above never depends on fleet-wide activity.
   if ((await limiter.consume([daily('signup-volume', '*', limits.operatorWarningThreshold)], client)).allowed) return;
   if ((await limiter.consume([daily('signup-volume-warning', '*', 1)], client)).allowed) return day;
