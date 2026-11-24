@@ -7,15 +7,23 @@ import { releaseStorageControlClaims } from "../deploy/test-cloud/storage-admin-
 
 const [root] = process.argv.slice(2);
 const bin = join(root, "weed");
-const storeCommand = bin + " mini -dir=" + join(root, "data") + " ";
+const dataArgument = " -dir=" + join(root, "data") + " ";
 
 function ownedStores() {
-  const rows = execFileSync("/bin/ps", ["-ww", "-axo", "pid=,stat=,args="], {
-    encoding: "utf8", timeout: 2000, maxBuffer: 8 * 1024 * 1024,
+  const inspect = () => execFileSync("/bin/ps", ["-ww", "-axo", "pid=,stat=,args="], {
+    encoding: "utf8", timeout: 2000, maxBuffer: 8 * 1024 * 1024, env: { LC_ALL: "C.UTF-8" },
   });
+  let rows;
+  try { rows = inspect(); }
+  catch (error) {
+    if (error.code !== "ETIMEDOUT") throw error;
+    rows = inspect();
+  }
   return rows.split("\n").flatMap(row => {
     const match = /^\s*(\d+)\s+(\S+)\s+(.*)$/.exec(row);
-    return match && !match[2].startsWith("Z") && match[3].startsWith(storeCommand) ? [Number(match[1])] : [];
+    if (!match || match[2].startsWith("Z")) return [];
+    const command = match[3];
+    return command.startsWith(bin + " ") && command.includes(dataArgument) ? [Number(match[1])] : [];
   });
 }
 

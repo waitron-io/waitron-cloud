@@ -21,17 +21,18 @@ after(async () => { if (seedRoot) await rm(seedRoot, {recursive: true, force: tr
 
 const deathProbe = `
 import childProcess from "node:child_process";
-import {writeFileSync} from "node:fs";
+import {renameSync, writeFileSync} from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
 const [marker, paused] = process.argv.slice(1), spawn = childProcess.spawn;
 childProcess.spawn = (bin, args, options) => {
   const native = paused === "true"
     ? spawn("sh", ["-c", 'kill -STOP $$; exec "$@"', "sh", bin, ...args], options)
-    : spawn(bin, args, options);
-  writeFileSync(marker, JSON.stringify({
+    : spawn(bin, ["-v=1", ...args], options);
+  writeFileSync(marker + ".tmp", JSON.stringify({
     pid: native.pid, root: options.env.HOME,
     port: args.find(arg => arg.startsWith("-s3.port=")).split("=")[1],
   }));
+  renameSync(marker + ".tmp", marker);
   return native;
 };
 syncBuiltinESMExports();
@@ -41,7 +42,7 @@ writeFileSync(marker + ".ready", "");
 `;
 
 async function processState(pid) {
-  try { return (await execute("ps", ["-o", "stat=", "-p", String(pid)])).stdout.trim(); }
+  try { return (await execute("ps", ["-ww", "-o", "stat=,args=", "-p", String(pid)], {env:{LC_ALL:"C.UTF-8"}})).stdout.trim(); }
   catch (error) { if (error.code === 1 && !error.stderr) return ""; throw error; }
 }
 
@@ -64,10 +65,13 @@ for (const paused of [false, true]) test(
   paused ? "a killed fixture prevents a paused launch from starting storage" :
     "SIGKILL of a ready fixture removes its native store and port claim",
   {timeout:60000}, async t => {
-    const directory = await mkdtemp(join(tmpdir(), "cloud-storage-death-test-"));
+    const directory = await mkdtemp(join(tmpdir(), "cloud-storage-death-test-café-"));
     const cache = join(directory, "waitron-cloud-test-binaries"), marker = join(directory, "child.json");
     let native, driver;
-    const alive = async () => !!(await processState(native.pid)).match(/^[^Z]/);
+    const alive = async () => {
+      const row = await processState(native.pid);
+      return /^[^Z]/.test(row) && row.includes(join(native.root, "weed"));
+    };
     t.after(async () => {
       if (driver?.exitCode === null && driver.signalCode === null) {
         const exited = once(driver, "exit");
@@ -96,7 +100,7 @@ for (const paused of [false, true]) test(
       if (await exists(marker)) return JSON.parse(await readFile(marker, "utf8"));
     }, "the fixture must start its owned child", 40000);
     if (!paused) await eventually(() => exists(marker + ".ready"), "storage must answer S3 before SIGKILL", 40000);
-    if (paused) await eventually(async () => (await processState(native.pid)).includes("T"), "launcher must be paused");
+    if (paused) await eventually(async () => (await processState(native.pid)).split(/\s/, 1)[0].includes("T"), "launcher must be paused");
     const claim = join("/tmp", "waitron-cloud-storage-ports-" + process.getuid(), native.port);
     assert.equal(await readlink(claim), native.root);
     const survivingStore = await peer;

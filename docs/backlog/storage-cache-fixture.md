@@ -30,9 +30,10 @@ Each fixture claims eight ports on the filesystem before binding and holds them 
 child stops. Other programs, native fallback choices, default admin listeners and outgoing
 connections can still take a port; those causes, and the historical competing processes, are
 open. Different kernel port ranges and competing outgoing traffic need a controlled
-Linux comparison. The historical 55-second slowdown still has no cause. Compose and
-Test Cloud publish no admin port on the host. SeaweedFS 4.47 still accepts admin gRPC
-connections from peers on their private container network.
+Linux comparison. A driver killed before native launch can leave a fixture directory
+or claims behind. The historical 55-second slowdown still has no cause. Compose and
+Test Cloud publish no admin port on the host. Their SeaweedFS 4.47 image accepts admin
+gRPC connections from container peers and uses a different release from the native checks.
 
 ## Current browser and identity-port qualification (D499)
 
