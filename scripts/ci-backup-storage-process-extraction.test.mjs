@@ -8,9 +8,9 @@ import test, { before, after } from "node:test";
 import { prepareStorageTarSeed } from "./fixtures/storage-tar-seed.mjs";
 
 const pins = {
-  "darwin-arm64": ["darwin_arm64", "3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda"],
-  "linux-arm64": ["linux_arm64", "ba5c9def9ff98f78becdf309a50a9f906922f6383a7c4c772d01ede3cc012e16"],
-  "linux-x64": ["linux_amd64", "31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d"],
+  "darwin-arm64": ["darwin_arm64", "faa194e72a346755dc4404288b0561eb3c260351702901d8363024d5099bdd7d"],
+  "linux-arm64": ["linux_arm64", "557e92c38c5c7d180748eb8e2b2b45e426f8e5282a4caca8e098a90d09f03a07"],
+  "linux-x64": ["linux_amd64", "4a7d108384d044d95212d1342cdda9533fa55842c1c9b41f606ca3c8a9561124"],
 };
 let seedRoot, seed, archiveName, digest;
 

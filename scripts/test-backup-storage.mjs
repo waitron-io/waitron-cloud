@@ -393,7 +393,7 @@ try {
   contractClient.destroy();
   console.log(
     JSON.stringify({
-      provider: "SeaweedFS 4.47",
+      provider: "SeaweedFS 4.48",
       tlsVerified: true,
       encryption: true,
       immutableWrite: true,

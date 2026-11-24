@@ -157,8 +157,10 @@ production service objectives.
 
 The runners own their temporary databases, files, servers and containers and remove
 those resources on exit. Downloaded, digest-checked binaries stay in the temporary
-binary cache. SeaweedFS 4.47 listens on loopback with verified HTTPS; its temporary
-OIDC issuer gives scoped credentials through its security-token service. macOS runs
+binary cache. The native SeaweedFS 4.48 fixture serves verified HTTPS and its admin
+gRPC port on loopback. Its cleanup helper stops the native store if the fixture
+process is killed. The temporary OIDC issuer gives scoped credentials through its
+security-token service. macOS runs
 Litestream in a disposable pinned Linux container with the private CA mounted,
 without modifying your system trust settings. This needs Docker Desktop's
 `host.docker.internal` bridge. Native Linux uses the pinned Linux binary. The complete
@@ -175,7 +177,7 @@ file named by `CLOUD_MILESTONE_RECEIPT` is the only receipt it keeps.
   a real 12-second credential, waits for its expiry and proves that the provider refuses
   another write. It rotates a separate venue-scoped writer through the live provider
   configuration, proves that the replacement works and proves that the old key stops working.
-- SeaweedFS 4.47 accepts one writer in an eight-request create-only race and one writer
+- The native storage check requires SeaweedFS to accept one writer in an eight-request create-only race and one writer
   in an eight-request compare-and-swap replacement race. A stale entity tag receives
   HTTP 412. With bucket versioning enabled, the three accepted writes remain as three
   distinct versions, while refused writes add no version. These are provider-contract

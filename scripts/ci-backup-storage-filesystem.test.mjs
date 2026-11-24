@@ -39,7 +39,7 @@ fs.mkdir = (path, ...args) => {
   return mkdir(path, ...args);
 };
 fs.readFile = (path, ...args) => {
-  if (String(path).startsWith(join(cache, "seaweed-4.47-"))) {
+  if (String(path).startsWith(join(cache, "seaweed-4.48-"))) {
     archiveReads++;
     return Promise.reject(original);
   }
