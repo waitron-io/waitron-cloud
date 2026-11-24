@@ -1,13 +1,18 @@
 # Scope address lookup before choosing a provider
 
-**Decision note, 2026-09-30.** Offer address suggestions to people setting up an open-source Waitron venue through a Cloud login, while keeping every existing address field editable. Do not select a provider yet. A useful suggestion is not enough: Waitron must be allowed to save the selected address as a durable merchant record, map it safely into its country pack, and sustain the resulting traffic within a stated allowance and budget. The original research put Geoapify first and used CartoCiudad as a Spain-specific comparator. The owner now prefers planning Google with Geoapify fallback after the two measured comparisons; read the dated terms finding below before implementing it. Public Nominatim cannot serve live autocomplete under its published policy. The prices below are dated list-price scenarios, not quotes or measured demand. No keys, live provider requests, spending, or customer data were used in the original September research. The October measurements are recorded separately below.
+**24 November 2026.** Use the [joint Waitron plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-11-24-address-lookup-finish.md)
+for the current design. Save confirms the editable address fields. The owner
+chose Google as the only provider. The terms research, cost scenarios and
+comparisons below record the September and October work.
+
+**Decision note, 2026-09-30.** Offer address suggestions to people setting up an open-source Waitron venue through a Cloud login, while keeping every existing address field editable. Do not select a provider yet. A useful suggestion is not enough: Waitron must be allowed to save the selected address as a durable merchant record, map it safely into its country pack, and sustain the resulting traffic within a stated allowance and budget. The original research put Geoapify first and used CartoCiudad as a Spain-specific comparator. The two measured comparisons led to the October proposal for Google with Geoapify fallback. Public Nominatim cannot serve live autocomplete under its published policy. The prices below are dated list-price scenarios, not quotes or measured demand. No keys, live provider requests, spending, or customer data were used in the original September research. The October measurements are recorded separately below.
 
 ## Google can propose an address; you must confirm what you keep
 
 **Terms read 2026-10-16; design only.** You need an address that remains yours after
 setup. Google Address Validation has a specific confirmation route for that purpose.
 A Places suggestion by itself does not establish the same storage permission. The
-owner's preference is Google suggestions with Geoapify fallback. The
+October proposal uses Google suggestions with Geoapify fallback. The
 [proposed design](superpowers/specs/2026-10-16-address-suggestions.md) and
 [implementation plan](superpowers/plans/2026-10-16-address-suggestions.md) keep
 manual entry available and leave both providers disabled until the release checks pass.
@@ -21,7 +26,7 @@ manual entry available and leave both providers disabled until the release check
 | [Places policies](https://developers.google.com/maps/documentation/places/web-service/policies) | “store Place ID values indefinitely” | A saved identifier is an exception, not a licence to save the prediction text, business details or coordinates indefinitely. The design needs no retained place ID. |
 | [Validation attribution policy](https://developers.google.com/maps/documentation/address-validation/policies) | “within the same visual container” | Show Google Maps attribution beside the Google list and validation draft, distinguish other providers, and preserve any required third-party credit. Provide public terms and privacy links. Use no map in this flow. |
 
-**Design interpretation:** after validation, show every proposed address field together,
+**October design interpretation:** after validation, show every proposed address field together,
 let you correct it, and ask you to confirm the whole address as your venue's address.
 Persist those submitted, confirmed fields as your record and discard the provider
 response. This implements the stated replacement route; it is an interpretation of
@@ -38,7 +43,7 @@ retention follows the venue record's policy once you have confirmed it. Keep Goo
 attribution on its active draft; do not attribute your subsequently corrected record
 to Google or attach Google's logo to Geoapify output.
 
-The plan proposes ten confirmed addresses per Cloud account per UTC calendar month,
+The October plan proposed ten confirmed addresses per Cloud account per UTC calendar month,
 shared across venues and providers. Its paid API budget is **USD 0**. It stops Google
 at 500 validations and 4,000 autocomplete requests per provider billing month,
 including existing and uncertain usage, and imposes separate daily peaks. Those are
@@ -56,8 +61,8 @@ The owner's Google key has no configured cap or alert according to the queue's o
 note; this firing has not inspected or changed that account. A billing budget
 [does not automatically stop usage or spending](https://developers.google.com/maps/billing-and-pricing/manage-costs).
 Transactional reservations before dispatch, provider quotas set by the owner, accounted
-shared usage and a tested stop control are separate activation requirements. Geoapify
-is the planned fallback only after its commercial Free eligibility and exact
+shared usage and a tested stop control are separate activation requirements. The October plan treats Geoapify
+as a fallback only after its commercial Free eligibility and exact
 merchant-storage terms are confirmed. Its [terms](https://www.geoapify.com/terms-and-conditions/)
 require OpenStreetMap credit, plus Geoapify credit on Free, and permit suspension or
 overage charges when limits are exceeded. An unavailable fallback leaves manual entry.

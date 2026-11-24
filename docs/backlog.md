@@ -647,7 +647,9 @@ covers Cloud's signed staff-email choice. The Mailpit rehearsal in
 `deploy/test-cloud/free-services-relay.test.mjs` covers delivery after sign-out.
 The [joint Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
 covered the Waitron setup screen and one staff password reset delivered to private
-Mailpit with the local mail server blank. Live address qualification remains open.
+Mailpit with the local mail server blank. The [Mac address trial](address-lookup-trial.md#what-the-mac-trial-measured)
+measured first-choice drafts for 40 public addresses. Billing and the connected-box
+check remain open.
 Qualify providers, storage rights, account allowances and abuse limits against
 the [requirements and open work](backlog/free-services.md).
 Evaluate mobile notifications separately.

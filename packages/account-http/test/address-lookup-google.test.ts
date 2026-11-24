@@ -4,7 +4,7 @@ import {createServer} from 'node:http';
 import {createGoogleAddressClient} from '../src/address-lookup-google.ts';
 
 const sessionToken='123e4567-e89b-42d3-a456-426614174000';
-test('Google suggestions carry only text while the request carries Spain, language and the session',async()=>{
+test('Google suggestions carry only text while the request carries Spain and language',async()=>{
  const calls:{url:string;options:RequestInit}[]=[];
  const client=createGoogleAddressClient({apiKey:'synthetic-key',fetcher:async(url,options)=>{
   calls.push({url:String(url),options:options!});
@@ -17,7 +17,18 @@ test('Google suggestions carry only text while the request carries Spain, langua
  assert.equal(calls[0]!.url,'https://places.googleapis.com/v1/places:autocomplete');
  assert.equal(calls[0]!.options.redirect,'error');
  assert.equal(new Headers(calls[0]!.options.headers).get('X-Goog-Api-Key'),'synthetic-key');
- assert.deepEqual(JSON.parse(String(calls[0]!.options.body)),{input:'Calle de Prueba 12',includedRegionCodes:['es'],languageCode:'es',sessionToken});
+ assert.deepEqual(JSON.parse(String(calls[0]!.options.body)),{input:'Calle de Prueba 12',includedRegionCodes:['es'],languageCode:'es'});
+});
+
+test('neither Google request sends a session token',async()=>{
+ const requests:Record<string,unknown>[]=[];
+ const client=createGoogleAddressClient({apiKey:'k',fetcher:async(_url,options)=>{
+  requests.push(JSON.parse(String(options!.body)));
+  return Response.json(requests.length===1?{}:{result:{address:{postalAddress:{regionCode:'ES'}}}});
+ }});
+ await client.suggest({query:'Calle de Prueba 12',language:'es',sessionToken});
+ await client.validate({selectedText:'Calle de Prueba 12, Madrid',sessionToken});
+ assert.deepEqual(requests.map(body=>Object.hasOwn(body,'sessionToken')),[false,false]);
 });
 
 const address={postalAddress:{regionCode:'ES',postalCode:'28013',locality:'Madrid'},addressComponents:[
@@ -38,7 +49,7 @@ test('validation maps only editable address fields and never claims country-pack
   provider:'google',fields:{addressLine1:'Calle de Prueba 12',addressLine2:'2º B',postalCode:'28013',city:'Madrid',province:'Madrid',countryCode:'ES'},
  });
  assert.equal(calls.length,1);assert.equal(calls[0]!.redirect,'error');
- assert.deepEqual(JSON.parse(String(calls[0]!.body)),{address:{regionCode:'ES',addressLines:['Calle de Prueba 12, Madrid']},sessionToken});
+ assert.deepEqual(JSON.parse(String(calls[0]!.body)),{address:{regionCode:'ES',addressLines:['Calle de Prueba 12, Madrid']}});
  const partial=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{postalAddress:{regionCode:'ES'}}}})});
  assert.deepEqual(await partial.validate({selectedText:'Calle de Prueba',sessionToken}),{
   provider:'google',fields:{addressLine1:'',addressLine2:null,postalCode:'',city:'',province:'',countryCode:'ES'},
@@ -154,5 +165,40 @@ test('invalid credentials or a missing injected transport fail locally without e
    assert.equal((error as Error&{dispatched:boolean}).dispatched,false);
    assert.equal(error.stack?.includes('synthetic-secret'),false);return true;
   });
+ }
+});
+
+test('Spain drafts accept the provider’s Catalan and Basque country labels',async()=>{
+ for(const country of ['Espanya','Espainia']){
+  const addressComponents=address.addressComponents.map(part=>part.componentType==='country'?{...part,componentName:{text:country}}:part);
+  const client=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{...address,addressComponents}}})});
+  assert.equal((await client.validate({selectedText:'Calle de Prueba 12',sessionToken})).fields.countryCode,'ES');
+ }
+});
+
+test('the validated postal street line fills a draft when Google omits the route component',async()=>{
+ const client=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{
+  postalAddress:{regionCode:'ES',postalCode:'28013',locality:'Madrid',addressLines:['Calle de Prueba 12']},
+  addressComponents:[{componentType:'street_number',componentName:{text:'12'}}],
+ }}})});
+ assert.equal((await client.validate({selectedText:'Calle de Prueba 12',sessionToken})).fields.addressLine1,'Calle de Prueba 12');
+});
+
+test('the Spanish postal province fills a draft when Google omits the province component',async()=>{
+ const client=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{
+  postalAddress:{regionCode:'ES',postalCode:'51001',locality:'Ceuta',administrativeArea:'Ceuta'},
+ }}})});
+ assert.equal((await client.validate({selectedText:'Plaza de Prueba 1, Ceuta',sessionToken})).fields.province,'Ceuta');
+});
+
+test('the postal street fallback preserves a structured route with or without a number',async()=>{
+ for(const number of [undefined,'12']){
+  const addressComponents=[{componentType:'route',componentName:{text:'Camino Real'}}];
+  if(number)addressComponents.push({componentType:'street_number',componentName:{text:number}});
+  const client=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{
+   postalAddress:{regionCode:'ES',addressLines:['Finca La Prueba']},addressComponents,
+  }}})});
+  const draft=await client.validate({selectedText:'Camino Real',sessionToken});
+  assert.equal(draft.fields.addressLine1,number?'Camino Real 12':'Camino Real');
  }
 });

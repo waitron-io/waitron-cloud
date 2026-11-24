@@ -12,34 +12,17 @@ venue does not subscribe to remote access or backups.
   autocomplete 17/28 and CartoCiudad 3/28, none reaching the proposed 95% gate; in the larger
   60-address comparison complete drafts occur in a five-result list for Google 48/60, Geoapify
   autocomplete 36/60, geocoding 40/60 (47/60 under the rural-municipality alternative) and
-  CartoCiudad 0/60. Cumulative attempts are Google 363, Geoapify 320 and CartoCiudad 161, below
+  CartoCiudad 0/60. The October comparisons used 363 Google, 320 Geoapify and 161 CartoCiudad requests, below
   1,499 each. The [terms check](../address-lookup-scope.md#google-can-propose-an-address-you-must-confirm-what-you-keep)
   identifies Address Validation's conditional confirmation route for merchant fields; Places
-  selection alone does not establish durable storage permission. The owner's next
-  preference is Google with Geoapify fallback. Its
-  [proposed design](../superpowers/specs/2026-10-16-address-suggestions.md) and
-  [plan](../superpowers/plans/2026-10-16-address-suggestions.md) specify explicit whole-address
-  confirmation, provider-specific attribution, no shared response cache, ten
-  confirmed selections per account per month and a zero-paid-usage budget. These
-  are proposed defaults, not approved production allowances or configured key caps.
-  Effective billing terms, accounted shared usage, operator quotas, Geoapify Free
-  eligibility/storage rights, locality policy and joint Waitron setup acceptance
-  remain release gates.
-  The signed route supports registered test boxes with one verified owner when
-  a local or disposable stack injects a fake provider ([trial contract](../address-lookup-trial.md)).
-  Joint testing of the setup screens and attribution remains open.
-  The watcher approved counted abandonment for this trial: expired or abandoned
-  holds stay counted. **Remove that exception when the real service is scoped.**
-  A crash can shorten one dispatch gap; no strict crash-spacing guarantee is made.
-  Real Google activation is a separate reviewed change requiring the server-only
-  key, owner usage/quotas confirmation and allowance configuration for this
-  account only. Later, Cloud serves live Google completion to “Yes, every registered
-  box”, inside the existing per-box limit (owner, 21 November 2026 at 10:34); that
-  is not built. Removing the key file stops this private trial; public-service
-  terms/privacy links do not gate it. No live request or production enablement is
-  proved by these local checks. Keep the measurement client sequential; the trigger of
-  CI run 38950506223's restart-spacing failure is unproved.
-  Keep manual entry and correction available when lookup is unavailable or wrong.
+  selection alone does not establish durable storage permission. The owner chose
+  Google. The [joint address plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-11-24-address-lookup-finish.md)
+  uses **Save** to confirm editable fields. The [Mac trial](../address-lookup-trial.md)
+  measured first-choice drafts for 40 addresses. Still open are the billing-category
+  readback, service caps and quotas, privacy wording and the four Waitron forms on
+  a connected box. The signed route's private trial still counts abandoned holds
+  and shares a dispatch slot. Replace those rules for the regular service and keep
+  manual entry available when a suggestion is unavailable or wrong.
 - **Transactional email.** The [test relay](../transactional-email-relay-contract.md)
   covers staff invitations, password resets and email-change codes, plus old-address
   warnings, security changes, role changes, box alerts and certificate reminders.

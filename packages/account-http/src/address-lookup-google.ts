@@ -35,11 +35,14 @@ function draft(value:unknown){
   }
  }
  const country=components.get('country');
- if(country!==undefined&&!['es','españa','spain'].includes(country.normalize('NFC').toLowerCase()))fail('malformed',true);
+ if(country!==undefined&&!['es','españa','espanya','espainia','spain'].includes(country.normalize('NFC').toLowerCase()))fail('malformed',true);
+ const route=components.get('route'),number=components.get('street_number');
+ const street=[route,number].filter(Boolean).join(' ');
+ const postalLine=!route&&Array.isArray(postal.addressLines)?text(postal.addressLines[0]):'';
  return {provider:'google' as const,fields:{
-  addressLine1:[components.get('route'),components.get('street_number')].filter(Boolean).join(' '),
+  addressLine1:postalLine||street,
   addressLine2:components.get('subpremise')||null,postalCode:text(postal.postalCode),city:text(postal.locality),
-  province:components.get('administrative_area_level_2')??'',countryCode:'ES' as const,
+  province:components.get('administrative_area_level_2')||text(postal.administrativeArea),countryCode:'ES' as const,
  }};
 }
 
@@ -87,7 +90,7 @@ export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof 
    checkInput(input?.query,input?.sessionToken);
    if(!['es','en'].includes(input.language))fail('invalid_input');
    const reply=record(await request('https://places.googleapis.com/v1/places:autocomplete',{
-    input:input.query,includedRegionCodes:['es'],languageCode:input.language,sessionToken:input.sessionToken,
+    input:input.query,includedRegionCodes:['es'],languageCode:input.language,
    },signal));
    if(reply.suggestions===undefined&&Object.keys(reply).length===0)return {provider:'google' as const,candidates:[]};
    if(!Array.isArray(reply.suggestions))fail('malformed',true);
@@ -101,7 +104,7 @@ export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof 
   async validate(input:ValidationInput,signal?:AbortSignal){
    checkInput(input?.selectedText,input?.sessionToken,true);
    return draft(await request('https://addressvalidation.googleapis.com/v1:validateAddress',{
-    address:{regionCode:'ES',addressLines:[input.selectedText]},sessionToken:input.sessionToken,
+    address:{regionCode:'ES',addressLines:[input.selectedText]},
    },signal));
   },
  };

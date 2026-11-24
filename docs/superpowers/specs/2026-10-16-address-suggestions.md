@@ -1,5 +1,10 @@
 # Proposed address suggestions for Spain
 
+**Update, 2026-11-24.** The [current joint plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-11-24-address-lookup-finish.md)
+replaces the confirm call, approval screen and one-use codes below. The person
+reviews editable fields and confirms them by saving the form. See the [Google
+trial results](../../address-lookup-trial.md#what-the-mac-trial-measured).
+
 **Status: PROPOSED, 2026-10-16.** This design is for owner review and queued implementation. Landing these documents approves neither a release nor changes to provider account caps. Google is the proposed first provider, with Geoapify as a separately gated fallback. Manual entry works at all times, without Cloud login or allowance. Cloud owns this provider and allowance contract; Waitron owns its setup form, country-pack checks and local server. No Waitron changes are authorised by this document.
 
 You can ask for suggestions while setting up a Spanish venue, review an editable address, and explicitly confirm it. Suggestions never silently replace your fields. This adds no map, subscription requirement, general geocoding service or address database. Fiscal allocations, hash chains, golden records and issued invoices remain outside scope.
