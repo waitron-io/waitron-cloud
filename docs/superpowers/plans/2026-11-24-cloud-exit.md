@@ -10,7 +10,7 @@ Stage with `BackupObjects.stage()` and cap the archive at 16 MiB in this test sl
 
 `packages/account-http/test/backups.test.ts` owns the refusals for normal service mode, stale proof, non-owner members, other venues, unverified points, oversize archives and authority lost during staging. `apps/portal/test/backup-browser.test.ts` checks both files save. The [verifier tests](../../../deploy/test-cloud/verifier-genuine.test.mjs) already own wrong keys and changed bytes.
 
-Extend `scripts/test-cloud-integration.mjs` and `docs/test-cloud.md`. Run `node --test scripts/test-cloud-exit-download.test.mjs` with the disposable Cloud and Waitron images. Record the unskipped pass, verifier image digest and Waitron pin `8eed667ab0586a3144ed7911b57cf50fcb3b0766`. Match the saved archive to the stored digest, open it with the saved key in the network-disabled verifier and show the source stayed online. Estimate 220–300 implementation lines, 200–290 test and harness lines and 20–35 guide lines.
+Extend `scripts/test-cloud-integration.mjs` and `docs/test-cloud.md`. Run `node --test scripts/test-cloud-exit-download.test.mjs` with the disposable Cloud and Waitron images. Record the unskipped pass, verifier image digest and exact Waitron revision. Use `44dc45af7a64d399037747499ba633594a63f84d` for the whole disposable stack. The earlier `8eed667ab0586a3144ed7911b57cf50fcb3b0766` speaks pairing v2, which the current Cloud account service refuses. Match the saved archive to the stored digest, open it with the saved key in the network-disabled verifier and show the source stayed online. Estimate 220–300 implementation lines, 200–290 test and harness lines and 20–35 guide lines.
 
 ## Later retention and deletion
 
