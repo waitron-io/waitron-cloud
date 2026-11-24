@@ -217,7 +217,8 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   assert.equal(sha256, archive.sha256, 'integration.exit_stored_digest');
   assert.equal(saved.length, archive.bytes);
   assert.ok(/^[A-Za-z0-9_-]{43}$/.test(secret), 'integration.exit_saved_key');
-  const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage, owner: runId});
+  const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage, owner: runId,
+    expectedRevision: request.target.runtime.revision});
   const {result, receipt} = await verify(bufferObject(saved), {...backupKey, secret}, {...request,
     attempt: {...request.attempt, controllerScope, childToken: randomUUID(), deadline: new Date(Date.now()+30_000).toISOString()}},
   AbortSignal.any([runSignal(), AbortSignal.timeout(30_000)].filter(Boolean)));
@@ -618,7 +619,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       assert.equal(registered.status, 200, 'integration.register_business');
       assert.equal(registered.body.businesses.length, 1, 'integration.first_business');
       const {id: legalBusinessId, organisationId} = registered.body.businesses[0];
-      const browser = services || (paidExitDownload && plan === 'paid') ?
+      const browser = services || paidExitDownload ?
         await completeServicesConnectionProof({api, mailbox, readMail, email, password, login}) :
         browserSession(login);
       const sessionToken = /__Host-cloud_session=([^;]+)/.exec(browser.cookie)?.[1];

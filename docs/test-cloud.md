@@ -964,7 +964,9 @@ encrypted archive later. This test download accepts archives up to 16 MiB.
 Actual venue exit still needs the rest of the return and deletion process.
 
 Use the Cloud image and the verifier built from the Waitron revision in
-`deploy/backup-verifier/target.json` to check that both files work together:
+`deploy/backup-verifier/target.json` to check that both files work together.
+Load `postgres:18-alpine` and `axllent/mailpit:v1.31.1` in Docker first because
+the rehearsal starts with image pulls disabled.
 
 ```sh
 TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
