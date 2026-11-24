@@ -87,28 +87,30 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,surviv
   throw Error('flux.revision_timeout');
 }
 
+export async function closePublishedContainer(run, id, removeFirewall) {
+  if (id) {
+    try {await run('docker', ['rm', '-f', id], undefined, true);}
+    catch (error) {
+      // A failed Docker command may leave the listener reachable. Retain its filter until Docker confirms otherwise.
+      try {
+        if (removeFirewall && await run('docker', ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id], undefined, true) === '') {
+          await removeFirewall();
+        }
+      } catch (cleanup) {
+        throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);
+      }
+      throw error;
+    }
+  }
+  await removeFirewall?.();
+}
+
 export async function startFluxMirror({name,image,run,address='10.77.0.1',port='',removeFirewall}) {
   const container = ['--name',name+'-git','--user','1000:1000','--entrypoint','node',
     '-v',fileURLToPath(import.meta.url)+':/proof/kubernetes-git.mjs:ro','-p',address+':'+port+':8000',image,
     '/proof/kubernetes-git.mjs','--serve-mirror','/tmp/mirror'];
   let id;
-  const close = async () => {
-    if (id) {
-      try {await run('docker', ['rm', '-f', id], undefined, true);}
-      catch (error) {
-        // A failed Docker command may leave the mirror reachable. Retain its filter until Docker confirms otherwise.
-        try {
-          if (removeFirewall && await run('docker', ['ps', '--quiet', '--no-trunc', '--filter', 'id=' + id], undefined, true) === '') {
-            await removeFirewall();
-          }
-        } catch (cleanup) {
-          throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);
-        }
-        throw error;
-      }
-    }
-    await removeFirewall?.();
-  };
+  const close = () => closePublishedContainer(run, id, removeFirewall);
   try {
     const created = removeFirewall
       ? await run('docker', ['create', '--pull=never', ...container], undefined, true)
@@ -143,9 +145,8 @@ git rev-parse HEAD`],text,false,signal);
   }
 }
 
-export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
+export async function installPublishedPeerFilter({interfaceName, run, address, port}) {
   assert.match(interfaceName, /^d621[a-f0-9]{3,11}$/, 'flux.mesh_interface');
-  const address = '10.77.0.4', port = '18000';
   // Docker has already translated the destination by DOCKER-USER.
   const original = ['-p', 'tcp', '-m', 'conntrack', '--ctdir', 'ORIGINAL', '--ctorigdst', address, '--ctorigdstport', port];
   const rules = [
@@ -169,7 +170,13 @@ export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
     catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; ' + cleanup.message);}
     throw error;
   }
-  return startFluxMirror({...options, run, address, port, removeFirewall: removeRules});
+  return removeRules;
+}
+
+export async function startOutsideFluxMirror({interfaceName, run, ...options}) {
+  const address = '10.77.0.4', port = '18000';
+  const removeFirewall = await installPublishedPeerFilter({interfaceName, run, address, port});
+  return startFluxMirror({...options, run, address, port, removeFirewall});
 }
 
 export async function installFlux({name,image,run,kube,deployment,controllersPath='/tmp/d618-flux.json',baselineNode=name+'-worker2',signal,mirror=startFluxMirror}) {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {readFile} from 'node:fs/promises';
 
 import * as deployment from './services.mjs';
 
@@ -45,6 +46,22 @@ test('outside services run one restarting copy per cell machine with a scoped in
   const {env, envFrom} = pod.containers.find(container => container.name === 'inspect');
   assert.equal(env.find(row => row.name === 'CLOUD_STOCKHOLM_REMOTE_CELL').value, 'fixture-cell');
   assert.deepEqual(envFrom, [{secretRef: {name: 'services-backup'}}]);
+});
+
+test('outside workers use the shared inbox and authenticate with their node name', () => {
+  const {spec: {template: {spec}}} = deployment.servicesDaemonSet('owned:cloud', ['node-a', 'node-b', 'node-c'], 'fixture-cell');
+  const {env} = spec.containers.find(row => row.name === 'email');
+  assert.equal(env.find(row => row.name === 'CLOUD_SMTP_HOST').value, '10.77.0.4');
+  assert.equal(env.find(row => row.name === 'CLOUD_SMTP_PORT').value, '1025');
+  assert.deepEqual(env.find(row => row.name === 'CLOUD_SMTP_USER').valueFrom, {fieldRef: {fieldPath: 'spec.nodeName'}});
+  assert.equal(spec.containers.some(row => row.name === 'mailpit'), false);
+  assert.equal(spec.volumes.some(row => row.name === 'mail'), false);
+});
+
+test('the Amazon image manifest prepares the Mailpit image used by outside services', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./local-checks.yaml', import.meta.url), 'utf8'));
+  assert.ok(manifest.items.some(row => row.spec?.containers?.some(
+    container => container.name === 'mailpit' && container.image === deployment.mailpitImage)));
 });
 
 test('Mailpit accepts only authenticated TLS mail to synthetic addresses', () => {

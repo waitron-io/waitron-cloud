@@ -46,9 +46,10 @@ test('measured stops cover all three machines and the live roles before returnin
         overrides.stages?.push('observe');
         assert.equal(holdMs, 360_000);
         ready(); assert.equal(await stopped(), 2000); await replacement();
-        return {recovery: {signup: {result: {worker: overrides.mail ?? 'surviving-mail'}},
+        const reconciliation = await reconcile();
+        return {recovery: {signup: {result: {worker: overrides.mail ?? reconciliation.primary}},
           backup: {result: {controllerScope: 'verifier', attemptId: 'attempt', retained: overrides.retained ?? true}}},
-          reconciliation: await reconcile()};
+          reconciliation};
       },
       reconcile: async (_node, _before, survivors) => ({primary: survivors[0], outsideStore: true,
         publication, flux: {appliedRevision: 'a'.repeat(40)}}),
@@ -64,6 +65,7 @@ test('measured stops cover all three machines and the live roles before returnin
   await assert.rejects(async () => run('b', undefined), /services\.stop_publication/);
   const publication = {worker: 'publication', completedMs: 1200};
   await assert.rejects(run('b', publication, {mail: ''}), /services\.stop_mail_worker/);
+  await assert.rejects(run('b', publication, {mail: 'b'}), /services\.stop_mail_worker/);
   await assert.rejects(run('b', publication, {retained: false}), /services\.stop_backup_worker/);
   await assert.rejects(run('b', publication, {context: {nodes: ['a', 'b']}}), /services\.stop_three_nodes/);
   let request;
@@ -74,6 +76,17 @@ test('measured stops cover all three machines and the live roles before returnin
     throw Error('synthetic probe failed during stop');
   }}}), /synthetic probe failed during stop/);
   assert.equal(request.aborted, true);
+
+  await t.test('the inbox witness is captured before each stop and read during it', async () => {
+    changes.length = 0;
+    const windows = [];
+    await run('b', publication, {context: {probes: {async inboxWitness() {
+      windows.push([...changes]);
+      return async () => windows.push([...changes]);
+    }}}});
+    assert.deepEqual(windows, [[], ['off:b'], changes.slice(0, 2), changes.slice(0, 3),
+      changes.slice(0, 4), changes.slice(0, 5)]);
+  });
 
   await t.test('signed reservation evidence brackets only the database primary stop', async () => {
     changes.length = 0;
@@ -161,6 +174,10 @@ for (const [name, routeStillResponding, placement, reason] of [
       },
       probes: {
         session: async () => {seen.push('account');}, remote: async () => {seen.push('routes');},
+        async inboxWitness() {
+          seen.push('saved mail');
+          return async () => {seen.push('read retained mail'); return true;};
+        },
         outage: {account: down('account outage'), staff: down('staff'), public: down('public')},
         backupAfterRestart: async () => {
           assert.equal(inspectionChecks, 2, 'the backup requires a ready inspector');
@@ -190,8 +207,8 @@ for (const [name, routeStillResponding, placement, reason] of [
     } else {
       const result = await run;
       assert.deepEqual(result.outage, {account: 'ECONNREFUSED', staff: 'ECONNREFUSED', public: 'ECONNREFUSED', store: 'ECONNREFUSED'});
-      assert.deepEqual(seen, ['account', 'routes', 'store', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
-        'store outage', 'confirmed', 'restarted', 'data restored', 'retained row and new write', 'account', 'routes', 'store',
+      assert.deepEqual(seen, ['account', 'routes', 'store', 'saved mail', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
+        'store outage', 'confirmed', 'restarted', 'data restored', 'retained row and new write', 'read retained mail', 'account', 'routes', 'store',
         'inspect', 'inspect', 'backup']);
       assert.equal(result.primary, 'original-copy');
       assert.equal(result.backup.pointId, 'new');
@@ -397,7 +414,7 @@ test('the outside rehearsal routes internal storage requests to the local store 
   }), error => error === configured);
 });
 
-test('a surviving inbox stays readable while another service container restarts', () => {
+test('a surviving account route stays ready while another service container restarts', () => {
   assert.equal(typeof servicesScript.readyServicePods, 'function');
   const pod = (name, readiness, containers) => ({
     metadata: {name: 'service-' + name}, spec: {nodeName: name},
@@ -405,43 +422,13 @@ test('a surviving inbox stays readable while another service container restarts'
       containerStatuses: containers.map(([name, ready]) => ({name, ready}))},
   });
   const rows = [
-    pod('a', true, [['account', true], ['mailpit', true], ['email', true]]),
-    pod('b', false, [['account', true], ['mailpit', true], ['email', false]]),
-    pod('c', false, [['account', true], ['mailpit', false], ['email', true]]),
+    pod('a', true, [['account', true], ['proxy', true], ['email', true]]),
+    pod('b', false, [['account', true], ['proxy', true], ['email', false]]),
+    pod('c', false, [['account', true], ['proxy', false], ['email', true]]),
   ];
-  assert.deepEqual(servicesScript.readyServicePods(rows, {stopped: 'a', containers: ['account', 'mailpit']})
+  assert.deepEqual(servicesScript.readyServicePods(rows, {stopped: 'a', containers: ['account', 'proxy']})
     .map(row => row.metadata.name), ['service-b']);
   assert.deepEqual(servicesScript.readyServicePods(rows, {}).map(row => row.metadata.name), ['service-a']);
-});
-
-test('a mail list combines surviving inboxes and finds a message outside the first one', async () => {
-  assert.equal(typeof servicesScript.readServicesInbox, 'function');
-  const fetch = async (pod, path) => {
-    if (pod === 'unreachable') throw Error('node stopped');
-    if (path === 'messages') return {status: 200, text: JSON.stringify({messages: [{ID: pod}]})};
-    return pod === 'on-c' && path === 'message/on-c' ? {status: 200, text: '{"ID":"on-c"}'} : {status: 404, text: 'not found'};
-  };
-  const inbox = (path, auth) => servicesScript.readServicesInbox(['unreachable', 'on-b', 'on-c'], fetch, path, auth);
-  assert.deepEqual(await (await inbox('messages', 'synthetic')).json(), {messages: [{ID: 'on-b'}, {ID: 'on-c'}]});
-  const message = await inbox('message/on-c', 'synthetic');
-  assert.deepEqual(await message.json(), {ID: 'on-c'});
-  assert.equal(message.headers.get('x-rehearsal-mail-worker'), 'on-c');
-  assert.equal((await inbox('message/absent', 'synthetic')).status, 404);
-});
-
-test('the unauthenticated check needs a reply from every listed inbox', async () => {
-  const failure = Error('inbox could not be reached');
-  await assert.rejects(servicesScript.readServicesInbox(['protected', 'unavailable'], async pod => {
-    if (pod === 'unavailable') throw failure;
-    return {status: 401, text: 'unauthorized'};
-  }, 'messages', ''), error => error.cause === failure);
-});
-
-test('an unprotected surviving inbox cannot hide behind other inboxes that reject the request', async () => {
-  assert.equal(typeof servicesScript.readServicesInbox, 'function');
-  const response = await servicesScript.readServicesInbox(['protected', 'open'], async pod =>
-    pod === 'protected' ? {status: 401, text: 'unauthorized'} : {status: 200, text: '{"messages":[]}'}, 'messages', '');
-  assert.equal(response.status, 200, 'the caller must see that a surviving inbox accepted the unauthenticated request');
 });
 
 test('failure diagnostics retain only database SQLSTATEs from error records', () => {
@@ -490,6 +477,7 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
         assert.ok(Number.isFinite(leg.recovery[probe].longestGapMs));
       }
       assert.ok(leg.recovery.signup.result.worker);
+      assert.equal(leg.reconciliation.mailRetained, true);
       assert.equal(leg.recovery.backup.result.retained, true);
       assert.notEqual(leg.recovery.backup.result.attemptId, services.backup.workerVerification.attemptId);
       assert.equal(leg.reconciliation.outsideStore, true);
@@ -500,6 +488,7 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
     }
     assert.deepEqual(Object.keys(services.coldRestart.outage).sort(), ['account', 'public', 'staff', 'store']);
     assert.match(services.coldRestart.primary, /^cloud-db-\d+$/);
+    assert.equal(services.coldRestart.mailRetained, true);
     const {retainedPointId, pointId, status, childAbsent} = services.coldRestart.backup;
     assert.ok(retainedPointId && pointId && retainedPointId !== pointId);
     assert.equal(retainedPointId, legs.at(-1).recovery.backup.result.pointId);
@@ -554,6 +543,8 @@ test('an owned Linux Kind cell signs in and admits a genuine restored backup', {
 test('rehearsal credential files contain complete password and digest lines', () => {
   const files = servicesCredentialFiles('synthetic-smtp', 'synthetic-inbox');
   assert.equal(files.mail['smtp-auth'], 'sender:synthetic-smtp\n');
+  const outside = servicesCredentialFiles('synthetic-smtp', 'synthetic-inbox', ['node-a', 'node-b', 'node-c']);
+  assert.equal(outside.mail['smtp-auth'], 'node-a:synthetic-smtp\nnode-b:synthetic-smtp\nnode-c:synthetic-smtp\n');
   assert.equal(files.mail['ui-auth'], 'inbox:synthetic-inbox\n');
   assert.match(files.corpus, /^[a-f0-9]{64}\n$/);
 });

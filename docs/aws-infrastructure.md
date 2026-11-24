@@ -1370,20 +1370,27 @@ TEST_KUBERNETES_OUTSIDE_BASELINE=1 node --test scripts/kubernetes-services.test.
 One venue signs up, pairs, reaches signed staff and public HTTPS, uploads
 an encrypted backup and completes an isolated restore. Flux applies the
 remote publication Deployment from the test host's read-only Git mirror.
-The host's WireGuard filter admits replies and incoming Git traffic.
 The private relay gives the outside venue stable account and storage addresses.
-Each machine runs its own account service and authenticated Mailpit inbox.
-The test reads available inboxes through Kubernetes. The verifier can start
-on any of the three machines using prepared, bounded scratch space.
+The host's WireGuard filter admits replies and opens TCP ports 18000 for Git
+and 1025 for SMTP to the three machines. Their email workers send to one test
+inbox on the launch host, where Mailpit requires TLS and authentication.
+The observer reads it through an authenticated loopback API, so mail already
+delivered stays available when a cell machine stops. The verifier can start on
+any of the three machines using prepared, bounded scratch space.
 
 Set `TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS=1` as well to stop and restart each
 Kind machine for at least six minutes during the same journey. The test keeps the same
 account session, venue and tunnel. It records which machine holds each role
 before the stop, then measures account and HTTPS recovery within 90 seconds,
 backup recovery within 300 seconds, and Git revision and drift repair within
-180 seconds. Read the longest probe gaps alongside the times when a surviving
-inbox receives fresh mail, a publication worker completes new work and a new
-backup verification finishes. The publication check starts after Git finishes
+180 seconds. The test saves a Mailpit message ID before each stop and reads that
+message while the machine is down. A sign-in can finish a challenge issued
+before the stop. Its confirmation events record the Message-ID and the
+authenticated sender. To measure fresh sending, signup requests new mail
+after the stop and requires the sender to be on a surviving machine.
+Read the longest probe gaps alongside the times when signup mail arrives,
+the publication worker completes new work and backup verification finishes.
+The publication check starts after Git finishes
 rolling that worker, and its time is measured from the start of the stop.
 Before the next stop, the run checks for one writable PostgreSQL primary and
 six online drives through both returning store peers. Each peer must also
@@ -1427,8 +1434,8 @@ receipt includes the placement when the lookup succeeds.
 
 Fresh account, store, staff and public requests must fail at the network while
 the host can still confirm the machines are off. Restart the same machines and
-check the retained PostgreSQL
-row and a new write, one writable primary and ready storage. The same venue
+check the saved inbox message by ID, the retained PostgreSQL row and a new
+write, one writable primary and ready storage. The same venue
 process, session and tunnel must recover its signed routes and last verified
 backup, then publish a different capture and complete an isolated restore.
 The receipt shows API, data and client recovery times separately.

@@ -4,11 +4,12 @@ import {mkdir, rm, writeFile} from 'node:fs/promises';
 import {isIPv4} from 'node:net';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {fluxImages, installFlux, prepareFluxBundle, startOutsideFluxMirror} from './kubernetes-git.mjs';
+import {closePublishedContainer, installPublishedPeerFilter, fluxImages, installFlux, prepareFluxBundle, startOutsideFluxMirror} from './kubernetes-git.mjs';
+import {mailpitImage, mailpitArguments, outsideMailHost} from '../deploy/kubernetes/services.mjs';
 import {cleanUp} from './kubernetes-database.mjs';
 
 const wireGuardKey = /^[A-Za-z0-9+/]{43}=$/;
-export const rehearsalAddress = '10.77.0.4';
+export const rehearsalAddress = outsideMailHost;
 export const rehearsalMtu = 1420;
 export const meshNodeAddress = index => '10.77.0.' + (index + 1);
 
@@ -31,12 +32,14 @@ async function installHostFilter(run, name) {
   await rule('-N', name);
   try {
     await rule('-A', name, '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'RETURN');
-    // Match the Git listener before Docker rewrites the destination.
-    await rule('-A', name, '-p', 'tcp', '-d', rehearsalAddress, '--dport', '18000', '-j', 'RETURN');
+    // Match the listeners before Docker rewrites the destinations.
+    for (const port of ['18000', '1025']) {
+      await rule('-A', name, '-p', 'tcp', '-d', rehearsalAddress, '--dport', port, '-j', 'RETURN');
+    }
     await rule('-A', name, '-j', 'DROP');
     await rule('-I', ...jump);
     attached = true;
-    // Before the mirror is published, the same port could reach a host listener.
+    // Before Docker publishes a port, prevent it from reaching a host listener.
     await iptables('-I', ...input);
     local = true;
   } catch (error) {
@@ -93,11 +96,56 @@ export async function startOutsideMesh({directory, peers, prepareNodes, run, res
   }};
 }
 
-export function outsidePublication({cluster, signal, waitronImage, run, mesh, controllersPath, close = mesh.close}) {
-  let flux;
+export async function startOutsideInbox({name, directory, interfaceName, run, files, pullIfAbsent = false}) {
+  const inspect = () => run('docker', ['image', 'inspect', '--format', '{{.Id}}', mailpitImage]);
+  const settings = join(directory, 'outside-mail');
+  let id, removeFirewall, pulled = false;
+  const logs = () => run('docker', ['logs', '--tail=20', id], undefined, true);
+  const close = async () => {
+    await closePublishedContainer(run, id, removeFirewall);
+    if (pulled) await run('docker', ['image', 'rm', mailpitImage], undefined, true);
+  };
+  try {
+    const image = await inspect().catch(async error => {
+      if (!pullIfAbsent || !error.message.includes('No such image: ' + mailpitImage)) throw error;
+      await run('docker', ['pull', mailpitImage]);
+      pulled = true;
+      return inspect();
+    });
+    assert.match(image, /^sha256:[a-f0-9]{64}$/, 'outside.inbox_image');
+    await mkdir(settings, {mode: 0o700});
+    for (const [file, content] of Object.entries(files)) await writeFile(join(settings, file), content, {mode: 0o600});
+    removeFirewall = await installPublishedPeerFilter({interfaceName, run, address: rehearsalAddress, port: '1025'});
+    const created = await run('docker', ['create', '--pull=never', '--name', name + '-mail',
+      '--mount', 'type=bind,src=' + settings + ',dst=/run/mail,readonly',
+      '-p', rehearsalAddress + ':1025:1025', '-p', '127.0.0.1::8025', image, ...mailpitArguments('0.0.0.0')], undefined, true);
+    assert.match(created, /^[a-f0-9]{64}$/, 'outside.inbox_identity');
+    id = created;
+    await run('docker', ['start', id]);
+    const smtp = await run('docker', ['port', id, '1025/tcp']);
+    const ui = await run('docker', ['port', id, '8025/tcp']);
+    const port = Number(/^127\.0\.0\.1:([1-9][0-9]{0,4})$/.exec(ui)?.[1]);
+    assert.ok(smtp === rehearsalAddress + ':1025' && port > 0 && port <= 65535, 'outside.inbox_binding');
+    return {port, close, logs};
+  } catch (error) {
+    const output = id && await logs().catch(() => '');
+    if (output) process.stderr.write('outside Mailpit\n' + output + '\n');
+    await cleanUp(error, close);
+    throw error;
+  }
+}
+
+export function outsidePublication({cluster, directory, signal, waitronImage, run, mesh, controllersPath, amazon, close = mesh.close}) {
+  let flux, inbox;
   return {
     get revision() {return flux?.revision;},
     restoreNode: mesh.restoreNode,
+    async startInbox(files) {
+      inbox = await startOutsideInbox({name: cluster, directory, interfaceName: mesh.interfaceName,
+        run, files, pullIfAbsent: !amazon});
+      return inbox.port;
+    },
+    inboxLogs: () => inbox?.logs(),
     proveSurviving: (survivors, limit) => flux.proveSurviving(survivors, limit),
     async install({deployment, kube, worker}) {
       flux = await installFlux({name: cluster, image: waitronImage, run, deployment, kube, signal,
@@ -105,8 +153,13 @@ export function outsidePublication({cluster, signal, waitronImage, run, mesh, co
         mirror: options => startOutsideFluxMirror({...options, interfaceName: mesh.interfaceName})});
     },
     async close() {
-      try {await flux?.close();}
-      finally {await close();}
+      const errors = [];
+      for (const release of [flux?.close, inbox?.close, close]) {
+        try {await release?.();}
+        catch (error) {errors.push(error);}
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length) throw new AggregateError(errors, errors.map(error => error.message).join('\n'));
     },
   };
 }

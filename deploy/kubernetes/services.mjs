@@ -1,6 +1,8 @@
 import {storageNamespace} from './secrets.mjs';
 import {cloudContainer, caVolume, requireTls} from '../../scripts/kubernetes-database.mjs';
 
+export const outsideMailHost = '10.77.0.4';
+export const mailpitImage = 'axllent/mailpit:v1.31.1';
 export const servicesNamespace = 'd621-data';
 export const servicesOrigin = 'https://cloud.example.test:3000';
 export const servicesStoreHost = 's3.' + storageNamespace + '.svc.cluster.local';
@@ -20,6 +22,13 @@ function service(image, name, entry, {variables = {}, secret, storage = false, w
     volumeMounts: [...container.volumeMounts, ...(storage ? [storeMount] : [])],
     ...(secret && {envFrom: [{secretRef: {name: secret}}]})};
 }
+
+export const mailpitArguments = host => [
+  '--smtp', host + ':1025', '--listen', host + ':8025', '--smtp-require-tls',
+  '--smtp-tls-cert', '/run/mail/tls.crt', '--smtp-tls-key', '/run/mail/tls.key',
+  '--smtp-auth-file', '/run/mail/smtp-auth', '--ui-auth-file', '/run/mail/ui-auth',
+  '--smtp-allowed-recipients', '^[^@]+@[^@]+\\.test$', '--smtp-disable-rdns',
+];
 
 export function servicesPod(image, nodeName, remote) {
   const mount = (name, mountPath) => ({name, mountPath, readOnly: true});
@@ -42,12 +51,8 @@ export function servicesPod(image, nodeName, remote) {
       TEST_CLOUD_ORIGIN: servicesOrigin}),
     volumeMounts: [mount('proxy', '/run/proxy'), mount('proxy-key', '/run/proxy-key')],
     readinessProbe: {tcpSocket: {port: 3443}}};
-  const mailpit = {name: 'mailpit', image: 'axllent/mailpit:v1.31.1', args: [
-    '--smtp', '127.0.0.1:1025', '--listen', '127.0.0.1:8025', '--smtp-require-tls',
-    '--smtp-tls-cert', '/run/mail/tls.crt', '--smtp-tls-key', '/run/mail/tls.key',
-    '--smtp-auth-file', '/run/mail/smtp-auth', '--ui-auth-file', '/run/mail/ui-auth',
-    '--smtp-allowed-recipients', '^[^@]+@[^@]+\\.test$', '--smtp-disable-rdns',
-  ], volumeMounts: [mount('mail', '/run/mail')]};
+  const mailpit = {name: 'mailpit', image: mailpitImage, args: mailpitArguments('127.0.0.1'),
+    volumeMounts: [mount('mail', '/run/mail')]};
   return {apiVersion: 'v1', kind: 'Pod', metadata: {name: 'cloud-services', namespace: servicesNamespace},
     spec: {nodeName, restartPolicy: 'Never', automountServiceAccountToken: false,
       volumes: [caVolume, publicStoreCa, {name: 'proxy', configMap: {name: 'services-proxy'}},
@@ -61,6 +66,11 @@ export function servicesPod(image, nodeName, remote) {
 
 export function servicesDaemonSet(image, nodes, remoteCell) {
   const {metadata, spec} = servicesPod(image, undefined, true);
+  spec.containers = spec.containers.filter(row => row.name !== 'mailpit');
+  spec.volumes = spec.volumes.filter(row => row.name !== 'mail');
+  const email = spec.containers.find(row => row.name === 'email');
+  email.env.find(row => row.name === 'CLOUD_SMTP_HOST').value = outsideMailHost;
+  email.env.push({name: 'CLOUD_SMTP_USER', valueFrom: {fieldRef: {fieldPath: 'spec.nodeName'}}});
   const labels = {app: metadata.name};
   // Each field selector accepts one node name, and Kubernetes matches any term.
   const terms = nodes.map(name => ({matchFields: [{key: 'metadata.name', operator: 'In', values: [name]}]}));

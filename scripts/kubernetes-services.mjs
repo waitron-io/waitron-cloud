@@ -9,7 +9,7 @@ import {bootstrap} from '../deploy/local-stack/bootstrap.mjs';
 import {runtimeEnvironment} from '../deploy/local-stack/runtime.mjs';
 import {storageRuntime} from '../deploy/kubernetes/storage-identity.mjs';
 import {storageNamespace} from '../deploy/kubernetes/secrets.mjs';
-import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, servicesDaemonSet, servicesVerifier, servicesStoreHost, storeCaPath,
+import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, servicesDaemonSet, servicesVerifier, servicesStoreHost, storeCaPath, outsideMailHost,
   verifierScratchPath, verifierScratchVolume} from '../deploy/kubernetes/services.mjs';
 import {installStockholmDatabase} from './kubernetes-data.mjs';
 import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
@@ -49,11 +49,12 @@ export async function installServicesDatabase(context, image) {
   await kube(['-n', servicesNamespace, 'wait', '--for=condition=Complete', 'job/migrate', '--timeout=130s'], {timeout: 135_000});
 }
 
-async function certificates({directory, run}) {
+async function certificates({directory, run, baseline}) {
   const ca = join(directory, 'services-ca.crt'), caKey = join(directory, 'services-ca.key');
   const certificate = join(directory, 'services.crt'), key = join(directory, 'services.key');
   const csr = join(directory, 'services.csr');
-  const subjectAltName = 'subjectAltName=DNS:' + new URL(servicesOrigin).hostname + ',IP:127.0.0.1';
+  const subjectAltName = 'subjectAltName=DNS:' + new URL(servicesOrigin).hostname + ',IP:127.0.0.1' +
+    (baseline ? ',IP:' + outsideMailHost : '');
   const openssl = args => run('openssl', args, {timeout: 30_000});
   await openssl(['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-keyout', caKey, '-out', ca, '-subj', '/CN=Waitron rehearsal CA', '-addext', 'basicConstraints=critical,CA:TRUE']);
@@ -70,7 +71,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const {createTransport} = createRequire(new URL('./packages/registration/package.json', import.meta.url))('nodemailer');
 const send = async (to, pass) => {
-  const transport = createTransport({host:'127.0.0.1',port:1025,secure:true,forceAuth:true,
+  const transport = createTransport({host:process.env.CLOUD_SMTP_HOST,port:Number(process.env.CLOUD_SMTP_PORT),secure:true,forceAuth:true,
     auth:{user:process.env.CLOUD_SMTP_USER,pass},connectionTimeout:3000,greetingTimeout:3000,socketTimeout:3000});
   try {await transport.sendMail({from:'cloud@example.test',to,subject:'Synthetic rehearsal',text:'Synthetic rehearsal'});}
   finally {transport.close();}
@@ -79,9 +80,9 @@ await assert.rejects(send('control@example.test', 'wrong-password'), {code:'EAUT
 await assert.rejects(send('control@example.invalid', process.env.CLOUD_SMTP_PASSWORD), {code:'EENVELOPE'});
 `;
 
-export function servicesCredentialFiles(smtpPassword, inboxPassword) {
+export function servicesCredentialFiles(smtpPassword, inboxPassword, senders = ['sender']) {
   return {
-    mail: {'smtp-auth': 'sender:' + smtpPassword + '\n', 'ui-auth': 'inbox:' + inboxPassword + '\n'},
+    mail: {'smtp-auth': senders.map(sender => sender + ':' + smtpPassword + '\n').join(''), 'ui-auth': 'inbox:' + inboxPassword + '\n'},
     corpus: createHash('sha256').update('Synthetic compromised D621 password').digest('hex') + '\n',
   };
 }
@@ -131,15 +132,17 @@ export async function configureServices(context, kube, store, custody) {
     CLOUD_PAIRING_ACTIVE_KEY_ID, CLOUD_PAIRING_KEYS, CLOUD_PORTAL_ASSETS_DIR, CLOUD_FACTOR_ACTIVE_KEY_ID, CLOUD_FACTOR_KEYS, CLOUD_FACTOR_POLICY, ...storage['services-account']});
   await secret('services-monitor', emailVariables);
   await secret('services-backup', storage['services-backup']);
-  await secret('services-email', {...emailVariables, CLOUD_SMTP_USER: 'sender', CLOUD_SMTP_PASSWORD: smtpPassword});
-  const {mail, corpus} = servicesCredentialFiles(smtpPassword, inboxPassword);
-  await secret('services-mail', {'tls.crt': tls.cert, 'tls.key': tls.key, ...mail});
+  await secret('services-email', {...emailVariables, ...(!context.baseline && {CLOUD_SMTP_USER: 'sender'}), CLOUD_SMTP_PASSWORD: smtpPassword});
+  const {mail, corpus} = servicesCredentialFiles(smtpPassword, inboxPassword,
+    context.baseline ? context.nodes.map(row => row.name) : undefined);
+  const mailFiles = {'tls.crt': tls.cert, 'tls.key': tls.key, ...mail};
+  if (!context.baseline) await secret('services-mail', mailFiles);
   await secret('services-proxy-key', {'proxy.pem': tls.cert + tls.key});
   const proxy = (await asset('deploy/test-cloud/proxy.cfg'))
     .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
   await create(resource('ConfigMap', 'services-proxy', {data: {'haproxy.cfg': proxy, 'ca.crt': tls.root, 'passwords.sha256': corpus}}));
   await create(resource('ConfigMap', 'services-store-ca', {data: {'ca.crt': store.ca}}));
-  return {ca: tls.root, tls, config, runtimeDirectory, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
+  return {ca: tls.root, tls, config, runtimeDirectory, mailFiles, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
 }
 
 export function servicesDatabaseErrorCodes(log) {
@@ -155,15 +158,6 @@ export function servicesDatabaseErrorCodes(log) {
   return [...codes].sort();
 }
 
-const inboxRequest = `
-  import {readFileSync} from 'node:fs';
-  const {path, authorization} = JSON.parse(readFileSync(0, 'utf8'));
-  const response = await fetch('http://127.0.0.1:8025/api/v1/' + path, {
-    headers: authorization ? {authorization} : {}, signal: AbortSignal.timeout(5000),
-  });
-  console.log(JSON.stringify({status: response.status, text: await response.text()}));
-`;
-
 export function readyServicePods(rows, {stopped, containers = []}) {
   return rows.filter(row => {
     if (row.spec.nodeName === stopped || row.metadata.deletionTimestamp) return false;
@@ -172,24 +166,6 @@ export function readyServicePods(rows, {stopped, containers = []}) {
       container => container.name === name && container.ready));
     return row.status.conditions?.some(condition => condition.type === 'Ready' && condition.status === 'True');
   });
-}
-
-export async function readServicesInbox(pods, fetch, path, authorization) {
-  const completed = await Promise.allSettled(pods.map(pod => fetch(pod, path, authorization)));
-  const replies = completed.flatMap((row, index) => row.status === 'fulfilled' ? [{...row.value, worker: pods[index]}] : []);
-  if (!replies.length || (!authorization && replies.length !== pods.length)) {
-    throw Error('services.inbox_unreachable', {cause: completed.find(row => row.status === 'rejected')?.reason});
-  }
-  if (!authorization) {
-    const response = replies.find(reply => reply.status !== 401) ?? replies[0];
-    return new Response(response.text, {status: response.status});
-  }
-  const found = replies.filter(reply => reply.status === 200);
-  if (path === 'messages' && found.length) {
-    return Response.json({messages: found.flatMap(reply => parseIntegrationJson(reply.text).messages)});
-  }
-  const response = found[0] ?? replies.find(reply => reply.status !== 404) ?? replies[0];
-  return new Response(response.text, {status: response.status, headers: {'x-rehearsal-mail-worker': response.worker}});
 }
 
 export async function measureServiceStops({nodes, inventory, stopNode, restore, healthy, reconcile, probes, holdMs,
@@ -203,6 +179,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     const score = node => [...uncovered].filter(role => roles[role] === node).length;
     const node = remaining.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best);
     remaining.splice(remaining.indexOf(node), 1);
+    const checkInbox = await probes?.inboxWitness?.(signal);
     const checkReservations = requireSignedUpload && roles.primary === node ? await probes.signedBackupReservations() : undefined;
     process.stderr.write('D621 stop inventory ' + JSON.stringify({node, roles}) + '\n');
     const survivors = nodes.filter(name => name !== node);
@@ -212,7 +189,12 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     const leg = new AbortController();
     const limit = AbortSignal.any([leg.signal, ...[signal].filter(Boolean)]);
     const observation = observe({probes, holdMs, signal: limit, stopped: () => stopped.promise, replacement: () => stopped.promise,
-      reconcile: () => reconcile(node, roles, survivors, {...fault, signal: limit}),
+      async reconcile() {
+        const [result, mailRetained] = await Promise.all([
+          reconcile(node, roles, survivors, {...fault, signal: limit}), checkInbox?.(limit),
+        ]);
+        return {...result, ...(mailRetained && {mailRetained})};
+      },
       ready() {
         stopping = Promise.resolve().then(() => stopNode(node, {measured: true, afterRestart: options => restore(node, options),
           async whileStopped(details) {
@@ -236,7 +218,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     assert.ok(receipt?.stopped === node && receipt.offMs >= holdMs, 'services.stop_missing:' + node);
     const {signup, backup} = receipt.recovery;
     const {primary, publication, outsideStore, flux} = receipt.reconciliation;
-    assert.ok(signup.result?.worker, 'services.stop_mail_worker');
+    assert.ok(survivors.includes(signup.result?.worker), 'services.stop_mail_worker');
     assert.ok(backup.result?.controllerScope && backup.result.attemptId && backup.result.retained, 'services.stop_backup_worker');
     assert.ok(survivors.includes(primary) && outsideStore && flux?.appliedRevision, 'services.stop_service_recovery');
     if (roles.primary === node) assert.ok(publication?.worker && Number.isFinite(publication.completedMs), 'services.stop_publication');
@@ -293,6 +275,7 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
   signal.throwIfAborted();
   process.stderr.write('D621 all-machine stop inventory ' +
     JSON.stringify(roles ? {roles} : {unavailable: 'remote.stop_role_inventory', reason}) + '\n');
+  const checkInbox = await probes.inboxWitness?.(signal);
   const api = await restartAll(async ({signal, confirmStopped}) => {
     await confirmStopped(signal);
     const endpoints = Object.entries({...probes.outage, store: storeOutage});
@@ -315,12 +298,13 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
     return Object.fromEntries(observed.map(row => row.value));
   });
   const data = await restore(witness);
+  const mailRetained = await checkInbox?.(signal);
   const clientDeadline = AbortSignal.any([signal, AbortSignal.timeout(300_000)]);
   const started = performance.now();
   await untilRemote(async limit => {await healthy(limit); return true;}, 300_000, clientDeadline, 'cold_services_after');
   await untilRemote(inspectionReady, 300_000, clientDeadline, 'cold_inspection_ready');
   const backup = await probes.backupAfterRestart(clientDeadline);
-  return {...api, ...data, roles, backup, clientRecoveryMs: Math.round(performance.now() - started)};
+  return {...api, ...data, roles, backup, ...(mailRetained && {mailRetained}), clientRecoveryMs: Math.round(performance.now() - started)};
 }
 
 export async function runKubernetesServices(context) {
@@ -347,6 +331,7 @@ export async function runKubernetesServices(context) {
     return await withStockholmStorageIdentity(context, async (store, custody) => {
       const settings = await configureServices(context, kube, store, custody);
       const {ca, mailAuthorization, config} = settings;
+      const outsideMailPort = baseline ? await outside.startInbox(settings.mailFiles) : undefined;
       if (baseline) {
         await create(servicesDaemonSet(tag, nodes.map(node => node.name), config.gateway.cellId));
         await kube(['rollout', 'status', 'daemonset/cloud-services', '--timeout=180s']);
@@ -391,7 +376,9 @@ export async function runKubernetesServices(context) {
         try {await exec(await service('account', signal), 'account', ['node', '--input-type=module', '-e', ready]); break;}
         catch (error) {if (attempt === 29) throw error; await delay(1000, undefined, {signal});}
       }
-      await exec(await service('email', signal), 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
+      const emailPods = baseline ? (await readyServices(signal, 'email')).map(row => row.metadata.name) : ['cloud-services'];
+      assert.equal(emailPods.length, baseline ? nodes.length : 1, 'services.smtp_workers');
+      for (const email of emailPods) await exec(email, 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
       const ports = baseline ? {3443: 3000} : await forwardKubernetesPod(kubeArgs(), 'cloud-services', [3443, 8025], env, forwards);
       if (remote || baseline) {
         if (!baseline) outside = await prepareOutside?.(context, tag);
@@ -467,7 +454,7 @@ export async function runKubernetesServices(context) {
         'https://' + servicesStoreHost + ':9000/minio/health/cluster'], {signal});
       const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...mode, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
-        proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
+        proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: outsideMailPort ?? ports[8025], ca, mailAuthorization, storeCa: store.ca,
         stockholmRemote: remoteTarget, verifier, verifierImage: context.verifierImage, amazon, signal,
         ...(restartAll && {restartServices: probes => measureServiceRestart({
           restartAll, inventory, probes, checkStore: outsideStore, signal,
@@ -484,12 +471,6 @@ export async function runKubernetesServices(context) {
             return {...database, dataRecoveryMs: Math.round(performance.now() - started)};
           },
         })}),
-        ...(baseline && {async readInbox(path, authorization, limit) {
-          return readServicesInbox((await readyServices(limit, 'account', 'mailpit')).map(row => row.metadata.name),
-            async (pod, path, authorization) => parseIntegrationJson(await exec(pod, 'account',
-              ['node', '--input-type=module', '-e', inboxRequest], JSON.stringify({path, authorization}), limit)),
-            path, authorization);
-        }}),
         ...(stopServiceNodes && {stopServices: (probes, spaceSignup) => measureServiceStops({nodes: names, inventory, signal: stopSignal, probes, holdMs,
           spaceSignup, requireSignedUpload: process.env.TEST_CLOUD_INTEGRATION_REQUIRE_SIGNED_UPLOAD === '1',
           stopNode: (node, options) => stopNode(node, {...options, whileStopped(fault) {
@@ -561,8 +542,10 @@ export async function runKubernetesServices(context) {
         if (log) process.stderr.write(name + '\n' + log + '\n');
       }
     }
+    const mailLog = await outside?.inboxLogs?.()?.catch(() => '');
+    if (mailLog) process.stderr.write('outside Mailpit\n' + mailLog + '\n');
     for (const [pod, containers] of [
-      ['cloud-services', ['account', 'email', 'proxy', 'mailpit', 'monitor', 'usage', 'probe', ...(baseline ? ['inspect'] : [])]],
+      ['cloud-services', ['account', 'email', 'proxy', 'monitor', 'usage', 'probe', baseline ? 'inspect' : 'mailpit']],
       ['verifier', ['verifier', 'docker']], ['job/migrate', ['migrate']], ['job/services-inspection', ['inspect']],
     ]) for (const container of containers) {
       if (baseline && pod === 'job/services-inspection') continue;

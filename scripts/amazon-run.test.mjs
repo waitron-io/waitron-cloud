@@ -1060,9 +1060,10 @@ test('the outside baseline installs its host firewall before the tunnel and remo
   const inputRule = op => [...hostInput.slice(0, 2), op, 'INPUT', ...hostInput.slice(2)];
   const mangle = calls.filter(args => args.includes('mangle'));
   assert.ok(calls.findIndex(args => JSON.stringify(args) === JSON.stringify(inputRule('-I'))) >= 0);
-  assert.deepEqual(mangle.slice(-4), [
+  assert.deepEqual(mangle.slice(-5), [
     [...iptables, '-A', mesh.interfaceName, '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'RETURN'],
     [...iptables, '-A', mesh.interfaceName, '-p', 'tcp', '-d', '10.77.0.4', '--dport', '18000', '-j', 'RETURN'],
+    [...iptables, '-A', mesh.interfaceName, '-p', 'tcp', '-d', '10.77.0.4', '--dport', '1025', '-j', 'RETURN'],
     [...iptables, '-A', mesh.interfaceName, '-j', 'DROP'],
     [...iptables, '-I', ...jump],
   ]);

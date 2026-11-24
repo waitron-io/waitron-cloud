@@ -110,7 +110,7 @@ test('retained-client adapter checks sign-in responses, identity and process wit
 });
 
 const observerExpiry = '2026-11-24T14:05:20.123Z';
-const currentSignInMail = {ID: 'inbox-current', MessageID: '11111111-1111-4111-8111-111111111111@example.test',
+const currentSignInMail = {Username: 'node-b', ID: 'inbox-current', MessageID: '11111111-1111-4111-8111-111111111111@example.test',
   Text: 'Your Waitron Cloud verification code\n\n123456\n\nThis single-use code expires at Nov 24, 2026, 2:05:20\u202fPM UTC.\n'};
 const staleSignInMail = {ID: 'inbox-stale', MessageID: '22222222-2222-4222-8222-222222222222@example.test',
   Text: 'Your Waitron Cloud verification code\n\n654321\n\nThis single-use code expires at Nov 24, 2026, 2:05:05 PM UTC.\n'};
@@ -196,8 +196,8 @@ for (const {name, messages, status, malformedId = false} of [
     {stage: 'password', outcome: 202},
     {stage: 'mail-delivered', outcome: 'started', skipped: 0},
     {stage: 'mail-delivered', outcome: 'completed', skipped: messages[0] === staleSignInMail ? 1 : 0},
-    {stage: 'confirmation', outcome: 'started', messageId},
-    {stage: 'confirmation', outcome: status, messageId},
+    {stage: 'confirmation', outcome: 'started', messageId, username: 'node-b'},
+    {stage: 'confirmation', outcome: status, messageId, username: 'node-b'},
   ]);
 });
 
@@ -269,12 +269,12 @@ test('outside baseline requires the owned private route, inbox, peer and verifie
     instances: ['1', '2', '3'].map(n => 'i-' + n.repeat(17)),
     nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
   const target = {amazon, cluster, namespace: 'd621-data', network: cluster, account: 'kube-account',
-    proxyIp: '172.30.250.9', port: 3000, readInbox: noIo, ca: 'synthetic', storeCa: 'synthetic',
+    proxyIp: '172.30.250.9', port: 3000, mailPort: 38025, ca: 'synthetic', storeCa: 'synthetic',
     mailAuthorization: 'synthetic', exec: noIo, stockholmRemote: {gatewayIp: '172.30.250.9', peerTraffic: noIo},
     verifier: Object.fromEntries(['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].map(name => [name, noIo]))};
   const run = kubernetes => runTestCloudClients({stockholmBaseline: true, kubernetes});
   await assert.rejects(run(target), /integration\.image_invalid/);
-  for (const changed of [{proxyIp: '127.0.0.1'}, {proxyIp: '10.77.0.1'}, {proxyIp: '172.30.250.3'}, {port: 3443}, {network: 'other-network'}, {readInbox: undefined},
+  for (const changed of [{proxyIp: '127.0.0.1'}, {proxyIp: '10.77.0.1'}, {proxyIp: '172.30.250.3'}, {port: 3443}, {network: 'other-network'}, {mailPort: undefined},
     {verifier: undefined}, {stockholmRemote: {}}, {stopServices: noIo}, {amazon: {...amazon, phase: 'before'}}]) {
     await assert.rejects(run({...target, ...changed}), /(?:integration\.stockholm_baseline_binding|kubernetes\.amazon_binding)/);
   }
@@ -287,6 +287,23 @@ test('outside baseline requires the owned private route, inbox, peer and verifie
     await assert.rejects(runTestCloudClients({stockholmBaseline: true, kubernetes: target, [option]: true}),
       /integration\.stockholm_baseline_scope/);
   }
+});
+
+test('the inbox witness reads the saved message by ID even if the list has changed', async () => {
+  const {captureInboxWitness} = await load();
+  assert.equal(typeof captureInboxWitness, 'function');
+  const paths = [];
+  const witness = await captureInboxWitness(async path => {
+    paths.push(path);
+    if (paths.length === 1) return {messages: [{ID: 'saved+message'}]};
+    if (paths.length === 2) return {ID: 'saved+message'};
+    return {ID: 'different-message'};
+  });
+  assert.deepEqual(paths, ['messages']);
+  assert.equal(await witness(), true);
+  await assert.rejects(witness(), /integration\.inbox_witness_changed/);
+  assert.deepEqual(paths, ['messages', 'message/saved%2Bmessage', 'message/saved%2Bmessage']);
+  await assert.rejects(captureInboxWitness(async () => ({messages: []})), /integration\.inbox_witness_missing/);
 });
 
 test('the outside signup check retries a failed inbox read', async () => {
@@ -302,11 +319,11 @@ test('the outside signup check retries a failed inbox read', async () => {
   }, 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000)), token);
   assert.equal(reads, 2);
   assert.deepEqual(await readOutsideSignupMail(async () => ({
-    Text: 'https://cloud.example.test:3000/signup#token=' + token, worker: 'surviving-mail',
+    Text: 'https://cloud.example.test:3000/signup#token=' + token, Username: 'surviving-mail',
   }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
   {token, worker: 'surviving-mail'});
   await assert.rejects(readOutsideSignupMail(async () => ({
-    Text: 'https://cloud.example.test:3000/signup#token=' + token,
+    Text: 'https://cloud.example.test:3000/signup#token=' + token, worker: 'untrusted-caller-field',
   }), 'venue@example.test', 'https://cloud.example.test:3000', AbortSignal.timeout(5000), true),
   /integration\.outside_mail_worker/);
 });
