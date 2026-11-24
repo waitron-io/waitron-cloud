@@ -37,10 +37,14 @@ function draft(value:unknown){
  const country=components.get('country');
  if(country!==undefined&&!['es','españa','espanya','espainia','spain'].includes(country.normalize('NFC').toLowerCase()))fail('malformed',true);
  const route=components.get('route'),number=components.get('street_number');
- const street=[route,number].filter(Boolean).join(' ');
- const postalLine=!route&&Array.isArray(postal.addressLines)?text(postal.addressLines[0]):'';
+ const firstPostalLine=Array.isArray(postal.addressLines)?postal.addressLines[0]:undefined;
+ const postalLine=typeof firstPostalLine==='string'?firstPostalLine:'';
+ // Only recover a missing house number when the postal line names the same street.
+ const postalNumber=route&&!number&&postalLine.startsWith(route)
+  ? /^[\s,]+(\d+[a-z]?)$/iu.exec(postalLine.slice(route.length))?.[1] : undefined;
+ const street=[route,number||postalNumber].filter(Boolean).join(' ');
  return {provider:'google' as const,fields:{
-  addressLine1:postalLine||street,
+  addressLine1:route?street:postalLine||street,
   addressLine2:components.get('subpremise')||null,postalCode:text(postal.postalCode),city:text(postal.locality),
   province:components.get('administrative_area_level_2')||text(postal.administrativeArea),countryCode:'ES' as const,
  }};

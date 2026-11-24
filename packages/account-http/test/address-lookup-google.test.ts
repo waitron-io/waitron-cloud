@@ -196,9 +196,18 @@ test('the postal street fallback preserves a structured route with or without a 
   const addressComponents=[{componentType:'route',componentName:{text:'Camino Real'}}];
   if(number)addressComponents.push({componentType:'street_number',componentName:{text:number}});
   const client=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{
-   postalAddress:{regionCode:'ES',addressLines:['Finca La Prueba']},addressComponents,
+   postalAddress:{regionCode:'ES',addressLines:['Finca Mayor 12']},addressComponents,
   }}})});
   const draft=await client.validate({selectedText:'Camino Real',sessionToken});
   assert.equal(draft.fields.addressLine1,number?'Camino Real 12':'Camino Real');
  }
+});
+
+test('the postal line can supply the missing number for the same structured street',async()=>{
+ const client=createGoogleAddressClient({apiKey:'k',fetcher:async()=>Response.json({result:{address:{
+  postalAddress:{regionCode:'ES',addressLines:['Calle de Prueba 12']},
+  addressComponents:[{componentType:'route',componentName:{text:'Calle de Prueba'}}],
+ }}})});
+ const draft=await client.validate({selectedText:'Calle de Prueba 12',sessionToken});
+ assert.equal(draft.fields.addressLine1,'Calle de Prueba 12');
 });

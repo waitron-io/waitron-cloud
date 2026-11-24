@@ -30,23 +30,30 @@ had the same street and house number once spelling and formatting were normalize
 One of those drafts still had a locality mismatch. One first choice led to a
 different street, locality and postcode. Another first choice named the expected
 street, but validation returned a street outside the reference spellings at the
-same house number and postcode. The field-only receipt cannot distinguish an
-unlisted spelling from a change to the street. Four cases had other mismatches
-without a street mismatch: two localities, one postcode and locality, and one
-missing province.
+same house number and postcode. The earlier strict score also flagged its
+locality. The field-only receipt leaves the street difference unresolved. Four
+other cases had a mismatch outside the street line. Two had a wrong locality,
+one had a wrong locality and postcode, and one lacked a province.
 
-| First-choice result | Cases out of 40 |
+| Trial result | Cases |
 | --- | ---: |
 | Every field right on strict comparison | 22 |
 | Every field right after accepting equivalent street spellings | 11 more |
 | First choice still wrong | 7 |
-| Wrong first choice recovered by a second or third suggestion | 1 of the 7 |
+| Wrong first choice recovered by the third suggestion | 1 |
+| Other wrong first choices checked only at position one | 6 |
 
-**33 of 40 first choices scored as complete** across the strict and spelling
-checks. The spelling checks used fresh suggestions and validation replies. For
-six cases, they confirmed the street and house number while the earlier strict
-pass supplied the other field scores. Both lists checked at positions two and
-three had a complete third choice. One of those rescued a wrong first choice.
+The strict score was **22 out of 40**. The spelling checks identified 11 more
+complete cases by allowing accents, punctuation, articles, equivalent street
+types and number order while requiring the same house number. Those checks
+used fresh suggestions and validation replies. For six cases, they confirmed the
+street and house number while the earlier strict pass supplied the other field
+scores. Both lists checked at positions two and three had a complete third
+choice. One of those rescued a wrong first choice.
+
+The final adapter preserves the structured street when the postal line names a
+different one. The first two passes recorded no draft that had a structured
+street with a missing number component, the case affected by that review fix.
 
 The first two passes ran at 20:26–20:28 UTC and used 128 requests. The follow-ups
 at 21:18 and 21:22 UTC used 40 more, ending at 168 of the 170 authorized calls
@@ -105,8 +112,9 @@ A successful reply contains that `workflowId`, an ISO `expiresAt`,
 `provider: "google"` and `candidates: [{"text":"…"}]`. Only `es` and `en` are
 accepted; suggestions are restricted to Spain. If the first reply is lost, keep
 its workflow ID and send a fresh operation ID. That reuses the same allowance
-hold, but another suggestion attempt still counts. Cloud refuses an operation ID
-it has already consumed. Each admitted request makes at most one provider attempt.
+hold, but another suggestion attempt still counts. Cloud refuses a repeated
+operation ID while its five-minute record is held. Each admitted request makes
+at most one provider attempt.
 
 When you choose a suggestion, sign:
 
