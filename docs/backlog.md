@@ -1947,11 +1947,15 @@ implementation or production evidence.
   from a surviving worker after the stop. If a challenge is stranded, the measured
   observer starts over on the first probe at least 60 seconds after the password
   reply. This can miss the 90-second target. The two Stockholm sign-in timeouts
-  remain unexplained. In the free worker comparison, Kubernetes restart delays
-  left both surviving email workers down for 26.621 of the 31.234 seconds the
-  fresh message spent queued after PostgreSQL accepted writes. The
-  [reconnect plan](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md)
-  calls for a replay with the shared inbox to measure the remaining delay.
+  remain unexplained. In the free worker comparison, both surviving email workers
+  were down for 26.621 of the 31.234 seconds fresh mail spent queued after
+  PostgreSQL accepted writes. That interval included Kubernetes restart backoff
+  and the wait for the next container start. In the local
+  [reconnect tests](../packages/registration/test/email-worker-reconnect.test.ts),
+  the same worker delivered fresh mail after dropped, silent or read-only
+  connections. It recorded an accepted send before refusing new work against an
+  incompatible schema. The [reconnect plan](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md)
+  sets the shared-inbox replay target for the country-cell email worker.
   To reproduce the older failure, start with just the first in-cluster journey
   on disposable Debian 13 x86-64 using the paid Cloud revision `f19c12c7` and its
   pinned Waitron image. If it passes on one node, match the original three-node

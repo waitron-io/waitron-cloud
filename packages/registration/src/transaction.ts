@@ -1,6 +1,8 @@
-import type { Pool, PoolClient } from 'pg';
+import {DatabaseError,type Pool,type PoolClient} from 'pg';
 
-export async function transaction<T>(pool: Pool, action: (client: PoolClient) => Promise<T>): Promise<T> {
+export type TransactionOptions = {discardOnReadOnly?: boolean};
+
+export async function transaction<T>(pool: Pool, action: (client: PoolClient) => Promise<T>, options?: TransactionOptions): Promise<T> {
   const client = await pool.connect();
   let discard = false;
   // A borrowed pg client emits failures itself, including between awaited queries.
@@ -12,6 +14,7 @@ export async function transaction<T>(pool: Pool, action: (client: PoolClient) =>
     await client.query('COMMIT');
     return result;
   } catch (error) {
+    if(options?.discardOnReadOnly&&error instanceof DatabaseError&&error.code==='25006')discard=true;
     try {
       await client.query('ROLLBACK');
     } catch {

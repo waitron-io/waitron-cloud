@@ -7,6 +7,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,test,type TestContext} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {Pool} from 'pg';
+import {SMTPServer} from 'smtp-server';
 import {migrate,migrationNames} from '../src/migrate.ts';
 import {transaction} from '../src/transaction.ts';
 import {captured} from './fixtures/captured-mail.ts';
@@ -24,11 +25,11 @@ connection.searchParams.set('options',`-c search_path=${schema}`);
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
 
-function worker(t:TestContext,url=connection){
+function worker(t:TestContext,url=connection,smtpPort=MAILPIT_TEST_SMTP_PORT,args:string[]=[]){
   const name=`email_reconnect_${randomUUID()}`;
   const cli=fileURLToPath(new URL('../src/email-worker-cli.ts',import.meta.url));
-  const child=spawn(process.execPath,[cli],{env:{PATH:process.env.PATH,DATABASE_URL:url.href,PGAPPNAME:name,
-    NODE_ENV:'test',CLOUD_MAIL_TRANSPORT:'local',MAILPIT_SMTP_PORT:MAILPIT_TEST_SMTP_PORT,
+  const child=spawn(process.execPath,[cli,...args],{env:{PATH:process.env.PATH,DATABASE_URL:url.href,PGAPPNAME:name,
+    NODE_ENV:'test',CLOUD_MAIL_TRANSPORT:'local',MAILPIT_SMTP_PORT:smtpPort,
     CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify(testEmailKeys)},stdio:['ignore','ignore','pipe']});
   let stderr='';
   child.stderr.on('data',chunk=>{stderr+=chunk;});
@@ -105,9 +106,10 @@ test('the same email worker delivers fresh mail after active polls lose their co
   const w=worker(t);
   await duringBlockedPoll(w,()=>terminate(w));
   await delivered(w,await enqueue());
+  assert.match(w.stderr(),/^Email worker retrying; check database, key and mail configuration$/m);
 });
 
-test('the same email worker delivers fresh mail when established connections go silent',async t=>{
+test('the same email worker delivers fresh mail when established connections go silent',{timeout:36000},async t=>{
   const sockets=new Set<Socket>(),muted=new Set<Socket>();
   let dropped=false;
   const proxy=createServer(client=>{
@@ -137,24 +139,126 @@ test('the same email worker delivers fresh mail when established connections go 
   assert.ok(dropped,'the proxy withheld a PostgreSQL reply on a connection open at the fault');
 });
 
-test('the email worker refuses a changed migration ledger before a new connection can claim mail',async t=>{
+async function withIncompatibleLedger<T>(work:()=>Promise<T>):Promise<T>{
   const name=migrationNames.at(-1)!;
   const {rows:[saved]}=await pool.query('SELECT digest FROM schema_migrations WHERE name=$1',[name]);
+  await pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[name,'0'.repeat(64)]);
+  try{return await work();}
+  finally{await pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[name,saved.digest]);}
+}
+
+test('the email worker refuses a changed migration ledger before a new connection can claim mail',async t=>{
   const w=worker(t);
   await waitIdle(w);
   const timer=setTimeout(()=>w.child.kill('SIGKILL'),6500);
-  let mail:Awaited<ReturnType<typeof enqueue>>;
   try{
-    await pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[name,'0'.repeat(64)]);
-    await terminate(w);
-    mail=await enqueue();
-    assert.deepEqual(await w.exited,[1,null]);
-    assert.match(w.stderr(),/^Email worker refused: schema_incompatible$/m);
-    assert.deepEqual(await row(mail.id),{status:'pending',attempts:0});
-    await assert.rejects(captured(inbox,'Your Waitron Cloud password changed',mail.email),/Expected captured email/);
+    const mail=await withIncompatibleLedger(async()=>{
+      await terminate(w);
+      const mail=await enqueue();
+      assert.deepEqual(await w.exited,[1,null]);
+      assert.match(w.stderr(),/^Email worker refused: schema_incompatible$/m);
+      assert.deepEqual(await row(mail.id),{status:'pending',attempts:0});
+      await assert.rejects(captured(inbox,'Your Waitron Cloud password changed',mail.email),/Expected captured email/);
+      return mail;
+    });
+    await delivered(worker(t),mail);
   }finally{
     clearTimeout(timer);
-    await pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[name,saved.digest]);
   }
-  await delivered(worker(t),mail);
+});
+
+test('the email worker records an accepted send before refusing a new claim on an incompatible schema',async t=>{
+  const recipients:string[]=[];
+  let accept:(()=>void)|undefined;
+  const smtp=new SMTPServer({authOptional:true,disabledCommands:['AUTH','STARTTLS'],onData(stream,session,done){
+    stream.resume();
+    stream.once('end',()=>{
+      recipients.push(...session.envelope.rcptTo.map(recipient=>recipient.address));
+      accept=()=>done();
+    });
+  }});
+  await new Promise<void>(resolve=>smtp.listen(0,'127.0.0.1',resolve));
+  const address=smtp.server.address();assert.ok(address&&typeof address!=='string');
+  const w=worker(t,connection,String(address.port));
+  t.after(()=>new Promise<void>(resolve=>smtp.close(resolve)));
+  await waitIdle(w);
+  const first=await enqueue();
+  await until(w,async()=>Boolean(accept),'the SMTP server receiving the first message');
+  assert.deepEqual(await row(first.id),{status:'processing',attempts:1});
+  await waitIdle(w);
+  const timer=setTimeout(()=>w.child.kill('SIGKILL'),6500);
+  try{
+    await withIncompatibleLedger(async()=>{
+      await terminate(w);
+      const second=await enqueue();
+      accept!();
+      const outcome=await w.exited;
+      assert.deepEqual(await row(first.id),{status:'sent',attempts:1});
+      assert.deepEqual(await row(second.id),{status:'pending',attempts:0});
+      assert.deepEqual(recipients,[first.email]);
+      assert.deepEqual(outcome,[1,null]);
+      assert.match(w.stderr(),/^Email worker refused: schema_incompatible$/m);
+      await pool.query('DELETE FROM email_outbox WHERE id=$1',[second.id]);
+    });
+  }finally{clearTimeout(timer);}
+});
+
+test('a database failure in an active poll makes shutdown report failure',async t=>{
+  const w=worker(t);
+  await duringBlockedPoll(w,async()=>{
+    assert.equal(w.child.kill('SIGTERM'),true);
+    await delay(1000);
+    assert.equal(w.child.exitCode,null);
+    await terminate(w);
+  });
+  assert.deepEqual(await w.exited,[1,null]);
+  assert.match(w.stderr(),/^Email worker failed; check database, key and mail configuration$/m);
+});
+
+test('one-shot commands retain their existing database access when the migration digest changes',async t=>{
+  await withIncompatibleLedger(async()=>{
+    const mail=await enqueue();
+    const run=async(arg:string)=>worker(t,connection,MAILPIT_TEST_SMTP_PORT,[arg]).exited;
+    assert.deepEqual(await run('--status'),[0,null]);
+    assert.deepEqual(await run('--once'),[0,null]);
+    assert.deepEqual(await row(mail.id),{status:'sent',attempts:1});
+    await captured(inbox,'Your Waitron Cloud password changed',mail.email);
+  });
+});
+
+test('the same email worker moves from read-only connections to writable ones',async t=>{
+  const role=`${schema}_reader`,password=randomUUID();
+  await admin.query(`CREATE ROLE ${role} LOGIN PASSWORD '${password}'`);
+  const url=new URL(connection);url.username=role;url.password=password;
+  let w:Worker;
+  try{
+    await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
+    await pool.query(`GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA ${schema} TO ${role}`);
+    await admin.query(`ALTER ROLE ${role} SET default_transaction_read_only TO on`);
+    await withIncompatibleLedger(async()=>{
+      w=worker(t,url);
+      await until(w,async()=>w.stderr().includes('Email worker retrying'),'retrying a read-only connection');
+    });
+    await admin.query(`ALTER ROLE ${role} RESET default_transaction_read_only`);
+    await delivered(w!,await enqueue());
+    await waitIdle(w!);
+
+    const established=(await sessions(w!)).map(row=>row.pid);
+    assert.equal(established.length,4);
+    // Raise the server's read-only SQLSTATE only on existing sessions. A new session can write.
+    await pool.query(`CREATE FUNCTION old_session_read_only() RETURNS boolean LANGUAGE plpgsql AS $$
+      BEGIN
+        IF pg_backend_pid() IN (${established.join(',')}) THEN RAISE EXCEPTION 'test read-only session' USING ERRCODE='25006'; END IF;
+        RETURN true;
+      END $$;
+      CREATE POLICY retry_read_only ON email_outbox TO ${role} USING (old_session_read_only());
+      ALTER TABLE email_outbox ENABLE ROW LEVEL SECURITY`);
+    await delivered(w!,await enqueue());
+  }finally{
+    if(w!){w.child.kill('SIGKILL');await w.exited;}
+    await pool.query('ALTER TABLE email_outbox DISABLE ROW LEVEL SECURITY');
+    await pool.query('DROP POLICY IF EXISTS retry_read_only ON email_outbox');
+    await pool.query(`DROP OWNED BY ${role}`);
+    await admin.query(`DROP ROLE ${role}`);
+  }
 });

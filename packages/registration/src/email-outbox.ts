@@ -9,7 +9,7 @@ import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { validOwnerTransferMail,type OwnerTransferMail, normaliseEmail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt, type EmailDeliveryContext } from './email-delivery.ts';
-import { transaction } from './transaction.ts';
+import {transaction,type TransactionOptions} from './transaction.ts';
 import {admitMailAttempt,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
 import {bindSesProviderReceipt} from './ses-smtp-receipt.ts';
 import {lockMailScope} from './recipient-suppression.ts';
@@ -131,9 +131,13 @@ export class EmailWorker {
   readonly #timeout: number;
   readonly #ses:SesHandoffConfig|undefined;
   readonly #sesRecipient: {email:string;captureMailer:AccountMailer}|undefined;
-  constructor(pool: Pool, outbox: EmailOutbox, mailer: AccountMailer, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig;sesRecipient?:{email:string;captureMailer:AccountMailer}} = {}) {
+  readonly #checkClaimConnection: ((client:PoolClient)=>Promise<void>)|undefined;
+  readonly #transactionOptions: TransactionOptions;
+  constructor(pool: Pool, outbox: EmailOutbox, mailer: AccountMailer, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig;sesRecipient?:{email:string;captureMailer:AccountMailer};checkClaimConnection?:(client:PoolClient)=>Promise<void>} & TransactionOptions = {}) {
     this.#pool = pool; this.#outbox = outbox; this.#mailer = mailer;
     this.#timeout = options.sendTimeoutMs ?? 20_000;
+    this.#checkClaimConnection = options.checkClaimConnection;
+    this.#transactionOptions = {discardOnReadOnly:options.discardOnReadOnly};
     this.#ses=options.ses&&{config:options.ses.config,recipientKeys:{activeKeyId:options.ses.recipientKeys.activeKeyId,keys:{...options.ses.recipientKeys.keys}}};
     if (options.sesRecipient) {
       const email=normaliseEmail(options.sesRecipient.email);
@@ -146,6 +150,8 @@ export class EmailWorker {
   /** True means one row was handled; false means no claimable work exists right now. */
   async runOnce(): Promise<boolean> {
     const claim = await transaction(this.#pool, async client => {
+      // Finish an existing send even when a new connection cannot take another claim.
+      if(this.#checkClaimConnection)await this.#checkClaimConnection(client);
       const row: MessageRow | undefined = (await client.query(`SELECT * FROM email_outbox
         WHERE (status = 'pending' AND (available_at <= clock_timestamp() OR expires_at <= clock_timestamp()))
           OR (status = 'processing' AND lease_until <= clock_timestamp())
@@ -161,7 +167,7 @@ export class EmailWorker {
       const claimed = await client.query(`UPDATE email_outbox SET status = 'processing', attempts = attempts + 1,
         claim_id = $2, lease_until = clock_timestamp() + interval '60 seconds' WHERE id = $1 RETURNING *`, [row.id, randomUUID()]);
       return claimed.rows[0] as MessageRow;
-    });
+    },this.#transactionOptions);
     if (claim === undefined) return false;
     if (claim === null) return true;
     let message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail;
@@ -206,7 +212,7 @@ export class EmailWorker {
     }
     finally { clearTimeout(timer); }
     await this.#finish(claim, 'sent', receipt);
-    await bindSesProviderReceipt(this.#pool,admission,receipt?.providerReceipt);
+    await bindSesProviderReceipt(this.#pool,admission,receipt?.providerReceipt,this.#transactionOptions);
     return true;
   }
 
@@ -291,7 +297,7 @@ export class EmailWorker {
         return admission;
       }
       return true;
-    });
+    },this.#transactionOptions);
   }
 
   async #live(client:PoolClient,row: MessageRow, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail): Promise<boolean> {
@@ -398,7 +404,7 @@ export class EmailWorker {
         finished_at = CASE WHEN $3 = 'pending' THEN NULL ELSE $6::timestamptz END,
         claim_id = NULL, lease_until = NULL, available_at = $6::timestamptz + $5 * interval '1 second'
         WHERE id = $1 AND claim_id = $2 AND status = 'processing'`, [row.id, row.claim_id, status, failure, seconds, now]);
-    });
+    },this.#transactionOptions);
   }
 
   async status(): Promise<EmailDeliveryStatus> { return emailDeliveryStatus(this.#pool); }
