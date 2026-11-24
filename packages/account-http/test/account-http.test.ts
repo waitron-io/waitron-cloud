@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
+import {Pool} from 'pg';
 import type { HttpBindings } from '@hono/node-server';
 import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupStore, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { createAccountApp } from '../src/app.ts';
@@ -123,16 +124,48 @@ test('a sign-up waiting to attach a handover does not delay an unrelated sign-up
   assert.equal((await pending!).status, 201);
 });
 
-test('completed sign-ups share a private domain cap across connections while a public domain is exempt', async () => {
-  const tokens = await signupTokens(['company.example.test', 'googlemail.com'].flatMap(domain =>
-    Array.from({length: 6}, (_, index) => `synthetic-${index}@${domain}`)));
-  const replies = await Promise.all(tokens.map((token, index) =>
-    request('/signup/complete', {token, password}, {peer: `192.0.2.${index + 1}`})));
-  assert.equal(replies.slice(0, 6).filter(reply => reply.status === 201).length, 5);
-  const refusal = replies.slice(0, 6).find(reply => reply.status === 429)!;
+test('the private domain cap is shared across connections and a refusal restores the connection allowance', async () => {
+  const target = createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(),
+    signupLimits: {accountsPerConnectionPerDay: 1}}});
+  const tokens = await signupTokens(Array.from({length: 6}, (_, index) => `synthetic-${index}@company.example.test`));
+  const complete = (token: string, index: number) => request('/signup/complete', {token, password}, {target, peer: `192.0.2.${index + 1}`});
+  const replies = await Promise.all(tokens.map(complete));
+  assert.equal(replies.filter(reply => reply.status === 201).length, 5);
+  const refusedIndex = replies.findIndex(reply => reply.status === 429);
+  const refusal = replies[refusedIndex]!;
   assert.equal(refusal.headers.has('retry-after'), false);
   assert.deepEqual(await refusal.json(), {error: 'signup_domain_limited'});
-  assert.deepEqual(replies.slice(6).map(reply => reply.status), Array(6).fill(201));
+  const [fresh] = await signupTokens(['owner@another.example.test']);
+  assert.equal((await complete(fresh!, refusedIndex)).status, 201);
+});
+
+test('public email domains in the account guide are exempt across connections', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const domains = ['gmail.com', 'googlemail.com', 'outlook.com', 'outlook.es', 'hotmail.com', 'hotmail.es',
+    'live.com', 'live.es', 'msn.com', 'yahoo.com', 'yahoo.es', 'icloud.com', 'me.com'];
+  const target = createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(), signupLimits: {accountsPerDomainPerDay: 1}}});
+  for (const [index, domain] of domains.entries()) {
+    const tokens = await signupTokens([`synthetic-0@${domain}`, `synthetic-1@${domain}`]);
+    for (const [address, token] of tokens.entries()) {
+      assert.equal((await request('/signup/complete', {token, password}, {target, peer: `192.0.2.${2 * index + address + 1}`})).status, 201, domain);
+    }
+  }
+});
+
+test('a completion refused at the connection cap can use the same live link after midnight UTC', async t => {
+  const pool = new Pool({connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${db.schema},pg_catalog`});
+  t.after(() => pool.end());
+  // Shift the database clock by two minutes across midnight while the links stay valid.
+  const setTime = (offset: string) => pool.query(`CREATE OR REPLACE FUNCTION ${db.schema}.clock_timestamp()
+    RETURNS timestamptz LANGUAGE sql AS $$ SELECT date_trunc('day', pg_catalog.clock_timestamp(), 'UTC') + interval '${offset}' $$`);
+  const [first, next] = await signupTokens(['first@venue-one.example.test', 'next@venue-two.example.test']);
+  await db.pool.query("UPDATE signup_requests SET expires_at = clock_timestamp() + interval '3 days'");
+  const target = createAccountApp({pool, outbox: db.outbox, config: {...config(), signupLimits: {accountsPerConnectionPerDay: 1}}});
+  await setTime('23 hours 59 minutes');
+  assert.equal((await request('/signup/complete', {token: first, password}, {target})).status, 201);
+  assert.equal((await request('/signup/complete', {token: next, password}, {target})).status, 429);
+  await setTime('24 hours 1 minute');
+  assert.equal((await request('/signup/complete', {token: next, password}, {target})).status, 201);
 });
 
 test('the eleventh committed sign-up warns once even without an operator and further sign-ups still succeed', async t => {
@@ -169,6 +202,23 @@ for (const queueFailure of [false, true]) {
       day: (await db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day")).rows[0].day,
       threshold: 1,
     });
+  });
+}
+
+for (const state of ['disabled', 'unverified']) {
+  test(`a sign-up warning skips a configured ${state} operator and still logs once`, async t => {
+    const operator = await account();
+    await db.pool.query(state === 'disabled'
+      ? 'UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1'
+      : 'UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1', [operator.accountId]);
+    const target = createAccountApp({pool: db.pool, outbox: db.outbox, operatorAccountId: operator.accountId,
+      config: {...config(), signupLimits: {operatorWarningThreshold: 1}}});
+    const warn = t.mock.method(console, 'warn', () => {});
+    for (const token of await signupTokens(['first@example.test', 'second@example.test'])) {
+      assert.equal((await request('/signup/complete', {token, password}, {target})).status, 201);
+    }
+    assert.equal(warn.mock.callCount(), 1);
+    assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind='operator_notice'")).rows[0].count, '0');
   });
 }
 
