@@ -17,11 +17,24 @@ if (process.env.CLOUD_TEST_STREAM === '1') {
 const origin = process.env.CLOUD_TEST_ORIGIN ?? 'https://waitron.local:3000';
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
-  const response = await nativeFetch(url, options);
   const target = new URL(url);
+  const reserve = target.origin === origin && target.pathname === '/api/installations/backup-reserve';
+  const record = observed => appendFile(process.env.CLOUD_TEST_ROOT + '/exchanges.jsonl', JSON.stringify(observed) + '\n', {mode: 0o600});
+  let response;
+  try {response = await nativeFetch(url, options);}
+  catch (error) {
+    if (reserve) await record({path: target.pathname, status: 0});
+    throw error;
+  }
   if (target.origin === origin && /^\/api\/(pairing|installations)\/[a-z-]+$/.test(target.pathname)) {
     const observed = {path: target.pathname, status: response.status};
-    if (target.pathname === '/api/installations/backup-reserve' && response.status === 403) {
+    if (reserve && response.status === 200) {
+      const body = await response.clone().json();
+      // The address and the credentials are private. Record only the reply shape.
+      if (typeof body.uploadUrl === 'string' && !body.credentials) observed.uploadMethod = 'signed-put';
+      if (body.credentials && body.uploadUrl === undefined) observed.uploadMethod = 'storage-session';
+    }
+    if (reserve && response.status === 403) {
       const body = await response.clone().json();
       observed.error = body.error === 'permission_denied' ? 'permission_denied' : 'unexpected';
       observed.grantIssued = Object.keys(body).some(key => key !== 'error');
@@ -30,7 +43,7 @@ globalThis.fetch = async (url, options) => {
       const body = await response.clone().json();
       observed.error = body.error === 'object_mismatch' ? 'object_mismatch' : 'unexpected';
     }
-    await appendFile(process.env.CLOUD_TEST_ROOT + '/exchanges.jsonl', JSON.stringify(observed) + '\n', {mode: 0o600});
+    await record(observed);
   }
   return response;
 };

@@ -305,6 +305,16 @@ test('a fresh outside backup keeps the original verification bound to its origin
   await assert.rejects(async () => run(async () => original, true), /integration\.fault_backup_not_new/);
 });
 
+test('the signed upload rehearsal checks the first fresh reply and any later reserve failures', async () => {
+  const {checkSignedBackupReservations} = await load();
+  const signed = {status: 200, uploadMethod: 'signed-put'};
+  const legacy = {status: 200, uploadMethod: 'storage-session'};
+  assert.deepEqual(checkSignedBackupReservations([signed]), {uploadMethod: 'signed-put', reserves: 1, reserve503s: 0});
+  for (const replies of [[], [{status: 0}, signed], [{status: 400}, signed], [legacy, signed], [signed, legacy], [signed, {status: 503}]]) {
+    assert.throws(() => checkSignedBackupReservations(replies), /integration\.signed_backup_/);
+  }
+});
+
 test('after a full restart the last acknowledged backup is read before restoring a different capture', async () => {
   const {measureOutsideColdBackup} = await load();
   const original = {pointId: 'last-acknowledged', workerVerification: {attemptId: 'verified-before'}};
