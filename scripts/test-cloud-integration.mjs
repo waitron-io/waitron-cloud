@@ -197,7 +197,7 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-async function proveExitDownload({api, browser, request, directory, waitronImage, verifierChildren, onVerifierScope, online}) {
+async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online}) {
   const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
   const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
   const {venueId, pointId, archive, backupKey} = request;
@@ -218,10 +218,10 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   assert.equal(saved.length, archive.bytes);
   assert.ok(/^[A-Za-z0-9_-]{43}$/.test(secret), 'integration.exit_saved_key');
   const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage,
-    expectedRevision: request.target.runtime.revision});
+    expectedRevision: request.target.runtime.revision, scratchVolume});
   onVerifierScope(controllerScope);
   const {result, receipt} = await verify(bufferObject(saved), {...backupKey, secret}, {...request,
-    attempt: {...request.attempt, controllerScope, childToken: randomUUID(), deadline: new Date(Date.now()+30_000).toISOString()}},
+    attempt: {...request.attempt, controllerScope, childToken: randomUUID(), deadline: new Date(Date.now()+60_000).toISOString()}},
   AbortSignal.any([runSignal(), AbortSignal.timeout(30_000)].filter(Boolean)));
   assert.equal(result.status, 'passed', 'integration.exit_offline_open');
   assert.equal(result.activation, 'not_attempted');
@@ -400,6 +400,16 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     finally {if (cleanupCheckpoint) await cleanupCheckpoint();}
   };
   const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
+  let exitScratch;
+  if (paidExitDownload) {
+    const volume = process.env.TEST_CLOUD_EXIT_VERIFIER_VOLUME ?? '', stage = process.env.TEST_CLOUD_EXIT_STAGE ?? '';
+    assert.match(volume, /^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,63}$/, 'integration.exit_scratch_volume');
+    const [info] = parseIntegrationJson(await docker(['volume', 'inspect', volume]));
+    const path = info.Options?.device ?? '';
+    assert.equal(info.Labels?.['cloud.backup-verifier.scratch'], 'waitron-cloud-test-backup', 'integration.exit_scratch_owner');
+    for (const directory of [path, stage]) assert.match(directory, /^\/[\w./-]+$/, 'integration.exit_scratch_path');
+    exitScratch = {volume, path, stage};
+  }
   // Initial inventory can refuse before owned cleanup begins, so allocate no host scratch yet.
   const before = await inventory();
   checkProtectedContainers(before, before, protectedContainerIds);
@@ -729,6 +739,9 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,nosuid,nodev,size=96m,mode=1777', '--env', 'CLOUD_TEST_SERVICE_PLANS=1', '--env', 'CLOUD_VERIFIER_IMAGE=' + waitronImage,
             '--env', 'CLOUD_INTEGRATION_POINT_ID=' + point.pointId, '--env', 'CLOUD_INTEGRATION_WAITRON_REVISION=' + revision,
+            ...(exitScratch ? ['--cap-add', 'DAC_OVERRIDE', '--cap-add', 'FOWNER', '--env', 'CLOUD_INTEGRATION_EXIT_SCRATCH=' + exitScratch.volume,
+              '--mount', `type=bind,src=${exitScratch.path},dst=${exitScratch.path}`,
+              '--mount', `type=bind,src=${exitScratch.stage},dst=/run/exit-backup-stage`] : []),
             '--mount', 'type=volume,src=' + configVolume + ',dst=/run/local-stack,readonly',
             '--mount', 'type=volume,src=' + stateVolume + ',dst=/run/backup-verifier',
             '--mount', 'type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',
@@ -794,7 +807,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             const request = parseIntegrationJson(await accountPhase('inspect-exit-download', {...captured, image:verifierImage, revision, nativeTarget}));
             const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
             publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage,
-            verifierChildren, onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
+            scratchVolume: exitScratch.volume, verifierChildren, onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
               await control(id, 'ready');
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
               assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);

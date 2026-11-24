@@ -1124,6 +1124,10 @@ Actual venue exit still needs the rest of the return and deletion process.
 Use the disposable Cloud image and a verifier built from Waitron revision
 `44dc45af7a64d399037747499ba633594a63f84d`. This client uses the pairing proof
 format the Cloud account service expects.
+On your disposable Docker host, give the verifier a private 1 GiB ext4 volume
+using the [Amazon scratch settings](#rehearse-backup-on-the-amazon-test-cloud).
+Use a unique volume name and a separate empty directory for the worker to stage
+the encrypted archive. The worker and the saved-file check use the volume in turn.
 Load `postgres:18-alpine` and `axllent/mailpit:v1.31.1` in Docker first because
 the rehearsal starts with image pulls disabled.
 
@@ -1131,6 +1135,8 @@ the rehearsal starts with image pulls disabled.
 TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
 TEST_CLOUD_INTEGRATION_WAITRON_REVISION=44dc45af7a64d399037747499ba633594a63f84d \
 TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=<local-verifier-image-id> \
+TEST_CLOUD_EXIT_VERIFIER_VOLUME=<private-verifier-volume> \
+TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
   node --test scripts/test-cloud-exit-download.test.mjs
 ```
 

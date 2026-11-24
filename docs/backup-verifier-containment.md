@@ -26,7 +26,7 @@ permission model alone is not the security boundary. Docker also denies external
 and image writes when a test deliberately bypasses the Node permissions.
 
 The default is 1024 MiB total memory, including scratch, with memory-plus-swap set to the
-same value. The one writable scratch tmpfs is 256 MiB. Docker documents these controls in
+same value. The one writable scratch tmpfs is 256 MiB. That cannot verify compressed backups from Waitron #4204 onward. Use disk-backed scratch wherever you verify those backups. Docker documents these controls in
 [resource limits](https://docs.docker.com/engine/containers/resource_constraints/) and
 [tmpfs mounts](https://docs.docker.com/engine/storage/tmpfs/). The input and restored copy
 both count against scratch. The ceilings are independent: a tight memory setting may

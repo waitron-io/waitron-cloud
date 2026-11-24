@@ -3,7 +3,10 @@ import {testRuntimeEnvironment} from '../runtime.mjs';
 import {openTestBackupVerifier, runTestBackupWorker} from '../backup-worker.mjs';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {runUntilSelectedVerification} from './integration-verifier-drain.mjs';
+const execute=promisify(execFile);
 
 // The trusted worker owns the socket; its bounded verifier child receives no host mounts or network.
 const stop = new AbortController(), shutdown = () => stop.abort();
@@ -19,11 +22,22 @@ try {
   progress('pool');
   pool = new Pool({connectionString: environment.DATABASE_URL, max: 1, connectionTimeoutMillis: 5000, statement_timeout: 10000});
   const expectedRevision = process.env.CLOUD_INTEGRATION_WAITRON_REVISION;
+  const scratchVolume = process.env.CLOUD_INTEGRATION_EXIT_SCRATCH;
   progress('verifier-open');
-  const opened = await openTestBackupVerifier({directory: environment.CLOUD_VERIFIER_STATE_DIR, image: environment.CLOUD_VERIFIER_IMAGE, expectedRevision});
+  const opened = await openTestBackupVerifier({directory: environment.CLOUD_VERIFIER_STATE_DIR, image: environment.CLOUD_VERIFIER_IMAGE, expectedRevision, scratchVolume});
   console.log(JSON.stringify({controllerScope: opened.controllerScope}));
   await runUntilSelectedVerification({signal: stop.signal,
-    runOnce: () => {progress('worker-once'); return runTestBackupWorker(environment, ['--once'], {expectedRevision});},
+    runOnce: async () => {
+      progress('worker-once');
+      if (!scratchVolume) return runTestBackupWorker(environment, ['--once'], {expectedRevision});
+      try {
+        const {stdout}=await execute(process.execPath,['packages/backups/src/worker-cli.ts','--once'],{signal:stop.signal,
+          env:{...environment,LOCAL_STACK_CONFIG_DIR:environment.CLOUD_VERIFIER_STATE_DIR,
+            CLOUD_VERIFIER_OWNER:'waitron-cloud-test-backup',CLOUD_VERIFIER_WAITRON_REVISION:expectedRevision,
+            CLOUD_VERIFIER_SCRATCH_VOLUME:scratchVolume,CLOUD_BACKUP_STAGE_ROOT:'/run/exit-backup-stage'}});
+        console.log(stdout.trim());
+      } catch (error) {if (!stop.signal.aborted) throw error;}
+    },
     admitted: async () => (progress('qualification-query'), await pool.query("SELECT current_verification='verified' AS admitted FROM backup_point_qualification WHERE point_id=$1", [pointId])).rows[0]?.admitted === true});
 } catch (error) {
   const exceptionClass = ['Error', 'TypeError', 'AssertionError', 'RangeError', 'SyntaxError'].includes(error.name) ? error.name : 'OTHER';
