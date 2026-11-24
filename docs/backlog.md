@@ -2269,6 +2269,8 @@ existing monthly-wait, expiry, replay, allowance and rollback assertions remain.
 An independent database-time observation immediately before releasing the monthly
 wait also requires a period that ends after that observation; this prevents the
 shared stored timestamp from hiding a period chosen before the wait.
+The fresh-admission grant-expiry case advances its test clock only after
+PostgreSQL reports the monthly account lock wait.
 No landed migration or historical reservation changes.
 
 The original failure is registration job
