@@ -172,8 +172,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
         await page.locator('input[name=password]').fill('a synthetic long password');
         await page.getByRole('button', {name: c.create, exact: true}).click();
-        const message = locale === 'en' ? 'Too many new accounts with this email provider today. Try again tomorrow.'
-          : 'Hoy se han creado demasiadas cuentas con este proveedor de correo. Vuelve a intentarlo mañana.';
+        const message = locale === 'en' ? 'Too many new accounts with this email provider today. Ask for a new sign-up email tomorrow.'
+          : 'Hoy se han creado demasiadas cuentas con este proveedor de correo. Pide mañana un nuevo correo de registro.';
         const alert = page.getByRole('alert').filter({hasText: message});
         await alert.waitFor();
         assert.equal(await alert.textContent(), message);

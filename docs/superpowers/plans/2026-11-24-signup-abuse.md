@@ -21,7 +21,7 @@ screens in light and dark at 390 and 1280 pixels before each change lands.
    A missing operator or failed queue still leaves the account created. SMTP and SES
    keep their existing transport support. No table or migration is needed.
 3. **Keep the portal and proofs aligned.** Show the connection and email-provider
-   refusals as plain messages, using the wording from the watcher's 23:36 note.
+   refusals as plain messages, using the watcher's 23:36 and 23:53 wording.
    Leave the form available. Show the mailbox limit on the acknowledgment and
    display the five-minute resend wait in minutes while at least a minute is left. Password reset keeps its one-minute wait and its rate
    policy. Use one validated JSON setting for the account launchers and any
