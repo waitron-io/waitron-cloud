@@ -210,9 +210,14 @@ export async function venuePoints(
   return rows.rows.map(decodedPoint);
 }
 export async function checkedRecoveryPoints(client:PoolClient,venueId:string,targetDigest:string,pointId?:string) {
+  // OFFSET 0 keeps PostgreSQL from flattening qualification and rechecking other copies for each candidate.
   const {rows}=await client.query<StoredPoint & {attemptId:string}>(
-    `SELECT ${pointColumns},q.verification_id AS "attemptId" FROM ${qualifiedPoints}
-      WHERE p.venue_id=$1 AND q.current_verification='verified' AND q.qualified_target_digest=$2
+    `SELECT ${pointColumns},q.verification_id AS "attemptId"
+      FROM backup_points p JOIN LATERAL (
+        SELECT current_verification,verification_id FROM backup_point_qualification
+        WHERE point_id=p.id AND current_verification='verified' AND qualified_target_digest=$2 OFFSET 0
+      ) q ON true
+      WHERE p.venue_id=$1
         AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL
         AND p.object_key='snapshots/' || p.id::text AND ($3::uuid IS NULL OR p.id=$3)
       ORDER BY p.captured_at DESC,p.id DESC LIMIT 50`,
