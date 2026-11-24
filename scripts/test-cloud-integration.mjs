@@ -508,7 +508,11 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       if (source) waitronAssets = {...integrationAssetSummary(await probeIntegrationAssets({docker, image: clientImage, kind: 'waitron', runId,
         own: id => {owned.push(id); record('container', id);}})), baseImage: waitronImage};
       if (kubernetes) return;
-      await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
+      const limit = {limit: 20, windowSeconds: 60};
+      const factorPolicy = JSON.stringify({loginLifetimeMs: 300000, pendingLifetimeMs: 300000,
+        challengeAttempts: 5, enrolmentAttempts: 5, loginAccount: limit, completeIp: limit, completeAccount: limit,
+        completeChallenge: limit, manageIp: limit, manageAccount: limit});
+      await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n${paidExitDownload ? `      CLOUD_FACTOR_POLICY: '${factorPolicy}'\n` : ''}  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
       const ownership = join(directory, 'ownership.json');
       const rendered = parseIntegrationJson(await compose(['--profile', '*', 'config', '--format', 'json']));
       await writeFile(ownership, JSON.stringify(integrationOwnershipOverride(rendered, runId)), {mode: 0o600});
@@ -606,7 +610,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     for (const plan of services ? ['paid'] : ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       await signupAccount(email, password);
-      const login = await createObserverLogin({api, mailbox, readMail, email, password, rememberBrowser: true})();
+      const login = await createObserverLogin({api, mailbox, readMail, email, password, rememberBrowser: true,
+        ...(paidExitDownload && {onStage: ({stage, outcome}) => process.stderr.write(`Exit proof sign-in ${stage} ${outcome}\n`)})})();
       assert.equal(login.status, 200, 'integration.login');
       const registered = await api('/api/account/businesses', {legalName: plan + ' café SL',
         taxNumber: plan === 'free' ? 'B12345678' : 'B87654321', countryCode: 'ES'}, browserSession(login));
