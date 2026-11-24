@@ -84,18 +84,23 @@ calling stores. Bound header/body receive times and the number of simultaneous
 account operations so slow clients and password hashing cannot create unlimited work.
 
 Use PostgreSQL rate counters shared by all API instances, through migration 007.
-Apply limits before password hashing or delivery enqueue. Start with these defaults:
+Apply request limits before password hashing or delivery enqueue. Use these defaults.
 
 - All account routes: 120 requests per minute per client IP.
 - Login: 10 attempts per minute per IP and 30 per 15 minutes per normalised address.
-- Signup/reset email requests: 10 per 15 minutes per IP for each route; the existing
-  shared per-address one-minute email cooldown still applies.
+- Sign-up email requests allow five per connection per hour. A mailbox receives at most
+  three sign-up emails per UTC day, spaced at least five minutes apart.
+- Password reset allows ten email requests per connection per 15 minutes and one email
+  per address per minute.
 - Signup/reset completion: 10 attempts per 15 minutes per IP and per token for each route.
 
-Counters include successes and failures, independently of whether an account exists.
+Request counters include successes and failures, independently of whether an account exists.
+Account creation spends one place in the completing connection and email-domain daily counts
+only when it commits. See the [account API guide](../packages/account-http/README.md) for
+the defaults and public email domain exemptions.
 Login checks the IP allowance before charging the email allowance, so traffic already
 refused by the IP limit cannot cheaply lock another person out of their account.
-A blocked request returns 429 with Retry-After. Fail closed with 503 if the limiter
+A blocked request returns 429. Timed request refusals include Retry-After. Fail closed with 503 if the limiter
 cannot use PostgreSQL. Store HMAC identifiers using a dedicated deployment key,
 not plaintext IPs, email addresses or tokens. Expired counters have bounded cleanup.
 Test concurrent requests through separate app instances, including the window boundary.

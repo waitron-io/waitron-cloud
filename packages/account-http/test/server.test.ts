@@ -260,7 +260,7 @@ test('CLI shutdown and restart preserve committed work and shared request limits
     const shutdown = running.stop();
     assert.equal((await draining.result).status, 202); assert.equal((await shutdown).code, 0);
     running = cli(); port = await running.ready();
-    for (let i = 0; i < 8; i++) assert.equal((await send(port, '/signup/request', JSON.stringify({email: 'restart@example.test'})).result).status, 202);
+    for (let i = 0; i < 3; i++) assert.equal((await send(port, '/signup/request', JSON.stringify({email: 'restart@example.test'})).result).status, 202);
     assert.equal(await queued(), 2); assert.equal((await send(port, '/signup/request', JSON.stringify({email: 'restart@example.test'})).result).status, 429);
     assert.equal((await running.stop()).code, 0);
   } finally {if (running.child.exitCode === null) await running.stop();}

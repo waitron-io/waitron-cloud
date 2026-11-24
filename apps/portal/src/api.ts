@@ -107,6 +107,8 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
+    if (response.status === 429 && ['/signup/request', '/signup/complete'].includes(path)) codes.push('signup_rate_limited');
+    if (response.status === 429 && path === '/signup/complete') codes.push('signup_domain_limited');
     if(download&&response.status===413)codes.push('download_too_large');
     if(path==='/installations/remove'&&response.status===503)codes.push('guest_menu_takedown_failed');
     if(businessPath&&response.status===400)codes.push('country_unavailable');

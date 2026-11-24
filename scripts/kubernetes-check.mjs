@@ -20,7 +20,7 @@ import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
-import {observeP1, readP1Signals} from './p1-observer.mjs';
+import {observeP1, p1SignupLimits, readP1Signals} from './p1-observer.mjs';
 import {installFlux} from './kubernetes-git.mjs';
 import {kindNodeImage, runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
 import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
@@ -240,6 +240,12 @@ try {
       preferredDuringSchedulingIgnoredDuringExecution: [{weight: 100, preference: {matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'In', values: [cluster + '-worker2']}]}}],
     }};
   }
+  const signupLimits = observerLoss || amazon?.observer ? p1SignupLimits(env.CLOUD_SIGNUP_LIMITS) : undefined;
+  const signupSetting = signupLimits ? JSON.stringify(signupLimits) : env.CLOUD_SIGNUP_LIMITS;
+  if (signupSetting !== undefined) {
+    const account = manifest.items.find(item => item.metadata.name === 'cloud').spec.containers.find(container => container.name === 'account');
+    account.env.push({name: 'CLOUD_SIGNUP_LIMITS', value: signupSetting});
+  }
   if (observerLoss || amazon?.observer) {
     // The remote source archive runs without installed package dependencies.
     const emailLimit = {limit: 1000, windowSeconds: 300};
@@ -309,7 +315,8 @@ try {
   for (let journey = 0; journey < (workerLoss ? 2 : 1); journey++) {
   result = await clients({image, waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, freeRemote: true, paidRemote: true, paidVerification: true,
     kubernetes: {cluster, namespace: 'default', account: 'kube-account', ca, network: amazon ? cluster : 'kind', proxyIp: address, ...(amazon ? {amazon} : {}),
-      port: ports[3443], mailPort: ports[8025], exec, remote, verifier, ...(observe ? {observe} : {})}});
+      port: ports[3443], mailPort: ports[8025], exec, remote, verifier, signupRequestsPerHour: signupLimits?.requestsPerHour,
+      ...(observe ? {observe} : {})}});
   journeys.push(result);
   if (workerLoss && journey === 0) {
     const manifest = (await pod('manifest')).metadata.name;

@@ -165,8 +165,10 @@ test('request budgets include setup, both signup endpoints and the original sour
   assert.throws(() => budget.attempt('login', 'another@example.test'), /p1.login_budget/);
   clock = 60000;
   budget.attempt('login', 'owner@example.test');
-  for (let i = 0; i < 8; i++) budget.attempt('signup', 'new@example.test');
+  for (let i = 0; i < 8; i++) budget.attempt('signup-complete');
   assert.throws(() => budget.requireRoom(), /p1.signup_budget/);
+  assert.throws(() => budget.attempt('signup-complete'), /p1.signup_budget/);
+  budget.attempt('signup-request', 'new@example.test');
   for (const name of ['next', 'last']) {
     clock += 60000;
     for (let i = 0; i < 7; i++) budget.attempt('login', 'owner@example.test');
@@ -176,28 +178,46 @@ test('request budgets include setup, both signup endpoints and the original sour
   assert.throws(() => budget.attempt('login', 'owner@example.test'), /p1.email_budget/);
 });
 
-test('signup spacing leaves room for two calls as older attempts expire', () => {
+test('the sign-up rehearsal can retry throughout the recovery window at all three stops', () => {
+  const limits = api.p1SignupLimits('{"accountsPerDomainPerDay":9}');
+  assert.deepEqual(limits, {requestsPerHour: 20, accountsPerDomainPerDay: 9});
+  assert.equal(api.p1SignupLimits('{"requestsPerHour":10}').requestsPerHour, 10);
+  const budget = api.createP1Budget(() => 0, limits.requestsPerHour);
+  for (let i = 0; i < 2; i++) {
+    budget.attempt('signup-request', 'setup@example.test');
+    budget.attempt('signup-complete');
+  }
+  budget.requireRoom();
+  for (let leg = 0; leg < 3; leg++) {
+    assert.equal(budget.signupDelayMs(), 0);
+    budget.requireRoom();
+    for (let attempt = 0; attempt < 6; attempt++) budget.attempt('signup-request', 'probe@example.test');
+  }
+  assert.throws(() => budget.attempt('signup-request', 'excess@example.test'), /p1.signup_budget/);
+});
+
+test('signup spacing reserves six confirmation requests for the next service stop', () => {
   let clock = 0;
-  const budget = api.createP1Budget(() => clock);
-  assert.equal(typeof budget.signupDelayMs, 'function');
-  for (let i = 0; i < 6; i++) {
-    budget.attempt('signup', 'setup@example.test');
+  const budget = api.createP1Budget(() => clock, 20);
+  for (let i = 0; i < 14; i++) {
+    budget.attempt('signup-request', 'setup@example.test');
     clock += 1000;
   }
+  budget.attempt('signup-complete');
   budget.attempt('login', 'observer@example.test');
   assert.equal(budget.signupDelayMs(), 0);
-  budget.attempt('signup', 'first-stop@example.test');
-  assert.equal(budget.signupDelayMs(), 894_000);
-  budget.attempt('signup', 'first-stop@example.test');
-  assert.equal(budget.signupDelayMs(), 895_000);
+  budget.requireRoom();
+  budget.attempt('signup-request', 'first-stop@example.test');
+  assert.equal(budget.signupDelayMs(), 3_586_000);
+  assert.throws(() => budget.requireRoom(), /p1.signup_budget/);
+  for (let attempt = 0; attempt < 5; attempt++) budget.attempt('signup-request', 'first-stop-retry@example.test');
+  assert.throws(() => budget.attempt('signup-request', 'second-stop@example.test'), /p1.signup_budget/);
 
-  clock = 900_999;
+  clock = 3_604_999;
   assert.equal(budget.signupDelayMs(), 1);
-  clock = 901_000;
+  clock = 3_605_000;
   assert.equal(budget.signupDelayMs(), 0);
-  budget.attempt('signup', 'second-stop@example.test');
-  budget.attempt('signup', 'second-stop@example.test');
-  assert.throws(() => budget.attempt('signup', 'second-stop@example.test'), /p1.signup_budget/);
+  budget.attempt('signup-request', 'second-stop@example.test');
 });
 
 test('fragmented stop signals preserve ordering', async () => {

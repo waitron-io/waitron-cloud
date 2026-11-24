@@ -1,5 +1,5 @@
 import {validServiceAlert,type ServiceAlert} from './service-alert.ts';
-import { validOwnerTransferMail, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+import { validOwnerTransferMail, validSignupVolumeNotice, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
 export type AccountMailKind = 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
 const copy = {
   en: {
@@ -32,6 +32,12 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
     return {subject,text:[subject,'',detail,new URL('/account',origin).href].join('\n')};
   }
   if(kind==='operator_notice'){
+    if (validSignupVolumeNotice(message)) {
+      const subject = locale === 'es' ? 'Waitron Cloud: volumen de registros' : 'Waitron Cloud: sign-up volume';
+      const detail = locale === 'es' ? `Se crearon más de ${message.threshold} cuentas el ${message.day} (UTC).`
+        : `More than ${message.threshold} accounts were created on ${message.day} (UTC).`;
+      return {subject, text: detail};
+    }
     const subject=locale==='es'?'Waitron Cloud: acción para revisar':'Waitron Cloud: action to review';
     return {subject,text:[subject,'',locale==='es'?'Abre la consola de operador para revisar la solicitud.':'Open the operator console to review the request.',new URL('/operator/actions',origin).href].join('\n')};
   }

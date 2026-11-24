@@ -266,6 +266,12 @@ export class PortalApp {
     if (this.path === '/reset-password') return '/password-reset/complete';
     return this.path;
   }
+  get #emailCooldown() {
+    return this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0;
+  }
+  get waitingForSignupEmail() {
+    return this.operation === '/signup/request' && this.#emailCooldown > (this.#serverCooldowns.get(this.operation) ?? 0);
+  }
   get waiting() {
     if(this.path==='/reset-password'&&this.ownerRecovery.stage!=='idle')return this.ownerRecovery.waiting;
     if(this.path==='/operator/actions')return Math.max(this.session.waiting,this.cloudActions.waiting);
@@ -277,8 +283,7 @@ export class PortalApp {
       case 'remoteAccess': return Math.max(this.session.waiting, this.installations.waiting, this.remote.waiting, this.actionProof.waiting);
       case 'billing': return Math.max(this.session.waiting, this.billing.waiting, this.actionProof.waiting);
     }
-    const deadline = Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0,
-      this.#serverCooldowns.get(this.operation) ?? 0);
+    const deadline = Math.max(this.#emailCooldown, this.#serverCooldowns.get(this.operation) ?? 0);
     return Math.max(0, Math.ceil((deadline - performance.now()) / 1000), this.path === '/login' ? Math.max(this.authenticator.waiting, this.passkeys.waiting) : 0);
   }
   draw() {
@@ -376,7 +381,7 @@ export class PortalApp {
     queueMicrotask(() => {
       const field = Object.keys(this.errors)[0];
       if (field) this.root.querySelector<HTMLElement>(`wt-input[name="${field}"]`)?.focus();
-      else this.root.querySelector<HTMLElement>('wt-form-error-summary')?.focus();
+      else this.root.querySelector<HTMLElement>('#signup-refusal, wt-form-error-summary')?.focus();
     });
   }
   async submitPairing() {
@@ -465,17 +470,23 @@ export class PortalApp {
     this.draw();
     const result = await accountRequest(path, body);
     // A late reply still sets the wait for the operation that sent it.
-    if (!result.ok) this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
+    if (!result.ok && result.code !== 'signup_rate_limited') this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
-      if (path.endsWith('/request')) { this.requested = true; this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`, performance.now() + 60_000); }
+      if (path.endsWith('/request')) {
+        this.requested = true;
+        this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`,
+          performance.now() + (path === '/signup/request' ? 300_000 : 60_000));
+      }
       else { this.notice = path.startsWith('/signup/') ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
       const cause = bodyRefusal(result);
       if (cause) this.error = `${path.startsWith('/signup/')&&path.endsWith('/complete')?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
-      else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
+      else this.error = result.code === 'signup_rate_limited' ? 'signupConnectionLimited'
+        : result.code === 'signup_domain_limited' ? 'signupDomainLimited'
+        : result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'
         : result.status === 0 ? (path.endsWith('/complete') ? 'uncertain' : 'unavailable')

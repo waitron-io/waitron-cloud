@@ -10,6 +10,9 @@ import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type
 import { screenPassword, type PasswordScreeningProvider } from './compromised-passwords.ts';
 
 export type SignupEmail = AccountEmail;
+export const defaultSignupMailLimits = Object.freeze({emailsPerAddressPerDay: 3, resendSeconds: 300});
+type SignupMailLimits = { [Key in keyof typeof defaultSignupMailLimits]: number };
+type SignupAdmission = (client: PoolClient, email: string) => Promise<void>;
 export interface SignupMailer { sendVerification(message: SignupEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>; }
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; rememberBrowser?: boolean; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; browserToken?: string; }
@@ -24,16 +27,19 @@ export class SignupStore {
   readonly #countryCode: string;
   constructor(pool: Pool, outbox: EmailOutbox, screening?: PasswordScreeningProvider, countryCode = 'ES') { this.#pool = pool; this.#outbox = outbox; this.#screening = screening; this.#countryCode = countryCode; }
 
-  async request(input: string, locale: AccountLocale = 'en'): Promise<{status: 'accepted'}> {
+  async request(input: string, locale: AccountLocale = 'en', limits: SignupMailLimits = defaultSignupMailLimits): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
     if (!email || !validLocale(locale)) throw new SignupError('signup_invalid');
     await transaction(this.#pool, async client => {
       // Serialise requests for an address across workers; hash collisions only share a cooldown lock.
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':signup'), hashtext($1))", [email]);
       const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-      const recent = await client.query('SELECT 1 FROM signup_requests WHERE email = $1 AND created_at > $2 LIMIT 1',
-        [email, new Date(now.getTime() - 60_000)]);
-      if (recent.rowCount) return undefined;
+      const midnight = new Date(now); midnight.setUTCHours(0, 0, 0, 0);
+      const cooldown = new Date(now.getTime() - limits.resendSeconds * 1000);
+      const {daily, coolingDown} = (await client.query(`SELECT count(*) FILTER (WHERE created_at >= $2)::integer AS daily,
+        coalesce(bool_or(created_at > $3), false) AS "coolingDown"
+        FROM signup_requests WHERE email = $1 AND created_at >= LEAST($2, $3)`, [email, midnight, cooldown])).rows[0];
+      if (coolingDown || daily >= limits.emailsPerAddressPerDay) return;
       const token = randomBytes(32).toString('base64url');
       const expiresAt = new Date(now.getTime() + 30 * 60_000).toISOString();
       await client.query('INSERT INTO signup_requests (token_hash, email, created_at, expires_at) VALUES ($1, $2, $3, $4)',
@@ -60,12 +66,12 @@ export class SignupStore {
     });
   }
 
-  async completeAccount(token: string, input: Pick<SignupDetails, 'password'>) {
-    const {accountId} = await this.#complete(token, input, async () => ({}));
+  async completeAccount(token: string, input: Pick<SignupDetails, 'password'>, admit?: SignupAdmission) {
+    const {accountId} = await this.#complete(token, input, async () => ({}), admit);
     return {accountId};
   }
 
-  async #complete<T extends object>(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>,createBusiness:(client:PoolClient,accountId:string)=>Promise<T>){
+  async #complete<T extends object>(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>,createBusiness:(client:PoolClient,accountId:string)=>Promise<T>, admit?: SignupAdmission){
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignupError('verification_unavailable');
     if (!input || !validNewPassword(input.password)) throw new SignupError('signup_invalid');
     const tokenHash = digest(token);
@@ -90,6 +96,8 @@ export class SignupStore {
       await attachOwnerTransferRecipients(client, accountId, request.email);
       const business=await createBusiness(client,accountId);
       const browserToken=input.rememberBrowser?await rememberBrowser(client,accountId):undefined;
+      // A handover can wait on an existing organisation. Finish that wait before taking shared admission locks.
+      await admit?.(client, request.email);
       // Expiry after a contended write rolls back the account, business and membership together.
       const consumed = await client.query(`UPDATE signup_requests SET consumed_at = clock_timestamp()
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);

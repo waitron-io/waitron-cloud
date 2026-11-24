@@ -26,3 +26,17 @@ export function validOwnerTransferMail(message:AccountNotification):message is O
  return 'offerId' in message&&typeof message.offerId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(message.offerId)
   &&'event' in message&&['invitation','accepted','cancelled'].includes(String(message.event));
 }
+
+export interface SignupVolumeNotice extends AccountNotification {
+  event: 'signup_volume';
+  accountId: string;
+  day: string;
+  threshold: number;
+}
+
+export function validSignupVolumeNotice(message: AccountNotification): message is SignupVolumeNotice {
+  return 'event' in message && message.event === 'signup_volume'
+    && 'accountId' in message && typeof message.accountId === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(message.accountId)
+    && 'day' in message && typeof message.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(message.day)
+    && 'threshold' in message && typeof message.threshold === 'number' && Number.isSafeInteger(message.threshold) && message.threshold > 0;
+}

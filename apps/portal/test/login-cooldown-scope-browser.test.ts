@@ -92,7 +92,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.deepEqual(calls, [{path: '/login', body: {email: 'owner@example.test', password, locale}}, {path: flow.endpoint, body}]);
           if (!completion) {
             assert.equal(await page.getByRole('button', {name: c.resend, exact: true}).isDisabled(), true);
-            assert.equal(await page.getByRole('status').filter({hasText: c.cooldown}).textContent(), `${c.cooldown} 60 ${c.seconds}`);
+            const wait = flow.endpoint === '/signup/request' ? `5 ${c.minutes}` : `60 ${c.seconds}`;
+            assert.equal(await page.getByRole('status').filter({hasText: c.cooldown}).textContent(), `${c.cooldown} ${wait}`);
           }
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
           await page.evaluate(() => history.back());

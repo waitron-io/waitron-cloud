@@ -626,6 +626,12 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 ## Cloud signup and business moves
 
+Add the browser check to sign-up and password-reset email requests. Sign-up has email
+confirmation and connection, mailbox and domain limits. High sign-up volume writes
+one operator warning to the account log each UTC day. A configured operator can
+also receive it in the local capture stacks. Operator email delivery through SMTP
+and SES remains open.
+
 The [Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
 covered sign-in after Admin and return to the original tab on a synthetic box.
 Qualify the same setup on the released Waitron box, including the setup services.

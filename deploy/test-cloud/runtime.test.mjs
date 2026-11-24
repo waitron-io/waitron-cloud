@@ -19,6 +19,16 @@ test('dedicated runtime selects capture mail and forwards validated dormant plan
  assert.equal(api.testRuntimeCommand('email'),'deploy/test-cloud/email-worker.mjs');assert.equal(api.testRuntimeEnvironment('email',config,{}).CLOUD_MAIL_TRANSPORT,'test-capture');
  assert.equal(runtimeEnvironment('account',config).CLOUD_PORTAL_ORIGIN,'http://localhost:3000');
 });
+test('Test Cloud passes an explicit sign-up limit only to the account process', async t => {
+ const {testRuntimeEnvironment} = await import('./runtime.mjs');
+ const dir = await mkdtemp(join(tmpdir(), 'cloud-signup-limits-'));
+ t.after(() => rm(dir, {recursive: true, force: true}));
+ const config = await bootstrap(dir), limits = '{"accountsPerConnectionPerDay":8}';
+ const settings = {CLOUD_SIGNUP_LIMITS: limits};
+ assert.equal(testRuntimeEnvironment('account', config, settings).CLOUD_SIGNUP_LIMITS, limits);
+ assert.equal(testRuntimeEnvironment('email', config, settings).CLOUD_SIGNUP_LIMITS, undefined);
+});
+
 test('base runtime accepts only the explicit canonical origin while retaining loopback default',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'cloud-origin-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
  assert.equal(runtimeEnvironment('account',config,{},'https://waitron.local:3000').CLOUD_PORTAL_ORIGIN,'https://waitron.local:3000');

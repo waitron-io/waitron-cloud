@@ -17,6 +17,13 @@ test('operatorSettingReachesAccountOnly',async()=>{
   assert.equal(runtimeEnvironment(role,config,settings).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
 });
 
+test('sign-up limits reach only the account runtime', async () => {
+ const {config} = await configured(), limits = '{"requestsPerHour":20}';
+ const settings = {CLOUD_SIGNUP_LIMITS: limits};
+ assert.equal(runtimeEnvironment('account', config, settings).CLOUD_SIGNUP_LIMITS, limits);
+ assert.equal(runtimeEnvironment('email', config, settings).CLOUD_SIGNUP_LIMITS, undefined);
+});
+
 test('guest menu settings reach only the account runtime',async()=>{
  const {config}=await configured(),settings={GUEST_ORIGIN:'https://menus.example.test',GUEST_TLS_KEY_FILE:'/run/local-stack/guest-key.pem',GUEST_TLS_CERT_FILE:'/run/local-stack/guest-cert.pem',GUEST_HTTP_PORT:'3443',GUEST_HTTP_HOST:'0.0.0.0'};
  const account=runtimeEnvironment('account',config,settings);

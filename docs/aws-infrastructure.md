@@ -1407,9 +1407,10 @@ address. When a stop takes the PostgreSQL primary offline, the check requires
 a signed address on the first fresh reservation and refuses storage-session
 replies and HTTP 503 responses during that stop.
 
-After a healthy rejoin, the local test waits if its shared signup allowance
-has fewer than two calls left. It starts the next machine stop once there
-is room for a request and a retry. The allowance is eight calls in 15 minutes.
+After a healthy rejoin, the local test waits if its hourly sign-up allowance
+has fewer than six email requests left. The rehearsal sets this allowance to
+20 requests per hour to cover two setup accounts and three recovery windows
+with up to six attempts each.
 That pause happens before the 90-second recovery clock starts. The local
 machine-stop test has a 54-minute timeout. The guest’s separate 55-minute
 limit also covers setup.
@@ -1445,9 +1446,9 @@ with the private `D618_CONFIG` on the test host. The launcher selects a healthy
 control plane over SSH for Kubernetes commands and verifier image import.
 All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
-holds. The hold is the same length as the signup allowance’s counting
-window. The next stop can begin after the returning machine passes its
-health checks. The launcher refreshes the outside peer’s route after each
+holds. Its 20-request sign-up allowance covers all three stops within one
+hour. The next stop can begin after the returning machine passes its health
+checks. The launcher refreshes the outside peer’s route after each
 restart and reports how long control plane selection took. It then restarts
 the same three Stockholm instances, checks their boot IDs, volumes and
 scratch mounts, and refreshes the outside routes to their new addresses.

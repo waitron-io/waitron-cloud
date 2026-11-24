@@ -1,7 +1,7 @@
 import { canonicalIp } from './client-address.ts';
 import { createPublicKey } from 'node:crypto';
 import { isAbsolute } from 'node:path';
-import { LocalPasswordCorpus, type PasswordScreeningProvider } from '@waitron-cloud/registration';
+import { defaultSignupMailLimits, LocalPasswordCorpus, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import type {FactorKeys} from '@waitron-cloud/identity';
 import type {PasswordLoginPolicy,FactorManagementPolicy} from '@waitron-cloud/registration';
 export interface FactorLimit {limit: number; windowSeconds: number}
@@ -44,8 +44,22 @@ export function factorConfigFromEnv(env: NodeJS.ProcessEnv): FactorConfig {
   // An authenticator-app configuration outage leaves recognised password-only browsers and passkey sign-in available; country enrollment requirements still apply.
   return validateFactorConfig({keys,policy});
 }
+const defaultSignupLimits = {
+  requestsPerHour: 5, accountsPerConnectionPerDay: 5, accountsPerDomainPerDay: 5,
+  operatorWarningThreshold: 10, ...defaultSignupMailLimits,
+};
+export type SignupLimits = { [Key in keyof typeof defaultSignupLimits]: number };
+function signupLimits(value: unknown): Readonly<SignupLimits> {
+  if (value === undefined) return Object.freeze({...defaultSignupLimits});
+  if (!object(value) || Object.entries(value).some(([key, limit]) =>
+    !Object.hasOwn(defaultSignupLimits, key) || !positive(limit, key === 'resendSeconds' ? 86400 : 1000000))) {
+    throw new Error('Invalid sign-up limits');
+  }
+  return Object.freeze({...defaultSignupLimits, ...value});
+}
+
 interface SetupPairingConfig { publicKey: string; redirectUri: string }
-export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; countryCode?: string; setupPairing?: Readonly<SetupPairingConfig>; }
+export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; countryCode?: string; setupPairing?: Readonly<SetupPairingConfig>; signupLimits?: Partial<SignupLimits>; }
 
 function validateSetupPairing(config: SetupPairingConfig): Readonly<SetupPairingConfig> {
   const {publicKey, redirectUri} = config;
@@ -57,7 +71,8 @@ function validateSetupPairing(config: SetupPairingConfig): Readonly<SetupPairing
   return Object.freeze({publicKey, redirectUri});
 }
 
-export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpConfig> {
+export function validateConfig(config: AccountHttpConfig) {
+  const limits = signupLimits(config?.signupLimits);
   try {
     const origin = new URL(config.portalOrigin);
     const countryCode = config.countryCode ?? 'ES';
@@ -71,14 +86,17 @@ export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpC
     const trustedProxyIps = Object.freeze(config.trustedProxyIps.map(canonicalIp));
     const setupPairing = config.setupPairing === undefined ? undefined : validateSetupPairing(config.setupPairing);
     return Object.freeze({countryCode, portalOrigin: origin.origin, production: config.production, rateKey: config.rateKey, trustedProxyIps,
-      ...(config.requireEnrollment ? {requireEnrollment: true} : {}), ...(setupPairing ? {setupPairing} : {})});
+      ...(config.requireEnrollment ? {requireEnrollment: true} : {}), ...(setupPairing ? {setupPairing} : {}), signupLimits: limits});
   } catch { throw new Error('Invalid account HTTP configuration'); }
 }
-export function accountHttpConfig(env: NodeJS.ProcessEnv): AccountHttpConfig {
+export function accountHttpConfig(env: NodeJS.ProcessEnv) {
   if (env.CLOUD_REQUIRE_ENROLLMENT !== undefined && !['true', 'false'].includes(env.CLOUD_REQUIRE_ENROLLMENT)) throw new Error('Invalid enrollment requirement');
   const {CLOUD_SETUP_PAIRING_PUBLIC_KEY: publicKey, CLOUD_SETUP_PAIRING_REDIRECT_URI: redirectUri} = env;
   const setupPairing = publicKey === undefined && redirectUri === undefined ? undefined : {publicKey: publicKey ?? '', redirectUri: redirectUri ?? ''};
-  return validateConfig({countryCode: env.CLOUD_COUNTRY_CODE, portalOrigin: env.CLOUD_PORTAL_ORIGIN ?? '', production: env.NODE_ENV === 'production',
+  let limits: unknown;
+  try { limits = env.CLOUD_SIGNUP_LIMITS ? JSON.parse(env.CLOUD_SIGNUP_LIMITS) : undefined; }
+  catch { throw new Error('Invalid sign-up limits'); }
+  return validateConfig({signupLimits: signupLimits(limits), countryCode: env.CLOUD_COUNTRY_CODE, portalOrigin: env.CLOUD_PORTAL_ORIGIN ?? '', production: env.NODE_ENV === 'production',
     rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', requireEnrollment: env.CLOUD_REQUIRE_ENROLLMENT === 'true',
     trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : [], setupPairing});
 }

@@ -104,10 +104,22 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
   }
 }
 
+export function p1SignupLimits(setting) {
+  try {
+    const limits = JSON.parse(setting || '{}');
+    if (!limits || typeof limits !== 'object' || Array.isArray(limits)) throw Error();
+    // Two setup requests and up to six useful probes in each of three recovery windows.
+    return {requestsPerHour: 20, ...limits};
+  } catch { throw Error('Invalid sign-up limits'); }
+}
+
 // Both signup endpoints and every login share the real proxy's source identity.
-export function createP1Budget(now = () => performance.now()) {
-  const logins = [], signups = [];
-  const signupLimit = 8, signupWindowMs = 900_000, signupReserve = 2;
+export function createP1Budget(now = () => performance.now(), signupRequestsPerHour = 5) {
+  const logins = [];
+  const signups = {
+    'signup-request': {attempts: [], limit: signupRequestsPerHour, windowMs: 3_600_000, reserve: Math.min(6, signupRequestsPerHour)},
+    'signup-complete': {attempts: [], limit: 8, windowMs: 900_000, reserve: 2},
+  };
   const recent = (rows, ms, email) => rows.filter(row => now() - row.at < ms && (!email || row.email === email)).length;
   return {
     attempt(kind, email) {
@@ -116,20 +128,23 @@ export function createP1Budget(now = () => performance.now()) {
         assert.ok(recent(logins, 900000, email) < 24, 'p1.email_budget');
         logins.push({at: now(), email});
       } else {
-        assert.ok(recent(signups, signupWindowMs) < signupLimit, 'p1.signup_budget');
-        signups.push({at: now(), email});
+        const {attempts, limit, windowMs} = signups[kind];
+        assert.ok(recent(attempts, windowMs) < limit, 'p1.signup_budget');
+        attempts.push({at: now(), email});
       }
     },
     requireRoom(email) {
       assert.ok(recent(logins, 60000) <= 4, 'p1.login_budget');
       assert.ok(recent(logins, 900000, email) <= 18, 'p1.email_budget');
-      assert.ok(recent(signups, signupWindowMs) <= signupLimit - signupReserve, 'p1.signup_budget');
+      for (const {attempts, limit, windowMs, reserve} of Object.values(signups)) {
+        assert.ok(recent(attempts, windowMs) <= limit - reserve, 'p1.signup_budget');
+      }
     },
     signupDelayMs() {
       const at = now();
-      const active = signups.filter(row => at - row.at < signupWindowMs);
-      const limiting = active.at(-(signupLimit - signupReserve + 1));
-      return limiting ? limiting.at + signupWindowMs - at : 0;
+      const {attempts, limit, windowMs, reserve} = signups['signup-request'];
+      const limiting = attempts.at(-(limit - reserve + 1));
+      return limiting ? Math.max(0, limiting.at + windowMs - at) : 0;
     },
   };
 }
