@@ -689,9 +689,9 @@ implementation or production evidence.
     ([short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md)).
   - Sustained OS, disk and CPU headroom, SES feedback composition, real email delivery and
     joint box handoff. Stockholm's original restart cause and the joint box email trial.
-  - The owner's pre-production box still needs a fresh named pairing with the Amazon test
-    Cloud for the guided backup trial; the live capture and guided result
-    ([rehearsal](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud)) wait for it.
+  - After Stockholm, [upgrade the Amazon test Cloud](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
+    The owner resets the test box to the pinned Waitron release before the fresh
+    [guided pairing and capture](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud).
     Recovery approval remains off.
   - Automatic remote access needs the same fresh pairing, the assigned Staff page on mobile
     data, and confirmation that the box switch stops access.
@@ -882,8 +882,9 @@ implementation or production evidence.
   hold the detail. The full saved-image Linux rehearsal passed all three stops, the repairs and
   a restore after the all-machine restart; paid Stockholm qualification remains open:
 
-  - Cloud's [signed upload reply](authenticated-captures.md#wire-contract) needs the matching
-    Waitron build. After stopping the database primary, the first fresh reserve must return a
+  - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
+    [Amazon verifier pin](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
+    After stopping the database primary, the first fresh reserve must return a
     signed URL with zero storage session calls and zero reserve HTTP 503s; require independent
     backup verification within five minutes and signup email within 90 seconds. Repeat the
     outside rehearsal on the exact Cloud commit and Waitron image proposed for any separately
