@@ -419,17 +419,24 @@ enrolment and environment-backed settings still need joint formats and tests.
   download of database, latest backup and its key; plain fiscal-retention warning; backups
   read-only for 90 days, recoverable on resubscription; then delete everything except
   Cloud's own billing records" (`docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md:39`).
-  The engineering states and clocks are in the same design's section 6.
+- On 2026-11-24 at 17:58, the owner said “yes to all” to the three exit changes
+  (lane G questions). Keep the full download and 90 days of read-only recovery.
+  Destroy venue data only after proof of return, either a completed download or
+  confirmation that the venue’s box holds the data. Seal it if return is unproved.
+  Close venue access on day 90 and destroy every copy eligible for deletion by
+  day 120. The [data-protection design](2026-10-22-cloud-data-protection-design.md#6-make-cancellation-return-and-deletion-one-recorded-instruction)
+  defines the clocks and proof. The final production destruction step still needs
+  specialist confirmation.
 - A trial that ends unpaid (§4), a lapsed level 2 (§6) and a hosted venue stopped for
   non-payment (§6) all enter that same path (owner for the hosted case; driver's call for
   the other two).
 - Cancelling is done from the Cloud account and takes effect at the end of the paid month
   (§6).
 - Closing an account cancels every venue, then follows the same lifecycle.
-- **Only Cloud's own billing records survive** the final deletion. Which fields, for how
-  long and who may see them is lawyer question 2 in the data-protection design
-  (`docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md:363`). A billing record
-  never carries venue content (`docs/cloud-processing-annexes.md:43`).
+- Keep Cloud’s own billing records and one sealed file of Cloud’s own account and
+  security evidence, with no venue content. Keep each event for three years and
+  contract evidence for five years. Ask the specialist to confirm the retention
+  schedule, fields and access. [Data-protection questions](2026-10-22-cloud-data-protection-design.md#10-questions-for-the-lawyer-not-engineering-guesses)
 
 ## 9. Cloud's own invoices
 

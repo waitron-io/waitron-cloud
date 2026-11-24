@@ -505,10 +505,15 @@ G5 movement, G6 diagnostics/privacy and G7 runtime evidence retain their
 path-scoped gates. G4/G5 are outside the first target. No tunnel or consumer is
 qualified by the plan. Admission stays CLOSED and `.local` independent.
 
-**D101 data protection is parked until the privacy specialist answers** (owner,
-2026-11-09). Slices 1–4 remain landed, and the slice 5 plan is kept. No further
-D101 build starts until that answer. The earlier approvals and delivered work
-below remain the record.
+**D101 data protection can proceed in cleared slices.** The owner lifted the
+9 November pause on 2026-11-24 at 17:46 (lane G questions): “Yes, and let's not be blocked
+by the privacy specialist. search the gdpr rules to find answers. let's go with our
+best guess and ask for confirmation from the specialist later”. The
+[provisional privacy answers](superpowers/specs/2026-11-24-d101-privacy-answers.md)
+record the research for the specialist to confirm. First build the
+[test-Cloud owner download](superpowers/plans/2026-11-24-cloud-exit.md) with made-up
+venues, then bring the next slice 5 plan to the watcher. Bring slices 6 onward
+one plan at a time for clearance.
 
 The owner approved the complete D101/D88 data-protection engineering design from PR283
 (`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30 **for build
@@ -560,16 +565,24 @@ locally; later runtime controls remain **unbuilt**. One venue approval permits a
 of support access, shorter where practical and fresh approval to extend. **Paris
 `eu-west-3`** is the approved extra encrypted backup destination, subject to service,
 contract and recovery qualification; Spain data/logs/keys remain in `eu-south-2`.
-The approved exit/retry/concurrency rules retain full download, fixed UTC 90-day
-read-only recovery, earlier verified deletion and all-copy evidence without fiscal
-row changes. O1 is answered. AI stays disabled until separately privacy-reviewed
+The 21 October exit decision includes a full download and fixed UTC 90-day
+read-only recovery. On 2026-11-24 at 17:58 the owner said “yes to all” to the
+three changes (lane G questions). Require proof of return before destruction, and
+seal data if it has not been returned. Close venue access on day 90 and destroy
+all copies eligible for deletion by day 120. Keep billing records and one sealed
+file of Cloud’s own account and security evidence for three years per event or
+five years for contract evidence, with no venue content. The owner also said
+“invoices may be kept in europe”. P6/P7 own the future hosted signup and failover
+checks, including evidence that a hosted venue notified Spain’s tax agency before
+keeping invoices abroad. Earlier verified deletion, copy evidence and unchanged
+fiscal rows remain requirements. O1 is answered. AI stays disabled until separately privacy-reviewed
 eligibility rules, positive/refusal examples and documented limits receive owner
 acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provider/entity/
 access-location evidence, D102 email qualification and runtime proof remain open.
-The published plan records the reviewed roadmap and leaves every legal, provider,
-shared-contract and enablement gate in place. The owner's 9 November pause takes
-precedence over the earlier local build authority. This does not approve broader D88 hosting/isolation/shared contracts,
-spending, deployment, provider resources or contracts. The C39 monitoring design
+The final production destruction step, AWS key deletion and AI sending stay
+disabled. Product repair uses records stripped of personal data. Broader D88
+hosting, isolation and shared contracts, spending, deployment and provider
+resources still require their own approvals. The C39 monitoring design
 remains approved for planning only, subject to the production deployment and
 monitoring designs' corrections. The [alerts plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md#global-constraints)
 keeps the exact daily UTC backup schedule, first due slot and first monitored
