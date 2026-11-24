@@ -690,8 +690,9 @@ implementation or production evidence.
   - Sustained OS, disk and CPU headroom, SES feedback composition, real email delivery and
     joint box handoff. Stockholm's original restart cause and the joint box email trial.
   - The owner's pre-production box still needs a fresh named pairing with the Amazon test
-    Cloud for the guided backup trial. Upgrade the test Cloud and move the box to the pinned
-    Waitron release before the [guided capture](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud).
+    Cloud for the guided backup trial. Check the box's Waitron release against the verifier pin
+    before [pairing and capture](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud).
+    Moving a box on a different database baseline needs separate qualification.
     Recovery approval remains off.
   - Automatic remote access needs the same fresh pairing, the assigned Staff page on mobile
     data, and confirmation that the box switch stops access.
