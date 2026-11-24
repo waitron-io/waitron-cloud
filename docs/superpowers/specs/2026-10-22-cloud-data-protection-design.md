@@ -36,7 +36,7 @@ planning approval recorded below, carried into D101 and D88:
 | --- | --- |
 | Country packs choose locations | Each pack names a home region and permitted backup regions. Same-country hosting is not always possible. Spain uses AWS `eu-south-2` for venue data, logs and keys, with one extra backup copy in another EU region. |
 | Translation sends menu text only | Never send personal data. Arbitrary text entered in a menu can contain it; section 4 proposes the missing outbound boundary. SES email in an EU region is a separate approved exception, owned by D102. |
-| Cancellation provides an exit | Full standard-format download of database, latest backup and its key; plain fiscal-retention warning; backups read-only for 90 days, recoverable on resubscription; then delete everything except Cloud's own billing records. Section 6 records the approved engineering clocks and earlier-deletion handling. |
+| Cancellation provides an exit | Full standard-format download of database, latest backup and its key; plain fiscal-retention warning; backups read-only for 90 days, recoverable on resubscription; then delete everything except Cloud's own billing records. Section 6 records the 2026-11-24 changes to this decision. |
 | Support needs approval each time | Time-limited session, every action logged and visible to you. **24 hours is the approved maximum** for one venue approval, shorter where practical; extension requires fresh approval. |
 | Emergency has two conditions | Your venue cannot trade **and** cannot be reached. Access only keeps it running, with a log and a report straight afterward. Keys use AWS's key service; machines have scoped restore/verification access, Cloud personnel only these two support routes. |
 | Standby starts cold | Start and restore only when needed. A continuously running Cloud follower is a future, unapproved option. Reliability and prices wait for measurement and D68. |
@@ -124,7 +124,15 @@ For Spain, the owner approved **Paris `eu-west-3`** for the one extra encrypted 
 copy to separate its regional failure boundary, subject to service, contract and
 recovery qualification. This is an approved engineering choice, not provider proof.
 Keep operational data, logs and AWS KMS keys in `eu-south-2`.
-No automatic cross-region runtime failover or key replication is authorised. Test the
+On 2026-11-24 at 17:58, the owner said “invoices may be kept in europe” (lane G
+questions), so EU copies and Paris are allowed locations in the design. At hosted
+signup, ask the venue for evidence of prior notice to Spain’s tax agency (AEAT)
+before its invoices are kept outside Spain. Record it per venue. Ask the tax
+adviser to confirm how this applies to temporary failover. P6 and P7 own the
+hosting and failover build. Runtime failover and key replication stay disabled.
+[Spanish invoicing rules, article 22.2](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696#a22)
+
+Test the
 extra copy with its Spain key dependencies; until that passes, make no Spain-outage
 recovery promise. An unavailable Spain key can make that copy temporarily unusable.
 [AWS multi-Region keys](https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html)
@@ -220,9 +228,18 @@ uses a supplied master key; this is not evidence of deployed AWS KMS custody.
 Article 28(3)(g) says return/delete is “a elección del responsable” (at the controller's
 choice), with legally required retention excepted. Recommend writing the owner's
 90-day read-only recovery period into the venue's explicit contract instruction.
-Cancellation alone follows that instruction; it must not override an earlier verified
-delete instruction. Counsel must settle exceptions before this policy can be offered.
+Follow an earlier verified deletion instruction once return is proved and the exception
+review is complete. Ask the specialist to confirm the instruction and exceptions
+before offering this policy.
 [GDPR Article 28(3)(g)](https://www.boe.es/buscar/doc.php?id=DOUE-L-2016-80807&lang=es).
+
+On 2026-11-24 at 17:58, the owner said “yes to all” to the three changes to the
+21 October decision (lane G questions). Keep the full download and the 90-day
+read-only window. Prove return before destruction through a completed download
+or evidence that the venue’s box holds its data. Seal unreturned data. Close venue
+access on day 90 and destroy every copy eligible for deletion by day 120.
+Keep Cloud’s billing records and one sealed file of its own evidence as described
+below. [Research and open confirmations](2026-11-24-d101-privacy-answers.md)
 
 The approved engineering states are: **active**, **exit preparing**, **read-only until deadline**,
 **purging**, **purged**. Record cancellation receipt and effective service-end time
@@ -256,7 +273,8 @@ resubscription under one venue lifecycle revision. A job started under an older
 revision cannot publish a new object or credential. Track outside calls and uncertain
 outcomes durably; retries resume the same operation. At a verified earlier deletion
 request, withdraw download links, cancel exports/readers, reconcile unfinished uploads
-and begin deletion after the approved exception review. No automatic 90-day wait.
+and begin deletion once return is proved and the exception review is complete.
+An earlier deletion that meets those conditions can proceed before day 90.
 
 Before the deadline, resubscription may cancel pending purge only through the same
 serialized decision and evidence that the retained data still exists. Restoration uses
@@ -265,14 +283,16 @@ until its outcome is known; never resurrect a deleted generation from a stale jo
 platform backup. After purge, resubscription creates a fresh service and cannot recover
 purged data. A download already received by the venue is outside Cloud's custody.
 
-At deadline, delete all Cloud-held venue copies: home and extra-region objects and
+At day 90, withdraw access to venue data. For data eligible for deletion, verify
+destruction of all Cloud-held venue copies by day 120. Include home and extra-region objects and
 versions, streams/snapshots, disks/disk snapshots, replicas/caches, staging/verifier
 scratch, exports, unfinished multipart uploads, queues, support attachments, logs and
 identifying metadata. Inventory shared platform/database backups too. If selective
 erasure is unavailable, those backups need an approved bounded expiry and isolated
 restore process that reapplies deletion instructions before access. Such a residual
-copy is **pending deletion**, not deleted at day 90. Qualification must reconcile this
-with the owner's policy before launch; convenience cannot extend it silently.
+copy is **pending deletion** until its expiry is verified. Rehearse the expiry
+within the day-120 window before launch. Keep unreturned venue data sealed until
+return can be proved.
 
 Preserve every needed key version until all authorised return/recovery dependencies
 finish, then revoke grants and retire keys only after checking all dependent copies.
@@ -285,17 +305,16 @@ without retaining deleted payloads. Unknown deletion is failed/pending, never su
 has a mandatory 7–30-day waiting period, with possible additional provider delay.
 A scheduled deletion is not completed physical deletion. At the exit deadline,
 withdraw access, stop readers and remove cached/plaintext data keys; observe ciphertext
-and plaintext copy removal separately. Record scheduled KMS deletion and confirm its
-actual completion afterward. Restorability through day 90 and physical key deletion
-at day 90 cannot be asserted from a schedule. Resolve the remaining key-retention
-policy and contract wording before launch, rather than silently extending the owner’s
-all-data deadline. Do not delete shared platform keys to erase one venue.
+and plaintext copy removal separately. The final destruction step in production
+stays disabled pending confirmation. Disable eligible AWS keys and leave deletion
+unscheduled. Keep shared keys available to every venue that depends on them.
+Confirm the remaining key policy and contract wording before launch.
 
-Cloud's own billing records are the owner's sole routine exception. Recommend retaining
-only necessary Cloud invoice/payment evidence under a separately approved schedule,
-with restricted access, not the venue database or a general support archive. Counsel
-must define any required minimal legal hold, support/security-log exception, authority,
-review/expiry and notification. Do not silently create one through this proposal.
+Keep necessary Cloud invoice and payment evidence under its own restricted
+schedule. Keep one sealed file of Cloud’s own account and security evidence for
+three years from each event, with contract evidence kept for five years. Exclude
+venue content. Ask the specialist to confirm the schedule, access, review, notice
+and any required legal hold.
 At base `60c0fbf`, [history-cleanup.ts:6](https://github.com/waitron-io/waitron-cloud/blob/60c0fbf25618a30977657fe74cce90fc5dbb915b/packages/registration/src/history-cleanup.ts#L6)
 lists transient cleanup categories; it is not this all-copy cancellation/purge service.
 
@@ -363,8 +382,13 @@ open. Local build authority now covers slices 1–5, without spending, deploymen
 
 ## 10. Questions for the lawyer, not engineering guesses
 
+On 2026-11-24 at 17:46 the owner lifted the 9 November pause (lane G questions).
+Use the [provisional research answers](2026-11-24-d101-privacy-answers.md) to plan
+the next authorised slices and ask the specialist to confirm the answers. The
+research records its sources and limits.
+
 1. Complete the Article 28 agreement and annexes for the actual entities/services. Does the instructed 90-day recovery period, with earlier verified return/delete choice, satisfy the intended contract? Resolve any mandatory retention/blocking exceptions without changing immutable fiscal ledgers.
-2. Which minimal Cloud billing evidence must remain, for what justified period? Can any support/security log or legal hold survive exit, on what authority, with what access, notice, review and final deletion? No period is assumed here.
+2. Which minimal Cloud billing evidence must remain, for what justified period? Can any support/security log or legal hold survive exit, on what authority, with what access, notice, review and final deletion? Confirm the provisional periods in section 6.
 3. Approve the supplier authorisation/objection process and actual AWS/SES/AI entity, access-location and transfer evidence. What additional safeguards or refusal of a supplier are required? Regional storage and standard terms alone do not answer this.
 4. Confirm the proposed normal/emergency support instructions, single-on-call evidence and audit access, and the purpose-specific roles for Cloud's own account/security records. Reuse **adviser confirmation P8** for replacement remote transport, product repair, venue support and Cloud-own security roles; ask once.
 5. Does any shared-backup expiry conflict with the promised deletion deadline? Agree an honest contract and measurable all-copy process before launch, including limited deletion evidence, KMS waiting periods and key dependencies.
