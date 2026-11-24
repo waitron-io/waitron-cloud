@@ -90,6 +90,10 @@ export class PortalApp {
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'))this.billing.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.recovery?.error==='pairEnrollment')this.recovery.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.recovery?.error==='actionProofUnavailable'||this.recovery?.error==='recoveryProofRequired'))this.recovery.error=undefined;
+      if(!this.actionProof.pending&&this.backups?.downloadProof){
+        if(this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.backups.error==='pairEnrollment')this.backups.error=undefined;
+        if(this.actionProof.status?.freshUntil&&(this.backups.error==='actionProofUnavailable'||this.backups.error==='snapshotDownloadProof'))this.backups.error=undefined;
+      }
       this.draw();
     });
     this.authenticator = new AuthenticatorController(() => this.draw());
@@ -397,11 +401,11 @@ export class PortalApp {
     this.draw();
   }
   async downloadBackup(key:boolean){
-    const b=this.backups,venue=b.venueId,point=b.selected;
+    const b=this.backups,page=b.page,point=b.selected;
     if(!b.downloadable||b.pending||b.downloading||b.waiting||this.actionProof.pending)return;
     b.downloadProof=true;
     const route=this.#route,proved=await this.#requireActionProof();
-    if(route!==this.#route||venue!==b.venueId||point!==b.selected)return;
+    if(route!==this.#route||page!==b.page||point!==b.selected||!b.downloadProof)return;
     if(this.actionProof.status?.methods.every(method=>method==='email'))b.error='pairEnrollment';
     else if(!proved)b.error=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
     else{b.downloadProof=false;await b.download(key);return;}

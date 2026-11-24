@@ -958,8 +958,9 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
 ### Save a verified backup while the test box stays online
 
 Sign in as the owner of a synthetic test venue. Open **View snapshots** and
-choose a verified snapshot. Confirm your sign-in, then select **Download backup**
-and **Download recovery key**. Keep the matching key private so you can open the
+choose a verified snapshot. Select **Download backup**. If asked, confirm your
+sign-in and select **Download backup** again. Select **Download recovery key**
+for the same snapshot. Keep the matching key private so you can open the
 encrypted archive later. This test download accepts archives up to 16 MiB.
 Actual venue exit still needs the rest of the return and deletion process.
 

@@ -289,8 +289,10 @@ export class BackupCatalogue {
     this.#vault = vault;
     this.#objects = objects;
   }
-  async #exitPoint(client: PoolClient, venueId: string, pointId: string, fence: MutationFence) {
+  async #exitPoint(client: PoolClient, venueId: string, pointId: string, fence: MutationFence, deadline: PublicationDeadline) {
     if (this.#planMode !== 'test-free-paid' && this.#planMode !== 'test-venue-levels') backupFail('local_integration_only');
+    // The database must release its locks even when the HTTP request times out first.
+    await client.query("SELECT set_config('transaction_timeout',$1,true)",[`${deadline.remaining()}ms`]);
     await fence(client);
     await lockVerificationPolicy(client);
     const storage = location(await lockVenue(client, venueId));
@@ -306,7 +308,7 @@ export class BackupCatalogue {
   async exitArchive(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     const signal = AbortSignal.any([deadline.signal, requestSignal]);
-    const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence));
+    const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence, deadline));
     const first = await deadline.run(read);
     signal.throwIfAborted();
     const objects = this.#objects(first.storage);
@@ -330,7 +332,7 @@ export class BackupCatalogue {
   async exitArchiveKey(venueId: string, pointId: string, fence: MutationFence) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     return deadline.run(() => transaction(this.#pool, async client => {
-      const {selected} = await this.#exitPoint(client, venueId, pointId, fence);
+      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline);
       return (await pointKeys(client, this.#vault, venueId, selected.keyVersion)).recoveryKey;
     }));
   }

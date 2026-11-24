@@ -9,6 +9,7 @@ import {requireConnectionProof,transaction} from '@waitron-cloud/registration';
 import {readSessionCookie} from './cookies.ts';
 import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
+import {securityHeaders} from './portal.ts';
 import type {RateRule} from './rate-limit.ts';
 const uuid=(s:string)=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(s);
 function cursor(value:string|undefined,venueId:string):string|null{
@@ -46,18 +47,17 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
    const proof=await requireConnectionProof(client,token,csrfToken);
    if(await ownerVenue(client,venueId,proof.accountId)!=='test')throw new AccountHttpError(403,'permission_denied');
   };
-  const headers={'cache-control':'no-store','x-content-type-options':'nosniff'};
   try{
    if(action==='download-key'){
     const key=await exitDownloads.exitArchiveKey(venueId,pointId,fence);
-    return new Response(key+'\n',{headers:{...headers,'content-type':'text/plain; charset=utf-8',
+    return new Response(key+'\n',{headers:{...securityHeaders,'content-type':'text/plain; charset=utf-8',
      'content-disposition':`attachment; filename="waitron-backup-${pointId}.key"`}});
    }
    const source=await exitDownloads.exitArchive(venueId,pointId,fence,c.req.raw.signal);
    try{
     const stream=source.open();
     stream.once('close',()=>{void source.dispose().catch(()=>{});});
-    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{headers:{...headers,
+    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{headers:{...securityHeaders,
      'content-type':'application/octet-stream','content-length':String(source.receipt.size),
      'content-disposition':`attachment; filename="waitron-backup-${pointId}.backup.enc"`}});
    }catch(error){await source.dispose();throw error;}
@@ -67,7 +67,7 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
     case 'backup.download_too_large':throw new AccountHttpError(413,'download_too_large');
     case 'backup.local_integration_only':throw new AccountHttpError(403,'permission_denied');
     case 'backup.unavailable':throw new AccountHttpError(410,'unavailable');
-    case 'backup.cancelled':case 'backup.key_unavailable':case 'backup.object_invalid':throw new AccountHttpError(503,'temporarily_unavailable');
+    case 'backup.cancelled':case 'backup.key_unavailable':case 'backup.object_invalid':throw new AccountHttpError(503,'temporarily_unavailable',1);
     default:throw error;
    }
   }

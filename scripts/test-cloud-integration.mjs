@@ -197,7 +197,7 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-async function proveExitDownload({api, browser, request, directory, waitronImage, runId, online}) {
+async function proveExitDownload({api, browser, request, directory, waitronImage, verifierChildren, onVerifierScope, online}) {
   const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
   const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
   const {venueId, pointId, archive, backupKey} = request;
@@ -217,14 +217,16 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   assert.equal(sha256, archive.sha256, 'integration.exit_stored_digest');
   assert.equal(saved.length, archive.bytes);
   assert.ok(/^[A-Za-z0-9_-]{43}$/.test(secret), 'integration.exit_saved_key');
-  const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage, owner: runId,
+  const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage,
     expectedRevision: request.target.runtime.revision});
+  onVerifierScope(controllerScope);
   const {result, receipt} = await verify(bufferObject(saved), {...backupKey, secret}, {...request,
     attempt: {...request.attempt, controllerScope, childToken: randomUUID(), deadline: new Date(Date.now()+30_000).toISOString()}},
   AbortSignal.any([runSignal(), AbortSignal.timeout(30_000)].filter(Boolean)));
   assert.equal(result.status, 'passed', 'integration.exit_offline_open');
   assert.equal(result.activation, 'not_attempted');
   assert.equal(receipt.cleanupConfirmed, true);
+  assert.deepEqual(await verifierChildren(controllerScope), [], 'integration.exit_verifier_child_remains');
   await online();
   return {sha256, bytes: saved.length, offline: true, boxOnline: true};
 }
@@ -405,7 +407,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, recoveryBuilt = false, started = false, result, cloudSource, cloudAssets, waitronAssets, waitronBaseSource, waitronClientSource;
-  let verifierWorker, verifierStarted = false, verifierScope, capacityEvidence, nativeTarget;
+  let verifierWorker, verifierStarted = false, verifierScope, exitVerifierScope, capacityEvidence, nativeTarget;
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
   let hostCapacity, startupCapacity, capacityChronology;
@@ -422,13 +424,13 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const identity = parseIntegrationJson(await readFile(path, 'utf8'));
     verifierScope = verifierIdentityScope(identity, waitronImage);
   };
-  const verifierChildren = async () => {
-    if (!verifierScope) return [];
-    const children = lines(await verifierDocker(['ps', '-aq', '--no-trunc', '--filter', 'label=cloud.backup-verifier.owner=waitron-cloud-test-backup', '--filter', 'label=cloud.backup-verifier.scope=' + verifierScope]));
+  const verifierChildren = async (scope = verifierScope) => {
+    if (!scope) return [];
+    const children = lines(await verifierDocker(['ps', '-aq', '--no-trunc', '--filter', 'label=cloud.backup-verifier.owner=waitron-cloud-test-backup', '--filter', 'label=cloud.backup-verifier.scope=' + scope]));
     for (const id of children) {
       assert.match(id, /^[a-f0-9]{64}$/);
       const [info] = parseIntegrationJson(await verifierDocker(['inspect', id]));
-      checkVerifierChild(info, {id, image: verifierImage, scope: verifierScope});
+      checkVerifierChild(info, {id, image: verifierImage, scope});
     }
     return children;
   };
@@ -791,7 +793,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             journeyStage = 'exit-download';
             const request = parseIntegrationJson(await accountPhase('inspect-exit-download', {...captured, image:verifierImage, revision, nativeTarget}));
             const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
-            publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage, runId, online: async () => {
+            publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage,
+            verifierChildren, onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
               await control(id, 'ready');
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
               assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
@@ -1150,7 +1153,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     try {
       // Host cleanup owns the native clients; the owned kind node collects its separate verifier daemon.
       const cleanup = () => cleanupTestCloudResources({docker, project, runId, created, removed, owned, started,
-        verifier: {worker: kubernetes ? undefined : verifierWorker, started: verifierStarted, readScope: readVerifierScope, children: verifierChildren},
+        verifier: {worker: kubernetes ? undefined : verifierWorker, started: verifierStarted, readScope: readVerifierScope,
+          children: async () => [...await verifierChildren(), ...(exitVerifierScope ? await verifierChildren(exitVerifierScope) : [])]},
         built, recoveryBuilt, clientTag, recoveryTag, inventory,
         protectedUnchanged: after => checkProtectedContainers(before, after, protectedContainerIds)});
       if (capacityChronology) {

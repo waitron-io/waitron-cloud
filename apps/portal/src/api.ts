@@ -76,36 +76,30 @@ function browserCsrfToken() {
  const values=document.cookie.split(';').map(value=>value.trim()).filter(value=>value.startsWith(name+'='));
  return values.length===1?values[0]!.slice(name.length+1):'';
 }
-export async function downloadBackupFile(key:boolean,body:{venueId:string;pointId:string},signal:AbortSignal):Promise<ApiResult<Blob>>{
- try{
-  const response=await fetch(key?'/api/account/backups/download-key':'/api/account/backups/download',{
-   method:'POST',credentials:'same-origin',mode:'same-origin',redirect:'error',cache:'no-store',
-   headers:{'Content-Type':'application/json','X-CSRF-Token':browserCsrfToken()},body:JSON.stringify(body),
-   signal:AbortSignal.any([signal,AbortSignal.timeout(30_000)]),
-  });
-  if(response.status===200&&response.headers.get('content-type')===(key?'text/plain; charset=utf-8':'application/octet-stream')){
-   const value=await response.blob();
-   if(key?value.size===44:value.size>0&&value.size<=16*1024*1024)return {ok:true,value};
-  }
-  const retry=Number(response.headers.get('retry-after'));
-  const failure:unknown=response.ok?null:await response.json().catch(()=>null);
-  const code=failure&&typeof failure==='object'&&'error' in failure&&typeof failure.error==='string'?failure.error:'unexpected_response';
-  return {ok:false,status:response.ok?503:response.status,code,retryAfterMs:Number.isFinite(retry)?Math.max(0,retry)*1000:0};
- }catch{return {ok:false,status:0,code:'network_error',retryAfterMs:0};}
-}
-export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
+export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<ApiResult<T>> {
+  const keyDownload = path === '/backups/download-key';
+  const download = keyDownload || path === '/backups/download';
   const installationWrite = path === '/installations/remove';
   const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
   const businessPath = path === '/businesses' || path === '/organisations/rename';
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     headers['X-CSRF-Token'] = browserCsrfToken();
   }
   try {
+    const timeout = AbortSignal.timeout(download ? 30_000 : 15_000);
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
-      headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+      headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      ...(download ? {mode: 'same-origin', redirect: 'error', cache: 'no-store'} : {})});
+    if (download && response.ok) {
+      if (response.status === 200 && response.headers.get('content-type') === (keyDownload ? 'text/plain; charset=utf-8' : 'application/octet-stream')) {
+        const value = await response.blob();
+        if (keyDownload ? value.size === 44 : value.size > 0 && value.size <= 16 * 1024 * 1024) return {ok: true, value: value as T};
+      }
+      return {ok: false, status: 503, code: 'unexpected_response', retryAfterMs: 0};
+    }
+    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || download || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;
@@ -113,6 +107,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
+    if(download&&response.status===413)codes.push('download_too_large');
     if(path==='/installations/remove'&&response.status===503)codes.push('guest_menu_takedown_failed');
     if(businessPath&&response.status===400)codes.push('country_unavailable');
     if(businessPath&&response.status===409)codes.push('business_match_ambiguous');

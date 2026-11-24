@@ -210,3 +210,46 @@ test('exit download disposes the staged archive if ownership is lost during the 
  assert.deepEqual(await response.json(),{error:'permission_denied'});
  assert.equal(disposals,1);
 });
+
+test('exit download rejects different stored bytes and disposes the staged copy',async()=>{
+ const f=await recoveryFixture(db),bytes=Buffer.from(f.objects.get(f.point.objectKey)!);
+ bytes[0]=bytes[0]!^1;
+ let disposals=0;
+ const send=exitDownload(f,'test-free-paid',async()=>({...bufferObject(bytes),async dispose(){disposals++;}}));
+ const response=await send('download');
+ assert.equal(response.status,410);
+ assert.equal(disposals,1);
+});
+
+test('exit download releases database locks when its request deadline expires',async()=>{
+ const f=await recoveryFixture(db),client=await db.secondPool.connect(),probe=await db.pool.connect();
+ const send=exitDownload(f,'test-free-paid',async()=>{throw Error('unexpected read');});
+ try{
+  await client.query('BEGIN');
+  await client.query('SELECT 1 FROM backup_locations WHERE venue_id=$1 FOR UPDATE',[f.installed.venueId]);
+  const response=await send('download-key');
+  assert.equal(response.status,503);
+  await probe.query('BEGIN');
+  await probe.query("SET LOCAL lock_timeout='2s'");
+  await probe.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[f.owner.accountId]);
+ }finally{await probe.query('ROLLBACK');probe.release();await client.query('ROLLBACK');client.release();}
+});
+
+test('exit download rechecks key authority if proof expires while waiting on the venue',async()=>{
+ const f=await recoveryFixture(db),client=await db.secondPool.connect();
+ const send=exitDownload(f,'test-free-paid',async()=>{throw Error('unexpected read');});
+ let response:Promise<Response>|undefined;
+ try{
+  await client.query('BEGIN');
+  const {rows:[backend]}=await client.query('SELECT pg_backend_pid() AS pid');
+  await client.query('SELECT 1 FROM backup_locations WHERE venue_id=$1 FOR UPDATE',[f.installed.venueId]);
+  await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '9 minutes 56 seconds' WHERE account_id=$1",[f.owner.accountId]);
+  response=Promise.resolve(send('download-key'));
+  await client.query('SELECT pg_sleep(4)');
+  const {rows:[blocked]}=await client.query('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))) AS waiting',[backend.pid]);
+  assert.equal(blocked.waiting,true,'proof was fresh when the request reached the venue lock');
+ }finally{await client.query('ROLLBACK');client.release();}
+ const refusal=await response!;
+ assert.equal(refusal.status,403);
+ assert.deepEqual(await refusal.json(),{error:'proof_required'});
+});

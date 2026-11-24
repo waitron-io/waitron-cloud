@@ -35,7 +35,12 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),exitDownloadAvailable:true}});
   };
   await page.route('**/api/account/backups/list',flag);
-  await page.route('**/api/account/action-proof',route=>route.fulfill({json:{methods:['passkey'],freshUntil:new Date(Date.now()+60_000).toISOString()}}));
+  let proof=false;
+  await page.route('**/api/account/action-proof',route=>route.fulfill({json:{methods:['app','recovery'],freshUntil:proof?new Date(Date.now()+60_000).toISOString():null}}));
+  await page.route('**/api/account/action-proof/factor',route=>{
+   assert.deepEqual(route.request().postDataJSON(),{kind:'recovery',code:'1'.repeat(32)});
+   proof=true;return route.fulfill({status:204});
+  });
   const archive='synthetic encrypted archive',key='k'.repeat(43)+'\n';
   for(const [action,body,contentType] of [['download',archive,'application/octet-stream'],['download-key',key,'text/plain; charset=utf-8']] as const){
    await page.route('**/api/account/backups/'+action,route=>{
@@ -46,6 +51,13 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   }
   await page.getByRole('button',{name:refresh,exact:true}).click();
   await choices.selectOption(verifiedId);
+  await saveArchive.click();
+  const proofPrompt=page.getByRole('alert').filter({hasText:locale==='en'?'Verify it’s you before downloading.':'Verifica que eres tú antes de descargar.'});
+  await proofPrompt.waitFor();
+  await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
+  await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
+  await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+  assert.equal(await proofPrompt.count(),0);
   for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[page.getByRole('button',{
    name:locale==='en'?'Download recovery key':'Descargar clave de recuperación',exact:true}),key,'key']] as const){
    const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
