@@ -1,5 +1,5 @@
 // Mounted into the unchanged pinned Waitron image; its existing helper owns setup and teardown.
-import {archiveHost,archiveCommand,agreeInternet,clock,suite,node,key} from '../test/hour-recovery-host.js';
+import {archiveHost,archiveCommand,agreeInternet,bases,clock,suite,node,key} from '../test/hour-recovery-host.js';
 import {it,expect} from 'vitest';
 import {recoverySelectPastWaits} from './testing/hour-test-clock.js';
 import {mkdtemp,readFile,writeFile,rm,rename} from 'node:fs/promises';
@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
 import {setTimeout as delay} from 'node:timers/promises';
 import {ALL_MODULES} from '@waitron/composition';
-import {openVenueDatabase,invoiceSeries} from '@waitron/db';
+import * as waitronDb from '@waitron/db';
 import {loadKeyRing} from '@waitron/credentials';
 import {fiscalAllocations} from '../../../packages/fiscal-verifactu/src/schema/allocations.js';
 import {makeAuthority} from '../../../packages/fiscal-verifactu/test/certificate-fixtures.js';
@@ -26,6 +26,8 @@ import {createSelectedRecoveryPreparation} from './recovery-preparation.js';
 import {runRestore} from './restore-command.js';
 import {restoreFromArtifact} from './restore.js';
 import {createRecoveryRestoreRunner} from './recovery-module-operation.js';
+
+const {openVenueDatabase,invoiceSeries}=waitronDb;
 
 it('recaptures the authorised source and prepares recovery for its new archive',async()=>{
  const original=await archiveHost(),directory=await mkdtemp('/tmp/cloud-integration-backup-authorised-');
@@ -113,8 +115,16 @@ it('recaptures the authorised source and prepares recovery for its new archive',
   expect(output.includes(key.secret)).toBe(false);expect(output.includes('archive password')).toBe(false);expect(output.includes(recoveryKey)).toBe(false);
   const restored=await openVenueDatabase(original.roots.venueDir);
   try{
-   const series=await restored.venue.select().from(invoiceSeries),retiredCounters=series.filter(row=>row.retiredAt!==null).map(row=>row.nextNumber),activeCounters=series.filter(row=>row.retiredAt===null).map(row=>row.nextNumber),allocations=(await restored.venue.select().from(fiscalAllocations)).length;
-   expect(retiredCounters).toEqual([123,123,123]);expect(activeCounters).toEqual([1,1,1]);expect(allocations).toBe(2);
+   // The pinned verifier still stores the counter, and current Waitron derives it from sales.
+   const deriveNextNumber=Reflect.get(waitronDb,'nextInvoiceNumberOf');
+   const nextNumber=deriveNextNumber ? deriveNextNumber(invoiceSeries.id) : Reflect.get(invoiceSeries,'nextNumber');
+   const series=await restored.venue.select({retiredAt:invoiceSeries.retiredAt,nextNumber}).from(invoiceSeries);
+   const retiredCounters=series.filter(row=>row.retiredAt!==null).map(row=>row.nextNumber);
+   const activeCounters=series.filter(row=>row.retiredAt===null).map(row=>row.nextNumber);
+   const allocations=(await restored.venue.select().from(fiscalAllocations)).length;
+   expect(retiredCounters).toEqual(bases.map(()=>123));
+   expect(activeCounters).toEqual(bases.map(()=>1));
+   expect(allocations).toBe(2);
    console.log('CLOUD_AUTHORISED_ARCHIVE='+JSON.stringify({verification,ordinaryRestore:{exit,preparationBoundToRecapture,retiredCounters,activeCounters,allocations},refusals:{wrongNodeKey,missingPreparation},...(delivery?{delivery}:{})}));
   }finally{await restored.close();}
  }finally{await rm(directory,{recursive:true,force:true});}
