@@ -11,9 +11,9 @@ screens in light and dark at 390 and 1280 pixels before each change lands.
    response. Queue at most three emails to an address per UTC day, at least five
    minutes apart. A link stays usable for 30 minutes. Complete at most five accounts
    per connection and five per private email domain per UTC day. Exempt the exact
-   public domains listed in the account API guide. Run those checks after inserting
-   credentials, in the same transaction as consuming the link. A refusal rolls back
-   both the account and its counters. The connection that completes the link counts.
+   public domains listed in the account API guide. Attach any pending handover first.
+   Run the checks just before consuming the link, inside the same transaction. A
+   refusal rolls back both the account and its counters. The connection that completes the link counts.
 2. **Warn once per UTC day.** The account API uses the existing PostgreSQL counters
    to claim a warning above ten completions across Cloud. After commit, log the date
    and threshold. If a verified operator is configured, queue an encrypted

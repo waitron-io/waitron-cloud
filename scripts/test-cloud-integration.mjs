@@ -552,7 +552,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
     const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const measured = Boolean(kubernetes?.stopServices);
-    const budget = kubernetes?.observe || measured ? createP1Budget() : undefined;
+    const budget = kubernetes?.observe || measured ? createP1Budget(undefined, kubernetes.signupRequestsPerHour) : undefined;
     const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal, fresh = false) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path === '/api/account/signup/request') budget?.attempt('signup-request', body.email);

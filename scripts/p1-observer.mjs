@@ -104,11 +104,19 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
   }
 }
 
+export function p1SignupLimits(setting) {
+  try {
+    const limits = JSON.parse(setting || '{}');
+    if (!limits || typeof limits !== 'object' || Array.isArray(limits)) throw Error();
+    return {requestsPerHour: 8, ...limits};
+  } catch { throw Error('Invalid sign-up limits'); }
+}
+
 // Both signup endpoints and every login share the real proxy's source identity.
-export function createP1Budget(now = () => performance.now()) {
-  const logins = [];
+export function createP1Budget(now = () => performance.now(), signupRequestsPerHour = 5) {
+  const logins = [], signupReserve = 2;
   const signups = {
-    'signup-request': {attempts: [], limit: 5, windowMs: 3_600_000},
+    'signup-request': {attempts: [], limit: signupRequestsPerHour, windowMs: 3_600_000},
     'signup-complete': {attempts: [], limit: 8, windowMs: 900_000},
   };
   const recent = (rows, ms, email) => rows.filter(row => now() - row.at < ms && (!email || row.email === email)).length;
@@ -128,13 +136,13 @@ export function createP1Budget(now = () => performance.now()) {
       assert.ok(recent(logins, 60000) <= 4, 'p1.login_budget');
       assert.ok(recent(logins, 900000, email) <= 18, 'p1.email_budget');
       for (const {attempts, limit, windowMs} of Object.values(signups)) {
-        assert.ok(recent(attempts, windowMs) < limit, 'p1.signup_budget');
+        assert.ok(recent(attempts, windowMs) <= limit - signupReserve, 'p1.signup_budget');
       }
     },
     signupDelayMs() {
       const at = now();
       const {attempts, limit, windowMs} = signups['signup-request'];
-      const limiting = attempts.at(-limit);
+      const limiting = attempts.at(-(limit - signupReserve + 1));
       return limiting ? Math.max(0, limiting.at + windowMs - at) : 0;
     },
   };

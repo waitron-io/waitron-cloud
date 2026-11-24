@@ -2,6 +2,7 @@ import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import type { HttpBindings } from '@hono/node-server';
 import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupStore, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { createAccountApp } from '../src/app.ts';
@@ -87,6 +88,39 @@ test('parallel completions share a connection cap and leave the sixth link usabl
   assert.deepEqual(await refusal.json(), {error: 'signup_rate_limited'});
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '5');
   assert.equal((await request('/signup/complete', {token: tokens[refusedIndex], password}, {peer: '2001:db8:1:3::1'})).status, 201);
+});
+
+test('a sign-up waiting to attach a handover does not delay an unrelated sign-up', async () => {
+  const sender = await account();
+  const [invitee, other] = await signupTokens(['invitee@venue.example.test', 'other@example.test']);
+  await db.pool.query(`INSERT INTO owner_transfers
+    (id, organisation_id, sender_id, sender_email, recipient_email, recipient_needs_enrolment, locale)
+    VALUES ($1,$2,$3,$4,'invitee@venue.example.test',true,'en')`, [randomUUID(), sender.organisationId, sender.accountId, sender.email]);
+  const locker = await db.secondPool.connect();
+  let pending: Promise<Response> | undefined;
+  let unrelated: Promise<Response> | undefined;
+  try {
+    await locker.query('BEGIN');
+    await locker.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE', [sender.organisationId]);
+    pending = request('/signup/complete', {token: invitee, password});
+    let waiting = false;
+    for (let attempt = 0; attempt < 200 && !waiting; attempt++) {
+      waiting = (await db.pool.query(`SELECT EXISTS (
+        SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'
+        AND query LIKE '%FROM organisations WHERE id=$1 FOR UPDATE%'
+      ) AS waiting`, [db.schema])).rows[0].waiting;
+      if (!waiting) await delay(20);
+    }
+    assert.equal(waiting, true, 'the invitee is waiting while the organisation is locked');
+    unrelated = request('/signup/complete', {token: other, password}, {peer: '198.51.100.9'});
+    const status = await Promise.race([unrelated.then(reply => reply.status), delay(3000, 'waiting on another sign-up', {ref: false})]);
+    assert.equal(status, 201);
+  } finally {
+    await locker.query('ROLLBACK');
+    locker.release();
+    await Promise.allSettled([pending, unrelated]);
+  }
+  assert.equal((await pending!).status, 201);
 });
 
 test('completed sign-ups share a private domain cap across connections while a public domain is exempt', async () => {

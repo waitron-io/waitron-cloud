@@ -39,7 +39,6 @@ request a fresh link tomorrow.
 Above ten completed sign-ups in one UTC day, Cloud logs a warning and queues a
 notice for its configured verified operator. The warning leaves sign-up available.
 
-
 Use the existing password hash format. New passwords require 15 characters and allow
 spaces and Unicode, up to 1024 UTF-8 bytes. Public deployment also needs a compromised
 password check, ingress bot controls and the chosen additional authentication factors.

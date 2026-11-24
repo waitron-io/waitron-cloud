@@ -178,10 +178,28 @@ test('request budgets include setup, both signup endpoints and the original sour
   assert.throws(() => budget.attempt('login', 'owner@example.test'), /p1.email_budget/);
 });
 
-test('signup spacing reserves one confirmation request for the next service stop', () => {
+test('the sign-up rehearsal reserves two probes and can make one retry at each of three stops', () => {
+  const limits = api.p1SignupLimits('{"accountsPerDomainPerDay":9}');
+  assert.deepEqual(limits, {requestsPerHour: 8, accountsPerDomainPerDay: 9});
+  assert.equal(api.p1SignupLimits('{"requestsPerHour":10}').requestsPerHour, 10);
+  const budget = api.createP1Budget(() => 0, limits.requestsPerHour);
+  for (let i = 0; i < 2; i++) {
+    budget.attempt('signup-request', 'setup@example.test');
+    budget.attempt('signup-complete');
+  }
+  budget.requireRoom();
+  for (let leg = 0; leg < 3; leg++) {
+    assert.equal(budget.signupDelayMs(), 0);
+    budget.attempt('signup-request', 'probe@example.test');
+    budget.attempt('signup-request', 'retry@example.test');
+  }
+  assert.throws(() => budget.attempt('signup-request', 'excess@example.test'), /p1.signup_budget/);
+});
+
+test('signup spacing reserves two confirmation requests for the next service stop', () => {
   let clock = 0;
   const budget = api.createP1Budget(() => clock);
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     budget.attempt('signup-request', 'setup@example.test');
     clock += 1000;
   }
@@ -190,13 +208,14 @@ test('signup spacing reserves one confirmation request for the next service stop
   assert.equal(budget.signupDelayMs(), 0);
   budget.requireRoom();
   budget.attempt('signup-request', 'first-stop@example.test');
-  assert.equal(budget.signupDelayMs(), 3_596_000);
+  assert.equal(budget.signupDelayMs(), 3_597_000);
   assert.throws(() => budget.requireRoom(), /p1.signup_budget/);
+  budget.attempt('signup-request', 'first-stop-retry@example.test');
   assert.throws(() => budget.attempt('signup-request', 'second-stop@example.test'), /p1.signup_budget/);
 
-  clock = 3_599_999;
+  clock = 3_600_999;
   assert.equal(budget.signupDelayMs(), 1);
-  clock = 3_600_000;
+  clock = 3_601_000;
   assert.equal(budget.signupDelayMs(), 0);
   budget.attempt('signup-request', 'second-stop@example.test');
 });

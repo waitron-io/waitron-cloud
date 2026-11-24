@@ -77,7 +77,7 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
       else if (scenario === 'logout') await page.getByRole('button', {name: c.signout, exact: true}).click();
       else await page.locator('#submit').click();
       await page.waitForFunction(() => (window as any).app.waiting > 0);
-      const wait = scenario === 'email' ? 60_000 : 2_000;
+      const wait = scenario === 'email' ? 300_000 : 2_000;
       const retry = scenario === 'passkeys' ? page.locator('.passkeys').getByRole('button', {name: c.retry, exact: true})
         : scenario === 'authenticator' ? page.locator('.authenticator').getByRole('button', {name: c.retry, exact: true})
         : scenario === 'security' ? page.locator('.sessions').getByRole('button', {name: c.retry, exact: true})
@@ -128,7 +128,7 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
       await page.waitForFunction(expected => {
         const a = (window as any).app;
         return !a.passkeys.pending && !a.authenticator.pending && !a.security.pending && a.waiting === expected;
-      }, scenario === 'email' ? 60 : 0);
+      }, scenario === 'email' ? wait / 1000 : 0);
       assert.equal(attempts, 2);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);

@@ -22,7 +22,7 @@ import {startRemoteRehearsal, untilRemote} from './kubernetes-remote.mjs';
 import {createKubernetesVerifier, forwardKubernetesPod, loadVerifierImage} from './kubernetes-check.mjs';
 import {parseIntegrationJson, runTestCloudClients} from './test-cloud-integration.mjs';
 import {prepareDatabaseWitness} from './kubernetes-cold-restart.mjs';
-import {observeP1} from './p1-observer.mjs';
+import {observeP1, p1SignupLimits} from './p1-observer.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
 const {CreateBucketCommand} = require('@aws-sdk/client-s3');
@@ -128,9 +128,10 @@ export async function configureServices(context, kube, store, custody) {
   const CLOUD_FACTOR_POLICY = JSON.stringify({loginLifetimeMs: 300000, pendingLifetimeMs: 300000,
     challengeAttempts: 5, enrolmentAttempts: 5, loginAccount: limit, completeIp: limit, completeAccount: limit,
     completeChallenge: limit, manageIp: limit, manageAccount: limit});
-  const signupLimits = context.env?.CLOUD_SIGNUP_LIMITS;
+  const signupLimits = context.stopServiceNodes ? p1SignupLimits(context.env?.CLOUD_SIGNUP_LIMITS) : undefined;
+  const signupSetting = signupLimits ? JSON.stringify(signupLimits) : context.env?.CLOUD_SIGNUP_LIMITS;
   await secret('services-account', {...emailVariables, CLOUD_HTTP_RATE_KEY, CLOUD_INSTALLATION_ISSUER_KEY,
-    ...(signupLimits !== undefined && {CLOUD_SIGNUP_LIMITS: signupLimits}),
+    ...(signupSetting !== undefined && {CLOUD_SIGNUP_LIMITS: signupSetting}),
     CLOUD_PAIRING_ACTIVE_KEY_ID, CLOUD_PAIRING_KEYS, CLOUD_PORTAL_ASSETS_DIR, CLOUD_FACTOR_ACTIVE_KEY_ID, CLOUD_FACTOR_KEYS, CLOUD_FACTOR_POLICY, ...storage['services-account']});
   await secret('services-monitor', emailVariables);
   await secret('services-backup', storage['services-backup']);
@@ -144,7 +145,7 @@ export async function configureServices(context, kube, store, custody) {
     .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
   await create(resource('ConfigMap', 'services-proxy', {data: {'haproxy.cfg': proxy, 'ca.crt': tls.root, 'passwords.sha256': corpus}}));
   await create(resource('ConfigMap', 'services-store-ca', {data: {'ca.crt': store.ca}}));
-  return {ca: tls.root, tls, config, runtimeDirectory, mailFiles, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
+  return {ca: tls.root, tls, config, runtimeDirectory, mailFiles, signupRequestsPerHour: signupLimits?.requestsPerHour, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
 }
 
 export function servicesDatabaseErrorCodes(log) {
@@ -332,7 +333,7 @@ export async function runKubernetesServices(context) {
     await installServicesDatabase(context, tag);
     return await withStockholmStorageIdentity(context, async (store, custody) => {
       const settings = await configureServices(context, kube, store, custody);
-      const {ca, mailAuthorization, config} = settings;
+      const {ca, mailAuthorization, config, signupRequestsPerHour} = settings;
       const outsideMailPort = baseline ? await outside.startInbox(settings.mailFiles) : undefined;
       if (baseline) {
         await create(servicesDaemonSet(tag, nodes.map(node => node.name), config.gateway.cellId));
@@ -457,7 +458,7 @@ export async function runKubernetesServices(context) {
       const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...mode, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: outsideMailPort ?? ports[8025], ca, mailAuthorization, storeCa: store.ca,
-        stockholmRemote: remoteTarget, verifier, verifierImage: context.verifierImage, amazon, signal,
+        stockholmRemote: remoteTarget, verifier, verifierImage: context.verifierImage, amazon, signal, signupRequestsPerHour,
         ...(restartAll && {restartServices: probes => measureServiceRestart({
           restartAll, inventory, probes, checkStore: outsideStore, signal,
           async inspectionReady(limit) {return (await readyServices(limit, 'inspect')).length > 0;},

@@ -10,7 +10,7 @@ export class AccountRateLimiter {
     if (typeof key !== 'string' || !/^[a-fA-F0-9]{64}$/.test(key)) throw new Error('Invalid rate configuration');
     this.#pool = pool; this.#key = Buffer.from(key, 'hex');
   }
-  /** A supplied client keeps counters in the caller's transaction; the caller commits expected refusals. */
+  /** A supplied client commits or rolls back counters with the rest of the caller's transaction. */
   async consume(rules: readonly RateRule[], client?: PoolClient): Promise<RateDecision> {
     if (!Array.isArray(rules) || !rules.length || rules.length > 8) throw new Error('Invalid rate rule');
     const entries = rules.map(rule => {

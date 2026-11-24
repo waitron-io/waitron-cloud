@@ -372,22 +372,23 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | Signup or reset completion, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |
 
-Successes and failures both count once a request reaches a limit. Login checks the
+Both successful and failed requests count against request limits. Daily account limits count committed sign-ups. Login checks the
 IP limit first; requests it refuses do not consume the email allowance. This prevents
 an already-blocked IP from spending another person's address allowance. Requests
 admitted by IP limits can still exhaust that address allowance, so distributed
 attacks also need the deployment's ingress controls. Login and email-request responses wait at
-least 300 ms after body reading. Load and timing checks under contention remain required.
+least 300 ms after body reading. Busy database rows can still make replies slower. Load and timing checks under contention remain required.
 
 A connection is an IPv4 address or IPv6 /64. The private-domain cap exempts `gmail.com`, `googlemail.com`, `outlook.com`, `outlook.es`, `hotmail.com`,
 `hotmail.es`, `live.com`, `live.es`, `msn.com`, `yahoo.com`, `yahoo.es`, `icloud.com` and
-`me.com`. The connection cap still applies. By default, each address can receive three
+`me.com`. The domain is the part after `@`, so each subdomain has its own allowance.
+The connection cap still applies. By default, each address can receive three
 sign-up emails per UTC day, with a five-minute wait between sends. The password-reset
 email wait is one minute.
 
 On the eleventh completed sign-up of a UTC day, the account log records the date and
 threshold. Cloud queues an operator notice if `CLOUD_OPERATOR_ACCOUNT_ID` names an
-enabled, verified account. The local and Test Cloud capture transport can deliver it.
+enabled, verified account. The local capture transport can deliver it. Test Cloud supplies the operator account in its action demo.
 The SMTP and SES transports leave this notice to the account log. Further sign-ups
 remain subject to their usual connection and domain limits.
 
@@ -399,7 +400,8 @@ The JSON below shows the default for each key.
 ```
 
 Use positive whole numbers. Keep the default mail settings for the public portal's
-three-email message and five-minute resend countdown.
+three-email message and five-minute resend countdown. The measured service-stop
+rehearsal uses eight requests per hour so each stop can retry once.
 
 A bounded local contention run on an 18-core Apple M5 Pro admitted exactly 10 of 12
 same-IP logins and exactly 30 of 31 same-address logins across two API instances. The

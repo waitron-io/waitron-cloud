@@ -93,10 +93,11 @@ export class SignupStore {
       const credentials = await client.query(`INSERT INTO cloud_credentials (account_id, email, password_hash, email_verified_at)
         VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING`, [accountId, request.email, passwordHash, now]);
       if (!credentials.rowCount) throw new SignupError('verification_unavailable');
-      await admit?.(client, request.email);
       await attachOwnerTransferRecipients(client, accountId, request.email);
       const business=await createBusiness(client,accountId);
       const browserToken=input.rememberBrowser?await rememberBrowser(client,accountId):undefined;
+      // A handover can wait on an existing organisation. Finish that wait before taking shared admission locks.
+      await admit?.(client, request.email);
       // Expiry after a contended write rolls back the account, business and membership together.
       const consumed = await client.query(`UPDATE signup_requests SET consumed_at = clock_timestamp()
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);
