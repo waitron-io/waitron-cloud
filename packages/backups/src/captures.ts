@@ -9,6 +9,7 @@ export interface CaptureOptions {
  vault:BackupKeyVault;
  objects:ObjectFactory;
  grant(location:StorageLocation,scope:StorageScope):Promise<{credentials:StorageCredentials;expiresAt:string}>;
+ signUpload?(location:StorageLocation,key:string):Promise<{uploadUrl:string;expiresAt:string}>;
  planMode?:PlanMode;
  uploadOrigin?:string;
  managedStreams?:ManagedStreamAuthority;
@@ -50,14 +51,20 @@ export class BackupCaptures {
    }
   };
   if(action==='backup-reserve'){
-   if(routing.body!=='{}')backupFail('invalid_metadata');
+   const signed=routing.body==='{"upload":"presigned-put-v1"}';
+   const signUpload=signed&&this.#options.uploadOrigin===undefined?this.#options.signUpload:undefined;
+   if(!signUpload&&routing.body!=='{}')backupFail('invalid_metadata');
    const capture=await this.#catalogue.reserveCapture(routing.installationId,routing.operationId,fence);
-   const grant=await this.#options.grant(capture.location,{kind:'capture',bucket:capture.location.bucket,scope:capture.incomingKey});
-   // Provider waits allow revocation to commit; never hand out the resulting grant without a fresh check.
+   const grant=signUpload
+    ?await signUpload(capture.location,capture.incomingKey)
+    :await this.#options.grant(capture.location,{kind:'capture',bucket:capture.location.bucket,scope:capture.incomingKey});
+   // Storage work runs outside the locks, so the reply needs fresh authority on the same destination.
    const current=await this.#catalogue.reserveCapture(routing.installationId,routing.operationId,fence);
-   if(this.#options.planMode==='test-venue-levels'&&(current.location.endpoint!==capture.location.endpoint||current.location.bucket!==capture.location.bucket||current.location.region!==capture.location.region))backupFail('conflict');
+   if((signed||this.#options.planMode==='test-venue-levels')&&(current.location.endpoint!==capture.location.endpoint||current.location.bucket!==capture.location.bucket||current.location.region!==capture.location.region))backupFail('conflict');
    const expires=Date.parse(grant.expiresAt);
-   if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+901000||!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken)backupFail('storage_grant');
+   const maxLifetime=signed?900000:901000;
+   if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+maxLifetime)backupFail('storage_grant');
+   if('credentials' in grant&&(!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken))backupFail('storage_grant');
    const location=this.#options.uploadOrigin===undefined?current.location:{...current.location,endpoint:this.#options.uploadOrigin};
    return {id:current.id,installationId:routing.installationId,venueId:current.venueId,keyVersion:current.keyVersion,location,incomingKey:current.incomingKey,recoveryKey:current.keys.recoveryKey,...grant};
   }

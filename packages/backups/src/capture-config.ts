@@ -3,7 +3,6 @@ import {readFileSync} from 'node:fs';
 import {BackupKeyVault} from './keys.ts';
 import {StorageAuthority,validateLocation} from './storage.ts';
 import {workerObjects} from './worker-config.ts';
-import type {ObjectStore} from './catalogue.ts';
 import type {CaptureOptions} from './captures.ts';
 export function captureRuntime(env:Record<string,string|undefined>):{options:CaptureOptions;close():void}|undefined{
  if(!Object.keys(env).some(k=>k.startsWith('CLOUD_BACKUP_')&&env[k]))return;
@@ -13,8 +12,13 @@ export function captureRuntime(env:Record<string,string|undefined>):{options:Cap
  const privateKey=createPrivateKey(config.privateKey);if(privateKey.asymmetricKeyType!=='rsa'||(privateKey.asymmetricKeyDetails?.modulusLength??0)<2048)throw Error('backup.storage_configuration');
  const authority=new StorageAuthority({...config,privateKey});
  const ca=env.CLOUD_BACKUP_CA_FILE?readFileSync(env.CLOUD_BACKUP_CA_FILE,'utf8'):undefined;
- const objects=workerObjects(env,ca),clients=new Map<string,ObjectStore>();
- return {options:{vault:new BackupKeyVault(Buffer.from(env.CLOUD_BACKUP_MASTER_KEY!,'hex')),objects(location){const key=JSON.stringify(location);let client=clients.get(key);if(!client){client=objects.objects(location);clients.set(key,client);}return client;},async grant(location,scope){
+ const objects=workerObjects(env,ca),clients=new Map<string,ReturnType<typeof objects.objects>>();
+ function clientFor(location:Parameters<typeof objects.objects>[0]){
+  const key=JSON.stringify(location);let client=clients.get(key);
+  if(!client){client=objects.objects(location);clients.set(key,client);}
+  return client;
+ }
+ return {options:{vault:new BackupKeyVault(Buffer.from(env.CLOUD_BACKUP_MASTER_KEY!,'hex')),objects:clientFor,async signUpload(location,key){return clientFor(location).signCaptureUpload(key);},async grant(location,scope){
   validateLocation(location);if(new URL(location.endpoint).href!==new URL(env.CLOUD_BACKUP_ENDPOINT!).href||location.region!==env.CLOUD_BACKUP_REGION)throw Error('backup.storage_configuration');
   return authority.grant(location,scope,ca);
  }},close(){clients.clear();objects.close();}};
