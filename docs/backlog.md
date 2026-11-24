@@ -127,8 +127,23 @@ D152's isolation-command refusal and D507's old cache-upload stall together.
 The 31 October to 6 November retained failure-history review found no matching
 recurrence; that explains no cause. A new matching failure joins its existing
 investigation, with the original assertions, limits and cleanup checks preserved.
-Lane J's local `receipts/d593/sweep-inventory.json` and `recurrence-review.json` name
-every original entry, its source revision and its evidence.
+Lane J's `receipts/d593/` inventory is no longer on disk, so this table is the record.
+
+| Entry | What was seen | Start from |
+| --- | --- | --- |
+| D126 | Linux download supervision | [detail](backlog/linux-download-supervision.md) |
+| D129 | Password reset during derivation failed before its final checks. A late observer reproduces it and the test now holds the result. | [run 39953541488](https://github.com/waitron-io/waitron-cloud/actions/runs/39953541488) |
+| D131, D583 | Conformance setup timeouts; a healthy source fetch retried. #957 repaired the fixture clock; the isolated replay early wake is open. | [detail](backlog/cost-setup-timeout.md) |
+| D152 | Isolation canary exit 1 in category `container-state`, and the gateway later exited 1. A name-lookup ordering defect is fixed; linking it to these is an inference. | [run 40041135283](https://github.com/waitron-io/waitron-cloud/actions/runs/40041135283/job/120712388129), [run 40054514898](https://github.com/waitron-io/waitron-cloud/actions/runs/40054514898/job/120754852118), [run 40062864377](https://github.com/waitron-io/waitron-cloud/actions/runs/40062864377/job/120780089952) |
+| D198 | Diagnostic revocation slower than 100 ms. Record connection, update, commit and read-release times; keep the lock-wait limit and the final 403. | [run 40089088819](https://github.com/waitron-io/waitron-cloud/actions/runs/40089088819/job/120857966430) |
+| D262 | Mail measurement refused at close | [rehearsal refusals](#platform-work-to-scope) |
+| D311 | Fixture archive downloads | [detail](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311) |
+| D335 | Verifier build | [detail](backlog/verifier-build.md) |
+| D349 | Empty generated JSON state. An interrupted write reproduces it and is fixed. | [run 41169033630](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790) |
+| D457 | Storage extraction across processes; prompt refusal is unproved. | `scripts/ci-backup-storage-process-extraction.test.mjs` |
+| D507 | Cache-upload stall | [detail](backlog/ci-cache-saving.md#historical-upload-transport-cause-d507) |
+| D574 | Translation startup | [detail](backlog/translation-startup.md) |
+| Installation renewal | Renewal accepted during owner revocation. A paused backend reproduces it; the test now queues renewal behind revocation. The historical scheduling is unknown and production locking is unchanged. | runs 39953541488, 40990452819, 41266766013 |
 
 The translation launcher's 20-second startup limit (PR #1173, then an `ETIMEDOUT` in
 PR #1282) has no proved cause and no established link to D574;
@@ -174,6 +189,16 @@ PR #1282) has no proved cause and no established link to D574;
   or paid level: “Only with the trial” (owner, 20 November 2026 at 14:13). The menu page
   follows the phone's languages: “we should fix the cloud's menu page to follow the phone
   langs” (owner, 17 November 2026).
+- The box registers quietly when you sign in at the start of setup, with no account-only key:
+  “I'd like the quiet at the end option, but i think it needs to be earlier, at the start of
+  setup, because we need access to address completion and emails during setup” (owner,
+  20 November 2026 at 13:11). Remote access still needs a trial or paid level.
+- You may remove a venue while its trial or paid period runs. The confirmation says the venue
+  is hidden and its connection stopped, but charges continue and Billing still lists it (owner,
+  19 November 2026 at 19:23, choosing this over refusing removal).
+- Live Google address completion serves “Yes, every registered box”, inside each box's existing
+  limit (owner, 21 November 2026 at 10:34). The private launcher still serves one approved box;
+  [what is left](backlog/free-services.md).
 
 ### CI policy
 
@@ -205,7 +230,9 @@ Owner decision, 8 November 2026:
 No cost alert until a real cost figure exists: the calculator over committed inputs
 cannot see a cost change (about 90% of its USD 18.44/month is one fixed server
 charge; 100 times the orders moves it 5.7%). Reopen with measured storage and
-request counts priced nightly.
+request counts priced nightly. If it reopens, the owner's earlier rule (8 November 15:03,
+as the watcher relayed it) was an alert and email at 10% or more above the last alert,
+including slow creep, with the first measurement saved silently.
 
 ## Installation deployment qualification
 
@@ -720,7 +747,9 @@ implementation or production evidence.
   usage. Keep generated fixture data within each service's 64 MiB scratch limit, or make a
   separate bounded capacity change. A generated restore-integrity failure reproduces on the
   host-shared Docker folder and passes on container-native storage; its production relevance
-  is unproved, so prepare a consistent frozen copy before long replay.
+  is unproved, so prepare a consistent frozen copy before long replay. Earlier untraced refusals
+  and transient source-file changes are unattributed; later activity in a live source is not
+  proof that the isolated experiment wrote it.
 
   **Unexplained rehearsal refusals.** Each now reports a fixed stage or category; capture that
   on a recurrence, reproduce it with the pinned runtime and fix the cause. Passing repeats
@@ -738,6 +767,12 @@ implementation or production evidence.
   | Paced replay at `storage-cleanup` (D121) | [40144665901](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173) |
   | Writer-deadline check during opening | [40259519210](https://github.com/waitron-io/waitron-cloud/actions/runs/40259519210/job/121368783695), [43971423269](https://github.com/waitron-io/waitron-cloud/actions/runs/43971423269) |
   | Remote browser journey, mostly reconnect/takings | [39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728), [40004973526](https://github.com/waitron-io/waitron-cloud/actions/runs/40004973526/job/120590562266), [40092022379](https://github.com/waitron-io/waitron-cloud/actions/runs/40092022379/job/120866647453), [40122070386](https://github.com/waitron-io/waitron-cloud/actions/runs/40122070386/job/120955659784); [investigation](backlog/browser-reconnect.md) |
+  | Mail measurement close (D262, PR #467) | [job 121192744128](https://github.com/waitron-io/waitron-cloud/actions/runs/40201247616/job/121192744128). Read the close error's first reason and both counts: a timeout, a protocol failure and a disagreement after an accepted reply need different reproductions. |
+  | SIGINT cleanup before a worker was admitted (D502) | [run 41003177471](https://github.com/waitron-io/waitron-cloud/actions/runs/41003177471/job/123892097439). Read `local-command-refusal` first; controls in `scripts/cloud-cost/local-command-diagnostics.test.mjs`. |
+
+  The strict 4.01-second streamed-day control must refuse after its original deadline in
+  whichever phase it reaches, with the source unchanged, private state removed and every
+  started child collected and exited (owner, 24 October 2026).
 
   The official Litestream shutdown also still needs qualification
   ([scheduling investigation](backlog/cost-conformance-fixtures.md#replay-close-scheduling-d530)).
@@ -817,7 +852,8 @@ implementation or production evidence.
   records SumUp card and Stripe SEPA test paths; both suppliers and their live country
   flows remain unqualified. Paid-plan tax collection and Spanish tax-number
   validation, paid-plan choices, cancellation, account closure, hosting enrolment,
-  supplier qualification and production billing remain open.
+  supplier qualification and production billing remain open. When Billing can cancel, the
+  **Remove venue** confirmation gains the instruction to cancel there to stop charges.
 - **Venue and node registration.** Qualify the installed-box sign-in with the released
   Waitron client. Initial setup still needs sign-in, signup and access to basic services.
   Planned handover, diagnostics, retention, key provisioning
@@ -876,6 +912,11 @@ implementation or production evidence.
   expiry drill, offline ARM inputs and measured build/steady/fault/verifier/healing peaks
   remain open. The 6.10 GiB owned-memory sample is only a lower bound. Weekly automation needs
   scoped access and the [weekly plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
+  **Spending on these runs:** “we need to get it working. if that requires paid runs the sobeit”
+  (owner, 23 November 2026 at 19:46). One run at a time, after looking for the last failure's
+  cause for free. The limits recorded with it: ask the owner again before a run above about $10,
+  after three failures for the same cause, or past $250 in total. Another fresh sign-in failure
+  counts as the third (watcher, 24 November 2026 at 19:47).
   No general AWS, production or schema authority follows from any of this.
   [Release waves](superpowers/plans/2026-11-17-d114-release-waves.md) wait for full P1
   qualification; hosted venues and regional failover remain open.

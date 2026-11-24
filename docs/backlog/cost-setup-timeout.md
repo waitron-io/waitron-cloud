@@ -22,6 +22,8 @@ them in a later source revision.
 ## Healthy source-fetch fixture records a retry
 
 [PR #953's standard run](https://github.com/waitron-io/waitron-cloud/actions/runs/42007512040/job/127179355072)
-recorded two fetches where `conformance-source-fetch.test.mjs:137` requires one. Capture the attempt
+recorded two fetches where `conformance-source-fetch.test.mjs:137` requires one. #957 reproduced
+this with a 500 ms scheduling delay and fixed the fixture clock; the job did not measure its own
+delay. Capture the attempt
 diagnostics and generated helper state on a recurrence before changing the fixture. Lane H's
 CI-failure investigation is the proposed owner, pending watcher assignment.

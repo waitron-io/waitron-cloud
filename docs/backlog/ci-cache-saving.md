@@ -76,6 +76,10 @@ cleanup with each job's existing limit, especially registration partition 1/6.
 Any proposed limit, matrix or check change needs a separate owner decision.
 These successful samples do not establish that every future job fits its cap.
 
+Two native observations are separate and unexplained: `ci-setup-pnpm.test.mjs` once counted
+two descendant-test attempts instead of three, and the unavailable-mirror case in
+`ci-download.test.mjs` two commands instead of one. Keep both assertions.
+
 ## Portal shard job budget (D546 qualification)
 
 Portal work uses six file partitions so each job has less mandatory work
@@ -87,7 +91,9 @@ every current filename plus one future filename and requires each to execute
 exactly once, with nonempty partitions and no overlapping fixture bodies.
 
 **Open.** Runtime variance and the historical cache-upload stall remain
-unexplained. Compare setup, test and cleanup timings on each six-partition
+unexplained. [PR805](https://github.com/waitron-io/waitron-cloud/actions/runs/41212399965/job/124570013509) and
+[PR816's merge](https://github.com/waitron-io/waitron-cloud/actions/runs/41232242922/job/124628742328) passed every portal case and
+then exhausted the eight-minute job limit. Compare setup, test and cleanup timings on each six-partition
 candidate and its independent merge before claiming the five-minute job target.
 The partition change reduces work per job; it does not guarantee that all
 future jobs finish within the cap or attribute the original slowdown.

@@ -33,7 +33,9 @@ venue does not subscribe to remote access or backups.
   A crash can shorten one dispatch gap; no strict crash-spacing guarantee is made.
   Real Google activation is a separate reviewed change requiring the server-only
   key, owner usage/quotas confirmation and allowance configuration for this
-  account only. Removing the key file stops this private trial; public-service
+  account only. Later, Cloud serves live Google completion to “Yes, every registered
+  box”, inside the existing per-box limit (owner, 21 November 2026 at 10:34); that
+  is not built. Removing the key file stops this private trial; public-service
   terms/privacy links do not gate it. No live request or production enablement is
   proved by these local checks. Keep the measurement client sequential; the trigger of
   CI run 38950506223's restart-spacing failure is unproved.
@@ -43,7 +45,9 @@ venue does not subscribe to remote access or backups.
   warnings, security changes, role changes, box alerts and certificate reminders.
   The latter two need the Waitron sender and a joint inbox check. See the
   [free email scope](venue-email.md#what-the-owner-decided-2026-11-21) for which
-  notices still need your own mail server. The relay uses installation/account
+  notices still need your own mail server. The owner chose “Tick box, as proposed” for
+  setup email (21 November 2026); its line names only what is sent, so adding guest mail
+  needs a new consent version. The relay uses installation/account
   grants, fixed templates, encrypted admission,
   retry versus uncertain acceptance, abuse limits, metering and customer status.
   The grant, admission, worker and operator-stop core is built for explicit local use and

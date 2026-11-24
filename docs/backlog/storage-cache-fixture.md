@@ -120,6 +120,10 @@ failures or measure recurrence. Open:
   [PR790](https://github.com/waitron-io/waitron-cloud/actions/runs/41172266544/job/124452925371),
   [PR793](https://github.com/waitron-io/waitron-cloud/actions/runs/41182496471/job/124482642911),
   [PR795](https://github.com/waitron-io/waitron-cloud/actions/runs/41187136562/job/124496295046).
+  The competing socket on
+  [41422295053](https://github.com/waitron-io/waitron-cloud/actions/runs/41422295053) is also
+  unidentified, and the port drawn in
+  [merge 11840894](https://github.com/waitron-io/waitron-cloud/actions/runs/42036627987/job/127276526890) was not printed.
 - The 90-second limit ([PR870](https://github.com/waitron-io/waitron-cloud/actions/runs/41387374274/job/125091183776),
   [PR942](https://github.com/waitron-io/waitron-cloud/actions/runs/41986274075/job/127107818923),
   [PR951](https://github.com/waitron-io/waitron-cloud/actions/runs/41996943278/job/127142507219)).

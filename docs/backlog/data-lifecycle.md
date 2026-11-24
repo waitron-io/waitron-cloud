@@ -31,7 +31,9 @@ activation.
   counts and scheduling for the real venue distribution. The
   [capacity guide](../local-backups.md#measure-local-transfer-capacity) records local numbers.
 - **Custody and isolation:** production master-key custody and rewrapping, dynamic writer/reader
-  credential delivery, rotation and revocation, the provider's prefix and conditional-write
+  credential delivery, rotation and revocation (static or renewable), a journey that applies
+  Cloud's stream settings on the source box without showing credentials to the browser, alerts
+  for missing stream observations, the provider's prefix and conditional-write
   semantics, production host/kernel verifier hardening, hostile exploits and fleet sizing.
   Qualify untrusted diagnostic forwarding before widening the trusted-local adapter.
 - **Policies:** production cutoffs, recovery-request and audit retention, account deletion,
@@ -50,6 +52,6 @@ activation.
   next natural failure.
 - Reclamation tests over their 13-second checks (14.57 and 14.82 seconds): capture image
   inspection, enumeration, removal, verification and host scheduling.
-- The heap-refusal crash-collection, container start and image-build timings behind older CI
-  failures are unproved. Shared-daemon loss during cleanup, host crashes and production recovery
+- The heap-refusal crash-collection (run 39111146785), container start and image-build timings
+  behind older CI failures are unproved. Shared-daemon loss during cleanup, host crashes and production recovery
   timings are unmeasured.

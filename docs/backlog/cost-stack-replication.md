@@ -33,6 +33,8 @@ Unexplained refusals to compare a recurrence with: transport close after 21 atte
 `ERR_STREAM_PREMATURE_CLOSE` with equal bodies but different outcomes
 ([41303338930](https://github.com/waitron-io/waitron-cloud/actions/runs/41303338930/job/124838744224),
 [nightly 41990933182](https://github.com/waitron-io/waitron-cloud/actions/runs/41990933182/job/127137641411)),
+an exit-step refusal with an interrupted PUT and 20 producer against 19 observer attempts
+(D325, [40443038771](https://github.com/waitron-io/waitron-cloud/actions/runs/40443038771/job/121987717163)),
 and `active-close` at stop
 ([40144823848](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)).
 Reproduce a new diagnostic recurrence before changing transport, accounting or cleanup.
