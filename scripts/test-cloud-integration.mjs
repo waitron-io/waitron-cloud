@@ -197,6 +197,16 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
+export async function captureInboxWitness(readInbox, signal) {
+  const id = (await readInbox('messages', signal)).messages?.[0]?.ID;
+  assert.ok(typeof id === 'string' && id.length, 'integration.inbox_witness_missing');
+  return async limit => {
+    const message = await readInbox('message/' + encodeURIComponent(id), limit);
+    assert.equal(message.ID, id, 'integration.inbox_witness_changed');
+    return true;
+  };
+}
+
 export async function readOutsideSignupMail(readMail, recipient, origin, signal, recordWorker = false) {
   const message = await untilRemote(limit => readMail(recipient, new Set(), limit), 90_000, signal, 'outside_signup_mail');
   const token = readSignupToken(message.Text, origin);
@@ -520,7 +530,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const fetchInbox = (path, signal, authorization = kubernetes?.mailAuthorization) => {
       const limit = AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)]);
       return fetch(`http://127.0.0.1:${mailPort}/api/v1/${path}`, {signal: limit,
-          ...(authorization ? {headers: {authorization}} : {})});
+        ...(authorization ? {headers: {authorization}} : {})});
     };
     const readInbox = async (path, signal) => {
       const response = await fetchInbox(path, signal);
@@ -533,15 +543,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       await request.body?.cancel();
     }
     const mailbox = signal => readInbox('messages', signal);
-    const inboxWitness = async signal => {
-      const id = (await mailbox(signal)).messages?.[0]?.ID;
-      assert.ok(id, 'integration.inbox_witness_missing');
-      return async limit => {
-        const message = await readInbox('message/' + encodeURIComponent(id), limit);
-        assert.equal(message.ID, id, 'integration.inbox_witness_changed');
-        return true;
-      };
-    };
+    const inboxWitness = signal => captureInboxWitness(readInbox, signal);
     const readMail = async (email, seen, signal) => {
       let message;
       for (let attempt = 0; attempt < 100; attempt++) {

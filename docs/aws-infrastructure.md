@@ -1371,8 +1371,9 @@ One venue signs up, pairs, reaches signed staff and public HTTPS, uploads
 an encrypted backup and completes an isolated restore. Flux applies the
 remote publication Deployment from the test host's read-only Git mirror.
 The private relay gives the outside venue stable account and storage addresses.
-The host's WireGuard filter admits Git and authenticated TLS mail from the
-three machines. Their email workers send to one test inbox on the launch host.
+The host's WireGuard filter admits replies and opens TCP ports 18000 for Git
+and 1025 for SMTP to the three machines. Their email workers send to one test
+inbox on the launch host, where Mailpit requires TLS and authentication.
 The observer reads it through an authenticated loopback API, so mail already
 delivered stays available when a cell machine stops. The verifier can start on
 any of the three machines using prepared, bounded scratch space.

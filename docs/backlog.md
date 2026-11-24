@@ -1946,8 +1946,8 @@ implementation or production evidence.
   retained messages from one inbox on the launch host. Signup measures new mail
   from a surviving worker after the stop. If a challenge is stranded, the measured
   observer starts over on the first probe at least 60 seconds after the password
-  reply. This can miss the 90-second target. The Stockholm timeout and the delay
-  in restarting workers remain open.
+  reply. This can miss the 90-second target. The two Stockholm sign-in timeouts
+  remain unexplained. The worker restart delay has a separate investigation.
   To reproduce the older failure, start with just the first in-cluster journey
   on disposable Debian 13 x86-64 using the paid Cloud revision `f19c12c7` and its
   pinned Waitron image. If it passes on one node, match the original three-node

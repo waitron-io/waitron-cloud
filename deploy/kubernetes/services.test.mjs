@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {readFile} from 'node:fs/promises';
 
 import * as deployment from './services.mjs';
 
@@ -55,6 +56,12 @@ test('outside workers use the shared inbox and authenticate with their node name
   assert.deepEqual(env.find(row => row.name === 'CLOUD_SMTP_USER').valueFrom, {fieldRef: {fieldPath: 'spec.nodeName'}});
   assert.equal(spec.containers.some(row => row.name === 'mailpit'), false);
   assert.equal(spec.volumes.some(row => row.name === 'mail'), false);
+});
+
+test('the Amazon image manifest prepares the Mailpit image used by outside services', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./local-checks.yaml', import.meta.url), 'utf8'));
+  assert.ok(manifest.items.some(row => row.spec?.containers?.some(
+    container => container.name === 'mailpit' && container.image === deployment.mailpitImage)));
 });
 
 test('Mailpit accepts only authenticated TLS mail to synthetic addresses', () => {

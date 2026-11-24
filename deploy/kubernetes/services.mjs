@@ -24,11 +24,11 @@ function service(image, name, entry, {variables = {}, secret, storage = false, w
 }
 
 export const mailpitArguments = host => [
-    '--smtp', host + ':1025', '--listen', host + ':8025', '--smtp-require-tls',
-    '--smtp-tls-cert', '/run/mail/tls.crt', '--smtp-tls-key', '/run/mail/tls.key',
-    '--smtp-auth-file', '/run/mail/smtp-auth', '--ui-auth-file', '/run/mail/ui-auth',
-    '--smtp-allowed-recipients', '^[^@]+@[^@]+\\.test$', '--smtp-disable-rdns',
-  ];
+  '--smtp', host + ':1025', '--listen', host + ':8025', '--smtp-require-tls',
+  '--smtp-tls-cert', '/run/mail/tls.crt', '--smtp-tls-key', '/run/mail/tls.key',
+  '--smtp-auth-file', '/run/mail/smtp-auth', '--ui-auth-file', '/run/mail/ui-auth',
+  '--smtp-allowed-recipients', '^[^@]+@[^@]+\\.test$', '--smtp-disable-rdns',
+];
 
 export function servicesPod(image, nodeName, remote) {
   const mount = (name, mountPath) => ({name, mountPath, readOnly: true});

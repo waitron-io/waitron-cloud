@@ -39,7 +39,7 @@ async function installHostFilter(run, name) {
     await rule('-A', name, '-j', 'DROP');
     await rule('-I', ...jump);
     attached = true;
-    // Before the mirror is published, the same port could reach a host listener.
+    // Before Docker publishes a port, prevent it from reaching a host listener.
     await iptables('-I', ...input);
     local = true;
   } catch (error) {
@@ -102,8 +102,8 @@ export async function startOutsideInbox({name, directory, interfaceName, run, fi
   let id, removeFirewall, pulled = false;
   const logs = () => run('docker', ['logs', '--tail=20', id], undefined, true);
   const close = async () => {
-    try {await closePublishedContainer(run, id, removeFirewall);}
-    finally {if (pulled) await run('docker', ['image', 'rm', mailpitImage], undefined, true);}
+    await closePublishedContainer(run, id, removeFirewall);
+    if (pulled) await run('docker', ['image', 'rm', mailpitImage], undefined, true);
   };
   try {
     const image = await inspect().catch(async error => {
@@ -153,10 +153,13 @@ export function outsidePublication({cluster, directory, signal, waitronImage, ru
         mirror: options => startOutsideFluxMirror({...options, interfaceName: mesh.interfaceName})});
     },
     async close() {
-      try {
-        try {await flux?.close();}
-        finally {await inbox?.close();}
-      } finally {await close();}
+      const errors = [];
+      for (const release of [flux?.close, inbox?.close, close]) {
+        try {await release?.();}
+        catch (error) {errors.push(error);}
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length) throw new AggregateError(errors, errors.map(error => error.message).join('\n'));
     },
   };
 }

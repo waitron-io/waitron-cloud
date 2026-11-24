@@ -289,6 +289,23 @@ test('outside baseline requires the owned private route, inbox, peer and verifie
   }
 });
 
+test('the inbox witness reads the saved message by ID even if the list has changed', async () => {
+  const {captureInboxWitness} = await load();
+  assert.equal(typeof captureInboxWitness, 'function');
+  const paths = [];
+  const witness = await captureInboxWitness(async path => {
+    paths.push(path);
+    if (paths.length === 1) return {messages: [{ID: 'saved+message'}]};
+    if (paths.length === 2) return {ID: 'saved+message'};
+    return {ID: 'different-message'};
+  });
+  assert.deepEqual(paths, ['messages']);
+  assert.equal(await witness(), true);
+  await assert.rejects(witness(), /integration\.inbox_witness_changed/);
+  assert.deepEqual(paths, ['messages', 'message/saved%2Bmessage', 'message/saved%2Bmessage']);
+  await assert.rejects(captureInboxWitness(async () => ({messages: []})), /integration\.inbox_witness_missing/);
+});
+
 test('the outside signup check retries a failed inbox read', async () => {
   const {readOutsideSignupMail} = await load();
   assert.equal(typeof readOutsideSignupMail, 'function');

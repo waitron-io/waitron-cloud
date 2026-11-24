@@ -337,26 +337,44 @@ for (const binding of ['10.77.0.4:18001', '10.77.0.4:18000:18001']) {
   });
 }
 
-for (const fault of ['none', 'binding', 'start']) {
+for (const fault of ['none', 'binding', 'start', 'pulled', 'removal', 'inventory']) {
   test('outside Mailpit publishes only private SMTP and loopback inbox and cleans up: ' + fault, async t => {
     const {startOutsideInbox} = await import('./kubernetes-outside.mjs');
     const directory = await mkdtemp(join(tmpdir(), 'outside-inbox-test-'));
     t.after(() => rm(directory, {recursive: true, force: true}));
     const calls = [], id = 'f'.repeat(64), imageId = 'sha256:' + 'e'.repeat(64);
+    let cached = fault !== 'pulled' && fault !== 'removal';
     const options = {name: 'd621-test', directory, interfaceName: 'd621abc', files: {'smtp-auth': 'node:synthetic'},
+      pullIfAbsent: true,
       async run(binary, args) {
         calls.push({binary, args});
-        if (args[0] === 'image') return imageId;
+        if (args[0] === 'image' && args[1] === 'inspect') {
+          if (fault === 'inventory') throw Error('synthetic image inventory failure');
+          if (!cached) throw Error('No such image: axllent/mailpit:v1.31.1');
+          return imageId;
+        }
+        if (args[0] === 'pull') cached = true;
+        if (fault === 'removal') {
+          if (args[0] === 'rm') throw Error('Mailpit removal refused');
+          if (args[0] === 'ps') return id;
+          if (args[0] === 'image' && args[1] === 'rm') throw Error('Mailpit image in use');
+        }
         if (args[0] === 'create') return id;
         if (args[0] === 'start' && fault === 'start') throw Error('synthetic Mailpit start failure');
         if (args[0] === 'port') return args.at(-1) === '1025/tcp' ? '10.77.0.4:1025' :
           fault === 'binding' ? '0.0.0.0:39025' : '127.0.0.1:39025';
       }};
     assert.equal(typeof startOutsideInbox, 'function');
-    if (fault === 'none') {
+    if (fault === 'inventory') {
+      await assert.rejects(startOutsideInbox(options), /synthetic image inventory failure/);
+      assert.deepEqual(calls.map(({args}) => args.slice(0, 2)), [['image', 'inspect']]);
+      return;
+    }
+    if (['none', 'pulled', 'removal'].includes(fault)) {
       const inbox = await startOutsideInbox(options);
       assert.equal(inbox.port, 39025);
-      await inbox.close();
+      if (fault === 'removal') await assert.rejects(inbox.close(), /Mailpit removal refused/);
+      else await inbox.close();
     } else {
       await assert.rejects(startOutsideInbox(options), fault === 'start' ? /synthetic Mailpit start failure/ : /outside.inbox_binding/);
     }
@@ -367,8 +385,45 @@ for (const fault of ['none', 'binding', 'start']) {
     const filters = calls.slice(0, publish).filter(({args}) => args.includes('DOCKER-USER'));
     assert.equal(filters.length, 2);
     assert.ok(filters.every(({args}) => args[args.indexOf('--ctorigdstport') + 1] === '1025'));
+    const imageActions = calls.filter(({args}) => args[0] === 'pull' || args[0] === 'image' && args[1] === 'rm');
+    assert.deepEqual(imageActions.map(({args}) => args[0]),
+      {pulled: ['pull', 'image'], removal: ['pull']}[fault] ?? []);
     const cleanup = calls.filter(({args}) => args[0] === 'rm' || args.includes('-D'));
-    assert.deepEqual(cleanup.map(({binary}) => binary), ['docker', 'sudo', 'sudo']);
+    assert.deepEqual(cleanup.map(({binary}) => binary), fault === 'removal' ? ['docker'] : ['docker', 'sudo', 'sudo']);
     assert.deepEqual(cleanup[0].args, ['rm', '-f', id]);
   });
 }
+
+test('outside publication removes the inbox before closing the mesh when the Git mirror cannot close', async t => {
+  const {outsidePublication} = await import('./kubernetes-outside.mjs');
+  const directory = await mkdtemp(join(tmpdir(), 'outside-publication-test-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const controllersPath = join(directory, 'flux.json');
+  await writeFile(controllersPath, '{"items":[]}');
+  const stopped = [], git = 'b'.repeat(64), mail = 'c'.repeat(64), cluster = 'd621-test';
+  const values = observed(revision, 'baseline');
+  const worker = values.pods.items[0].spec.nodeName;
+  const outside = outsidePublication({cluster, directory, controllersPath, waitronImage: 'waitron:test',
+    signal: AbortSignal.timeout(1000), mesh: {interfaceName: 'd621abc',
+      async close() {stopped.push('mesh'); throw Error('mesh removal refused');}},
+    async run(_binary, args) {
+      if (args[0] === 'image') return 'sha256:' + 'd'.repeat(64);
+      if (args[0] === 'create') return args.includes(cluster + '-git') ? git : mail;
+      if (args[0] === 'exec') return revision;
+      if (args[0] === 'port') return {'8000/tcp': '10.77.0.4:18000', '1025/tcp': '10.77.0.4:1025', '8025/tcp': '127.0.0.1:39025'}[args.at(-1)];
+      if (args[0] === 'rm') {
+        stopped.push(args.at(-1));
+        if (args.at(-1) === git) throw Error('Git removal refused');
+      }
+    }});
+  await outside.startInbox({});
+  await outside.install({worker,
+    deployment: {metadata: {name: 'manifest'}, spec: {template: {metadata: {}}}},
+    kube: async args => args[0] === 'get' ? JSON.stringify(values[args[1]]) : ''});
+  await assert.rejects(outside.close(), error => {
+    assert.match(error.message, /Git removal refused/);
+    assert.match(error.message, /mesh removal refused/);
+    return true;
+  });
+  assert.deepEqual(stopped, [git, mail, 'mesh']);
+});
