@@ -31,8 +31,8 @@ empty work and incomplete job results. Large markers retain full work.
 
 After the existing root verification, a selected pull request that changes only
 regular source/test files in existing packages or apps, optionally with ordinary
-prose, can omit the nine synthetic suites named in the
-[D613 plan](superpowers/plans/2026-11-09-cloud-root-test-inputs.md).
+prose, can omit the nine synthetic suites named in
+[ci-root-selection.mjs](../scripts/ci-root-selection.mjs).
 `ci-package-revisions.test.mjs` stays: its live-reader case clones the actual
 repository. The nine other files passed 613 cases after live source/test
 directories were removed in a committed temporary revision.

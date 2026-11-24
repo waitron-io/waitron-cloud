@@ -1,6 +1,6 @@
 # Register a box from Waitron
 
-Sign in or sign up after creating the box administrator, before the venue form. The same tab returns to Waitron and keeps the staged forms. Saving the venue files it under the matching business. Skip keeps manual addresses and your own mail server. Connect later from Cloud services. The owner set the outcome on 20 November at 13:49, 13:54 and 14:16 in Lane K's questions. Lane K owns Cloud and defines the requests below. Lane D owns the Waitron calls and the shared signing package release. Publish the package before either implementation depends on v4. This supersedes the [link-only plan](2026-11-19-cloud-one-click-pairing.md).
+Sign in or sign up after creating the box administrator, before the venue form. The same tab returns to Waitron and keeps the staged forms. Saving the venue files it under the matching business. Skip keeps manual addresses and your own mail server. Connect later from Cloud services. The owner set the outcome on 20 November at 13:49, 13:54 and 14:16 in Lane K's questions. Lane K owns Cloud and defines the requests below. Lane D owns the Waitron calls and the shared signing package release. Publish the package before either implementation depends on v4.
 
 ## 1. Connect an installed test box
 

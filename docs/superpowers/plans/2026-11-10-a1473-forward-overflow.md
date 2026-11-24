@@ -1,6 +1,6 @@
 # A1473 slice 3a: forward overflow
 
-**Ask and authority.** “make the controller do by itself what the watcher did by hand on 10 Nov” (Lane I queue). Codex authored this proposal; Claude reviewed it once (221 seconds). The watcher cleared its simpler untouched-run cut at 2026-11-10 17:24 with the corrections below; no owner design approval is claimed. Watcher 14:05 withdrew 13:49 clearance and folded owned stuck cancellation into 3a. This plan travels with implementation, never a standalone plan PR; the [earlier plan](2026-11-10-a1473-ci-self-recovery.md) remains historical context.
+**Ask and authority.** “make the controller do by itself what the watcher did by hand on 10 Nov” (Lane I queue). Codex authored this proposal; Claude reviewed it once (221 seconds). The watcher cleared its simpler untouched-run cut at 2026-11-10 17:24 with the corrections below; no owner design approval is claimed. Watcher 14:05 withdrew 13:49 clearance and folded owned stuck cancellation into 3a. This plan travels with implementation, never a standalone plan PR.
 
 **Finish line.** After filling local slots, the controller moves one eligible current-head PR run to available GitHub capacity without hand-written markers or API calls, and resumes an interrupted move. Exclude main/schedule/manual-dispatch whole-run moves, 3b’s reverse/free-room grace, new state/files/timers/protocols/variables and workflow changes. Main runs remain a hand move: ordinary main pushes run quick checks after A1452 and each must keep its own CI run. Manual/single-slot recovery stays unchanged.
 

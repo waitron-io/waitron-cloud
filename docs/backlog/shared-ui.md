@@ -6,8 +6,7 @@ and common helpers. Existing `@waitron/ui` imports re-export the same implementa
 venue controls and brand delivery remain in Waitron. The runtime package depends on
 Lit rather than `@waitron/shared`. A built tarball installs outside the workspace and
 passes declaration, Chromium form, theme and accessibility checks. Both UI packages
-retain coverage and weekly mutation gates. The [approved design](../superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
-and [execution plan](../superpowers/plans/2026-09-23-shared-ui-extraction.md) record the boundary.
+retain coverage and weekly mutation gates.
 The [Waitron publisher](../shared-ui-release.md) published private `@waitron-io/ui-core@0.2.34`
 from Waitron `5e91f7a9ef2a0aede4ff5500c305b1477b907fc7`. Cloud pins it in its
 manifest and lockfile; a Chromium fixture checks the installed controls and themes,

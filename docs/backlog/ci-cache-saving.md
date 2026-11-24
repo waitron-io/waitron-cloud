@@ -11,32 +11,10 @@ UI build keeps its source-lockfile cache key, package checks, publication dry ru
 and artifacts; actual publishing still requires its separate manual invocation.
 The historical browser-reconnect samples below precede its observation retirement.
 
-The root checks, type checking, receipt suites, package matrix and venue-service
-proofs use the same separate restore and final save. Cache saving keeps the
-retained jobs' mandatory steps, permissions, artifacts, assertions and limits.
-The venue proof runs its current venue receipt and records runner capacity; the
-retired pre-venue receipt no longer consumes a matrix job.
-
-Each job selects the stable store before installation. A cache hit skips saving;
-a miss can save only after successful mandatory work. A failed optional save stays
-visible without changing a successful test result. The save runs last because
-final runner cleanup collects action children; its one-minute step limit does not
-promise immediate child termination. The eight-minute job limit still includes
-setup, tests and cleanup, so a successful test suite alone cannot qualify a job
-that exhausts that limit.
-
-The repair landed in [PR767](https://github.com/waitron-io/waitron-cloud/pull/767)
-and [PR920](https://github.com/waitron-io/waitron-cloud/pull/920).
-Before interpreting a slow job, distinguish its two deadlines. The
-[final-save control](https://github.com/waitron-io/waitron-cloud/actions/runs/41048548222)
-prints `The action 'Save pnpm dependency cache' has timed out after 1 minutes.`
-and still completes its mandatory-success job successfully. Its deliberate
-exit-37 test fails and skips saving. Final runner cleanup collects the blocked
-archive children; the step timeout alone does not promise immediate collection.
-An overall timeout instead reports `The job has exceeded the maximum execution
-time of 8m0s`, as in
-[the portal failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41232242922/job/124628742328).
-That job is cancelled even when all its tests passed.
+The separate save has its own one-minute limit and still shares the job's eight minutes, so a
+successful suite alone cannot qualify a job that exhausts them: compare "Save pnpm dependency
+cache … timed out after 1 minutes" (job still passes) with "The job has exceeded the maximum
+execution time of 8m0s" (job cancelled).
 
 ### Healthy-run timing sample, 6 November 2026
 
@@ -98,20 +76,9 @@ cleanup with each job's existing limit, especially registration partition 1/6.
 Any proposed limit, matrix or check change needs a separate owner decision.
 These successful samples do not establish that every future job fits its cap.
 
-The retained store-location steps preserve a failed pnpm lookup's exit status and
-refuse an empty path before publishing cache inputs. Native shell controls run
-the actual configured steps with failed, empty and successful lookups, including
-paths containing spaces. Run `node --test scripts/ci-cache-location.test.mjs`.
-The controls cover the configured cache consumers, with every retained mandatory
-step and publication gate preserved.
-
-Keep two native harness observations separate from the cache transport cause.
-During review, `ci-setup-pnpm.test.mjs` reports two descendant-test attempts
-instead of three on both the candidate and its base. The unavailable-mirror
-case in `ci-download.test.mjs` reports two commands instead of one in the wider
-run. Later isolated checks pass without changing either source. Their causes
-remain unknown; retain the original assertions and investigate these scheduling
-observations under D530 before changing their limits.
+Two native observations are separate and unexplained: `ci-setup-pnpm.test.mjs` once counted
+two descendant-test attempts instead of three, and the unavailable-mirror case in
+`ci-download.test.mjs` two commands instead of one. Keep both assertions.
 
 ## Portal shard job budget (D546 qualification)
 
@@ -123,30 +90,10 @@ and the eight-minute job cap stay unchanged. A Node subprocess check exercises
 every current filename plus one future filename and requires each to execute
 exactly once, with nonempty partitions and no overlapping fixture bodies.
 
-[PR805's initial qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41212399965/job/124570013509)
-passes all 2,463 portal shard 3 tests, then exhausts the overall job limit during
-the setup-node cache upload. GitHub's annotation explicitly reports the eight-minute
-limit. The test runner takes 420.6 seconds; the enclosing test step takes
-434 seconds. The cache upload runs for about two seconds before cancellation,
-so this log does not establish an upload stall.
-
-Four recent successful runs of the same shard report test-runner durations of
-306.3, 394.0, 337.3 and 324.3 seconds. At the initial investigation, none of
-the previous cancelled runs among the latest eighty CI runs had the same
-portal-shard job-limit annotation. The
-initial qualification changes only Markdown, and all 17,223 tests pass across
-its jobs. These observations establish a job-budget failure, not the cause of
-the slower runtime or a recurring cache failure. The same job limit later
-cancels D548 and
-[PR816’s first merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41232242922/job/124628742328).
-That run passes all 2,463 cases: setup takes 69 seconds, including 49 seconds
-for Chromium; the test runner takes 408.865 seconds and its enclosing step
-takes 422 seconds. The combined mandatory work exhausts the limit even when
-all cases pass. The subsequent clean retry qualifies the unrelated image
-acquisition change and does not repair this budget issue.
-
 **Open.** Runtime variance and the historical cache-upload stall remain
-unexplained. Compare setup, test and cleanup timings on each six-partition
+unexplained. [PR805](https://github.com/waitron-io/waitron-cloud/actions/runs/41212399965/job/124570013509) and
+[PR816's merge](https://github.com/waitron-io/waitron-cloud/actions/runs/41232242922/job/124628742328) passed every portal case and
+then exhausted the eight-minute job limit. Compare setup, test and cleanup timings on each six-partition
 candidate and its independent merge before claiming the five-minute job target.
 The partition change reduces work per job; it does not guarantee that all
 future jobs finish within the cap or attribute the original slowdown.

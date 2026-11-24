@@ -1,155 +1,24 @@
 # Cost conformance image acquisition (D137)
 
-A Docker Hub token request timed out while D135's stack group 2/3 was pulling
-`node:26.11.1-slim` (cost run 39977546909, job 120496895328). Both archives
-verified and the fixture image built before the refusal; 206 cost cases passed
-and eight did not start. The network cause remains unknown.
-
-The conformance preparer now checks the local image cache first and retries only
-recognised transport failures, with at most three pull attempts. Authentication,
-permission, missing-manifest and rate-limit refusals stop immediately, even when
-the same message also contains a transport error. An unavailable Docker daemon
-stops at inspection. Container creation is not retried. Fixture image builds have
-their own bounded retry for Docker Hub metadata HTTP 5xx responses, described in
-the [build acquisition investigation](cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
-
-Inspection, all pulls and both retry pauses share the existing 300-second image
-acquisition budget: inspect time + pull times + 1 second + 2 seconds must fit
-inside 300 seconds; each command receives only the remaining time. Retries are
-not started when their pause cannot fit, interruption cancels a pause, and the existing
-command supervisor kills a stalled child. Cached images avoid another registry
-request. A BuildKit base image is not assumed to exist in Docker's runnable-image
-cache; the separate Node runner still uses an explicit cache inspection.
-Image pins and all conformance assertions remain unchanged.
-
-Controlled Docker-command tests reproduce the exact recorded refusal and cover
-recovery, permanent refusals, exhausted attempts, shared deadlines, cached images,
-interruption and owned scratch cleanup. Run them with
-`node --test scripts/cloud-cost/conformance-image-acquisition.test.mjs`.
-Use the authorised Linux test box for a live reproduction and current-head CI
-for landing evidence. The controlled checks below do not contact the registry.
+Image pulls check the local cache first and retry only recognised transport failures and registry
+HTTP 5xx, at most three times inside their budgets; authentication, permission, missing-manifest
+and rate-limit refusals stop at once, even beside a transport error. Container creation is never
+retried. Keep the pins, deadlines, immediate authentication refusal and every isolation assertion.
 
 ### Registry failure groups (D530)
 
-Keep these three boundaries separate when investigating a recurrence:
+Keep these boundaries apart; their provider causes are unknown:
 
-- [D477's launcher failure](https://github.com/waitron-io/waitron-cloud/actions/runs/40856632619/job/123389285499)
-  returns HTTP 500 while pulling PostgreSQL, before conformance preparation.
-  `scripts/test-postgres.mjs` now retries registry HTTP 5xx within its shared
-  120-second acquisition budget. Run `node --test scripts/ci-test-postgres.test.mjs`
-  for recovery, exhausted-attempt and permanent-refusal controls.
-- [D521's fixture build](https://github.com/waitron-io/waitron-cloud/actions/runs/41143129809/job/124361956617)
-  returns HTTP 502 while reading Node base-image metadata. Its separate build
-  retry shares the original 300-second budget. Run
-  `node --test scripts/cloud-cost/conformance-image-build.test.mjs` for its controls.
-- [D462's later Node pull](https://github.com/waitron-io/waitron-cloud/actions/runs/41160662631/job/124417317872)
-  reports `unauthorized: authentication required` after the fixture build succeeds.
-  It stops after one pull, as required for authentication refusals. The log has
-  no registry challenge or credential-selection evidence, so its cause remains
-  unknown. Capture those details in a controlled reproduction without publishing
-  tokens, credentials or authorization headers.
+- Token request timeout on `node:26.11.1-slim` (cost run 39977546909).
+- [HTTP 500 pulling PostgreSQL](https://github.com/waitron-io/waitron-cloud/actions/runs/40856632619/job/123389285499)
+  before preparation (D477).
+- [HTTP 502 for base-image metadata](https://github.com/waitron-io/waitron-cloud/actions/runs/41143129809/job/124361956617)
+  (D521).
+- [Implicit `node:26-slim` pull, HTTP 502](https://github.com/waitron-io/waitron-cloud/actions/runs/41209487824/job/124561374894)
+  before the isolation canary (D462); the image is now obtained first.
+- [`unauthorized: authentication required`](https://github.com/waitron-io/waitron-cloud/actions/runs/41160662631/job/124417317872)
+  after a successful build (D462). Capture the registry challenge and credential selection in a
+  controlled reproduction without recording secrets.
 
-The first two boundaries already have recovery handling on main; their provider
-outage causes remain unknown. A passing control or later CI run does not repair
-the authentication failure or explain any of these historical outages. Preserve
-the existing image pins, deadlines and immediate authentication refusal.
-
-### Isolation-test Node image (D530)
-
-[D462's later receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/41209487824/job/124561374894)
-fails an implicit `node:26-slim` pull with HTTP 502 before the isolation canary
-starts. Six source-copy checks then fail because that image is absent. This is
-a separate acquisition path from the conformance preparer and its pinned runner.
-
-[PR #816](https://github.com/waitron-io/waitron-cloud/pull/816) delivered recovery
-for this exact path. Both `local.test.mjs` and `source-copy.test.mjs` call
-`isolationTestImage` before creating resources. The original canary failure was
-an implicit pull inside `docker run`; preparation now obtains the image first.
-Cache inspection, at most three pulls, one- and two-second retry
-pauses, and the final immutable-image-ID lookup share a 120-second preparation
-budget. Only recognised temporary transport and registry HTTP 5xx failures retry;
-authentication, permission, missing-manifest and rate-limit refusals stop immediately,
-including messages that also contain a temporary failure. An unavailable daemon
-stops at inspection. Container creation is never retried, and the tests retain
-every isolation assertion and existing test deadline. Image preparation finishes
-before the cancellation test schedules its abort.
-
-Run `node --test scripts/cloud-cost/isolation-image-acquisition.test.mjs` for
-controlled acquisition checks. On the authorised Linux test box, also run
-`node --test --test-concurrency=1 scripts/cloud-cost/local.test.mjs scripts/cloud-cost/source-copy.test.mjs`
-to exercise the actual isolation and source-copy boundaries. The historical
-Docker Hub outage cause remains unknown; this recovery does not repair the
-provider or the separate authentication refusal.
-
-### Current qualification
-
-[PR #328](https://github.com/waitron-io/waitron-cloud/pull/328) delivered the
-conformance pull recovery. Its acquisition fixture is unchanged on 4 November.
-All 54 existing pull, build and isolation-image acquisition controls pass on
-macOS with:
-
-```sh
-node --test --test-concurrency=1 --test-timeout=30000 \
-  scripts/cloud-cost/conformance-image-acquisition.test.mjs \
-  scripts/cloud-cost/conformance-image-build.test.mjs \
-  scripts/cloud-cost/isolation-image-acquisition.test.mjs
-```
-
-These checks run real supervised children with replacement Docker commands.
-They cover recovery from the recorded temporary refusals, immediate permanent
-refusal, cache reuse, shared deadlines, interruption and cleanup. They do not
-exercise a live Docker daemon or registry, or establish the historical causes.
-The original token-timeout log records a completed fixture build followed by a
-15-second token-request timeout. The later authentication log records one refused
-pull after a completed build, without the registry challenge or credential
-selection needed to attribute it. Keep both investigations open and capture
-those details during a controlled Linux recurrence, without recording secrets.
-
-### Linux qualification on 5 November 2026 (D530-4)
-
-At Cloud commit `800717778b6ca28779ed7c0347b0911f8bd56148`, the Debian 13
-x86-64 test box passes all 104 existing acquisition controls with no failures,
-cancellations or skips:
-
-```sh
-node --test --test-concurrency=1 --test-timeout=30000 \
-  scripts/ci-test-postgres.test.mjs \
-  scripts/cloud-cost/conformance-image-acquisition.test.mjs \
-  scripts/cloud-cost/conformance-image-build.test.mjs \
-  scripts/cloud-cost/isolation-image-acquisition.test.mjs
-```
-
-The real conformance preparer also downloads both checksum-pinned archives on
-their first attempts and builds its fixture image on the first attempt. It
-resolves Node and Mailpit metadata but reuses cached build layers. A separate
-`docker pull node:26.11.1-slim`, with only `PATH`, `LANG`, `TZ` and `CI` in the
-client environment, succeeds and reports the existing image up to date. This
-checks current registry access; it does not qualify an empty image cache or
-establish which credentials the daemon or Docker's default configuration uses.
-
-An unauthenticated request for the public Node manifest returns HTTP 401 with
-Docker Hub's Bearer challenge, which names the token endpoint and public pull
-scope. That challenge is part of registry authentication; it does not reproduce
-the historical daemon refusal after a pull. The old log has neither that
-exchange nor credential-selection evidence, so D462's authentication cause
-remains unknown.
-
-Both original isolation and source-copy suites pass all 29 cases against real
-Docker, without failures, cancellations or skips:
-
-```sh
-node --test --test-concurrency=1 --test-timeout=30000 \
-  scripts/cloud-cost/local.test.mjs scripts/cloud-cost/source-copy.test.mjs
-```
-
-The preparer's owned image tag and scratch directory are absent after cleanup.
-The real PostgreSQL/Mailpit launcher reaches its child command and collects
-both owned containers on exit.
-The three pre-existing application containers retain their identities. These
-results qualify the existing recovery paths on this machine. They do not
-explain the historical provider failures or repair authentication. Preserve
-immediate authentication refusal, all retry and deadline limits, and every
-isolation assertion. On a new recurrence, capture the registry challenge and
-credential-selection evidence without recording credentials before choosing a
-repair; repeating these passing selections supplies no historical explanation.
-
+The Linux recovery paths pass on cached images and layers; an empty image cache, and which
+credentials the daemon uses, are unqualified. Repeating passing selections explains nothing.

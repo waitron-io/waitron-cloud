@@ -42,7 +42,7 @@ This plan reads worktree HEAD `6700d6f2319ff0b62b0ccc27e833487935ad2174`. The C3
 
 P1/D110 owns monitor-worker images and Kubernetes manifests. Local evaluators need not wait for P1. Agree later how the actual CLI entrypoints and explicit configuration enter P1's packaging; do not invent an image name, manifest path or production deployment. P4/D113 consumes the signal contract in Task 4b and owns permissions. D104 implements the outside contracts in Task 4a in its own independently recoverable deployment.
 
-Read [documentation ownership](../../documentation-ownership.md), the [original monitor design](../specs/2026-09-24-service-monitoring-design.md), the [quiet design](../specs/2026-10-13-monitoring-quiet-escalation-design.md) and [landed plan](2026-10-13-monitoring-quiet-escalation.md), the [production plan](2026-10-22-cloud-production-deployment.md), [incident runbook](../../incident-response.md), [launch evidence](../../launch-evidence.md), [monitoring guide](../../local-monitoring.md) and [operations guide](../../operations-status.md). Waitron keeps capture/restore/activation ownership.
+Read [documentation ownership](../../documentation-ownership.md), the [original monitor design](../specs/2026-09-24-service-monitoring-design.md), the [quiet design](../specs/2026-10-13-monitoring-quiet-escalation-design.md), the [production plan](2026-10-22-cloud-production-deployment.md), [incident runbook](../../incident-response.md), [launch evidence](../../launch-evidence.md), [monitoring guide](../../local-monitoring.md) and [operations guide](../../operations-status.md). Waitron keeps capture/restore/activation ownership.
 
 ## Review focus
 

@@ -2,7 +2,7 @@
 
 You currently share one test-box lock across lanes. Replace that bottleneck with several isolated, disposable test slots, then use the same machinery for Cloud's ordinary GitHub Actions work. Bring Waitron later, after a separate inventory and approval.
 
-**Status:** the coupled single manual slot, automatic Mac recovery and host startup are published from [PR1061](https://github.com/waitron-io/waitron-cloud/pull/1061). The [7 November restart and fresh successor check](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609) qualifies the owner’s private bridge: 43 PostgreSQL checks, verified command exit 3 and independent guest absence. It does not qualify production or interruption of an active guest by reboot. The [first CI canary amendment](../plans/2026-11-07-disposable-ci-canary.md) comes next, before multiple-slot capacity. Frozen transitive packages, CI activation and permanent-host migration remain open.
+**Status:** the coupled single manual slot, automatic Mac recovery and host startup are published from [PR1061](https://github.com/waitron-io/waitron-cloud/pull/1061). The [7 November restart and fresh successor check](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609) qualifies the owner’s private bridge: 43 PostgreSQL checks, verified command exit 3 and independent guest absence. It does not qualify production or interruption of an active guest by reboot. Frozen transitive packages, CI activation and permanent-host migration remain open.
 
 **Source status:** linked official GitHub references were freshly read on 6 November 2026. Repository receipts below are source inspection, not executed workflow or server evidence.
 

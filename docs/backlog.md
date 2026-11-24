@@ -2,108 +2,55 @@
 
 ## Disposable test slots and repository runners (D592)
 
-A1479 includes the mapped two-host pool and pinned installer, plus server-controller
-publication, fresh-state rollback, systemd status and Mac-only manual capture.
-Controlled tests cover installation, cutover, rollback, upload completion/EOF and
-status. Both replacement hosts passed corrected native guest isolation and idle
-reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull/1147#issuecomment-6778586320)).
-The matched two-archive support is published on NEW/BENCH. The active pool uses
-sixteen identifiers with measured family sizes and per-host memory admission; its
-fresh-generation rollback retains six fixed guests per host. The server controller
-owns the sole ledger and the Mac controller is disabled.
-Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
-Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
-remains separate from this admission retry. The publication fixture
-now supplies its own Git metadata. The published quota reduction later exhausted
-the App quota again on 12 November. The client now retains GET validators across
-unrelated writes, including refused cancellation and capacity publication; the
-loopback HTTP test exercises both. The installed release's 12 November 08:11–09:11 UTC
-hour contains 2,472 non-token completed non-304 fetches, 135 token requests separately
-and zero failed fetches across 139 scopes. Job inventories account for 23.7% of the
-non-token count and 51.4% of their replies are 304. Peak sampled core use is 1,845/5,000;
-returned reset series stay separate. Different workloads prevent a causal savings claim.
-The [automatic quota plan](superpowers/plans/2026-11-12-a1473-automatic-quota-fallback.md)
-has a Claude plan read and watcher clearance (12 November 10:34). Controlled threshold/reset
-checks cover zero available capacity for new placements, durable holds across entry points,
-continued existing-label pickup, retained active reservations and suppressed forward overflow.
-Malformed/token headers and failed ledger recording retain the HTTP response.
-The reviewed controller is installed with independent release/configuration readback; its [owned forward-overflow drill](https://github.com/clintongormley/waitron/actions/runs/43390920001) reached a successful hosted second attempt. The counters separate command roles, endpoint categories
-and raw quota headers.
-A rate-limited GET before runner registration can grant one retry after the API client’s
-retry time and confirmed guest and runner removal; sent registration requests remain retired
-unless they receive the HTTP 5xx refusal described under A1473 below.
-The controller revalidates JSON bodies and shares recent checked admission; see the
-[controller guide](../deploy/disposable-tests/README.md) for timing and cache limits.
-For a replacement release, qualify a full busy hour below about 4,000 used requests
-in each returned quota series; confirm automatic zero-capacity publication if it crosses that threshold.
-OLD's CI startup is disabled; it stays
-available for periodic benchmarks and practice, not as a quota fallback.
+The server controller on NEW owns the only ledger; the two-host pool is NEW and BENCH
+(A1479), and the Mac controller is off. OLD's CI startup is disabled; it stays available
+for periodic benchmarks and practice, not as a quota fallback. The owner-approved
+[design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and
+[plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work; the
+[controller guide](../deploy/disposable-tests/README.md) owns behaviour, timing and limits.
+Keep contributor approval and the accepted public-repository limits. D591's selection work
+stays separate.
 
-The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
+**Open:**
 
-Pickup now retains active workers across temporary routing and inventory reads with a 30-second retry. Automatic worker recovery cleans guests and runners without moving the run; full-pool forward overflow follows the A1473 rules below. Guest readiness tolerates SSH restarts during cloud-init within its original boot budget. The matching stability controller and host recipe ran [six simultaneous GitHub jobs successfully](https://github.com/waitron-io/waitron-cloud/actions/runs/42490199973), with all six guests and runner registrations cleaned up. The later widened admission release retains those fixes; the watcher restored server mode on 8 November at 17:50, and ordinary assignment resumed. Sustained operation remains to be measured.
-
-Qualify the documented hosted-routing publication window on the next matched release, including draining existing server-labelled work, native qualification and restoration of the saved mode. Qualify dashboard shards 5–6 in Waitron A1398-2 after matched controller and host publication. Record the first server assignment for each enabled job family, then hourly server-versus-hosted jobs, server-caused failures and host memory/load for [automatic same-repository PR pickup](../deploy/disposable-tests/README.md#pick-up-ordinary-pr-jobs-automatically), and qualify full browser coverage after the ten-slot trial exhausted guest memory. Keep the larger guest profile until smaller guests complete coverage without OOM kills. Qualify changed guest dependencies with the affected job commands before restoring their routing caps. A1440 widens the controller to main/manual/scheduled jobs and later attempts. Automatic pickup trusts same-repository workflow revisions after identity, current-head and contributor checks, recording the actual digest instead of requiring recurring pins. A hosted-attempt marker excludes its successor and predecessor from pickup; stale markers do not block later attempts. The Mac agent uses Standard scheduling after an intermittent Background ledger-write timeout (later Background probes also passed); the installed policy passed [six independent concurrent controller processes](https://github.com/waitron-io/waitron-cloud/actions/runs/42499863126). The controller and host admit the idle server probe. Six simultaneous independent workers passed in Waitron run 42506301786; trusted-main health run 42509853431 cancelled and retried the deliberately stranded probe 42506969127, whose hosted attempt 2 passed. Automatic pickup now follows existing server labels even when new runs use hosted mode; manual selected-head admission retains its mode guard. After a zero listener exit, ordinary completion checks retain their observations and report doubt without whole-run fallback; nonzero exits still clean up without automatically moving the run. The old fallback’s recorded pending result implies an unfinished status read, but the first refusal discarded its observations, so its exact failed field remains unproven. A matching job gets five reads two seconds apart; longer status lag still reports failure without cancellation. Retain real assignment, PR-skip reasons and cleanup observations when qualifying a published controller. Cancelled jobs without assignment and hosted retries must not establish server health. Still qualify the coordinated Waitron workflow and first-day queue measurements; the second-host registration remains separate work. The first ordinary Cloud typecheck with hosted fallback, frozen transitive guest packages and permanent-host reproduction remain open. Retain contributor approval and the accepted public-repository limits. D591’s selection work stays separate.
-
-A1440's attempt-job reader now uses 30-record pages after reproduced 100-record HTTP 502 failures
-on 84/87-job runs. Every consumer keeps its completeness, trust and admission checks, including
-later siblings observed as assigned that bar manual cancellation. Source tests exercise paginated
-admission and refusal; keep actual published pickup as separate operating evidence.
-
-A1440's execution monitor now checks guest liveness independently when GitHub reads fail
-with a network error, timeout, interrupted body or HTTP 5xx response. It retains confirmed
-cancellation/identity stops and existing deadlines. A delayed GitHub cancellation after a
-guest was destroyed does not measure that guest's execution speed; keep the API-monitor
-failure and later cancellation timestamps separate when assessing server performance.
-
-Matching prebuilt tool disks skip guest-preparation downloads and check the pinned tools offline.
-Missing or stale recipes retain the verified-Debian install path, whose Node, pnpm and runner
-downloads share up to three attempts inside their existing budgets; HTTP 4xx and integrity
-failures refuse immediately. The controlled dependency tests exercise both paths. Frozen host
-recipes still change only through explicit publication; complete image smoke keeps its existing
-hosted-only Bluetooth exception.
-
-A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
-
-Pickup supplements complete-looking status lists with the newest 100 unfiltered runs,
-without replacing known observations or bypassing admission. Controlled tests cover the
-observed ten-row omission and a failed extra read. A run omitted from the status lists
-and older than that page can still be missed; the campaign's SERVER STUCK alarm remains
-necessary. The [installed release and natural pickup](https://github.com/waitron-io/waitron-cloud/pull/1258#issuecomment-6936711737)
-were qualified on 17 November: all three native proofs passed, then a natural changes
-job succeeded with independent guest and runner cleanup readback. That is ordinary
-pickup evidence, not a replay of the earlier omission.
-
-A1472 bounds pickup and capacity run-list rereads at three fresh requests for count/list
-mismatches. Persistent mismatches retain the existing refusal; job pagination and routing
-policy are unchanged. The local consumer tests exercise recovery and exhaustion. Actual
-published assignment and any change in incomplete-inventory events remain separate evidence;
-no queue saving is established by those tests.
+- For a replacement release, qualify a full busy hour below about 4,000 used requests in
+  each returned quota series, and confirm automatic zero-capacity publication if it crosses
+  that threshold. The App quota ran out again on 12 November; the later lower counts come
+  from different workloads and prove no saving.
+- Qualify the hosted-routing publication window on the next matched release, including
+  draining existing server-labelled work, native qualification and restoring the saved mode.
+- Qualify dashboard shards 5–6 (Waitron A1398-2), changed guest dependencies with the
+  affected job commands before restoring their routing caps, and full browser coverage:
+  the ten-slot trial exhausted guest memory. Keep the larger guest profile until smaller
+  guests finish coverage without out-of-memory kills.
+- Record the first server assignment for each enabled job family, then hourly
+  server-versus-hosted jobs, server-caused failures and host memory and load for
+  [automatic pickup](../deploy/disposable-tests/README.md#pick-up-ordinary-pr-jobs-automatically).
+  Cancelled jobs without assignment and hosted retries must not establish server health,
+  and an API-monitor failure is not a measure of a guest's speed.
+- Natural pickup after A1472's rereads and A1440's smaller pages, and sustained operation,
+  remain to be measured. The old fallback's exact failed status field is unproved.
+- A run omitted from GitHub's status lists and older than the newest 100 can still be
+  missed, so the campaign's SERVER STUCK alarm stays. The watcher owns connecting A1456's
+  status command to it.
+- Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption, the
+  coordinated Waitron workflow, first-day queue measurements, the first ordinary Cloud
+  typecheck with hosted fallback, frozen transitive guest packages and permanent-host
+  reproduction remain open.
 
 ### CI self-recovery (A1473)
 
-The controller from [PR #1195](https://github.com/waitron-io/waitron-cloud/pull/1195) is installed. Publication and independent readback on 13 November matched its release files, configuration, pinned keys and 12-slot mapping, with one enabled server timer and the Mac controller disabled. Isolated checks against the installed files cover quota reset and retained reservations, loopback quota recording, and one delayed received-5xx retry after guest and exact-name runner removal. Natural registration-failure recovery remains unqualified. The later measured-memory release retains these paths; one owned no-op forward-overflow run was automatically marked, cancelled and rerun on GitHub on 13 November. Ordinary work filled the pool; the prepared filler was not dispatched. The [run and both attempts](https://github.com/clintongormley/waitron/actions/runs/43390920001) retain the unchanged source head. This supplies no product-test or speed qualification.
+The controller is installed, with quota holds, one delayed registration-5xx retry,
+obsolete-PR cancellation and forward overflow; the
+[forward-overflow plan](superpowers/plans/2026-11-10-a1473-forward-overflow.md) records
+the rules and their measurement prerequisite. One owned overflow drill ran on 13 November;
+it qualifies no product test or speed.
 
-A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; natural recovery remains to be read.
-
-The [approved three-slice plan](superpowers/plans/2026-11-10-a1473-ci-self-recovery.md)
-covers obsolete-PR cancellation, terminal-marker retirement and shared per-pass reads.
-Controlled cases cover cancellation, full-pool invocation, scoped pickup above the
-repository bound and conservative capacity age; natural published outcomes remain
-to be read. The request-count CLI events and minute run-state cadence now have controlled
-HTTP, lifecycle, cancellation and diagnostic-excerpt checks. The busy-hour prerequisite and A1479 request-budget qualification are recorded in the
-[forward-overflow plan](superpowers/plans/2026-11-10-a1473-forward-overflow.md).
-Controlled cases now exercise forward overflow from a full pool: oldest untouched current-head PR,
-shared pressure reads, fresh refusal checks and recorded cancellation/rerun recovery.
-An owned stuck cancel still needs qualification.
-Empty queued runs older than an hour now have controlled once-only cancel/force-cancel
-and restart checks; the existing ledger keeps them out of subsequent automatic passes.
-Installed readback matched this code; natural cleanup outcomes remain to be read.
-The five-minute untaken-job rule has no named eligible case after source refusals
-and recorded turns are excluded; the watcher held new code until one is measured
-on 13 November at 07:02. Reverse movement remains open, pending a measured case.
-Main pushes, schedules and manual runs still require hand moves.
-
+**Open:** natural outcomes for registration failure, a live rate limit (the six recorded
+403s have no headers), the busy-runner retry, obsolete-PR cancellation, marker retirement
+and stale queued runs, and an owned stuck cancel. The watcher held new code for the
+five-minute untaken-job rule (13 November 07:02) until a real case is measured; reverse
+movement waits for one too. Main pushes, schedules and manual runs still need hand moves.
 
 ## Keep the private shared UI release current (D579)
 
@@ -115,147 +62,35 @@ remain human work.
 
 ## Shared storage-test seed downloads (D585)
 
-The [storage archive acquisition and cancellation record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
-tracks D585: native startup, ten test seed hooks and conformance share bounded
-acquisition. Native startup retains one attempt, with a 30-second deadline
-covering headers and body. Conformance retains three attempts, a 120-second
-total budget and 30-second inactivity. HTTP refusals preserve each caller’s
-existing error and retry policy. The Dockerfile now invokes the shared command
-inside its existing Node image, with three temporary attempts inside 30 seconds
-and ten-second inactivity. Architecture digests and extraction remain required.
-The `storage-tools` build target isolates that boundary for checks; full
-application image preparation qualification remains open.
+Native startup, test seed hooks, conformance and the image build share bounded
+acquisition. **Open:** qualify full application image preparation.
+See [the acquisition and cancellation record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 
 ## Admin listener shutdown and paced replay (D581)
 
-The exhaustion fixture drains probe data before closing its owned listeners.
-The [socket regression and limits](backlog/storage-cache-fixture.md#admin-owner-probe-draining-d581)
-cover a disconnected peer that previously prevented shutdown. Historical CI
-client attribution and the separate paced-replay checkpoint failure remain open.
+**Open; the historical causes are unknown.** The exhaustion fixture's listener shutdown is
+repaired ([limits](backlog/storage-cache-fixture.md#admin-owner-probe-draining-d581)).
+Replay shutdown now half-closes used storage sockets and waits for their peers inside the
+existing two-second budget, which repairs one measured ordering and explains none of the
+older CI traces. A request reusing a half-closed socket, the native LIST investigation and
+requests starting after the final drain remain open.
 
-At checkpoint admission, failures retain the failed socket's count of fully
-validated forwarding requests through worker serialization. Run `node --test
-scripts/cloud-cost/checkpoint-socket-diagnostics.test.mjs` to reproduce a real
-connection reset after a completed request: the count is zero, but measurement
-still refuses. Counts outside 0–1,000,000,000, private values and accessors refuse.
-An interrupted mutation body can also leave zero once validation unwinds; zero
-does not prove an idle socket. A reset during inventory reports only the
-measurement stage, without a socket count.
-Five ordinary official-writer macOS probes pass; with a padded 512 KiB LIST reply,
-two of five stop-at-idle probes instead record `client-error / ECONNRESET`, zero
-forwarding requests, equal successful counters and writer exit zero. This is a
-controlled native reproduction, not attribution of the historical paced replay.
-Replay shutdown now gracefully half-closes previously used storage sockets and
-waits for their peers to close before signalling the writer. It checks again for
-requests admitted during that drain. Fresh connections remain available for their
-first request. A peer closing with unfinished headers and interrupted replies
-still refuse. Silent partial headers are not qualified by the transport.
-The drain shares the existing two-second force-stop budget during finish and
-collection; waiting for a peer cannot postpone that timer.
-Run `node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
-scripts/cloud-cost/replay-stream.test.mjs` for socket, restore and collection
-controls. The padded official-writer Linux probe records nineteen reset refusals
-with writer exit zero and one force-collected stop, then passes all twenty with
-graceful retirement. This repairs that measured
-shutdown ordering; the older CI traces cannot establish every historical cause.
-A request reusing a half-closed socket can reach storage before its reply refuses.
-That race, the separate native LIST investigation and requests starting after the
-final drain remain open. The diagnostic idle-action count includes drain attempts
-before signalling; it does not prove that the writer was signalled. No existing
-assertion, accounting check or configured deadline value changes.
+Controlled official Litestream runs (0.5.17, and 0.5.18 in one comparison) show a
+snapshot-retention task still listing storage after a confirmed database stop, so a
+passive idle wait is not completion and a later LIST can be cancelled. Completing that
+retention sequence before stop passes as an ordering control only; waiting for the whole
+turn after stop reaches the three-request guard. Next: reproduce this boundary in the real
+smoke without treating a briefly idle transport as finished maintenance. The smoke's final
+sale and concurrent maintenance still need qualification. Do not copy replay's socket
+retirement into the smoke: all three native trials refuse at retry-sequence validation.
 
-Official 0.5.17 macOS controls also reproduce the native LIST's
-`response-pipeline / ERR_STREAM_PREMATURE_CLOSE` signature in three of three
-trials: all 213 reply bytes reach the counter, both HTTP messages are complete,
-and the writer exits zero. The control deliberately postpones downstream
-response completion by 100 ms after the body passes through. It establishes a
-possible ordering, not the natural cause of the historical 743-byte refusal.
-One refusal snapshot has equal four-attempt counters and another pending
-request; two include extra refused work.
-Do not transplant replay's socket retirement into this smoke: all three native
-trials refuse at retry-sequence validation, and two need forced collection.
-A passive pre-signal idle wait still permits a later LIST cancellation in all
-three trials. The ledger reports unknown cost; the control's additional demand
-for full reconciliation fails. A generated writer alone passes the proposed drain, but that
-change fails 15 of 92 existing shutdown checks; restoring the implementation
-passes all 92. Keep the current acceptance guard and absolute two-second stop
-budget.
-
-The same official 0.5.17 controls on Debian 13 reproduce all three delayed
-LIST cancellations with writer exit zero. Socket retirement fails all three
-trials at retry-sequence validation and needs forced collection in each.
-Passive idle still permits a later LIST cancellation in all three trials;
-the ledger retains unknown cost. These controlled Linux results confirm the
-counterexamples, not the historical cause. Next, establish a background-work
-completion boundary without treating one idle observation as completion.
-
-Native runtime profiles now identify the background task in that controlled
-case. On Debian 13 and macOS, each of three official 0.5.17 trials still has
-one Store maintenance task inside `EnforceSnapshotRetention` after the database
-stop acknowledgement. Three other maintenance tasks are waiting between turns.
-The held task can continue listing lower levels after an idle observation;
-waiting for its whole turn after stop reaches the existing three-request guard
-in all six profiled trials. The writers exit zero. These results identify the
-controlled task, not the natural cause of the historical 743-byte refusal.
-
-Retesting the same three held-LIST orderings on Debian 13 with the official,
-checksum-verified 0.5.18 release leaves this boundary open. Both releases still
-acknowledge database stop with a held LIST; signalling cancels the partial reply,
-and releasing it to idle still permits a later cancelled level-1 LIST. Waiting
-through the final level passes on each release. This one comparison does not
-qualify a drain for the full smoke; the cost experiments remain pinned to 0.5.17.
-The existing native-monitor characterization also fails its unchanged
-“runtime stop must finish active snapshot-retention storage work” assertion
-on both releases, while its release-before-stop control passes both. The 0.5.18
-after-stop profile still contains `Store.EnforceSnapshotRetention` calling
-`DB.EnforceSnapshotRetention`; an upstream stop-order change does not close this
-controlled database-stop case.
-
-Completing that same held retention sequence before requesting stop passes
-three controls on each platform. Both independent counters pair every LIST,
-all four maintenance tasks then wait between turns, and no request enters the
-after-stop subset. The original two-second trial budget still covers release,
-completion, stop and exit. This is an experimental ordering control, not a
-readiness rule for the full smoke: its final sale and concurrent maintenance
-still need qualification. No runtime implementation, acceptance guard, existing
-check or deadline changes. Next, reproduce this boundary in the real smoke
-without assuming that a temporary idle transport means maintenance is finished.
-
-
-The real SQLite proof now runs official Litestream 0.5.17 against synthetic
-Waitron sales. After the writer and all covering writes stop, the negative
-control replaces stored objects with the captured one-sale recovery point and
-reads every retained body back. All twelve restore attempts find one sale and
-SQLite `ok`; the rehearsal refuses at restore validation despite nonblocking
-unknown accounting. Its paired retained-write control cuts the reply, restores
-both sales and passes SQLite and fiscal checks. Run the stack conformance cases
-`lostFinalWriteFailsFunctionalRestoreDespiteNonblockingAccounting` and
-`committedWriteWithCutoffReplyRestoresSuccessfully` for this controlled proof.
-The initial x86 run passes both cases; wider shared-consumer qualification remains.
-
-Three genuine native-smoke cases each change one observer record while restoring
-both sales with SQLite and fiscal checks and removing owned resources. The
-replication case reported a byte discrepancy of 742 instead of -1 in
-[PR1050's cost job](https://github.com/waitron-io/waitron-cloud/actions/runs/42332288959/job/128281835882).
-Its natural cause remains in the closed D530 history. Capture the synthetic proof before asserting its exact
-discrepancy; keep that assertion.
-
-Real bucket-control billing remains unknown
-and cannot qualify merely because both transfer counters agree. Run `node --test
-scripts/cloud-cost/schema.test.mjs scripts/cloud-cost/local-receipt.test.mjs
-scripts/cloud-cost/meter.test.mjs scripts/cloud-cost/storage-meter.test.mjs` for
-these boundaries.
-Measured local inputs also need their original replay and stream records. The
-exporter compares every supported value, unit, source, observation time and
-cadence, and refuses an unrelated or invented measurement. Individually valid
-meters that overflow when combined finish with unknown accounting and no receipt;
-the original observations remain available. The generated archive
-journey finishes with its original observations and no receipt because billing
-and storage-history coverage remain unknown. Its real Debian control retains
-all 11 requests, the restored sale, privacy and owned cleanup.
-Your current generated stream runs also finish without a new measured receipt:
-setup and cleanup control billing stays unknown. The clean unit fixture supplies
-known billing to exercise the export contract; it does not qualify real billing.
+Keep every acceptance guard, the two-second stop budget and the pins (cost experiments stay
+on 0.5.17). Real bucket-control billing stays unknown and cannot qualify because two
+transfer counters agree; generated archive and stream runs finish without a new measured
+receipt for that reason. Keep the assertion on PR1050's byte discrepancy of 742 instead of
+-1 until the synthetic proof captures its exact cause. Controls:
+`node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
+scripts/cloud-cost/replay-stream.test.mjs scripts/cloud-cost/checkpoint-socket-diagnostics.test.mjs`.
 
 ## Cloud backup box identity (D451)
 
@@ -290,22 +125,29 @@ remain open. Real-command checks and the allowance comparison are in
 Keep D126, D129, D131, D198, D262, D311, D335, D349, D457, D574 and D583,
 D152's isolation-command refusal and D507's old cache-upload stall together.
 The 31 October to 6 November retained failure-history review found no matching
-recurrence for these observations. This does not explain their causes or prove
-that they cannot recur. D152's replication failures and D507's cache-miss budget
-qualification remain separate below. A new matching failure joins its existing
+recurrence; that explains no cause. A new matching failure joins its existing
 investigation, with the original assertions, limits and cleanup checks preserved.
+Lane J's `receipts/d593/` inventory is no longer on disk, so this table is the record.
 
-PR #1173 later hit the translation launcher’s unchanged 20-second startup limit
-twice. The real-stack launcher now runs apart from the package’s database-heavy tests;
-the CI timeout’s cause remains unproved, and no link to D574 is established.
-PR #1282 later reported startup `ETIMEDOUT` with no service states in the same
-fixture; [the retained evidence](backlog/translation-startup.md) leaves its cause
-open and preserves every deadline and migration-refusal assertion.
+| Entry | What was seen | Start from |
+| --- | --- | --- |
+| D126 | Linux download supervision | [detail](backlog/linux-download-supervision.md) |
+| D129 | Password reset during derivation failed before its final checks. A late observer reproduces it and the test now holds the result. | [run 39953541488](https://github.com/waitron-io/waitron-cloud/actions/runs/39953541488) |
+| D131, D583 | Conformance setup timeouts; a healthy source fetch retried. #957 repaired the fixture clock; the isolated replay early wake is open. | [detail](backlog/cost-setup-timeout.md) |
+| D152 | Isolation canary exit 1 in category `container-state`, and the gateway later exited 1. A name-lookup ordering defect is fixed; linking it to these is an inference. | [run 40041135283](https://github.com/waitron-io/waitron-cloud/actions/runs/40041135283/job/120712388129), [run 40054514898](https://github.com/waitron-io/waitron-cloud/actions/runs/40054514898/job/120754852118), [run 40062864377](https://github.com/waitron-io/waitron-cloud/actions/runs/40062864377/job/120780089952) |
+| D198 | Diagnostic revocation slower than 100 ms. Record connection, update, commit and read-release times; keep the lock-wait limit and the final 403. | [run 40089088819](https://github.com/waitron-io/waitron-cloud/actions/runs/40089088819/job/120857966430) |
+| D262 | Mail measurement refused at close | [rehearsal refusals](#platform-work-to-scope) |
+| D311 | Fixture archive downloads | [detail](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311) |
+| D335 | Verifier build | [detail](backlog/verifier-build.md) |
+| D349 | Empty generated JSON state. An interrupted write reproduces it and is fixed. | [run 41169033630](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790) |
+| D457 | Storage extraction across processes; prompt refusal is unproved. | `scripts/ci-backup-storage-process-extraction.test.mjs` |
+| D507 | Cache-upload stall | [detail](backlog/ci-cache-saving.md#historical-upload-transport-cause-d507) |
+| D574 | Translation startup | [detail](backlog/translation-startup.md) |
+| Installation renewal | Renewal accepted during owner revocation. A paused backend reproduces it; the test now queues renewal behind revocation. The historical scheduling is unknown and production locking is unchanged. | runs 39953541488, 40990452819, 41266766013 |
 
-Lane J's local `receipts/d593/sweep-inventory.json` retains every original entry,
-its source revision and its investigation links. The matching failure records
-and review limits are in `receipts/d593/recurrence-review.json`. Use those records
-to find the original evidence before choosing a repair.
+The translation launcher's 20-second startup limit (PR #1173, then an `ETIMEDOUT` in
+PR #1282) has no proved cause and no established link to D574;
+[the retained evidence](backlog/translation-startup.md) keeps every deadline.
 
 ## How to keep this file honest
 
@@ -321,27 +163,43 @@ to find the original evidence before choosing a repair.
 
 ## Decisions and deliberate limits
 
-The owner changed the acceptance rule on 6 November: functional rehearsal checks
-still fail, while cost-accounting problems are reported with named gaps in every
-mode. The [accounting-gap plan](superpowers/plans/2026-11-06-cost-accounting-gaps.md)
-sets out that change. It replaces the proposed retry, uncertain-read cap and
-maintenance-completion gate. Sales, uploads, stop, restore, SQLite and fiscal
-integrity, cleanup, request caps and deadlines remain required. An unknown figure
-stays unknown, and a run with gaps cannot replace a published cost figure.
-
+- The owner changed the cost rehearsal's acceptance rule on 6 November 2026: functional
+  checks still fail, while cost-accounting problems are reported with named gaps in every
+  mode. This replaces the proposed retry, uncertain-read cap and maintenance-completion
+  gate. Sales, uploads, stop, restore, SQLite and fiscal integrity, cleanup, request caps
+  and deadlines remain required. An unknown figure stays unknown, and a run with gaps
+  cannot replace a published cost figure.
+- The owner rejected a custom Litestream binary on 25 October 2026. Keep the official
+  release and its pins ([detail](backlog/cost-stack-replication.md)).
 - Every message Cloud sends for a venue uses a fixed Cloud template (owner, 2026-11-08),
   for email and SMS. Callers supply a template name and values; refuse free text and values
   outside the template's allowed type and length. A code is digits; a time is a time.
-
 - A venue's own mail server always sends its email (owner, 2026-11-21). Without one,
   the free scope covers account emails and the five staff notices the owner chose
   on 22 November. The paid scope covers every venue email, from its own domain or
   a Waitron address. The venue decides what to do about bounces. [Detail](backlog/venue-email.md).
-
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
   Correcting an address allows an immediate send; returning to it keeps its wait.
   A server Retry-After still blocks every address for that operation.
   This also means a refusal in another operation cannot transfer or clear that wait.
+- Cloud backups are streamed as whole files (owner, 17 November 2026 at 23:16). The trial
+  bounds lanes G and J agreed within it are 2 GiB of ciphertext and 4 GiB expanded; linear
+  growth reaches the expanded limit at about 15–16 months. The shipped ceiling stays 512 MiB.
+- Guests open a venue's shared menu only while it has an active Connected or Hosted trial
+  or paid level: “Only with the trial” (owner, 20 November 2026 at 14:13). The menu page
+  follows the phone's languages: “we should fix the cloud's menu page to follow the phone
+  langs” (owner, 17 November 2026).
+- The box registers quietly when you sign in at the start of setup, with no account-only key:
+  “I'd like the quiet at the end option, but i think it needs to be earlier, at the start of
+  setup, because we need access to address completion and emails during setup” (owner,
+  20 November 2026 at 13:11). Remote access still needs a trial or paid level.
+- You may remove a venue while its trial or paid period runs. The confirmation says the venue
+  is hidden and its connection stopped, but charges continue and Billing still lists it (owner,
+  19 November 2026 at 19:23, choosing this over refusing removal).
+- Live Google address completion serves “Yes, every registered box”, inside each box's existing
+  limit (owner, 21 November 2026 at 10:34). The private launcher still serves one approved box;
+  [what is left](backlog/free-services.md).
+
 ### CI policy
 
 - The owner closed D69 on 20 October 2026 with "run all when unsure" and accepted
@@ -358,6 +216,12 @@ stays unknown, and a run with gaps cannot replace a published cost figure.
 - The owner's target remains at most five minutes per work job and about ten
   minutes per complete run, including setup and queueing; keep the eight-minute
   work-job cap. Passing local checks do not establish hosted duration or savings.
+- Pull requests test only the packages they change: “yes, same rule”; “if code in package
+  X changes then run the tests for package X ... and then catch anything else in the
+  nightlies.” (owner, recorded 9 November 2026). Omitting the audited root suites was
+  approved with “9% is significant, I'd build it as long as it doesn't add fragility.”
+  (owner, 9 November 2026 at 22:22): uncertainty runs everything, and an advice failure
+  runs the original command.
 
 ### Service monitoring
 
@@ -366,8 +230,9 @@ Owner decision, 8 November 2026:
 No cost alert until a real cost figure exists: the calculator over committed inputs
 cannot see a cost change (about 90% of its USD 18.44/month is one fixed server
 charge; 100 times the orders moves it 5.7%). Reopen with measured storage and
-request counts priced nightly.
-
+request counts priced nightly. If it reopens, the owner's earlier rule (8 November 15:03,
+as the watcher relayed it) was an alert and email at 10% or more above the last alert,
+including slow creep, with the first measurement saved silently.
 
 ## Installation deployment qualification
 
@@ -394,116 +259,52 @@ See [the native alert boundaries](backlog/alert-preference-http.md#alert-prefere
 **Open.** Qualify server authority, deployed browser integration and translation
 release checks. See [the remaining consent qualifications](backlog/translation.md#translation-consent-deployment-qualification).
 
-## Signup and password-reset HTTP acknowledgements (D423)
-
-**Client and local server qualification complete.** Signup and password reset
-require the exact success status and acknowledgement. Signup requires a nonblank account ID.
-Browser journeys preserve uncertain results for an explicit
-retry in both languages, themes and widths. Real HTTP checks cover the 15-second
-header and body deadline; local Mailpit checks cover server authority and session
-revocation. Production provider delivery remains with D102's owner-only enablement
-gate. See [the acknowledgement boundaries and runnable checks](backlog/account-http-boundaries.md#signup-and-password-reset-http-acknowledgements-d423).
-
-The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702)
-was a prematurely closed LIST response during Litestream shutdown. Its natural
-cause remains unknown in the CI bundle; delivery of these client tests does not repair it.
-
 ## Current state
 
-Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
-registration state, internal password sessions, session-backed Cloud approval and an
-email-verification signup backend that creates an account.
-Cloud password recovery and an encrypted PostgreSQL email queue are implemented
-internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
-email capture. SMTP capture tests select by subject and recipient because concurrent
-database fixtures share the inbox. The account HTTP API now provides signup, login, session activity,
-logout and recovery with shared request limits, Origin/CSRF checks and bounded
-network handling. The bilingual portal supports signup and password recovery.
-After signing in, use Account for businesses and security, Venues for services and
-backups, and Remote access for addresses and guest menus. Billing appears for
-eligible accounts and holds the Connected trial, tax details and test payment methods.
-You can sign out from each page. Browser and Mailpit tests exercise the portal
-through the account API. Venues shows one organisation at a time, with business
-details, connection and service state, and separate latest and verified snapshot times. Verified
-snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
-protected copies. The local durable worker now verifies real Waitron restores, retries failures and
-cleans expired snapshots and abandoned captures. The local monitor now persists contact,
-snapshot and remote-route incidents, shows stale checks as unknown, and queues opt-in
-bilingual alerts with permission and current-route rechecks.
-Live provider/sender configuration and public deployment remain open.
-No public cloud service is deployed. This file owns cloud product and platform work;
-Waitron's backlog owns the on-prem application and its side of the integration.
+Accounts, sign-in and recovery, pairing, remote access, backups with verified restores,
+monitoring, email, guest menus, translation, handover and the test-only billing pages are
+built and exercised by local or test-Cloud checks only. The portal has Account, Venues, Remote
+access and, for eligible accounts, Billing. **No public Cloud service is deployed;** live
+providers, senders and public deployment remain open. This file owns Cloud product and
+platform work; Waitron's backlog owns the on-prem application and its side of the
+integration. Start with the [product discussion](product-and-platform.md); the
+[launch evidence boundary](launch-evidence.md) separates local proof from what public
+exposure still needs.
 
-Start with the [product discussion](product-and-platform.md). The
-[launch evidence boundary](launch-evidence.md) separates the completed local milestone
-from the provider, policy and live tests still required before public exposure. The
-[inherited inventory](reference/2026-08-29-cloud-services-inventory.md) holds the wider
-candidate list and previous commercial reasoning. Remote access and backups are the
-agreed initial services. The first integration milestone is complete locally; the
-production release scope remains open.
+**D88 hosting.** The owner requires `.local` for venue devices and public menus, online
+bookings and orders, and table-QR ordering with the Cloud step soon after go-live, not
+go-live itself. The [hosting design](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md),
+[conditional outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) and the
+[public access/A951 contract](waitron-integration-contract.md#public-access-and-a951-proposed)
+record the scope. D88's duplicate design-approval gate is closed: the approved production
+design settles per-venue gVisor runtimes on shared machines, country cells, cold recovery,
+Spain/Paris, per-action automation, per-cell releases and quiet-hour moves. The owner's
+24 October decisions put accounts, sign-in and recovery in-country with one owner per
+customer per country, no invitations or manager accounts. D112-S's 16 November direction
+keeps countries independent, including billing and customer email; worldwide is limited to
+a small admin passkey console for health and deploy starts plus the apex/Spain redirect,
+with no country customer data or operator authority. A future owner transfer must be
+country-scoped verified transfer or recovery, without a second owner or automatic support
+takeover. P6/D115 owns delivery with P1/P4/P7, D608's owner checks, A951 and D101.
+Reliability promises and pricing await measurements at launch. A1018's design, examples
+and defaults are approved at Waitron `060966c2b3e9203acf0849042814997307cae463`; exact
+formats, compatible A947 amendments, separate A1018 build authority and runtime proof
+remain open.
 
-**D88 / published #265 access extension, reconciled 2026-10-24:** the owner requires `.local`
-for venue devices and public menus, online bookings/orders and table-QR ordering
-with the Cloud step soon after go-live, not go-live itself. The [hosting design](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md),
-[conditional outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) and
-single [public access/A951 contract home](waitron-integration-contract.md#public-access-and-a951-proposed)
-record the scope. Close D88's duplicate design-approval gate: the approved production
-design settles per-venue gVisor runtimes on shared machines, country cells, cold
-recovery, Spain/Paris, per-action automation, per-cell releases and quiet-hour moves.
-The owner's 24 October decisions put accounts/sign-in/recovery in-country with one
-owner per customer per country, no invitations or manager accounts. D112-S's
-16 November direction keeps countries independent, including billing and customer
-email. Worldwide is limited to a planned small admin passkey console for health
-and deploy starts, plus the apex/Spain redirect, without country customer data or
-operator authority.
-Future owner transfer must be country-scoped verified transfer/recovery, without a
-second owner or automatic support takeover. No D88 owner question is ready now;
-P6/D115 owns runtime/build delivery with P1/P4/P7, existing country owner
-checks/D608, A951 and D101 dependencies.
-Production local build/rehearsal authority stands; this reconciliation adds none.
-Reliability promises and pricing await measurements at launch. A1018's design,
-both examples and retained defaults are approved at Waitron
-`060966c2b3e9203acf0849042814997307cae463`; exact formats, compatible A947
-amendments, separate A1018 build authority and runtime proof remain open.
-G owns P3/P4 plan revisions and priority-5 single-owner lifecycle; production
-section 4 names the changed dependencies. A951 owns the lasting Waitron tunnel/certificate client; its accepted
-implementation and landing pin remain required. The [D123 scoped review](waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23), [D130 helper response](waitron-integration-contract.md#a951-helper-and-routing-response-2026-10-23-d130) and [D136 routing response](waitron-integration-contract.md#a951-routing-revision-2-response-2026-10-23-d136)
-retain their scopes: exact helper accepted for isolated T3 with matching E acceptance
-at Waitron `4fbb76eaf`, routing edition proposal-2026-10-23.2 accepted by G with
-E's matching record still required, and the original 83-byte empty manifest unchanged.
-The [D132 appliance response](waitron-integration-contract.md#a951-appliance-response-2026-10-23-d132)
-still accepts no full appliance artifact or executable pair. The [D560 mapping response](waitron-integration-contract.md#a951-g1-hostcustody-mapping-response-2026-11-02-d560)
-returns immutable `cloud-a951-g1-host-custody-v1` / `proposal-2026-11-02.1`.
-E's [matching intake](https://github.com/clintongormley/waitron/blob/9b2adbf7dbe9ef2b29eaff22eda352129bba1b32/docs/developers/cloud-connection.md#g1-mapping-acceptance-2-november-2026-d560)
-accepts its exact publication digest for isolated engineering planning only.
-The mapping preserves closures, 256 lifetime trust entries within each 64 KiB
-safety cap, the shared 256 KiB journal, four-store crash reconciliation and
-separate role-local progress. Complete appliance acceptance and both executable
-consumers remain NONE. The owner parked the earlier D582 protocol work on
-6 November. D582-S first runs the existing two-venue remote proof, then connects
-a real browser to a box through the existing gateway, with manual setup allowed.
-The proof's backup worker now keeps database copies inside its own writable
-temporary parent. The test gateway now serves the real external browser path,
-including trusted password sign-in and automatic app and tunnel restart. The
-existing signed certificate status action can discover a lost request ID,
-including a stale predecessor, without exposing a CSR or certificate. Joint
-reboot, renewal, revocation, offline sales, signed tunnel provisioning and
-connected-machine isolation checks remain open. Deployment of the lasting
-gateway remains open too. The parked
-[D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
-assigns the approval receiver and one-use Permit ledger, registration/node
-mapping, public root/origin/peer policy and separate issuer custody to Cloud.
-E owns local permission decisions, provisioning, private keys, client and native
-confinement. The accepted responsibility split does not accept the missing
-approval channel, revised full appliance or complete signed corpus; those must
-precede affected adapters. The first target is one fixed box with opt-in test
-staff access on Debian 13. Exact host pins and runtime proof remain G7 work.
-E also records D136 routing revision 2 acceptance at the linked pin solely for
-isolated T4 fixtures; the original 83-byte production manifest is unchanged.
-G2 actual A947 authority, G3 client limits, G4 independent customer upstream,
-G5 movement, G6 diagnostics/privacy and G7 runtime evidence retain their
-path-scoped gates. G4/G5 are outside the first target. No tunnel or consumer is
-qualified by the plan. Admission stays CLOSED and `.local` independent.
+**A951 tunnel.** Waitron owns the lasting tunnel and certificate client; its accepted
+implementation and landing pin remain required. The owner parked the earlier D582 protocol
+work on 6 November; its [Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
+and the contract's D123, D130, D132, D136 and D560 responses keep their scopes and
+acceptance limits (complete appliance acceptance and both executable consumers: none).
+D582-S ran the two-venue proof and connects a real browser through the existing gateway;
+that path now works in test, including certificate status by lost request ID. Joint reboot,
+renewal, revocation, offline sales, signed tunnel provisioning, connected-machine isolation
+and deployment of the lasting gateway remain open. Waitron (E) owns local permission
+decisions, provisioning, private keys, client and native confinement. The missing approval
+channel, revised full appliance and complete signed corpus must precede affected adapters.
+The first target is one fixed box with opt-in test staff access on Debian 13; gates G2–G7
+keep their scopes, and G4/G5 are outside the first target. Admission stays CLOSED and
+`.local` independent.
 
 **D101 data protection can proceed in cleared slices.** The owner lifted the
 9 November pause on 2026-11-24 at 17:46 (lane G questions): “Yes, and let's not be blocked
@@ -515,214 +316,87 @@ record the research for the specialist to confirm. First build the
 venues, then bring the next slice 5 plan to the watcher. Bring slices 6 onward
 one plan at a time for clearance.
 
-The owner approved the complete D101/D88 data-protection engineering design from PR283
-(`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30 **for build
-planning only**. The [Cloud design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
-and [implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md)
-use [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
-as the single application map. Planning covers the service/supplier register and
-annexes, country/credential/outbound controls, support/KMS, exit/purge and handoffs;
-the owner approved the roadmap and authorised slice 1 on 2026-10-22. On
-2026-10-23 the owner authorised local slices 2–5, with SQL-free slices 2/3 first
-and slices 4/5 taking an actually available migration slot. Slices 6–12 remain
-unauthorised. Slice 2 publishes the [purpose/supplier register](cloud-data-processing-register.md)
-and [five draft agreement annexes](cloud-processing-annexes.md): stable IDs,
-separate Cloud-own purposes, explicitly unqualified supplier evidence and all six
-open lawyer questions. The register, annexes, design and roadmap reuse
-[adviser confirmation P8](https://github.com/clintongormley/waitron/blob/2a4443a2ba01676e51fdb119a82d224f9d1cece7/docs/compliance/2026-11-06-adviser-questions.md#for-the-privacy-specialist)
-for product repair, venue support, replacement remote transport and Cloud-own
-security roles. The old relay question Q57 is retired; use the 6 November English
-list, which replaces the 5 November Spanish batch. P8 is still awaiting legal
-confirmation. These are unsigned drafting records, not legal or provider
-qualification. Slice 3 adds the SQL-free [country decision function](country-policy.md):
-exact qualified destination matching, positive policy revisions and evidence-only results.
-The production Spain default has no qualified flows. Slice 4 adds the disabled
-[venue lifecycle journal](data-lifecycle-journal.md): fixed UTC deadlines,
-idempotent requests, venue revisions, expiring worker claims and bound outside-call
-intent/uncertainty. PostgreSQL checks include process death at four boundaries,
-same-revision claim takeover and unchanged migration history. The version 8
-upgrade receipt covers the actual 044-to-047 candidate, separate pre-upgrade and
-populated-journal backups, retained deadlines and stale-worker refusal. The
-original billing and venue-authority proofs remain pinned to their delivered
-trees with their original strict checks. Recording a request
-grants no service or deletion authority; no customer route or effects worker is
-enabled. Resubscription still needs a future retained-data check and activation
-adapter. Slice 5 has a source-based
-[implementation plan](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
-for durable country bindings, late-grant reconciliation and separate account/venue
-mail purposes. The reduced first task adds internal stored-policy admission
-([guide](country-policy.md#check-a-stored-venue-binding-inside-a-transaction));
-`flow-authority.test.ts` checks synthetic destinations and lock waits against
-PostgreSQL. Product adapters do not call it yet. Placement/credential enforcement remains unbuilt; production
-assignment, provider retirement, destructive-retention coordination and mail retry
-semantics remain explicit gates. The retention and mail worker integrations stop
-until their existing behavioral guarantees have a compatible design. The
-later exit adapter must preserve priority for an earlier verified delete, perform
-independent status lookup and qualify finer deadline comparisons if another
-producer writes timestamps beyond millisecond precision. The
-outbound AI refusal and explicit synthetic loopback transport are implemented
-locally; later runtime controls remain **unbuilt**. One venue approval permits at most **24 hours**
-of support access, shorter where practical and fresh approval to extend. **Paris
-`eu-west-3`** is the approved extra encrypted backup destination, subject to service,
-contract and recovery qualification; Spain data/logs/keys remain in `eu-south-2`.
-The 21 October exit decision includes a full download and fixed UTC 90-day
-read-only recovery. On 2026-11-24 at 17:58 the owner said “yes to all” to the
-three changes (lane G questions). Require proof of return before destruction, and
-seal data if it has not been returned. Close venue access on day 90 and destroy
-all copies eligible for deletion by day 120. Keep billing records and one sealed
-file of Cloud’s own account and security evidence for three years per event or
-five years for contract evidence, with no venue content. The owner also said
-“invoices may be kept in europe”. P6/P7 own the future hosted signup and failover
-checks, including evidence that a hosted venue notified Spain’s tax agency before
-keeping invoices abroad. Earlier verified deletion, copy evidence and unchanged
-fiscal rows remain requirements. O1 is answered. AI stays disabled until separately privacy-reviewed
-eligibility rules, positive/refusal examples and documented limits receive owner
-acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provider/entity/
-access-location evidence, D102 email qualification and runtime proof remain open.
-The final production destruction step, AWS key deletion and AI sending stay
-disabled. Product repair uses records stripped of personal data. Broader D88
-hosting, isolation and shared contracts, spending, deployment and provider
-resources still require their own approvals. The C39 monitoring design
-remains approved for planning only, subject to the production deployment and
-monitoring designs' corrections. The [alerts plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md#global-constraints)
-keeps the exact daily UTC backup schedule, first due slot and first monitored
-group subject to owner approval before enablement.
-D102's [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
-was approved for authenticated private-queue intake on 2026-11-01. The owner
-subsequently authorised the local code and tests (D565), accepting Stockholm
-`eu-north-1` and Paris `eu-west-3`, with Stockholm as the configured default.
-The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
-sets out attempt binding, shared suppression, private feedback intake and separate
-provider qualification. Task 1 now validates immutable, independently qualified
-purpose/resource/SMTP bindings and bounded one-recipient event envelopes. Native
-synthetic checks cover refusals and classification; they prove no effective AWS
-publisher authentication or live delivery. Task 2 adds durable, one-recipient
-attempt bindings, retained key commitments and shared suppression lookup under a
-transaction lock for each country/provider account/region. Migration 049 retains
-all 48 previous ledger entries. Task 3 applies parsed feedback in one transaction,
-deduplicates transport and semantic events, and preserves blocking evidence after
-payload erasure. Local process-death checks cover both sides of commit. Missing
-retained keys leave feedback retryable; unknown bindings never guess a recipient.
-Task 3 retains the original recipient across later policy or configuration
-revisions when its country, provider account, region, purpose and configuration
-set still match. The owner approved this late-feedback rule on 5 November.
-Any revoked retained key still closes feedback and admission across its entire
-scope; revocation cannot be undone and has no supported recovery path yet.
-The owner accepted that full stop for this task. Production remains blocked on
-a separately approved key-retirement and recovery design, including whether an
-unrelated revoked key should exceed the design's required-key refusal.
-Task 4 adds optional trusted SES admission to both send paths. Account authority
-and relay control, message and authority locks precede shared suppression; workers
-recheck claims and deadlines after waits and commit each original-recipient attempt
-before transport. Synthetic fixtures cover blocked handoffs, admitted sends,
-rotation, replaced claims and current reset and alert authority. Migration 050
-retains the first 49 ledger entries and maps explicitly scoped local blocks to
-shared recipient references without inventing provider events or assigning old
-unmapped rows to a country. Unconfigured local capture retains its existing gate.
-Retained-key lock waits now receive a final authority-deadline check before commit.
-The legacy relay gate remains global across country settings. Task 7 distinguishes
-block lifetimes so a later unscoped re-add cannot revive old country mappings,
-and refuses clearing a legacy row mapped to another scope.
-Before production wiring, qualify retained-key failures that leave relay work
-queued until its original expiry and occupy capacity until the claim lease ends.
-Task 5 adds qualified SES configuration-set and opaque attempt headers to both
-TLS adapters. Account delivery passes its committed admission, retains the original
-RFC Message-ID and binds a separately parsed provider acceptance ID only to that
-attempt. Early feedback keeps the first provider binding; a conflicting receipt
-emits a fixed operational diagnostic without replaying accepted mail. Malformed
-optional metadata does not change acceptance. A late receipt cannot settle a
-replacement claim. The internal standalone relay adapter and separate receipt
-settlement keep the local-proof worker's outcome contract and startup gate.
-The opt-in account loader reads a bounded binding file and recipient keys, but
-Spain's trusted policy still has no qualified email flows. A supplied file cannot
-qualify itself; recognised public and VPC SES endpoints refuse unqualified SMTP.
-TLS transport requires authentication even when AUTH is not advertised; a named
-pipe configuration refuses without blocking startup.
-Task 6 has an internal one-message queue intake seam. Local PostgreSQL checks
-require committed feedback before deletion, retain malformed and conflicting
-messages, and replay a failed acknowledgement without a second durable effect.
-A shutdown observed before processing or after commit leaves the message for replay.
-Its internal SQS adapter signs requests for the validated queue and region, with
-one message per receive, a ten-second poll and sixty-second visibility. A shared
-fifteen-second request deadline covers credentials, receive and delete; shutdown
-or close aborts pending transport work. Local stand-ins check these boundaries,
-fixed diagnostics and malformed replies, not provider permissions or encrypted
-redrive. CI's lock reader now retains and validates pnpm deprecation warnings;
-its literal graph counts include the new SDK dependency. Unknown fields still
-refuse parsing. Database acquisition, lock waits and processing now share a five-second
-deadline. Transaction-local PostgreSQL limits also bound a stalled commit;
-failed connections are discarded and a connection returned after expiry cannot
-start feedback work. Local checks cover cumulative statements, deferred commit,
-disconnection and safe replay without premature deletion or partial writes.
-The worker now admits at most two concurrent operations and exposes aggregate
-health from both consumer slots. Readiness requires fresh successful polls and a
-fresh trusted operational sample; a failed or overdue slot, stopped consumer,
-changed configuration revision or observed drift closes readiness. The report
-includes its producer timestamp, keeps commit freshness separate from acknowledgement, reports queue age and
-dead-letter count, and emits only fixed failures and aggregate fields. Its
-35-second freshness limit is conservative and can report stale during a long,
-otherwise valid two-slot batch. It is not an alert threshold. Local stand-ins and PostgreSQL checks cover these states;
-collecting authenticated provider samples remains unwired. The standalone
-consumer now requires explicit opt-in, qualified trusted settings and retained
-recipient keys. It stays outside normal services and uses one shared worker
-with two consumer slots. Connection establishment and pool cleanup each have a
-five-second limit; cleanup shares the twenty-second shutdown grace. A process
-deadline remains armed until natural exit so a retained driver handle cannot
-extend shutdown. Local command tests exercise SIGINT/SIGTERM, lock waits,
-restart acknowledgement, death after commit and a provider stand-in's poison
-redrive after five receives. Exact replays of persisted binding conflicts remain
-unacknowledged without changing the store's transport-duplicate result. One-shot
-completion reports stopped, and cancelled queue calls add no failure code while
-earlier genuine failures remain visible. The command reads optional bounded operational
-samples and emits aggregate JSON; it does not collect provider metrics or
-qualify encryption, IAM or real dead-letter transfer. A pending pool request
-is discarded when it returns. Task 7 adds internal manual reconciliation through
-actual operator session, CSRF and platform-permission checks. Immutable requests
-retain the actor, reason code, scope, revision and keyed prior evidence. A private,
-expiring provider observation is bound to that operation. Provider stand-ins cover
-BOUNCE and COMPLAINT removal and an independent final query outside database locks.
-Both stores clear in one transaction only while authority and evidence remain
-current. Partial provider removal, another scope's mapping, unmapped local blocks,
-new feedback or expiry during a database wait keeps suppression. Completed outcomes
-survive lost acknowledgements; pending work needs fresh evidence after restart.
-Migration 051 retains the first 50 ledger entries and adds block-lifetime mappings
-without changing historical attribution. Old feedback deduplication survives
-clearing, new blockers can apply again, and no old mail, attempt or token is revived.
-An unscoped decision stays marked for its lifetime and defeats a pending clear.
-Old local rows keep unknown origin, since earlier mappings cannot prove how they
-began; they remain blocked through this interface. Finished operations and known
-unreconcilable local evidence cannot start provider work. Every admitted provider
-attempt retains immutable intent and result rows, including the original removed
-reasons across another query or a lost acknowledgement. An unfinished intent remains
-uncertain. This internal interface starts from an existing Cloud block; provider-only
-removal is not qualified here.
-Task 8 adds a closed offline policy-document validator for exact SES/SNS sources,
-private Standard encrypted queues, redrive bindings and separate SMTP, consumer,
-health, operator and key-administrator identities. Synthetic refusal checks cover
-broader permissions, drift and second-country sharing; they establish no effective
-AWS access or live configuration. The [qualification guide](ses-feedback-qualification.md)
-records the normalized document profile, later supervision/schema/health/shutdown
-handoff and queue/evidence/backup/key inventory without choosing retention.
-Stockholm is the configured default; Paris remains an explicitly qualified option.
-These current rules supersede historical Paris-only and date-based enablement
-wording. Operator permission provisioning, production provider acquisition/removal
-and enablement remain open. Additional event types are not qualified;
-`Rendering Failure` still refuses. AWS resources,
-spending, credentials, production access and live mail remain unauthorised for production.
-The separately approved [Stockholm sandbox switch](test-cloud.md#send-account-mail-to-the-approved-test-mailbox)
-admits one verified Cloud account mailbox. The focused worker checks cover SES
-attempt settlement and Mailpit delivery for staff, operator notices and box mail.
-The private test queues have four days of retention. Qualify real receipt and
-sender authentication on the test host, then qualify authenticated queue intake,
-bounce and complaint application and suppression for D102. D101's
-legal, retention and supplier gates, C39's alert thresholds and D104's independent
-alert route remain open; a second country needs its own approved provider-account
-policy. D68 is landed, including
-`b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79's local
-backup verification includes migration 043 and the complete same-run recovery proof.
-Snapshots remain unavailable in the delivered deployment and plan enforcement stays
-off until release qualification. Recheck active migration reservations before new
-database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle journal.
+- The owner approved the D101/D88 [design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
+  on 2026-10-22 around 08:30 **for build planning only**, then the
+  [roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) and slice 1 that day, and
+  local slices 2–5 on 2026-10-23. Slices 6–12 remain unauthorised until each plan is cleared. It uses
+  [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
+  as the single application map.
+- Built, disabled: slices 1–4 (outbound AI refusal, the
+  [register](cloud-data-processing-register.md) and [draft annexes](cloud-processing-annexes.md),
+  the [country decision](country-policy.md), the [venue lifecycle journal](data-lifecycle-journal.md))
+  and slice 5's first task, internal stored-policy admission that no product adapter calls
+  yet. The production Spain default has no qualified flows. No customer route or effects
+  worker is enabled.
+- Open in slice 5 ([plan](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)):
+  placement and credential enforcement, production assignment, provider retirement,
+  destructive-retention coordination and mail retry semantics. The retention and mail worker
+  integrations stop until their existing guarantees have a compatible design. Resubscription
+  needs a retained-data check and an activation adapter. The later exit adapter must keep
+  priority for an earlier verified delete, do an independent status lookup and qualify finer
+  deadline comparisons if another producer writes timestamps beyond milliseconds.
+- One venue approval permits at most **24 hours** of support access, shorter where practical
+  and fresh approval to extend. **Paris `eu-west-3`** is the approved extra encrypted backup
+  destination, subject to service, contract and recovery qualification; Spain data, logs and
+  keys remain in `eu-south-2`.
+- The 21 October exit decision includes a full download and fixed UTC 90-day
+  read-only recovery. On 2026-11-24 at 17:58 the owner said “yes to all” to the
+  three changes (lane G questions). Require proof of return before destruction, and
+  seal data if it has not been returned. Close venue access on day 90 and destroy
+  all copies eligible for deletion by day 120. Keep billing records and one sealed
+  file of Cloud’s own account and security evidence for three years per event or
+  five years for contract evidence, with no venue content. The owner also said
+  “invoices may be kept in europe”. P6/P7 own the future hosted signup and failover
+  checks, including evidence that a hosted venue notified Spain’s tax agency before
+  keeping invoices abroad. Earlier verified deletion, copy evidence and unchanged
+  fiscal rows remain requirements. O1 is answered.
+- AI stays disabled until separately privacy-reviewed eligibility rules, positive/refusal
+  examples and documented limits receive owner acceptance. All six lawyer questions (reusing
+  [adviser confirmation P8](https://github.com/clintongormley/waitron/blob/2a4443a2ba01676e51fdb119a82d224f9d1cece7/docs/compliance/2026-11-06-adviser-questions.md#for-the-privacy-specialist),
+  still awaiting legal confirmation), KMS deletion-waiting policy, exact
+  provider/entity/access-location evidence, D102 email qualification and runtime proof
+  remain open. The final production destruction step, AWS key deletion and AI sending stay
+  disabled. Product repair uses records stripped of personal data.
+- Broader D88 hosting, isolation and shared contracts, spending, deployment and provider
+  resources still require their own approvals. The C39 monitoring design remains approved
+  for planning only, subject to the production deployment and monitoring designs'
+  corrections. The [alerts plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md#global-constraints)
+  keeps the exact daily UTC backup schedule, first due slot and first monitored
+  group subject to owner approval before enablement.
+
+**D102 email feedback and suppression.** The
+[design](superpowers/specs/2026-11-01-ses-feedback-design.md) was approved for authenticated
+private-queue intake on 2026-11-01. The owner then authorised the local code and tests
+(D565), accepting Stockholm `eu-north-1` and Paris `eu-west-3`, with Stockholm as the
+configured default. Tasks 1–8 of the
+[plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md) are built locally and
+off; the [qualification guide](ses-feedback-qualification.md) has the live profile and
+handoff. The owner approved the late-feedback rule (Task 3 retains the original recipient
+across later policy or configuration revisions when country, provider account, region,
+purpose and configuration set still match) on 5 November, and accepted for that task that
+any revoked retained key closes feedback and admission across its entire scope, with no
+supported recovery path yet. Open:
+
+- A separately approved key-retirement and recovery design, including whether an unrelated
+  revoked key should exceed the design's required-key refusal. Production is blocked on it.
+- Before production wiring, qualify retained-key failures that leave relay work queued until
+  its original expiry and occupy capacity until the claim lease ends.
+- Collecting authenticated provider samples, queue encryption, IAM and real dead-letter
+  transfer, operator permission provisioning, provider-only removal, production provider
+  acquisition and enablement. `Rendering Failure` and other extra event types still refuse.
+  Spain's trusted policy has no qualified email flows.
+- AWS resources, spending, credentials, production access and live mail remain unauthorised
+  for production; these rules supersede the historical Paris-only and date-based enablement
+  wording. The separately approved
+  [Stockholm sandbox switch](test-cloud.md#send-account-mail-to-the-approved-test-mailbox)
+  admits one verified Cloud account mailbox. Qualify real receipt and sender authentication
+  on the test host, then authenticated queue intake, bounce and complaint application and
+  suppression.
+- D101's legal, retention and supplier gates, C39's alert thresholds and D104's independent
+  alert route remain open; a second country needs its own approved provider-account policy.
+
+Snapshots remain unavailable in the delivered deployment and plan enforcement stays off
+until release qualification. Recheck active migration reservations before new database work.
 
 ## Hosted guest menu (A670-CLOUD)
 
@@ -739,27 +413,14 @@ belongs to Waitron A509 online ordering.
 
 ## Custom domains with one record, and names that follow the venue
 
-The [approved design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md)
-has eight slices in its [Cloud plan](superpowers/plans/2026-11-17-custom-domain-one-record.md).
-Stored country-zone names and certificate-check names now survive a cell move;
-`packages/remote-access/test/movement.test.ts` and
-`packages/remote-access/test/installation-configuration-names.test.ts` cover the
-stored names and signed reply. DNS movement is checked locally by
-`packages/remote-access/test/name-records.test.ts` and the real CNAME reads in
-`scripts/remote-reconciler-receipt.mjs`. The [local two-cell proof](local-remote-access.md#run-the-proof)
-covers the one-record portal and certificate worker's gateway path, including issuance
-and renewal with Pebble and an unchanged owner CNAME across a move. The
-[Amazon test Cloud](test-cloud.md#configure-a-separate-https-test-name) uses the same TLS check for
-custom names. With the trusted Let's Encrypt issuer, the gateway uses Node's
-public roots for its staff HTTPS request. The real-domain trial still needs a
-certificate readback and a page load on mobile data.
-Remaining work:
-
-- Qualify automatic staff certificate installation on the appliance.
-
-Waitron’s part, taking its staff name from Cloud, is a separate plan in Waitron
-that can start after Cloud PR1. Live Let’s Encrypt, Route53, production keys and
-multi-gateway coordination remain production gates.
+All eight slices of the [Cloud plan](superpowers/plans/2026-11-17-custom-domain-one-record.md)
+for the [approved design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md)
+are built; the [local two-cell proof](local-remote-access.md#run-the-proof) covers them.
+**Open:** the [Amazon test Cloud](test-cloud.md#configure-a-separate-https-test-name)'s
+real-domain trial still needs a certificate readback and a page load on mobile data;
+automatic staff certificate installation on the appliance needs qualification; Waitron’s
+part, taking its staff name from Cloud, is a separate plan in Waitron. Live Let’s Encrypt,
+Route53, production keys and multi-gateway coordination remain production gates.
 
 ## Venue email from Cloud, sent as the venue's own domain
 
@@ -786,29 +447,16 @@ order. Remote access matters most because Waitron's customer-facing features wai
    the statements in C39, C41 and the hosting proposal that put the owner's approval on every
    step. The build is [seven plans](superpowers/plans/2026-10-22-cloud-production-deployment.md),
    each written when its turn comes; D112-S replaces the old P3 migration programme.
-   P2 now provides the [AWS layer](aws-infrastructure.md): independent global and Spain
-   roots, three-zone primary cells, encrypted cold copies, separate key authority,
-   scoped workload permissions, ingress, DNS and infrastructure signals. Its offline
-   pinned checks produce complete version 1 references for each exact cell and validate
-   the unchanged handoff schema. Integration checks run each independent root in its
-   own container under the original command and container deadlines. CI separates
-   three guard-test shards from the full plan and formatting checks, keeping every
-   test file and the original job limits. The historical database provider
-   startup failure in nightly 43495535547 (no initial plugin response) still
-   needs its cause established; passing later runs does not explain it.
-   The global email/sign-in secret metadata has no reader in this console cut;
-   remove it with its own plan.
-   These are mocked plans, not a deployment. Account/state
-   custody, populated secrets, actual service and collector permissions, recovery and
-   provider availability still need their separately authorised qualification.
-   Very deeply nested source remains subject to Python's limits; no exact boundary
-   or exception name is qualified.
-   State qualification must cover first initialization at an absent key under the exact
-   conditional list policy, separate bootstrap-key creation and later deployment-role
-   refresh. Database recovery grants still belong to P7's qualification.
+   P2's [AWS layer](aws-infrastructure.md) is built as mocked plans and offline checks, not a
+   deployment. Open: account and state custody, populated secrets, actual service and
+   collector permissions, recovery and provider availability under separate authorisation;
+   state qualification (first initialization at an absent key, separate bootstrap-key
+   creation, later deployment-role refresh); database recovery grants (P7); removing the
+   global email/sign-in secret metadata, which has no reader, under its own plan; and the
+   cause of the provider startup failure in nightly 43495535547.
    The owner approved gVisor for P6 and running Spain from Paris for P7 on
-   2026-10-23. P6 still waits for P1/P4 and the accepted Waitron handover contract
-   (A1018) and existing country owner checks/D608. P7 recovers a self-contained
+   2026-10-23. P6 still waits for P1/P4, the accepted Waitron handover contract
+   (A1018) and D608's owner checks. P7 recovers a self-contained
    country without P3 permits; P2 and legal/provider gates remain. Neither answer
    grants live/provider authority.
    Cloud agrees the [revised A1018 direction](waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
@@ -822,72 +470,60 @@ order. Remote access matters most because Waitron's customer-facing features wai
    supersedes #312’s M1 filing assignment and #300’s external stop proof. Waitron
    owns one short revised owner design question; formats, actor bridge, A947
    fiscal-only transfer amendments, authorised A1034 test-service receipts, build
-   authority and all eight scenario/direction runtime checks remain open. Country rebuild and action status
-   supply no venue declaration or activation authority.
+   authority and all eight scenario/direction runtime checks remain open. Country
+   rebuild and action status supply no venue declaration or activation authority.
 2. **Production monitoring, alerting and the status page — DESIGNED AND APPROVED (2026-10-24).**
    The [design](superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) was
    approved by the owner for building and rehearsing locally; the paging, outside-machine and
    Anthropic accounts, and any spending, need a separate go-ahead (its section 16). It changes
    C39 and D104 where its section 3 says: the owner is paged after an AI investigation or at
    15 minutes, by a text then a phone call; the status page updates itself; an on-prem box
-   going quiet never pages. Cloud's [report receivers and private reader](box-error-reports.md)
-   have synthetic local checks only. Waitron's opt-in, staff form and sender, and the
-   triage agent remain open. D101's AI gate still has to be opened
-   for the investigator's inputs before it runs in production. Waitron work it needs: the
-   error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
-   updater honouring a held version.
-   Local PostgreSQL measurement at one million synthetic reports used 586 MiB including
-   indexes; the latest hold comparison took 343 ms on the x86 test box. See the
-   [volume measurements](box-error-reports.md#measure-storage-and-reads-before-sizing-a-service)
-   for the command, fixture and limits. Assess
-   matched-window error shares after real reports exist: lifetime totals from
-   reporting boxes can delay young-release holds or inflate ratios when other errors
-   disappear. The [receiver contract](box-error-reports.md) has synthetic evidence only.
-   D104's [owner setup checklist](incident-setup.md) now gives the Cloudflare Pages
-   Free/Direct Upload steps, independent `pages.dev` fallback and two phone-provider
-   options with prices checked on 4 November 2026. The incident runbook follows the
-   approved automatic updates, text then call and press-1 acknowledgment. The
-   [local generator](incident-setup.md#generate-a-bundle-locally) produces the current
-   post and optional dated resolved history. The [local rehearsal](incident-setup.md#rehearse-the-first-automatic-update-locally)
-   turns a synthetic confirmed Cloud incident into the bilingual Investigating
-   update and hands both pages to a local stand-in for the uploader. The live
-   caller will need to supply the confirmation time in whole-second UTC.
-   Local Twilio/Vonage phone adapters now
-   pass fake-provider text/call, delivery and press-1 checks. The local signed
-   callback listener now binds accepted attempts, refuses forged events and suppresses
-   session repeats; both providers have complete fake send-to-acknowledgment rehearsals.
-   No automatic caller or production callback service is connected. Verified-health wording, account setup,
-   live status publication and later updates,
-   supplier review, spending approval and outage/delivery/coverage
-   drills remain open; the checklist
-   creates no account or operational service.
-   The local collector now exposes account-service request counts, timing bands and
-   configurable fast/slow failure and slowness breaches per request group. Local Linux
-   sampling and synthetic collector checks also exercise disk, available memory,
-   15-minute load and stack-wide email/overdue-backup age warnings, with explicit
-   per-signal limits and horizons. It pages nobody and opens no work items.
-   Here `rule="slow"` names the design's long-window rule, rather than requests taking
-   too long: the design intends about twice normal for some hours, while actual values
-   are explicit settings. Trial-derived targets and hosted-server measurements remain
-   open. See the
-   [request measurements](operations-status.md#collect-status-in-the-local-deployment)
-   for scope and the cross-process rehearsal command.
+   going quiet never pages. Built locally: [report receivers and private reader](box-error-reports.md),
+   the [status-page generator and first-update rehearsal](incident-setup.md), phone adapters
+   and signed callbacks against fake providers, and
+   [collector measurements](operations-status.md#collect-status-in-the-local-deployment) with
+   explicit settings. It pages nobody and opens no work items. Open: Waitron's opt-in, staff
+   form, sender, "can trade" check and updater holding a version; the triage agent and D101's
+   AI gate for its inputs; trial-derived targets and hosted measurements (here `rule="slow"`
+   names the design's long-window rule); matched-window error shares once real reports exist;
+   Verified-health wording, live status publication and later updates, account setup,
+   supplier review, spending approval and outage/delivery/coverage drills. The
+   [owner setup checklist](incident-setup.md) creates no account or service.
 3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
    [design](superpowers/specs/2026-10-29-cloud-billing-design.md) sets three levels
    (registered, connected, hosted), trials, SumUp cards and Stripe direct debit, failed
-   payments, emergency hosting by a venue manager, and Cloud's own Veri\*Factu invoices.
-   The [build plan](superpowers/plans/2026-10-29-cloud-billing.md) orders ten slices. Slice B's calendar, trial and charge rules and slice C's country-local billing store are built. The store keeps scoped event receipts, business anchors and opaque payment methods, per-venue levels and independent trials, hosted days, frozen prices and charge lines, payment observations and actual paid history. Migration 045 preserves all 44 older SQL files and existing rows. The upgrade proof interrupts and retries the real migration, checks consumer startup gates, and restores separate old and populated new backups. Restored retries, prices, payments, trials, hosted days and events retain their facts; five deliberate database guard omissions are caught, including coverage retained by a later successful payment after the first is refunded. Hosted paid-period dates are bounding summaries; future billing views must use the exact hosted-day allocations. Slice D's pure service floors, effective trial levels and continuous grant windows are built and tested. Translation requires level 2 in those rules, and a gap between trials ends the setup grant. The country authority reader and billing-event transition now qualify opt-in generations and atomic setup invalidation, including raw billing commands and elapsed trials. Registration and pairing qualify enrolled-venue lock order; pinned release-45 binary controls retain historical completion, while damaged current authority refuses access. Pairing v2 requires its migrated schema. Installation consumers now read venue authority after authenticating proofs. Fresh and saved replies, explicit setup and account lists qualify current levels, complete venue locking and scope changes during waits. Snapshot admission, explicit same-location reprovisioning, retained expiry and publication after object waits qualify enrolled venue levels, generation changes, revocation and concurrent copies of one capture. Capture grants now authenticate before policy and compare permission generation and storage destination after provider waits; those checks and installation replies after expired trials, late transitions and unobserved gaps qualify in CI. Managed streams check storage destinations after provisioning and pointer reads, reject installations moved during permission waits, and accept explicit reprovisioning with the same input after an upgrade while keeping keys, reader identity and observed recovery data. Their database tests retain downgrade, trial-change and revocation checks. Stream regression checks cover explicit reprovision after expired trials, late extensions, conversion to hosted trials and unobserved gaps, while preserving recovery keys, reader identity, observed data and neighbouring venue setup. Independent omission probes exercise the expiry, setup-clearing and reprovision branches. The machine adapter authenticates before metadata or policy work; HTTP checks cover enrolled levels, signed observations and proof, lease, key and permission changes during provider waits. Recovery HTTP delivery now compares the admitted permission generation and storage destination after provider waits, including stream reader identity. Its new checks cover snapshot and continuous recovery, owner status, catalogue and close at level one, and proof, membership and operation changes during provider work, with independent guard omissions qualified in CI. Replacement regression checks cover snapshot and continuous proposals, activation and completed-result replay at enrolled venue levels, owner inspection after downgrade, and proof or session expiry during resource waits. Independent omission probes retain those authority and expiry boundaries. Replacement HTTP regression tests cover both sources: current admission and completed replay, retained owner inspection and close, proof/session/owner/binding refusals and the existing machine response fields. The direct storage adapter now binds each writer to its permission mode and per-venue generation. Explicit venue mode upgrades private state to version 2, retires legacy writers even at an equal revision, and preserves recovery readers and data. New storage checks cover mode changes, same-organisation neighbours, missed downgrade round trips, restart, provider waits and country-policy outages; independent omissions test the physical writer refusals. The storage regression checks also exercise actual writer refusal after expired trials, late extensions, conversion to hosted trials and unobserved gaps, and reject a reader grant after a permission round trip during its file-lease wait. Temporary credentials retain their 900-second requested lifetime and existing 901-second returned-expiry bound, with the native provider expiry proof kept separate. Remote route exports, scheduling and forward-status reports now share an exact venue-scoped eligible set for active and incoming placements, with forward reports enabled or disabled. Regression checks cover same-organisation siblings, level-one refusals despite stored setup, explicit reprovisioning after upgrade, original bindings and complete venue locking during waits. Gateway restart retains the signed ten-minute authority limit. Remote account status now reads venue levels, masks withdrawn access and retains explicit reprovisioning. Database checks cover DNS, signing and certificate waits, proof-first staff certificate reads, refreshed setup after installation waits, and legacy batch/report exclusion for enrolled venues. Private route job digests include configuration revisions even without a reporting gateway, so restoring the same route cannot revive an old signing job. Independent omission probes cover these admission and publication guards. First enrolment is now serialized with legacy remote batches through sorted organisation and venue parent locks. The captured venue set is reused after the wait, including reporting exports, scheduling and forward-status reads and writes. Database checks cover first enrolment, installation-lock ordering, unrelated-cell progress and captured placements; independent omissions challenge the guards. Direct remote admission now rechecks the original venue and installation key under the installation lock after policy waits, then reads setup before allowing further work. Added checks cover provisioning, DNS instructions, certificate admission, cleared setup during a move wait and unrelated-cell progress. DNS changes and certificate publication now retain the admitted installation venue and public key across external waits. Added database checks cover key and venue changes without a revision change, retain environment, revision and revocation refusals, and require unchanged identities to succeed. Independent omissions challenge each retained identity component. Additional remote-report checks cover forged signatures, mapping and route revisions, current reporter identity after waits, sibling isolation and status before cleanup. Six independent guard omissions must be caught by those checks in CI. Translation batch hooks now separate permission from spending admission, recheck permission after provider accounting and retry waits, and retain an already paid valid result without starting review. Native checks cover denial, restoration, cancellation and callback failures. Translation admission and workers now consume venue authority; new database checks cover level-one refusal, retained results, queued-job progress and downgrade round trips during provider work. Database omission checks qualify admission, provider callbacks and the admitted permission generation. The explicit test-mode worker now skips production jobs without changing their rows or bodies, so they cannot block eligible test venues. Added database checks cover queued and interrupted work, and separate omissions challenge both selection paths. The account HTTP app now passes its selected mode into translation admission. New HTTP checks cover enrolled levels, production refusal, independent consent and setup, retained paging and replay, ownership and proof refusals. Policy-wait tests cover lock order, revocation, key and venue changes, expired leases and withdrawn consent; independent omissions challenge HTTP mode propagation and post-wait authentication. Relay approval, message admission and SMTP handoff now read basic venue eligibility before installation locks, while retaining the independent owner, consent, origin, grant, allowance and operator-stop checks. New checks cover each level, policy waits through direct and HTTP entry points, fresh admission, retained account debits and rejected configuration. Same-organisation translation checks reject forged selectors and keep jobs bound to the authenticated installation. The dedicated test runtime now validates and forwards the explicit venue mode, keeps the legacy modes unchanged and selects the local storage, trust and private controller paths. It drops translation provider inputs and forwards the Stripe test and SumUp sandbox account and key values only to the test venue account worker when payment setup is enabled. Native tests cover each runtime role and invalid combinations. New database and captured-mail checks cover signup and password reset across venue transitions, unchanged queued mail and relay authority, and unavailable address and translation routes at all three levels; independent omissions challenge signup and reset admission in CI. Worker commands now pass the explicit venue-level mode to their service checks and refuse conflicting or invalid settings before database work. A separate version-2 service receipt runs nine fixture groups and retains the older free/paid proof. Each complete receipt now has its own eight-minute CI job, preserving every assertion and the 330-second child and 360-second test limits. The grouped receipt runner can overlap two independent suites, retains its serial default and still runs every selected suite after a failure; controlled scheduling tests catch extra workers, serial execution, lost failures and invalid counts. Its storage group executes the direct cases once while keeping the discovered package wrapper. A single bounded file queue covers the groups without multiplying their file concurrency. The new guard runner requires independent passing baseline and restored runs around an exact named assertion failure; its controls reject empty or omitted tests, setup failures, timeouts, ambiguous mutations and undetected changes. Version 7 has a separate strict receipt format and pinned revision parser. Actual CI qualifies all 17 guard omissions, including two pure and fifteen database cases and the exact-candidate upgrade/recovery proof, including old and populated restores and physical stale-writer refusal. Independent queued-job consent remains required in venue mode; a new regression check and deliberate omission qualify its restoration. The independent CI jobs in [PR #750](https://github.com/waitron-io/waitron-cloud/pull/750) qualify the preserved 255-case legacy matrix and the 360-case nine-group venue matrix at the same head. The legacy test took 139 seconds and the venue test 283 seconds; keep measuring fixture runtime before adding work. Opt-in per-file and per-case timings now identify the service group and source line without exposing paths or test names; CI also records its CPU and memory limits. The seed-batching experiment did not make the proof fit and is removed. The two independent receipts retain all cases, strict fields and head/tree bindings. The measured between-run variability remains a profiling follow-up. A qualification also reported a bound-verifier cleanup refusal followed by live-child cascades. Fixed controller refusals now retain their failed boundary and bounded Docker exit details through the cleanup error, without daemon text, paths or request values. The parent absence check records its boundary; other controller exceptions retain only the parent removal boundary. Callers that print the error can see these details, including Node test reports; the production catalogue still records only `cleanup_uncertain`. The unchanged invalid-archive case and all 47 original bound-container cases pass on the Linux test box; this does not reproduce or explain the historical failure. Use the next instrumented occurrence to distinguish discovery, ownership inspection, removal and absence confirmation before changing cleanup behavior. Ownership fences, verdicts and time limits remain unchanged. Each receipt keeps the approved 330-second child cutoff, its own 360-second test limit and an eight-minute CI job. Both jobs must pass independently at the same head. An earlier release qualification was blocked by a [pinned Node fixture image pull](https://github.com/waitron-io/waitron-cloud/actions/runs/41160662631/job/124417317872) returning an authentication refusal before conformance tests. The underlying registry cause remains open. A later qualification also hit an HTTP 502 while fetching the legacy Node canary image, followed by six missing-image prerequisite failures. [PR #816](https://github.com/waitron-io/waitron-cloud/pull/816) added bounded recovery to that isolation-test acquisition path before resources are created; its controls retain immediate authentication refusal, the three-attempt cap and the shared 120-second budget. The [image acquisition investigation](backlog/cost-image-acquisition.md#isolation-test-node-image-d530) owns that delivered recovery and the unresolved registry outage cause. On repeated CI runs, the test that removes catalogue safeguards in disposable copies exceeded its unchanged three-minute limit. Its fourteen independent guard checks now use two separate checkouts, with the original assertions and deadlines. An isolated Linux comparison drops from 141 to 77 seconds. The [catalogue guard runtime investigation](backlog/snapshot-guard-runtime.md) records the measurements and remaining CI variability. Older upgrade and service assertions remain. Every selected current-head CI job remains the final release gate; production enforcement stays off. Slice J's installation-authenticated billing display now has a plan and a shared contract agreed with Waitron lane B, including state/period combinations, error mappings, five example replies and trusted account/signup destinations. Its pure display projector now uses accepted charge settlement and exact hosted-day allocations, keeps unpaid gaps visible, selects stored trial and lapse facts without inventing transitions, and derives the civil day from an explicit calendar. Its package exports and fixed signing vector are built. The authenticated country reader now derives scope through the stored installation, rechecks current authority after parent-lock waits, reads accepted attempts and exact hosted allocations in one transaction, and selects one effective published price without writing billing or installation state. The separate HTTP endpoint requires the stored installation proof and lease, applies the shared budgets and bounded body read, and keeps billing separate from service configuration. Automatic omission probes cover accepted settlement, unpaid day gaps, scope changes during a wait, revocation and trusted account destinations. The read shares its legal-business parent among display readers while retaining billing-writer exclusion. Real database, HTTP, socket and guard checks qualify the provider; joint Waitron consumer qualification remains open. Pre-connection public prices and the production billing calendar retain the owner questions raised by lane B. Billing remains internal: production prices, payment collection, invoices, allowances, enforcement and deployment need their later slices and owner gates. The [D568 emergency display and code proposal](waitron-integration-contract.md#emergency-hosting-display-and-code-proposed-d568) answers A1188 part 1 and A1018’s four Cloud questions without extending billing display version 1. It incorporates Lane B’s eight part 1 amendments. Waitron accepts the separate display/code boundaries in its 14 November response; Cloud’s [13:33 CET agreement](https://github.com/waitron-io/waitron-cloud/pull/1214#issuecomment-6877323126) settles the part 1 code/refusal/primitive-signing examples, independent six-per-minute code-read budget, daily-price projection and operational `not_provisioned` meaning. Lane A agrees with the four A1018 answers; its amendments now require a permitted person in the copy, a destination key in both the chart and M1’s local node record, valid operation IDs and settings/image compatibility. Hosted enrolment must name the node-record writer, and environment-backed settings with null file digests still need a compatibility design. The inspected unpublished Slice 5 pin must be reconciled with its reviewed result before joint formats and tests. Separate signed facts and on-demand code reads, cached-link freshness, code issue dates and the unqualified hosted authentication, resource and membership-key bindings are specified there; no endpoint, P6 or emergency billing is built by that text. The contract’s “Agreed part 1 values” section records that technical agreement; shared signing-action publication, both adapters and authenticated-route qualification remain open. Its [part 3 agreement](waitron-integration-contract.md#agreed-part-3-values-15-november-2026) settles fresh-node locked placement, launcher-delivered PEM, copy-only eligibility/last-contact status and one active copy with three admitted starts per rolling hour for future build. The [part 4 agreement](waitron-integration-contract.md#agreed-part-4-confirmation-18-november-2026) defines confirmation, expiry, replay and verified source withdrawal. The Cloud status and confirmation endpoints wait for P6's locked placement, stored copy operation, restricted copy authority, capped lease, D568 eligibility and shared signing actions. Routes, counters and joint runtime qualification remain open. Cloud’s supplier of [TOTP purpose keys](waitron-integration-contract.md#totp-purpose-key-input-amendment-17-november-2026) stays unbuilt until the real selected-backup-to-launch consumer exists. This is not owner design approval or permission to build hosted/P6 runtime. Slice A's [sandbox receipt](billing-provider-test.md) records an unattended SumUp card charge and Stripe SEPA success, failure and dispute notifications. The reported SumUp sandbox fee was €0.25 on €10; the live saved-card rate, live-account enablement and production settlement timing remain unqualified. Prices and allowance
-   sizes wait for measurement (the design's §11), except the separately decided [SMS figures](superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md). The owner approved its per-venue design on 9 November 2026; sender/privacy/delivery qualification and implementation remain open, and booking messages are outside its revision. Billing cannot go live before the
-   Waitron company exists to issue invoices, and that billing software needs its own
-   declaración responsable.
-
-   Slice E's [plan](superpowers/plans/2026-10-29-cloud-billing.md#slice-e-allowances-and-remote-access-traffic) is implemented for explicit test/UTC use. Immutable monthly configuration and held, spent or released reservations serialize account and venue budgets, preserve the original operation and month on replay, and retain spent units after uncertain calls. Relay admission commits one spent unit with its queue row. Translation holds items with the job, spends under its current lease and records actual invocation dates; a durable pending-call count prevents another batch or lease takeover from erasing uncertainty. Existing owner, consent, origin, grant, lease, stop, policy and money-cap checks remain independent. Account and worker commands forward the options only when explicitly enabled. There are no production allowance sizes, provider credentials remain excluded from the dedicated test runtime, and production enforcement stays off.
-
-   Signed remote traffic binds reporter, process, configuration and published route identity. The durable spool retains exact pending reports and counters; ingestion commits one source receipt and paired byte event, with exact replay after a lost acknowledgement. Private writer leases bind Linux boot, PID namespace and process start time, so a restarted or reused PID cannot retain a crashed writer’s lock. Unknown or live writer identity still refuses recovery; a retained gap prevents recovered bytes from claiming continuous coverage. Country publication journals both route channels and explicitly empty intervals. Operational probes cannot become user traffic, and missing intervals or unfinished calls cannot prove an unused trial. The existing owner usage summary and its four reconciliation sources remain unchanged. The three rendered traffic scenarios execute once through the discovered Docker wrapper with its private network-administration capability. Actual rendered HAProxy and PostgreSQL fixtures check independently measured bytes, real TLS probes over three controlled dates with zero usage, real user requests over three dates in each venue's stored trial, lost replies, foreign scope and killed-gateway gaps. These controlled-clock checks do not qualify live calendar behavior or a production gateway.
-
-   Migration 048 appends the allowance and traffic schema after main's lifecycle migration 047. All earlier SQL and receipt modes 1–8 retain their meaning. Version 9 qualifies the exact 47-to-48 upgrade: interrupted rollback, concurrent and repeated migration, complete consumer ledgers and separate old and populated backup restores. Matching external keys preserve backup holds, both configuration revisions, held/spent/released reservations, unfinished calls, reporter identity and durable gaps. Pending and older spool replay retains the exact traffic ledger without adding bytes or resetting identity. Historical proof wrappers execute their original installed releases. The retained-job upgrade assertion preserves every original field and additionally requires the new pending-call count to be zero.
-
-   The official guard wrapper independently removes two trial rules and fourteen database, service and traffic guards, requires their specific wrong outcomes, then restores and reruns each case. A spent-state omission must refund two units; a final lease omission must make one real provider call after takeover; operational counter substitution must turn real probes into forbidden ledger events. Two independently installed candidates divide the fourteen cases into equal batches under the original deadlines; both finish before cleanup, and exact coverage and original result order remain mandatory. Strict controls reject setup errors, missing or duplicate cases, skips, incomplete batches and undetected faults. Run the guard and recovery commands in the [registration guide](../packages/registration/README.md#monthly-allowances-in-test-fixtures) on a Docker-capable host. Provider accounts, production sizes, clock-drift/calendar qualification, enablement, live recovery and later billing slices remain separate work. An unconfirmed spent call deliberately keeps later trial evidence incomplete; it is never replayed to manufacture confirmation. Concurrent direct spool calls refuse under the exclusive-writer contract; runtime and child operations use their existing queues. Non-Linux reuse of a different live PID and an interrupted recovery lease remain conservative refusals rather than authority to discard evidence.
+   payments, emergency hosting by a venue manager, and Cloud's own Veri\*Factu invoices; the
+   [build plan](superpowers/plans/2026-10-29-cloud-billing.md) orders ten slices. Slices B
+   (rules), C (country-local store), D (per-venue levels), E (allowances and signed traffic,
+   test/UTC use only) and J (the box's billing view) are built, and slice A's
+   [sandbox receipt](billing-provider-test.md) exists. Enforcement, production allowance sizes
+   and provider credentials stay off. Open:
+   - Prices and allowance sizes wait for measurement (the design's §11), except the separately
+     decided [SMS figures](superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md). The
+     owner approved its per-venue design on 9 November 2026; sender/privacy/delivery
+     qualification and implementation remain open, and booking messages are outside it.
+   - Billing cannot go live before the Waitron company exists to issue invoices, and that
+     billing software needs its own declaración responsable.
+   - Joint Waitron qualification of the billing view; pre-connection public prices and the
+     production billing calendar keep the owner questions raised by lane B.
+   - Live-account enablement, production settlement timing and the live saved-card rate. The
+     reported SumUp sandbox fee was €0.25 on €10.
+   - Provider accounts, clock-drift and calendar qualification, live recovery, slice G onward
+     and production collection, invoices and deployment. An unconfirmed spent call keeps later
+     trial evidence incomplete; it is never replayed to manufacture confirmation. A production
+     gateway's traffic is unqualified, and stored hosted paid-period dates are bounding
+     summaries: later billing views must use the exact hosted-day allocations.
+   - A1188's agreed values ([part 1](waitron-integration-contract.md#emergency-hosting-display-and-code-proposed-d568),
+     [part 3](waitron-integration-contract.md#agreed-part-3-values-15-november-2026),
+     [part 4](waitron-integration-contract.md#agreed-part-4-confirmation-18-november-2026) and
+     the [TOTP purpose keys](waitron-integration-contract.md#totp-purpose-key-input-amendment-17-november-2026))
+     are contracts for a future build, not owner design approval or permission to build hosted
+     runtime. The endpoints wait for P6's locked placement, stored copy operation, restricted
+     copy authority, capped lease, D568 eligibility and shared signing actions. Hosted
+     enrolment must name the node-record writer; environment-backed settings with null file
+     digests need a compatibility design.
+   - The venue service proof still reaches its 330-second limit at 1.5 CPUs, and a bound
+     verifier cleanup refusal and registry failures remain unexplained: see their entries below.
 4. **Terms, the data processing agreement and service promises.** These are needed before
    the first customer, paid or not, and a lawyer is needed for each, so the questions should
    go out early. The [launch evidence](launch-evidence.md) requires "lawyer-reviewed terms",
@@ -950,10 +586,8 @@ functionality and other programs’ explicit bind races remain separate qualific
 
 ## Repository licence
 
-The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
-All eleven workspace and root manifests identify it with `SEE LICENSE IN LICENSE`.
-Waitron's separate grants are not included. The owner and watcher control the repository's
-visibility; this change does not switch it or alter settings and workflows.
+The root `LICENSE` is Waitron's Elastic License 2.0 text, without Waitron's separate grants.
+The owner and watcher control the repository's visibility.
 
 ## First working milestone
 
@@ -965,72 +599,11 @@ final-write handover and automatic appliance setup remain open; see the
 
 ## Fiscal allocation registry
 
-Cloud no longer runs the obsolete fiscal allocation registry. Waitron generates
-time-based codes; its caller removal landed in
-[Waitron PR2228](https://github.com/clintongormley/waitron/pull/2228) at
-`2297688a6bbaa29eaa11cbee283681d388efd069`. The
-[removal design](superpowers/specs/2026-10-29-remove-fiscal-registry-design.md)
-and [implementation plan](superpowers/plans/2026-10-29-remove-fiscal-registry.md)
-record the boundary. The workspace package, account and installation HTTP routes,
-portal journey and live cost producer are removed. Old document links receive the
-ordinary translated missing page; old API calls return `404 not_found` with the
-same host, query and security checks as other missing routes.
-
-Migration 038, its dormant tables and stored rows remain unchanged. Registration
-owns the seven retained schema tests and the digest/ledger-position check. Removal
-regressions compare every dormant table and the migration ledger before and after
-old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 30 logical shards in 29
-jobs and all six receipt suites, including all six portal shards. Saved historical
-manifests and cost receipts remain historical evidence; their parsers and positive
-receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)
-preserves the withdrawn contract and its old anchors. No outside journal, custodian,
-registry signing service or registry enablement work remains in the Cloud product.
-Destructive retirement of stored records or shipped migration history still needs
-a separate owner decision. Ordinary backup verification and local recovery keep
-their existing authority checks.
-
-**Maximum-hour lease fixture timing.** Full main CI `39247738663` failed
-`staff-certificates.test.ts` before its production-installation HTTP 403 check:
-the issuer refused a fixture built from two clock reads. Advancing only lease
-construction by one millisecond reproduces `invalid_proof` through real PostgreSQL.
-The fixture now derives expiry from one issuance timestamp; its permanent advancing-clock
-case verifies the signed lease lasts exactly 3,600,000 ms and retains the HTTP 403.
-The outage proof's live retired-key control had the same two-clock construction.
-Its complete PostgreSQL/SeaweedFS/HTTP journey also reproduces the refusal under
-that clock control and passes after the same correction, retaining key-removal,
-expiry and revocation checks. Both corrections leave production code, existing
-assertions and individual deadlines unchanged. CI did not record its clock values,
-so the exact historical timing remains unproved.
-A two-millisecond advancing-clock experiment also reproduces the issuer refusal
-in expired leases built from separate clock readings. The `relay-messages.test.ts`,
-`relay-operator-stop.test.ts` and `captures.test.ts` fixtures now derive both times
-from one reading. Each existing HTTP refusal test advances the clock during
-synchronous lease construction and restores it before making requests, preserving
-all expiry, permission, HTTP assertions and deadlines. A Docker-free probe executes
-the four actual construction blocks with the real issuer and verifies that each
-signed lease lasts 3,599,999 ms and is expired. The staff revision/revocation
-fixture also uses one timestamp under the same clock control, retaining every
-HTTP, revision and revocation assertion. PostgreSQL and HTTP journeys are
-qualified by CI while local Docker is unavailable. The historical CI clock values
-remain unknown.
-
-**Relay worker counter fixture timing.** CI `40266435807`, registration shard
-4/5, refused the initial operator-stop submission with `relay_counter_expired`:
-the counter ended at `1792987200000`, and the final database check observed
-`1792987200001`. Worker fixtures now start their unchanged one-hour counter
-window from PostgreSQL's setup timestamp, keeping handoff and stop checks
-independent of the wall-clock hour. Nine Docker-free cases execute the actual
-fixture configuration and counter calculation across that boundary, including
-an application clock two hours ahead or behind. Production expiry, limits and
-all existing worker assertions remain unchanged. Use current-head CI for the PostgreSQL worker journeys while local Docker is down.
-
-**Short lease fixture timing.** The capture object-write and installation-lock
-fixtures, and the replacement provider-grant fixture, derive expiry from one
-issuance timestamp. A Docker-free advancing-clock probe executes their actual
-construction statements with the real issuer and verifies signed durations of
-100, 250 and 600,000 ms. All existing refusal assertions and waits stay unchanged;
-GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
+Retired: Waitron generates time-based codes, and the
+[removal design](superpowers/specs/2026-10-29-remove-fiscal-registry-design.md) records the
+boundary. Migration 038, its dormant tables and stored rows stay unchanged; the
+[registry reference](fiscal-allocation-registry.md) keeps the withdrawn contract. Destructive
+retirement of stored records or shipped migration history needs a separate owner decision.
 
 ## Translate all: approved design, implementation still open
 
@@ -1088,654 +661,140 @@ implementation or production evidence.
 ## Platform work to scope
 
 - **Remote fixture startup failure still needs attribution.** Merge conformance run
-  `39906100584` on `a0404ad26282fadd30676266dd23c3ba439e1c4e` failed only the
-  `false-availability` case in `remote-waitron-conformance.test.mjs`, after the
-  unchanged 30-second readiness deadline. The same case passes locally through
-  `node scripts/test-postgres.mjs exec node scripts/cloud-cost/conformance.mjs --only remote-waitron-conformance.test.mjs --pattern false-availability`.
-  Both gateway and browser readiness probes now retain a fixed transport, TLS, HTTP, response-shape or
-  command phase without printing response bodies, keys or raw errors. Capture that
-  phase on recurrence before choosing a fix. This diagnostic change does not
-  identify or fix the historical failure. The two-second request timeout,
-  30-second startup deadline and all original gateway and browser journey checks remain.
-  A separate browser fixture refusal in [PR594's cost run40536958436](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
-  occurred during the gateway's `docker start`, before any browser phase. The command
-  wrapper now retains a fixed command category, failure reason, exit code or signal,
-  and output byte counts capped at one MiB per stream. Arguments, paths and output
-  contents stay private. Native child-process checks cover exit, signal, missing
-  executable, output limit and the unchanged 30-second timeout. Existing browser
-  refusal labels and all journey, ownership and cleanup checks remain unchanged.
-  Capture the next labelled failure to identify the startup cause; these controls
-  do not explain the historical Docker delay. Local Docker qualification stays
-  parked until 3 November; current-head CI runs the genuine gateway journeys.
+  `39906100584` failed only `false-availability` in `remote-waitron-conformance.test.mjs`
+  after the 30-second readiness deadline, and [PR594's cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
+  was refused during the gateway's `docker start`. Probes and commands now report a fixed
+  phase or category. Capture that on a recurrence before choosing a fix; keep every timeout
+  and journey check.
 
-- **LAN test Cloud with free and paid organisations.** The dormant PR7 proof
-  runner and [source-bound evidence assembler](test-cloud.md#assemble-the-local-evidence-before-release-qualification)
-  combine genuine free/paid pairing, captured account mail, paid archive
-  verification and non-activating recovery, continuous recovery, snapshot fallback,
-  remote isolation/withdrawal, same-run snapshot credential expiry and matching
-  four-volume rollback. Free-service fixtures stay separate from unavailable
-  Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
-  protected Waitron containers are never adopted.
+- **LAN test Cloud with free and paid organisations.** The fixed project is
+  `waitron-cloud-test`; protected Waitron containers are never adopted, and the existing
+  Waitron venue is quarantined: use disposable venues and leave its containers and data alone.
+  The dormant proof runner and [evidence assembler](test-cloud.md#assemble-the-local-evidence-before-release-qualification)
+  are built; their Linux receipts keep their original source and do not qualify the current
+  release image. Publication remains `unqualified`, the complete-integration and shipping
+  flags stay false, snapshots stay unavailable, plan enforcement and deployed translation stay
+  off and address providers stay disabled. No image publication, account, provider resource
+  or spending is authorised here. The [test Cloud guide](test-cloud.md) keeps historical
+  failure diagnostics.
 
-  Public test-venue HTTPS still needs Amazon staging/production issuance and renewal
-  qualification, account renewal, pairing and the owner's mobile-data check. The
-  [short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md) has the
-  watcher's 17 November clearance; local HTTP issuance and proxy checks do not
-  qualify those deployment workflows.
-  The [single-machine Amazon test plan](superpowers/plans/2026-11-16-test-cloud-aws.md)
-  is cleared by the watcher for staged implementation. Configurable HTTPS reuses
-  the test runtime and internal CA trust. The explicit Amazon driver target has
-  local admission and rendered-configuration checks, with measured image sizes and
-  an idle-stack observation. Sustained Amazon OS/disk/CPU headroom, pairing and
-  email qualification remain open. Driver inventory's
-  optional health handling is checked through Docker itself by
-  `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`.
-  `node --test scripts/test-cloud-deploy.test.mjs` simulates Docker output.
-  The driver takes one fresh sample when inspection exits with code 1 and
-  every error names a missing listed Cloud container. A second removal
-  during the retry still fails the run. The same command checks that the CLI
-  prints the error and its underlying cleanup errors. A disposable Linux
-  run of the real Compose files passed both same-image account replacements
-  and restored the synthetic Billing list. Each replacement interrupted
-  five sampled HTTPS requests before readiness returned. Stockholm's
-  original restart cause and the joint box email trial remain open.
-  Signed configuration now discovers a relay-grant hint without
-  advancing service configuration. The test-only private-origin
-  approval core accepts a signed statement under the current key-bound lease and
-  owner consent, with synthetic checks for production refusal. The
-  [test Cloud service controls](test-cloud-service-controls.md) show how to switch
-  remote access, backups, the guest menu and box email on the Amazon layout.
-  SES startup and authenticated feedback composition, real email delivery and
-  joint box handoff qualification remain open. The owner's pre-production box
-  still needs a fresh named pairing with the Amazon test Cloud for the guided
-  backup trial. The [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box)
-  uses the installed test box release. The [Amazon backup rehearsal](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud)
-  documents the upload route and disk workspace for the isolated restore worker.
-  The live capture and guided result still need the fresh synthetic pairing.
-  Recovery approval remains off.
+  Open on the [Amazon test Cloud](superpowers/plans/2026-11-16-test-cloud-aws.md):
 
-  Automatic remote access starts from the box's signed tunnel key in venue-level
-  test mode. The tunnel request returns `403 remote_plan_required` for a signed
-  box whose venue plan excludes remote access. The focused worker test starts
-  the Connected trial through the account endpoint and gets the assigned
-  address. The joint test still needs a fresh pairing on the pre-production
-  box, the assigned Staff page on mobile data, and confirmation that the box
-  switch stops access.
+  - Public test-venue HTTPS needs staging/production issuance and renewal qualification,
+    account renewal, pairing and the owner's mobile-data check
+    ([short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md)).
+  - Sustained OS, disk and CPU headroom, SES feedback composition, real email delivery and
+    joint box handoff. Stockholm's original restart cause and the joint box email trial.
+  - The owner's pre-production box still needs a fresh named pairing with the Amazon test
+    Cloud for the guided backup trial; the live capture and guided result
+    ([rehearsal](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud)) wait for it.
+    Recovery approval remains off.
+  - Automatic remote access needs the same fresh pairing, the assigned Staff page on mobile
+    data, and confirmation that the box switch stops access.
+  - A phone check of how long a synthetic menu takes to reappear after sharing is enabled
+    (Juniper portal trial).
 
-  The [Juniper portal trial follow-up](superpowers/plans/2026-11-19-cloud-portal-feedback.md)
-  still needs a phone check of how long a synthetic menu takes to reappear after
-  sharing is enabled.
+  **Open:** the owner-authorised **Cloud/Waitron release driver**, after this dormant proof
+  branch finishes, owns published-image upgrade and rollback qualification. It must bind
+  immutable published Cloud and Waitron digests to their exact source, compiled verifier
+  target/module manifest and generated assets, name a supported old/new release pair, prove
+  its real schema upgrade and old-consumer refusal, then restore the matching database,
+  configuration, storage and gateway state and prove both original pairings still exchange.
+  The existing rehearsal refuses a target containing migration 064 because its seeds use the
+  retired local-id layout, so the driver needs a v2 seed. See the
+  [release-driver handoff](test-cloud.md#release-driver-handoff).
 
-  The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
-  both combined cases without skips in 1,083.6 seconds. Both original pairings
-  exchange freshly after rollback; all 533 resource readings pass the original
-  limits. Independent cleanup finds all 539 recorded owned container IDs absent
-  and protected Waitron unchanged. A separate exact-source free-service run passes
-  seven groups and 255 tests without skips. The assembler checks their source,
-  image, generated-asset, recovery, withdrawal, resource and cleanup bindings.
-  These measurements retain their original source identity after rebasing; they
-  do not qualify the current release image. Historical failure diagnostics remain
-  in the [test Cloud guide](test-cloud.md), with unresolved causes still unknown.
+  Other open maintenance: keep organisation writes in the plan setter, since shared policy
+  readers that update their organisation can deadlock while upgrading locks. Qualify a
+  consistent route view across the two export reads and production-scale processing before
+  promising uninterrupted movement or larger capacity. Qualify recovery from definitive
+  daemon rejection without clearing uncertain verifier journals. Same-CA in-volume renewal,
+  continuous box supervision and the coordinated image/schema and volume-to-volume rollback
+  path remain open.
 
-  Whole-branch review found additional proof-runner gaps. Cleanup now uses run
-  ownership labels and recorded resource IDs, preserves foreign resources sharing
-  a project name, and retains verifier state after a failed stop or scope read.
-  Controlled Linux checks cover owned cleanup, foreign resources, stop refusal
-  and actual Compose ownership rendering. Whole-run cancellation now drains cleanup
-  during command gaps. The proof and deployment CLI share a stable admission lock
-  and refuse orphan owner-labelled resources. Cloud source measurements execute
-  host-supplied code, include tracked plus-named inputs and refuse unsupported
-  paths. The assembler requires the pinned client, ordinary fiscal refusal,
-  restart observations, remote peer and resource-measurement method. Private JSON
-  failures use a fixed error. Current-head CI still gates this dormant branch;
-  none of these controlled checks qualifies a release or enables deployment.
+- **Local package validation must avoid concurrent full-package groups.** Overlapping groups
+  once pushed the registration control CLI past its five-second bound; the cause of the
+  earlier nine-minute stall is unproved. Run local full package suites sequentially with two
+  file workers, keep the five-second assertion, and capture process timings if it still fails.
+- **Password-login recovery-row expiry.** [Run 39112504573](https://github.com/waitron-io/waitron-cloud/actions/runs/39112504573)'s
+  ordering is unproved. If the assertion fails again, capture expiry and setup stages; do not
+  extend its authority window or test deadline.
+- **Operating cost.** The [offline calculator](cloud-cost-calculator.html) and
+  [model](cloud-cost-model.md) compare the running platform and per-venue usage; the
+  [approved design](superpowers/specs/2026-10-14-cloud-cost-model-design.md) defines the
+  evidence boundary. The complete bill remains unknown: missing prices, minimums and blank
+  inputs stay named gaps, and neither a priced subtotal nor a passing command means a
+  complete or provider-validated budget. The accepted local samples
+  ([joined evidence](cost-model/local-driver-evidence.json)) keep their own source, clock and
+  limits; never add overlapping samples or substitute one's transfers for another's. Private
+  replay uses owned scratch and an internal network, and raw data stays on the Mac. No fiscal
+  allocation, hash-chain or golden rule is changed.
 
-  **Open:** the owner-authorised **Cloud/Waitron release driver**, after this
-  dormant proof branch finishes, owns published-image upgrade and rollback
-  qualification. It must bind immutable published Cloud and Waitron digests to
-  their exact source, compiled verifier target/module manifest and generated
-  assets, name a supported old/new release pair, prove its real schema upgrade
-  and old-consumer refusal, then restore the matching database, configuration,
-  storage and gateway state and prove both original pairings still exchange.
-  The existing schema-upgrade rehearsal refuses a target containing migration 064
-  because its source seeds use the retired local-id layout; the release driver
-  must provide a v2 seed before qualifying that upgrade. Historical pairs remain
-  available to the existing rehearsal.
-  See the [release-driver handoff](test-cloud.md#release-driver-handoff).
-  Publication remains `unqualified`; complete-integration and shipping flags stay
-  false. Final complete receipt, current-release resources and later reviewed LAN
-  deployment remain required. Snapshots stay
-  unavailable, plan enforcement and deployed translation stay off, address providers
-  stay disabled, and no image
-  publication, account, provider resource or spending is authorised here.
+  The [trial assessment](cost-model/live-check.json) stops before any AWS creation: its
+  illustrative high-cadence component alone projects 130,000 requests above the 10,000 cap,
+  an assumed sensitivity rather than a proved bound. No resources were created and no billing
+  read is due. Independent synthetic generation, an owned-resource runner and durable billing
+  execution are prerequisites if it is revisited.
 
-  Other open maintenance remains separate: keep organisation writes in the plan
-  setter, since shared policy readers that update their organisation can deadlock
-  while upgrading locks. Qualify a consistent route view across the two export
-  reads and production-scale processing before promising uninterrupted movement
-  or larger capacity. Qualify recovery from definitive daemon rejection without
-  clearing uncertain verifier journals. Same-CA in-volume renewal, continuous box
-  supervision and the coordinated image/schema and volume-to-volume rollback
-  deployment path remain open. The existing Waitron venue is quarantined: use
-  disposable venues and leave its running containers and data untouched.
+  Rebuild and verify with `node scripts/cloud-cost/cli.mjs build` and `… verify`;
+  `pnpm test:cloud-cost` runs the synthetic checks and `pnpm test:cloud-cost:conformance` the
+  generated-data checks.
 
+  **To complete the total:** missing inventory quantities and regional billing terms,
+  representative venue and public activity, complete retained-object forecasts,
+  recovery/alert/email frequencies and provider capacity/transfer mappings. Keep external
+  mail, fiscal API fees, GitHub charges, allowances, credits and tax separate from gross AWS
+  usage. Keep generated fixture data within each service's 64 MiB scratch limit, or make a
+  separate bounded capacity change. A generated restore-integrity failure reproduces on the
+  host-shared Docker folder and passes on container-native storage; its production relevance
+  is unproved, so prepare a consistent frozen copy before long replay. Earlier untraced refusals
+  and transient source-file changes are unattributed; later activity in a live source is not
+  proof that the isolated experiment wrote it.
 
-- **Translation worker lock-probe timing is now independently exercised.** The
-  existing review-totals case put a PostgreSQL lock probe inside its fake HTTP
-  response while the real client allowed 100 ms. A controlled 150 ms probe on
-  landed base `050084752f1c57b00183582a2d16d33b0555f5e8` produces a provider timeout
-  and three requests instead of the expected two. The probe now runs at the
-  worker's provider-call boundary before starting that same HTTP deadline, with a
-  deliberate 150 ms database delay. The original done/review totals, NOWAIT lock
-  check and exact two-request assertion remain; both provider calls are probed.
-  The earlier unexplained observations remain separate unless their exact trace
-  matches this reproducer. No provider retry policy, production code or deadline
-  changed.
-- **Password-login recovery-row expiry setup.** The recovery-row test now starts
-  its unchanged 500 ms challenge expiry after acquiring the row it will hold.
-  A deliberate 650 ms setup delay reproduces the earlier missing-lock assertion
-  with the old ordering and passes with this precondition. The 550 ms held-row
-  wait, lock observation, zero sessions, one spent attempt, unconsumed recovery
-  code and 30-second test deadline remain unchanged. No authentication code or
-  policy changes. [Run 39112504573](https://github.com/waitron-io/waitron-cloud/actions/runs/39112504573)
-  did not capture expiry/setup stages, so its exact historical ordering remains
-  unproved. Capture those stages if the same assertion fails again; do not extend
-  its authority window or test deadline to hide a failure.
-- **Local package validation must avoid concurrent full-package groups.** Four
-  two-file-worker groups overlapped during D79 and the registration control CLI
-  exceeded its unchanged five-second command bound. A landed-base phase probe
-  completed every node/root/package command in under 700 ms after reducing the
-  overlap; acknowledgement-to-close took at most a few tens of milliseconds.
-  This does not prove the cause of the earlier nine-minute stall. Run local full
-  package suites sequentially with two file workers and retain the five-second
-  assertion. Capture process/phase timings if it fails under that arrangement.
-- **Operating cost.** You can compare the running platform and per-venue usage
-  with the [offline calculator](cloud-cost-calculator.html) and
-  [model explanation](cloud-cost-model.md). They show priced subtotals at zero,
-  1, 10, 100 and 1,000 venues, with editable assumptions, English and Spanish,
-  light and dark themes, and layouts for 390 and 1280 pixels. The complete bill
-  remains unknown. The nightly generated-storage warning compares byte-seconds
-  only. Blank inputs and missing billing terms stay named gaps;
-  neither a priced subtotal nor a successful verification command means the
-  service has a complete or provider-validated operating budget.
-  The [approved design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
-  and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md)
-  define this evidence boundary.
+  **Unexplained rehearsal refusals.** Each now reports a fixed stage or category; capture that
+  on a recurrence, reproduce it with the pinned runtime and fix the cause. Passing repeats
+  explain nothing. Keep every accounting, ownership, isolation, restore, cleanup check and
+  deadline.
 
-  **Public inputs and arithmetic.** The [resource inventory](cost-model/inventory.json)
-  covers required capabilities, runtime roles, alternatives and excluded future
-  products. The [price snapshot](cost-model/prices.json) records dated Spain,
-  Stockholm and global rates, their exact sources and billing dimensions.
-  Missing regional prices, minimums and rounding rules stay unknown. The
-  calculator uses the same validated model in Node and the browser. It prices
-  whole gateway/database capacity steps and aggregate request tiers, preserves
-  startup and idle work when sales are zero, and simulates calendar archive
-  growth. Month-one and later-retention storage are alternative windows, never
-  added into one month. Resource size, capacity, future growth, traffic mapping
-  and low/base/high sensitivity remain assumptions. Daily and monthly archives,
-  continuous-stream retention and noncurrent versions remain distinct.
+  | Refusal | Evidence to start from |
+  | --- | --- |
+  | Streamed-day check at `private-replay` | [run 41003745800](https://github.com/waitron-io/waitron-cloud/actions/runs/41003745800/job/123893874129) |
+  | Stack start before archive assertions | [run 39743485615](https://github.com/waitron-io/waitron-cloud/actions/runs/39743485615/job/119706230844), and the older 39616174409 and 39627846860 |
+  | Paced replay, generic error | 39637622744, [39829272927](https://github.com/waitron-io/waitron-cloud/actions/runs/39829272927/job/120000877058) |
+  | Paced replay at `quiesce` | [40489223783](https://github.com/waitron-io/waitron-cloud/actions/runs/40489223783/job/122138753711) |
+  | Paced replay at `quiesce-checkpoint` | [40954158356](https://github.com/waitron-io/waitron-cloud/actions/runs/40954158356/job/123729967144), [41449381877](https://github.com/waitron-io/waitron-cloud/actions/runs/41449381877/job/125290693382) (`transfer-interrupted`) |
+  | Paced replay at `quiesce-idle` (D581) | [nightly 43207714335](https://github.com/waitron-io/waitron-cloud/actions/runs/43207714335) |
+  | Paced replay at `storage-cleanup` (D121) | [40144665901](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173) |
+  | Writer-deadline check during opening | [40259519210](https://github.com/waitron-io/waitron-cloud/actions/runs/40259519210/job/121368783695), [43971423269](https://github.com/waitron-io/waitron-cloud/actions/runs/43971423269) |
+  | Remote browser journey, mostly reconnect/takings | [39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728), [40004973526](https://github.com/waitron-io/waitron-cloud/actions/runs/40004973526/job/120590562266), [40092022379](https://github.com/waitron-io/waitron-cloud/actions/runs/40092022379/job/120866647453), [40122070386](https://github.com/waitron-io/waitron-cloud/actions/runs/40122070386/job/120955659784); [investigation](backlog/browser-reconnect.md) |
+  | Mail measurement close (D262, PR #467) | [job 121192744128](https://github.com/waitron-io/waitron-cloud/actions/runs/40201247616/job/121192744128). Read the close error's first reason and both counts: a timeout, a protocol failure and a disagreement after an accepted reply need different reproductions. |
+  | SIGINT cleanup before a worker was admitted (D502) | [run 41003177471](https://github.com/waitron-io/waitron-cloud/actions/runs/41003177471/job/123892097439). Read `local-command-refusal` first; controls in `scripts/cloud-cost/local-command-diagnostics.test.mjs`. |
 
-  **Accepted local samples.** The [joined evidence](cost-model/local-driver-evidence.json)
-  preserves each experiment's source revision, clock, scope and limitations:
+  The strict 4.01-second streamed-day control must refuse after its original deadline in
+  whichever phase it reaches, with the source unchanged, private state removed and every
+  started child collected and exited (owner, 24 October 2026).
 
-  - The [stream receipt](cost-model/measurements.json) replays all 207 selected
-    sales through the pinned Waitron sale writer, preserving its normal fiscal
-    integrity checks. It observes startup, accelerated workload, 1,200.009
-    seconds of idle traffic and a successful native restore. Copied source size
-    is 19,546,112 bytes; fresh-venue database growth is 700,416 bytes. All 342
-    physical requests reconcile between independent counters, including setup,
-    observer, restore, cleanup and eight failed attempts. Retained byte-seconds
-    have explicit lower/upper bounds. This short unversioned experiment observes
-    neither a full trading day nor a scheduled snapshot/compaction boundary.
-    A separate three-sale original-cadence control exposes batching sensitivity;
-    its different duration/background work cannot supply a daily correction.
-  - The [selected-sale archive](cost-model/archive-replay.json) captures a
-    3,527,677-byte archive and restores all 207 sales through the application
-    with valid integrity and owned cleanup. The
-    [one-sale storage sample](cost-model/archive-storage.json) separately measures
-    a 2,835,270-byte generated archive, eleven storage attempts, a complete and
-    range read, HEAD, listing, an abandoned multipart part and cleanup. Its
-    transfer counts cannot substitute for the selected-sale archive's transfers.
-  - The [generated owner browser journey](cost-model/remote-owner-browser.json)
-    measures 2,836,968 encrypted response bytes through the real isolated gateway,
-    including cold/cached loads, sign-in, dashboard, reconnect and sign-out.
-    Interrupted stream bodies and IP/TCP/WireGuard overhead remain outside its
-    body counters. The separate [owner/public API sample](cost-model/remote-owner-public-api.json)
-    covers generated API actions. Choose one owner scenario; summing API and
-    browser scenarios would overlap. Neither sample measures typical venue
-    activity, public browser use or provider-billed transfer.
-  - The [mail retry and fiscal lifecycle](cost-model/service-mail-retry-fiscal-lifecycle.json)
-    and [signup, recovery and refusal](cost-model/service-signup-recovery-fiscal-refusal.json)
-    samples preserve captured-mail attempts, refusals, retries and fiscal HTTP
-    body counts. They issue no additional fiscal authority through replay or
-    inspection. SMTP bytes, production alert eligibility and monthly service
-    frequencies remain unknown.
+  The official Litestream shutdown also still needs qualification
+  ([scheduling investigation](backlog/cost-conformance-fixtures.md#replay-close-scheduling-d530)).
 
-  **Private measurement controls.** Online SQLite copies include committed
-  transaction-log writes without migrating, checkpointing or reseeding the source.
-  Private replay uses only owned scratch and an internal Docker network, checks
-  effective isolation before opening data, excludes live credentials/senders and
-  runs the genuine pinned writer/archive/restore paths. Every storage HTTP attempt
-  is metered independently, including retries, failed replies, versions, deletion
-  batches and unfinished multipart work. Unknown or ambiguous histories refuse
-  complete evidence. Cancellation collects admitted writers before closing their
-  measurement transports; replaced paths, lost ownership or unverifiable cleanup
-  refuse deletion and retain the recorded resources for explicit recovery.
-  The [generated conformance fixtures](../scripts/cloud-cost/fixtures/) exercise
-  these boundaries. No fiscal allocation, hash-chain or golden rule is changed.
-  Raw data, names, row identities, object keys, credentials and payloads stay on
-  the Mac. Closed anonymous export rejects extra/hidden fields and raw canaries.
+- **Future remote DNS lost-reply browser failures.** If the saved-name assertion fails again,
+  use the bounded request/status events, injection stages and setup-screen diagnostics to
+  reproduce the cause. Keep the four-second assertion and fault-injection ordering checks.
+  See [the ordering receipt](#portal-lost-reply-test-ordering).
 
-  The generated streamed-day check now prints its fixed outer stage and the last
-  32 validated replay/native events when it refuses. The parent prints this
-  evidence explicitly before rethrowing the child-command failure; raw exceptions
-  and private fields are excluded. Run
-  `node --test scripts/cloud-cost/streamed-day-diagnostics.test.mjs` for native
-  child controls, the actual smoke catch, reporting failures and owned cleanup.
-  This addresses the missing evidence in
-  [run 41003745800, job 123893874129](https://github.com/waitron-io/waitron-cloud/actions/runs/41003745800/job/123893874129),
-  which stopped at `private-replay`. Its historical Linux cause remains unknown.
-  Capture a labelled recurrence and reproduce it with the pinned runtime when
-  Docker returns; preserve accounting, cleanup, existing assertions and deadlines.
-
-  **Forecast and live-check limits.** The [component projection](cost-model/usage-projection.json)
-  applies explicit [assumptions](cost-model/projection-settings.json), preserving
-  separate phases, failures, retry identities and source windows. Default future
-  sales are an assumed 207/day after saved-clock reconciliation, rather than the
-  earlier midnight-based source-selection count of 203. Owner/public/service/
-  recovery frequencies start unset. This projection is not a complete daily
-  object-size/lifetime, version, multipart, schedule or retry vector.
-  The [trial assessment](cost-model/live-check.json) therefore stops before any
-  AWS creation. Its illustrative high-cadence workload component alone projects
-  130,000 requests above the 10,000 cap before cleanup. That sensitivity is
-  assumed, not a proved upper bound. An under-cap base estimate cannot bound
-  missing work, and no measured operation may be truncated to make the trial fit.
-  No resources or synthetic payloads were created for this trial, and no billing
-  read is due for it. The earlier storage rehearsal and its follow-ups stay separate.
-
-  Local preflight helpers reserve cleanup requests/time, versions, multipart,
-  active key hours and delayed/cancelled-deletion contingencies; unavailable
-  applicable credits or missing price bounds refuse a plan. Consumption guards
-  charge attempts before dispatch and refuse reused/altered budgets. These checks
-  establish no generated-byte provenance or provisioning authority. Billing helpers
-  compare gross usage and credits separately, retain prior-key/other/ambiguous
-  lines, flag cost or quantity differences above 20%, and plan at most three
-  physical reads including continuation/retry. They perform no provider I/O;
-  independent synthetic generation, an owned-resource runner and durable billing
-  execution remain future prerequisites if the stopped trial is ever revisited.
-
-  **Rebuild and verify.** Run `node scripts/cloud-cost/cli.mjs build` and
-  `node scripts/cloud-cost/cli.mjs verify`. They read only public inputs and
-  compare the generated HTML, explanation and stop assessment without starting
-  private replay or contacting AWS. `pnpm test:cloud-cost` runs synthetic checks
-  and artifact verification; CI includes it alongside all five prior receipt suites.
-  Compiler, real-browser, deliberate-fault and generated local-storage checks cover
-  the model and its boundaries. Storage-only evidence validates neither fixed
-  infrastructure, AWS capacity nor a full provider bill.
-
-  Run `pnpm test:cloud-cost:conformance` for the deeper generated-data checks.
-  Its setup fetches the pinned public Waitron source, compiles the required
-  runtime exports and prepares local images without a venue source path. CI
-  discovers all eighteen files, with the longer stack file split into three
-  disjoint groups. Publication verification remains separate and offline.
-  The model command verifies public inputs and artifacts. The owner-approved native deadline
-  fixture holds its generated idle observation until shutdown is requested,
-  preserving both original 43/44-second limits and every source, startup and
-  cleanup assertion. It also requires deadline and cleanup to finish within
-  56 seconds. The real generated cancellation and deadline checks both pass;
-  neither check changes a production timeout.
-  Linux conformance exposed a PostgreSQL initialization race: temporary database
-  files now live on container-native scratch, outside the scanned ownership tree.
-  The merge's unversioned ambiguous-multipart case also refused stack startup
-  before its storage assertions. Generated Linux timing probes reproduce ownership
-  scans racing deletion of `state/replay/venue/migrations.lock-journal`
-  (`39635884776`), `state/mail.db-journal` and a storage `config.json.tmp`
-  (`39636087276`, stack group 3). The generated venue, mail and storage databases
-  now live on container-native scratch, outside that scan. The ownership guard
-  stays unchanged. Separate real-service regressions check that sales, integrity,
-  mail and storage still work without placing mutable service data on the host
-  mount. Each generated service has a 64 MiB private scratch limit. Keep fixture
-  data within it or make a separate bounded capacity change before larger uploads.
-  The earlier stream-startup failure (`39616174409`) and merge refusal
-  (`39627846860`) had no underlying trace; attributing those exact historical
-  failures to these races remains an inference. Keep their logs and all ownership,
-  isolation, accounting and cleanup assertions and deadlines. Temporary diagnostic
-  workflows are removed.
-  Another stack-start refusal occurred in
-  [run 39743485615, stack group 1](https://github.com/waitron-io/waitron-cloud/actions/runs/39743485615/job/119706230844):
-  `genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage` failed after
-  3.6 seconds before its archive assertions; the other nine group cases passed.
-  `startIsolatedStack` replaces its underlying error at `local.mjs:659`, so the
-  cause is unknown. The test-image handling branch changes no cost runtime,
-  fixture or workflow. The exact case passes locally through the new launcher
-  with all archive, accounting and cleanup assertions intact. That passing probe
-  explains neither the Linux failure nor a correction. Next: capture a bounded,
-  sanitised startup stage and underlying refusal before cleanup, then reproduce
-  it without relaxing ownership, isolation, accounting or cleanup checks.
-  A separate paced-replay check refused after 75.8 seconds in `39637622744`.
-  Its saved error is generic and exposes no underlying stage. One generated-only
-  instrumented Linux run passes (`39638725311`); this does not establish a cause
-  or correction. The paced-replay worker does not use the stack service runtime
-  changed above. The isolated controller now preserves a bounded failure trace
-  after normal cleanup and during result admission: fixed replay and stream stages,
-  native exit codes and signals, stderr byte counts and fixed keyword flags. Unlisted signals
-  use a fixed `other` code. The paced test prints the complete admitted trace on
-  failure. If diagnostic inspection, JSON serialization or the reporter fails, you
-  still receive the exact original replay refusal. The reporter reads only an own
-  data property, without invoking accessors; native checks cover null and undefined
-  refusals, hostile proxies, circular and non-serializable diagnostics, and failed
-  output. Run `node --test scripts/cloud-cost/replay-diagnostics.test.mjs` for these
-  checks. Raw output, paths and exception text stay private. Diagnostic traces
-  and native keyword lists now require plain dense arrays with visible own data
-  indices. Trace fields must also remain visible when copied;
-  sparse arrays, accessors, proxies, custom properties and custom prototypes
-  refuse before executable properties run. This prevents a keyword getter from
-  changing an admitted flag into private text while the validated trace is copied.
-  Native checks reproduce that substitution and preserve the existing label/count
-  bounds and independent copies. Run
-  `node --test scripts/cloud-cost/worker-trace-arrays.test.mjs`.
-  This qualifies the in-process validator; it does not establish that an external
-  caller can supply such objects through the worker's JSON files. Generated failures
-  exercise the worker boundary and malformed-trace refusals. If resource cleanup
-  itself refuses, its error can still be generic; preserve the private journal's
-  validated trace before fixture cleanup. Both historical paced failures remain
-  unexplained. Capture the trace on recurrence and fix its cause; preserve the 207-sale restore, integrity, source and
-  cleanup checks and limits. An unchanged generated reproduction passed 13 times
-  locally and 36 times across all 12 jobs of
-  [Linux run 39857085282](https://github.com/waitron-io/waitron-cloud/actions/runs/39857085282)
-  at `42f3b05d981769fb754ebcf984766a4f885f284e`. These passes do not identify or
-  correct the historical failures. Local scratch samples peaked at 22,444 KiB
-  within the unchanged 65,536 KiB limit; those samples do not establish the peak
-  during a failure. The temporary branch-only investigation workflow is removed.
-  A controlled child-process test separately reproduces premature stream readiness:
-  a completed read can release workload before the first successful upload.
-  Readiness now waits for a completed successful native PUT, matching the existing
-  startup admission requirement. Reads, refused and unfinished writes do not
-  satisfy it, and the original deadline still collects a writer that never uploads.
-  This fixes the reproduced readiness gap; without a trace from the historical
-  failures, it does not identify their cause. Startup observation keeps the original
-  first-transfer clock and overlaps upload readiness. The first candidate instead
-  waited for an upload and then began a separate observation; a real generated
-  reproduction exhausted the unchanged 4.01-second deadline during startup.
-  The corrected composition preserves the full two-second observation, the idle
-  refusal, early-timer-wake checks and every original deadline. Diagnostic-only
-  generated failures now retain their phase and elapsed-stage trace.
-  A controlled hang-child reproduction now distinguishes a child that stops
-  writing but ignores termination from one that keeps writing until forced
-  collection. The original hang fixture kept scheduling uploads after SIGTERM;
-  holding its next upload reproduces the generic cleanup refusal from
-  `39953541488` receipt job `120415065191`. The hang fixture now suspends itself
-  on SIGTERM until the unchanged two-second forced kill.
-  Its delayed regression holds uploads only after SIGTERM and requires SIGKILL
-  and exact owned-resource collection. A separate
-  still-writing child must refuse interrupted accounting while reporting completed
-  resource collection. Production code, original assertions and deadlines remain
-  unchanged. The historical job has no transfer trace, so attribution to this
-  reproduced overlap remains an inference. Earlier paced failures stay unexplained.
-  The same named paced-replay test also failed after 76.1 seconds in
-  [run 39829272927](https://github.com/waitron-io/waitron-cloud/actions/runs/39829272927/job/120000877058),
-  while qualifying the browser-source repair after Actions recovery. Its image
-  build completed, then `runIsolatedReplay` returned the same generic error.
-  That diagnostic head changed no cost-model files relative to `5b709aa`.
-  Its saved log has no underlying worker stage; the later bounded traces and
-  separate startup correction do not establish that historical failure's cause.
-  A later paced failure in
-  [cost run 40489223783, job 122138753711](https://github.com/waitron-io/waitron-cloud/actions/runs/40489223783/job/122138753711)
-  stops at `quiesce` after a zero native exit, before restore. That label combines
-  several independent checks. You now receive separate fixed codes for waiting
-  for idle transfers, waiting for child collection, validating its stop result,
-  checking post-stop health and checking storage accounting. A separate code
-  marks restore admission after that checkpoint completes. Cancellation can
-  refuse any active operation; these codes identify its boundary, not its cause. Native child/HTTP tests
-  distinguish nonzero stops, interrupted transfers, cancellation after a zero
-  exit and inconsistent storage inventory after a zero exit. A held child
-  reports collection in progress before the unchanged forced-kill timer fires.
-  Each controlled failure refuses publication and collects owned resources. Run `node --test
-  scripts/cloud-cost/replay-stream.test.mjs scripts/cloud-cost/replay-quiesce-diagnostics.test.mjs`.
-  The historical cause remains unknown; capture the new boundary on recurrence
-  before changing any accounting, ownership, restore or deadline guard.
-  Another paced replay refused at `quiesce-checkpoint` after a successful native
-  stop in [run 40954158356, job 123729967144](https://github.com/waitron-io/waitron-cloud/actions/runs/40954158356/job/123729967144).
-  You now receive a fixed `measurement-refusal` code distinguishing checkpoint
-  admission, independent inventory verification, rejected traffic during verification
-  and accounting snapshots. A request refused while inventory is running has its
-  own traffic code, even when it later poisons accounting. Cancellation is labelled
-  by the operation it interrupts. The code
-  survives replay and worker admission without exposing raw storage errors. Native
-  HTTP controls refuse closed sessions, unobserved objects and overflowing storage
-  totals; a native writer control verifies forwarding after a successful stop.
-  Reporter exceptions cannot replace the refusal or prevent listener collection.
-  Run `node --test scripts/cloud-cost/stream-checkpoint-diagnostics.test.mjs
-  scripts/cloud-cost/replay-stream.test.mjs`. These controls reproduce diagnostic
-  boundaries; the historical Linux checkpoint cause remains unknown. Capture the
-  new code on recurrence before changing accounting, ownership or deadline checks.
-  The checkpoint boundary recurred in [run 41449381877, job 125290693382](https://github.com/waitron-io/waitron-cloud/actions/runs/41449381877/job/125290693382)
-  with `transfer-interrupted`, zero pending and 111 completed transfers. Its trace
-  discarded the HTTP details already recorded by the transport. You now retain
-  the recorded HTTP event, network error code, storage operation, count of idle
-  callbacks at admission, closed-client flag and response-header flag through
-  the worker and host. These optional fields accept only fixed codes, booleans
-  and a bounded count. Raw paths, headers, bodies and error text stay private.
-  Read these as recorded transport fields, rather than proof of one exception.
-  A real HTTP control cancels a LIST after an idle callback and verifies that
-  the details survive while accounting still refuses publication. Run
-  `node --test scripts/cloud-cost/checkpoint-transport-details.test.mjs`.
-  The unchanged paced case passes once on the shared Linux test box with
-  `node scripts/cloud-cost/conformance.mjs --only paced-replay-conformance.test.mjs`;
-  that does not reproduce the historical failure.
-  This repairs evidence loss, not the historical paced-replay failure. Capture
-  the next trace and reproduce its first event before changing measurement guards.
-  [Nightly run 43207714335](https://github.com/waitron-io/waitron-cloud/actions/runs/43207714335)
-  refused the same paced case at `quiesce-idle` after about 80 seconds on
-  12 November. This is a new boundary in the D581 investigation retained from
-  D530; its cause is unknown. The unchanged Linux case passed once in 85.1
-  seconds (`node scripts/cloud-cost/conformance.mjs --only paced-replay-conformance.test.mjs`).
-  That pass does not repair the refusal. Keep its guards and deadlines intact.
-  The D121 recurrence in [cost run 40144665901, job 121023380173](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173)
-  reaches `storage-cleanup` after successful native replicate and restore exits.
-  Cleanup now retains its first refused operation as a fixed `storage-refusal`
-  stage in the worker trace, including inventory, deletion, accounting and resource
-  collection. Generated failures exercise persistence and reporting containment;
-  real-backend checks cover SDK refusals and retained-inventory disagreement.
-  Separate worker codes identify failure while constructing cleanup input or
-  shaping its result. All eighteen storage codes have generated fault checks.
-  The historical cleanup operation and cause still need an instrumented recurrence
-  and reproduction. Accounting, ownership checks and deadlines remain unchanged.
-  A generated setup-client shutdown exception no longer stops independent cleanup.
-  The worker tries a fresh cleanup client, collects its owned bucket when that
-  client opens, and closes its listener and child process. Any failed step still
-  refuses measurement and retains the private directory; a failed replacement
-  client never sends requests through the stale setup client or records a bucket
-  cleanup intent. A client whose instrumentation fails is closed before refusal.
-  The first fixed diagnostic remains available without raw SDK errors. Whether the real SDK
-  naturally throws there and the historical Linux cleanup cause remain unverified.
-  The successful browser journey also refused in
-  [run 39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728),
-  while all six deliberate-fault journeys passed. Its wrapper retained only the
-  generic refusal. Browser failures now retain a fixed phase through the generated
-  child boundary, without printing launch errors, URLs or credentials. The complete
-  seven-case journey passes locally; that pass does not identify the historical
-  failure. A later merge cost run
-  [40004973526](https://github.com/waitron-io/waitron-cloud/actions/runs/40004973526/job/120590562266)
-  refuses the successful journey during reconnect after 16,602.897 ms; all six
-  deliberate-fault journeys pass. Setup completed and the same tree passed all
-  seven cases in exact-head run `40003626992`. The historical operation and cause
-  remain unknown; the duration alone does not establish a timeout.
-  Reconnect failures now carry one of four fixed operation labels through the
-  generated child boundary: reload, takings, overdue-empty or requests. Controlled
-  failures exercise each browser operation, and a real child-process check carries
-  only the allowed labels into the parent refusal. Raw browser errors, URLs and
-  credentials stay out of the diagnostic. Run
-  `node --test scripts/cloud-cost/browser.test.mjs scripts/cloud-cost/browser-diagnostics.test.mjs`
-  to check the labels, redaction and unchanged failure cleanup. Every original
-  accounting, isolation, cache and cleanup check and deadline remains intact.
-  A later recurrence in
-  [40092022379](https://github.com/waitron-io/waitron-cloud/actions/runs/40092022379/job/120866647453)
-  identifies reconnect/takings. The whole test took 16,188.328 ms; that is not
-  a measurement of the takings wait. It still has no underlying error category.
-  Reconnect refusals now retain three more fixed observations: whether the thrown
-  error identifies itself as a timeout, the last session-check response observed
-  during reconnect (accepted, refused, other or none), and whether a page error
-  occurred during reconnect. A later session response replaces an earlier one;
-  this label does not preserve the full response history. These observations use
-  existing events and add no browser request or wait. Only the fixed labels cross
-  the generated child boundary; exception text, URLs, credentials and page content
-  remain private. Run `node --test scripts/cloud-cost/browser-refusal-evidence.test.mjs`
-  alongside the command above to check the boundary, unusual thrown values and
-  failed diagnostic output. Original tests and journey deadlines stay unchanged.
-  Capture an instrumented Linux recurrence before attributing the historical
-  cause. A passing unchanged repeat would not explain it. Local Docker-backed
-  qualification remains unavailable until Docker returns; CI runs the real journey.
-  Reconnect refusals also retain fixed request-event counts, grouped by known
-  route, whether Node first observed the request before or during reconnect,
-  and lifecycle event. This does not establish when Chromium issued it. Pending requests remain visible, including streams from before reload.
-  Counts saturate at 999; raw paths, query strings, bodies and network errors
-  are never printed. These passive observations add no request or wait and do
-  not change the existing accounting refusal or deadlines. A not-modified
-  response (HTTP 304) has its own label, separate from a redirect. Run
-  `node --test scripts/cloud-cost/browser-traffic-evidence.test.mjs` for the
-  controlled lifecycle and real child-boundary checks. The cause of the Linux
-  takings timeout and outstanding-request refusals remains under investigation.
-  Twelve independent Linux observations ran the complete seven-case group at
-  diagnostic heads `6bdf753` and `a58e794`: all 84 cases passed. A later instrumented
-  recurrence in [run 40122070386](https://github.com/waitron-io/waitron-cloud/actions/runs/40122070386/job/120955659784)
-  times out at reconnect/takings with an accepted session and no page error.
-  Both overview and overdue requests fail, alongside other API and live-stream
-  requests. These counts do not identify the underlying connection failure.
-  Reconnect refusals now retain the byte-counting relay's first refusal category
-  before browser cleanup. You can distinguish a socket reset, refused connection,
-  broken pipe or other socket error, timeout, incomplete close, empty exchange,
-  admission or byte limit, cancellation, observation-window end, listener error
-  or accounting refusal.
-  `none` means the relay had not refused when the browser error was caught.
-  Later cleanup cannot replace the first category. Socket sides identify the
-  browser-facing client or gateway-facing upstream; raw network errors and payloads
-  stay private. Run `node --test scripts/cloud-cost/remote-refusal-evidence.test.mjs scripts/cloud-cost/browser-relay-evidence.test.mjs`
-  for real relay sockets with controlled resets and injected faults, preserved
-  accounting refusals and the child-process diagnostic boundary. These controls do not establish the historical Linux cause.
-  Browser readiness waits for stream-open callbacks and their reads, rechecks
-  requests while response sizes settle, and retains the three-second deadline
-  and every byte-accounting guard. Run
-  `node --test scripts/cloud-cost/browser-readiness.test.mjs` for these boundaries.
-  The browser source now includes Waitron's
-  [document-lifecycle repair](https://github.com/clintongormley/waitron/pull/2279)
-  at `99c265981ba98f1afd0e5fc822624a9a91822ad2`, alongside D499's supported
-  generated authority, routes, assets and storage identity-port handoff. Replay
-  measurements retain their original source. The
-  [Linux investigation](backlog/browser-reconnect.md) retains the earlier
-  cancellation traces after the bounded observation groups qualified. A native
-  Chromium/TLS reproduction identifies an unloading page's error refresh as one
-  source of late reads; historical Linux socket-reset attribution remains open.
-  No cancelled bytes, failed samples, accounting checks or deadlines are excused.
-  The reporter preserves the original refusal when a diagnostic property cannot
-  be inspected, including throwing or revoked JavaScript proxies, objects that
-  intercept property inspection. Each field is contained separately, so an
-  unreadable step does not discard a valid phase. The same fixed labels and
-  original checks apply. A synchronous failure while printing either label also
-  preserves the exact original refusal; the reporter stops printing after that
-  failure. The same focused command above checks both output failures and normal
-  output. This does not identify the historical reconnect failure's cause.
-  The launch, reconnect and logout failure tests also
-  inspect the real traffic-meter listener and require it to be closed when the
-  journey refuses. Removing the meter cleanup fails six named assertions;
-  independent test teardown collects the listener and timer without waiting for
-  the meter's ten-minute lifetime. Browser operations remain controlled fixtures,
-  and this check does not establish the historical reconnect failure's cause.
-  Ownership validation remains strict. Generated gateway fixtures explicitly
-  retain the file-access capability needed for their host-owned private mounts;
-  production gateways and private-data replay permissions are unchanged.
-
-  Cancellation first drains admitted storage traffic before signalling the native
-  writer, with a bounded fallback. Invalid transfer accounting still refuses
-  measurement publication. Separately proved collection of native processes and
-  their owned scratch lets the replay remove its own verified database copy;
-  replaced roots and lost ownership continue to refuse cleanup. The generated
-  native cancellation/deadline journey passes three consecutive runs, alongside
-  37 stream and 33 private-replay checks. Setup interruption collects its recorded
-  child process group and generated directory for both supported signals.
-  The generated fast-exit cancellation checks now separate two contracts. The
-  successful-close case admits only its startup upload and its held upload, so
-  it retains the original successful-close and exact child-collection assertions
-  without queuing later work. A second case keeps queuing, admits a later upload
-  after the real idle handoff signals the writer, then exits after receiving one
-  of four declared reply bytes. Resource collection must complete and cancellation
-  must prevent publication; settled interrupted accounting may be unknown under
-  #1035. Frozen-writer cases await both replies before stopping the child. The
-  [scheduling investigation](backlog/cost-conformance-fixtures.md#replay-close-scheduling-d530)
-  records both controlled reproductions. The check requires a successful native exit
-  without a forced-kill signal and inspects the actual listeners, backend sockets,
-  owned child identities and scratch, and never launches restore.
-  Run both with `node --test --test-timeout=10000 --test-name-pattern='^cancellation'
-  scripts/cloud-cost/replay-stream.test.mjs`.
-  Native reproduction previously found one failure in 432 unchanged trials and
-  one in 800 instrumented trials: a later PUT lost its response during session
-  collection. The controlled split qualifies that local mechanism and preserves
-  admitted-upload drainage, accounting, child ownership and every deadline.
-  Runtime code is unchanged. The original untraced Linux event and official
-  Litestream shutdown still need attribution and qualification.
-
-  The replay writer-deadline check also refused during opening in
-  [main run 40259519210, receipts job 121368783695](https://github.com/waitron-io/waitron-cloud/actions/runs/40259519210/job/121368783695),
-  before its intended finish assertion. Slow fixture storage setup reproduces
-  that boundary: opening correctly consumes the whole-run 0.7-second budget.
-  Opening failures now report elapsed milliseconds and the existing bounded
-  stage/native trace, after collection, without private paths or child output.
-  The real-clock check requires its deadline callback to fire before accepting
-  refusal during opening or before a complete result, then verifies source
-  preservation, listener closure and final child collection. A separate check
-  waits for a real writer before firing the unchanged 0.7-second callback and
-  proves collection by that deadline before finish or close can hide a missed
-  abort. Only that callback is controlled; HTTP, SQLite,
-  native children and other timers remain real. The existing 4.01-second opening
-  and idle controls, drainage assertions and all runtime timers remain unchanged.
-  Run `node --test scripts/cloud-cost/replay-stream.test.mjs` for these controls,
-  bounded opening diagnostics and per-phase upload witnesses. The historical Linux
-  startup stage and underlying delay remain unknown, as does the failing phase in
-  [CI 43971423269](https://github.com/waitron-io/waitron-cloud/actions/runs/43971423269).
-  The checks cover reproduced test assumptions.
-
-  **Remaining work and observations.** To complete the operating total, establish
-  the missing inventory quantities and regional billing terms, representative
-  venue/public activity, complete retained-object forecasts, recovery/alert/email
-  frequencies and provider capacity/transfer mappings. Keep external mail, fiscal
-  API fees, GitHub charges, account allowances, credits and tax separate from
-  gross AWS usage. Earlier untraced refusals and transient source-file fingerprint
-  changes remain unattributed; later accepted samples do not explain those exact
-  occurrences. A generated restore-integrity failure reproduces on the host-shared
-  Docker folder and passes with active SQLite/native stream state on container-native
-  storage. Its production relevance is unproved. Prepare a consistent frozen copy
-  before long replay; later live-source activity does not identify a writer and
-  must not be treated as proof that the isolated experiment wrote the source.
-
-- **Future remote DNS lost-reply browser failures.** The reproduced reconciliation
-  stall is resolved by [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102).
-  If the saved-name assertion fails again, use the bounded request/status events,
-  injection stages and setup-screen diagnostics to identify and reproduce the cause.
-  Keep the four-second assertion and fault-injection ordering checks unchanged;
-  passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
-
-- **CI job record publication.** The historical GitHub publication delay remains
-  unexplained. D573 lets a slow job lookup finish with a larger retry budget inside
-  the original one-minute allowance. A controlled eleven-second response now
-  succeeds; persistent lookup timeouts and failed or missing jobs still fail.
-  Timeout diagnostics report attempt duration and remaining time. Deadline
-  diagnostics identify unmet identity and completed-step checks
-  from the last observed record. Preserve run identity, final dependency results and time
-  limits; landing still requires every actual job record final. See the
+- **CI job record publication.** The historical GitHub publication delay remains unexplained.
+  Preserve run identity, final dependency results and time limits; landing still requires
+  every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
-  The evidence tool also refuses CI 44104446979 attempt 2: GitHub reports 44 latest final jobs but 45 attempt-specific records, including an extra queued record; watcher 17 November 16:10 closed that merge on the native 44-job view, leaving this known readback gap open.
+  The evidence tool also refuses CI 44104446979 attempt 2 (44 latest final jobs against 45
+  attempt-specific records); the watcher closed that merge on the native view on 17 November
+  at 16:10, leaving this readback gap open.
 
-- **CI execution budget.** Keep the remaining qualifications and unknown causes
-  below; delivered allocation, selection and fixture repairs are not open work.
+- **CI execution budget.** Hosted browser qualification still owns removal of the retained
+  apt-only setup. Record D614's first natural proof-only PR hosted selection.
 
-  Hosted browser qualification still owns removal of the retained apt-only setup.
-  Record D614's first natural proof-only PR hosted selection; its policy-change
-  PR keeps full work. D613's accepted timing sample does not close these gates.
-
-  **Closed failure sweep (D530).** The sweep is closed; the existing investigations
-  retain their limits. This is the historical cause/fix summary, not new qualification.
-  Handle a matching recurrence from that run's log under the existing CI-failure rules;
-  preserve the original assertions, deadlines and cleanup checks.
+  **Closed failure sweep (D530).** Handle a matching recurrence from that run's log under the
+  existing CI-failure rules; preserve the original assertions, deadlines and cleanup checks.
 
   | Boundary | Retained cause or uncertainty | Disposition |
   | --- | --- | --- |
@@ -1758,9 +817,7 @@ implementation or production evidence.
   | Session clocks, foreign-container inventory, venue cutoff, child output and UI fixture | Reproduced fixture causes. | Retain #1002/#890/#1034/#1055/#1040; do not repeat those repairs. |
   | Concurrent documentation suites | Shared commit-hash output path; exact deleting process untraced. | Use separate temporary directories; passing isolation is not a test-source repair. |
 
-  Reproduced fixture mechanisms do not establish the historical clock, replay,
-  expiry or startup failure causes; those causes remain unproved.
-
+  Reproduced fixture mechanisms do not establish the historical causes.
   Qualify package and whole-run duration against the retained targets; keep the
   [registration slowdown](backlog/package-ci-runtime.md#what-remains-unexplained),
   [backup slowdown](backlog/backup-ci-budget.md) and [remote runtime limits](backlog/remote-ci-budget.md) distinct.
@@ -1789,17 +846,14 @@ implementation or production evidence.
   services, usage accounting, trials, failed payment and cancellation. Item 3 of
   [launch platform work](#launch-platform-work-in-priority-order); designed in
   [the billing design](superpowers/specs/2026-10-29-cloud-billing-design.md).
-  The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
-  covers the Connected trial chooser for configured synthetic accounts. The chooser shows
-  the current Connected price before and after VAT and explains the first live charge. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
-  covers test-only saved methods. Billing names the SumUp switch above its form, and
-  the [sandbox receipt](billing-provider-test.md#local-sumup-save-card-switch-20-november-2026)
-  records the refusal with the switch off and a saved card with it on. The
-  [supplier inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
+  The Connected trial chooser, its price, tax details and test-only saved methods work for
+  configured synthetic accounts ([sandbox receipt](billing-provider-test.md#local-sumup-save-card-switch-20-november-2026)).
+  The [supplier inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
   records SumUp card and Stripe SEPA test paths; both suppliers and their live country
   flows remain unqualified. Paid-plan tax collection and Spanish tax-number
   validation, paid-plan choices, cancellation, account closure, hosting enrolment,
-  supplier qualification and production billing remain open.
+  supplier qualification and production billing remain open. When Billing can cancel, the
+  **Remove venue** confirmation gains the instruction to cancel there to stop charges.
 - **Venue and node registration.** Qualify the installed-box sign-in with the released
   Waitron client. Initial setup still needs sign-in, signup and access to basic services.
   Planned handover, diagnostics, retention, key provisioning
@@ -1810,228 +864,70 @@ implementation or production evidence.
 - **Provisioning and placement.** The owner approved the
   [production deployment design](superpowers/specs/2026-10-22-cloud-production-deployment-design.md)
   for local building and rehearsal. D110's
-  [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
-  specifies images, repository-driven Kubernetes deployment and genuine three-node
-  availability checks for sign-in, remote access and backups. You can run the first
-  single-machine sign-in, remote-access and captured-backup restore checks with
-  `node scripts/kubernetes-check.mjs`; its opening comment lists the required local
-  images and tools. Its opt-in command,
-  `TEST_KUBERNETES_CHECK=1 node --test --test-name-pattern=one-node scripts/kubernetes-check.test.mjs`,
-  passed locally on Linux, including the captured point, digest and byte count, restoration
-  across 15 modules, child removal and natural worker exit. These checks use
-  test-service mode and the test backup worker. Full service/fault proof, the strict
-  common verifier and P1's production-mode acceptance remain open. The
-  [D621 first-cut plan](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md)
-  adds `node scripts/amazon-run.mjs observe` for an owner-started continuous
-  same-client C-loss check. Its focused observer and adapter checks run with
-  `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`.
-  Full local qualification has not passed (paid-remote fixture HTTP 500 after
-  worker replacement); the owner moved the remaining checks to the owner-started
-  Amazon session on 14 November. The 15 November owner-run failed at the baseline
-  target read before any fault, losing its inner stderr and exit status. The
-  [diagnostic change and next-run plan](superpowers/plans/2026-11-15-d621-target-read-diagnostic.md)
-  preserves those details; that cause remains unexplained. The second owner-run
-  failed earlier: the manifest landed on an allowed worker while the check
-  required worker2. The [placement fix](superpowers/plans/2026-11-15-d621-manifest-placement.md)
-  temporarily prevents new scheduling on the other worker until worker2 placement
-  is checked. Run the synthetic command tests with
-  `node --test scripts/kubernetes-check.test.mjs`.
-  The third owner-run reached target read and reported a missing module after the
-  root build import passed. The standalone builder now stages image-readable source
-  under a private caller mask, and the image checks target equality as user 1000.
-  Run its permission and source checks with
-  `node --test scripts/build-backup-verifier.test.mjs scripts/ci-verifier-build-refusals.test.mjs scripts/ci-verifier-source-isolation.test.mjs`.
-  The failed image's actual modes and the first run's cause remain unconfirmed.
-  The fourth and fifth D621 owner-runs reached late stop confirmations; the launcher
-  now requests C’s stop with `--skip-os-shutdown`. Run 6 received confirmation in
-  18,088.6 ms, then failed at paid remote; source places it in the withdrawn replay.
-  The saved replay expires during
-  the observer hold in a local reproduction; its fixture now refreshes authentication
-  without changing the saved operation. Run that check with
-  `node --test deploy/test-cloud/integration-paid-remote-replay.test.mjs`.
-  The private fixture now reports fixed inner error codes and message labels,
-  redacting other text; run `node --test deploy/test-cloud/integration-rollback-diagnostic.test.mjs deploy/test-cloud/integration-rollback-control.test.mjs`.
-  This defect fits run 6 by source inference; its inner error and the earlier
-  stop delays' cause remain unconfirmed. Full qualification has not passed.
-  Qualify the [Amazon-only repository repair](superpowers/plans/2026-11-16-d621-flux-repair.md),
-  including real Git application, drift repair, refetch and last-good retention.
-  The [three-member control-plane setup](superpowers/plans/2026-11-18-d621-stockholm-control-plane.md)
-  runs through synthetic commands in
-  `node --test deploy/kubernetes/bounded-amazon/bootstrap.test.mjs scripts/amazon-run.test.mjs`.
-  The local `node scripts/kubernetes-check.mjs --node-loss` check passed on Linux.
-  A surviving Kind node accepted API writes and ran a new pod during each of the
-  three outages. Each stopped node rejoined with its original address and
-  identities. Use `node scripts/kubernetes-check.mjs --database-loss` with a local
-  Cloud image to rehearse PostgreSQL primary and standby loss and migration
-  startup in the same Kind setup. The bounded launcher brings up the private
-  six-peer store. Run `node scripts/kubernetes-check.mjs --storage-loss` in the
-  Linux guest to check encrypted objects and multipart completion through the
-  first outage. After rejoin the rehearsal checks that both serving peers can
-  read the dedicated probe object from both returned disks. It runs one bucket repair
-  and checks the restored shards and bytes of both outage objects. The rehearsals
-  spread Kubernetes DNS across machines before starting workloads. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
-  record the Linux results and remaining storage limits. Run
-  `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
-  in the Linux guest to check temporary storage grants, issuer and backup-key
-  continuity, grant expiry and renewal during one machine outage, and an encrypted
-  read with the renewed grant after rejoin. Two renewals reached the ten-second
-  deadline. Their cause, multipart when a DNS host stops, repair and multipart
-  through consecutive outages remain open. The
-  [healthy Kind services rehearsal](aws-infrastructure.md#rehearse-signup-pairing-and-backup-on-a-healthy-kind-cell)
-  checks production-mode signup, pairing and backup against replicated PostgreSQL
-  and MinIO. The [measured outside rehearsal](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
-  checks the same venue, account and tunnel during each stop. It records account,
-  HTTPS, backup and Git recovery times, and when surviving workers complete new
-  work. Each rejoin checks the returning store peers and requires the repair
-  report to clear offline or missing shards before the next stop. After a
-  healthy return, the local rehearsal waits for room for a signup request
-  and retry before the next recovery clock starts. Before the all-machine
-  stop, the outside rehearsal now waits up to 180 seconds for three ready
-  database copies and a primary out of recovery. On 23 November the full
-  saved-image Linux rehearsal passed all three individual stops and repairs
-  and restored a new backup after the all-machine restart. The earlier
-  returning-store timeout remains unexplained. Stockholm run 11 passed image
-  loading and Git publication, then timed out at outside account readiness.
-  A free control reproduced the timeout with a private checkout whose image
-  could not start the unprivileged relay. The launcher stages the committed
-  archive with readable source modes and captures a stopped relay’s exit code
-  and recent log. Check the launch path with `node --test scripts/amazon-run.test.mjs
-  scripts/kubernetes-remote.test.mjs`. Run 11's relay exit remains unconfirmed.
-  A later Stockholm attempt reached the venue client, which exited with
-  `integration.client_exited:EACCES` before the first machine stop. An offline
-  x86 build on 23 November reproduced the startup error from mode-0600 sources.
-  With explicit copy modes, passing `{"phase":"ready"}` to
-  `docker exec -i <client> node /proof/integration-control.mjs` with the venue's
-  TLS certificate trusted returned `{"ready":true}` on attempt 46. User 1000
-  opened the entrypoint and all 14 other runtime scripts in the same container.
-  The next Stockholm attempt reached the paired venue and stopped before any
-  machine stop. The rebuilt x86 Cloud image reproduced BusyBox rejecting `ping -V`
-  and passed a loopback ping with networking disabled. The fixture now checks the
-  flags it needs by sending that ping. Run
-  `node --test deploy/test-cloud/test-fixtures/integration-waitron-tunnel.test.mjs`
-  to check that a failed probe prevents measured stops. Full Stockholm
-  qualification remains open.
-  The saved-image Linux run reached the third stop before an HTTPS probe
-  failed after recovery. The observer keeps the failure and reports how long
-  an overdue probe ran. HTTPS transport failures log the route and error. Run
-  `node --test scripts/p1-observer.test.mjs` to check that diagnostic.
-  The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
-  used the same peer through a standby and replaced the certificate on the same route.
-  During the worker machine stop, the survivor reused the saved certificate and
-  signing request and published the owner's revocation. With local DNS replicas,
-  both survivors resolved names in at most 5 ms and opened verified PostgreSQL
-  connections in 17 ms and 16 ms while the stopped replica was still listed as ready.
-  The account process returned database-backed readiness in 65.168 seconds
-  during the private PostgreSQL primary stop. Run the same checks in Stockholm.
-  The [private Kind machine-stop check](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
-  used the Waitron companion's own traffic and restored staff and public HTTPS
-  in 52.373 and 52.387 seconds through one private relay address. The former
-  gateway rejoined without its old WireGuard interface or readiness marker.
-  The socket test followed a changed backend address and switched nodes
-  without changing the listener ports. Real Stockholm gateway loss and
-  address changes, replicated publication and shared ingress remain open.
-  The [private Kind cold-restart check](aws-infrastructure.md#rehearse-an-all-node-cold-restart-in-private-kind)
-  passed in disposable x86-64 Linux with a full API outage, retained PostgreSQL
-  data and a fresh write.
-  The [outside full-service baseline](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
-  uses the private test host for one venue's signup, pairing, signed remote
-  access, encrypted upload and isolated restore. The same clients now exercise
-  each individual stop and the all-machine restart in private Kind. Use the role
-  placement logs before both kinds of stop when comparing the earlier storage
-  and HTTPS failures with later runs. The
-  [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
-  records the passing timed outside rehearsal and the paid attempt that failed
-  in the older in-cluster pairing check. The owner verified deletion. The causes
-  of the venue's HTTP 503 and the manifest restarts remain unknown. Cloud pairing
-  changed between the two runs. Paid Stockholm qualification and billing
-  reconciliation remain open. Cloud's [signed upload reply](authenticated-captures.md#wire-contract)
-  lets a test box opt in to a direct upload for one reserved object. Use the
-  matching Waitron build and the [signed-upload rehearsal check](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell).
-  After stopping the database primary, verify that the first fresh reserve returns a signed URL with zero
-  storage session calls and zero reserve HTTP 503 responses. Require independent
-  backup verification within five minutes and signup email within 90 seconds.
-  Repeat the outside rehearsal on the exact Cloud commit and Waitron image
-  proposed for any separately approved paid run.
-  The observer matches the email's expiry to the current challenge and records
-  how many messages it skipped, the submitted Message-ID, the authenticated sender
-  and confirmation status. Run `node --test scripts/test-cloud-integration.test.mjs`
-  for delayed mail, sender attribution and refusal. The outside rehearsal reads
-  retained messages from one inbox on the launch host. Signup measures new mail
-  from a surviving worker after the stop. If a challenge is stranded, the measured
-  observer starts over on the first probe at least 60 seconds after the password
-  reply. This can miss the 90-second target. The two Stockholm sign-in timeouts
-  remain unexplained. In the free worker comparison, both surviving email workers
-  were down for 26.621 of the 31.234 seconds fresh mail spent queued after
-  PostgreSQL accepted writes. That interval included Kubernetes restart backoff
-  and the wait for the next container start. In the local
-  [reconnect tests](../packages/registration/test/email-worker-reconnect.test.ts),
-  the same worker delivered fresh mail after dropped, silent or read-only
-  connections. It recorded an accepted send before refusing new work against an
-  incompatible schema. See the [shared-inbox replay plan](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md).
-  To reproduce the older failure, start with just the first in-cluster journey
-  on disposable Debian 13 x86-64 using the paid Cloud revision `f19c12c7` and its
-  pinned Waitron image. If it passes on one node, match the original three-node
-  placement, shared configuration and resource limits. Capture previous manifest
-  and account container exits and bounded private logs. Trace the venue's
-  `/api/pairing/start` request through the host's port 3000 to identify the
-  failing hop or response.
-  Flux-hosting-node loss and original A/all-node loss remain open. The three-node
-  command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
-  passed locally on ARM64 Mac Docker: both journeys restored their captured backups
-  across 15 modules, with the manifest worker replaced after its host stopped,
-  900 seconds before the second journey, and owned cluster/volume cleanup.
-  The owner dropped D570's first-machine proposal on 9 November. D618's
-  [bounded three-machine plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md)
-  supplies `node scripts/amazon-run.mjs start` for the original in-cluster check.
-  Its local SSH reuse, saved-image system/processor checks and one-upload/private-share
-  distribution run with `node --test scripts/amazon-run.test.mjs`. Archive-copy
-  cutoffs use measured bytes and a stated 10 Mbit/s floor. Failed Kubernetes
-  commands now retain bounded wait and process evidence; failed checks collect
-  application pods and events on Amazon as well as Kind. The controlled checks
-  run with `node --test scripts/kubernetes-check.test.mjs`. The fifth run's pods
-  never started because Debian's containerd looked for network plugins in
-  `/usr/lib/cni`; machine set-up now points it at `/opt/cni/bin` and refuses at once
-  if it does not. Run results and what stays open are in
-  [the bounded plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md#amazon-runs).
-  The [practice-account setup](d618-account-setup.md) supplies the role and budget
-  policy files, numbered steps, SSH-key creation and owner-run checks. The owner's
-  one-run access-key route keeps the existing restricted launcher and requires
-  manual key deletion. The owner chose Stockholm (`eu-north-1`): render the
-  region explicitly, update the existing roles, compare the saved image policy
-  with the run config and check the account's Paid Plan before running there. The
-  launcher refuses a standard vCPU quota below 12 before building the images.
-  The launcher has no region default. The bounded plan records run 7 passing;
-  the owner completes these checks before each new run;
-  live permission enforcement remains unqualified.
-  Production provider identity, capacity and fixed quantity/cost assumptions
-  remain unqualified. The independent expiry drill, offline ARM inputs, full P1
-  service/fault proof and measured build/steady/fault/verifier/healing peaks remain
-  open. The observed 6.10 GiB owned-memory sample is only a lower bound; no capacity
-  floor or supported Mac path changes. Weekly automation still needs scoped access
-  and the later [weekly plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
-  No general AWS, production or schema authority follows from this first machine.
-  Global account separation and the action controller have planning entries below;
-  [release waves](superpowers/plans/2026-11-17-d114-release-waves.md) wait for
-  full P1 service and machine-loss qualification. Hosted venues and regional failover remain open.
-  Country/provider/cell registry, repeatable resource
-  creation, recovery from partial failures, capacity and customer movement remain open. The local
-  movement state machine now reserves a destination without replacing the source, rejects
-  competing/stale operations, retains durable retry results and revokes the old route only
-  after the destination manifest was applied and tested. The two-cell proof preserves the
-  venue's hostnames and certificate fingerprints, isolates the other venue and measures
-  fresh-peer reconnections of 1,321 ms and 1,486 ms; it also proves failed-apply cancellation leaves the
-  source healthy. The local DNS/certificate reconciler now preserves usable material,
-  fences stale external work and republishes signed routes after restart. Repeat the full
-  path with provider-native cells, live adapters and appliance configuration before
-  choosing an explicit recovery-time target.
-  Define how established connections and
-  backups continue during a portal outage, including credential expiry and revocation.
-  The [local control-plane outage drill](control-plane-outages.md) now stops the real account
-  API process while a gateway HTTP route and TLS SeaweedFS transfer continue under their
-  existing signed authority. It proves that cached gateway restart does not extend expiry,
-  expired storage credentials are refused, recovery restores management access and a fresh
-  manifest removes a revoked route. Repeat the drill with the selected deployment database,
-  gateway reconciler and provider-native storage before setting an availability promise.
+  [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md) is rehearsed in
+  private Kind ([guide and commands](aws-infrastructure.md)); full service and fault proof, the
+  strict common verifier and P1's production-mode acceptance remain open. The owner moved the
+  remaining checks to the owner-started Amazon session on 14 November, and dropped D570's
+  first-machine proposal on 9 November.
+
+  **D621, Stockholm qualification, is open.** The
+  [remaining-checks plan](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md),
+  [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md),
+  [storage limits](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
+  and [bounded three-machine plan with its run results](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md#amazon-runs)
+  hold the detail. The full saved-image Linux rehearsal passed all three stops, the repairs and
+  a restore after the all-machine restart; paid Stockholm qualification remains open:
+
+  - Cloud's [signed upload reply](authenticated-captures.md#wire-contract) needs the matching
+    Waitron build. After stopping the database primary, the first fresh reserve must return a
+    signed URL with zero storage session calls and zero reserve HTTP 503s; require independent
+    backup verification within five minutes and signup email within 90 seconds. Repeat the
+    outside rehearsal on the exact Cloud commit and Waitron image proposed for any separately
+    approved paid run.
+  - The two Stockholm sign-in timeouts are unexplained. In the free comparison both surviving
+    email workers were down for 26.621 of the 31.234 seconds that fresh mail stayed queued;
+    the worker now [reconnects](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md).
+    If a challenge is stranded, the measured observer restarts 60 seconds after the password
+    reply, which can miss the 90-second target.
+  - Unexplained: the returning-store timeout, the venue's HTTP 503 and the manifest restarts of
+    the paid attempt, run 11's relay exit, the first run's target read, the earlier stop delays
+    and two temporary-grant renewals that reached the ten-second deadline.
+  - To reproduce the older pairing failure, start with the first in-cluster journey on
+    disposable Debian 13 x86-64 using paid revision `f19c12c7` and its pinned Waitron image;
+    if it passes on one node, match the three-node placement, shared configuration and limits.
+    Capture previous manifest and account container exits, and trace the venue's
+    `/api/pairing/start` through the host's port 3000.
+  - Multipart when a DNS host stops, repair and multipart through consecutive outages, real
+    gateway loss and address changes, replicated publication and shared ingress, the
+    [Amazon-only repository repair](superpowers/plans/2026-11-16-d621-flux-repair.md) (Git
+    application, drift repair, refetch, last-good retention), Flux-hosting-node loss, the
+    original A and all-node loss, and billing reconciliation.
+
+  The [practice-account setup](d618-account-setup.md) covers roles, budget, keys and owner-run
+  checks. The owner chose Stockholm (`eu-north-1`): render the region explicitly, update the
+  existing roles, compare the saved image policy with the run config and check the account's
+  Paid Plan before running there; the owner completes these before each new run, and the
+  one-run access-key route requires manual key deletion. Live permission enforcement,
+  production provider identity, capacity, fixed quantity/cost assumptions, the independent
+  expiry drill, offline ARM inputs and measured build/steady/fault/verifier/healing peaks
+  remain open. The 6.10 GiB owned-memory sample is only a lower bound. Weekly automation needs
+  scoped access and the [weekly plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
+  **Spending on these runs:** “we need to get it working. if that requires paid runs the sobeit”
+  (owner, 23 November 2026 at 19:46). One run at a time, after looking for the last failure's
+  cause for free. The limits recorded with it: ask the owner again before a run above about $10,
+  after three failures for the same cause, or past $250 in total. Another fresh sign-in failure
+  counts as the third (watcher, 24 November 2026 at 19:47).
+  No general AWS, production or schema authority follows from any of this.
+  [Release waves](superpowers/plans/2026-11-17-d114-release-waves.md) wait for full P1
+  qualification; hosted venues and regional failover remain open.
+
+  Also open: the country/provider/cell registry, repeatable resource creation, recovery from
+  partial failures, capacity and customer movement. Repeat the local two-cell movement proof
+  with provider-native cells, live adapters and appliance configuration before choosing a
+  recovery-time target, and the [control-plane outage drill](control-plane-outages.md) with the
+  selected deployment database, gateway reconciler and provider-native storage before setting
+  an availability promise. Define how established connections and backups continue during a
+  portal outage, including credential expiry and revocation.
 - **Independent countries and the worldwide admin console (P3 / D112-S).** The
   [replacement P3](superpowers/plans/2026-10-22-cloud-global-country-split.md) leaves
   deploy-start control open. The [release-waves plan](superpowers/plans/2026-11-17-d114-release-waves.md#2-start-that-release-from-the-worldwide-console)
@@ -2047,12 +943,8 @@ implementation or production evidence.
   delivery remain operating decisions; local synthetic/Mailpit rehearsal
   authorises no provider operation, spending, deployment or live mail.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
-  telemetry, with AWS and Google implementations where needed. The local SeaweedFS
-  storage contract now covers venue-scoped access, live key rotation, issued-credential
-  expiry, versioning, interrupted uploads and concurrent conditional create/replace.
-  The [Stockholm AWS sandbox rehearsal](aws-storage-rehearsal.md) now exercises those
-  storage boundaries with real assumed-role credentials, PostgreSQL-backed archive
-  publication/key rotation and real Waitron/Litestream restores. New S3 buckets need
+  telemetry, with AWS and Google implementations where needed. The local SeaweedFS contract
+  and the [Stockholm AWS sandbox rehearsal](aws-storage-rehearsal.md) pass. New S3 buckets need
   explicit SSE-C enablement for the existing stream format. Cloud must extend its
   managed-stream credential contract to carry and renew session tokens, coordinated
   with Waitron, before using assumed roles through that adapter. Repeat the deployment
@@ -2066,39 +958,22 @@ implementation or production evidence.
   and billing changes, diagnostics, restore and cancellation. Verify customers can
   complete routine flows without staff, including recovery from interrupted operations.
   Give exceptional failures useful diagnostics for investigation under the support policy.
-  Account security is now self-service: the portal shows active management sessions and
-  passkey last use, identifies the current session, and lets you revoke a session without
-  staff access. It refreshes the list after every attempt so a lost successful reply does
-  not encourage a second write. Owners can now download a versioned diagnostic for one
-  installation. It reports redacted access, service, monitoring, remote-check and backup
-  evidence without account, provider, hostname, configuration, credential or raw-error
-  data. Stale health is shown as unknown and the permission is rechecked before release.
-  If a diagnostic download fails, you see its error beside the venue you chose. Starting
-  another download clears that warning; changing accounts clears its venue association.
+  Account sessions, passkeys and a redacted installation diagnostic are self-service already.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   Production observation, phone delivery, recovery targets and C39 plan/build approval
   remain open; see [the requirements and deliberate limits](backlog/service-monitoring.md).
   See [the cost-alert decision](#service-monitoring).
 - **Usage metering.** Local totals cover snapshot storage and transfer, installation
-  operations, monitoring probes and administrative alerts. Native controller tests
-  hold old totals, permission refusals and rate limits across account or organisation
-  changes, including switching away and back and signing out. They check that old
-  replies cannot replace current totals, end a pending read, publish an error or
-  impose a cooldown; selecting the same account and organisation keeps its read.
-  Production deployment,
+  operations, monitoring probes and administrative alerts. Production deployment,
   monitoring and additional service units remain open; define costs, allowances and
   outage policy before using totals for billing. See [scope and remaining work](backlog/usage-metering.md).
 - **Data lifecycle.** Local backup capture, retention, verification and recovery are
-  implemented; paused-parent verifier checks retain diagnostic-input ordering. On local Linux,
-  `node --test scripts/test-cloud-paid-stream.test.mjs` passes with the pinned ec91 and
-  explicitly selected 3ff92a10 Waitron images; the latter also passes
-  `scripts/test-cloud-paid-continuous-recovery.test.mjs`. Production custody, release
+  implemented. Production custody, release
   qualification, provider isolation, capacity and lifecycle policies remain open.
   The venue-level test worker can use bounded disk scratch. Raising the 512 MiB
   ceiling still needs year-sized recovery, and fiscal verification still needs
   VERIFIER-CERT-OPEN. See [the requirements and deliberate limits](backlog/data-lifecycle.md).
-
 
 ## Backup catalogue qualification
 
@@ -2123,266 +998,93 @@ identify the observed stages and gaps. Preserve all assertions and deadlines.
 
 ## Monitoring shutdown fixture migration timeout (D530)
 
-**Open.** Registration shard 1 fails during migration 013 under its unchanged
-3,000 ms statement cap, before the shutdown checks run. The original failure
-precedes GitHub's published 5 November Actions incident. The same-source hosted
-rerun passes 343 cases; focused Debian runs pass four and 86 cases, with a
-temporary probe measuring 47 applications of migration 013 at 25–30 ms. None
-reproduces or repairs the failure. Preserve the cap and assertions; read
-the retained `cloud-test-setup-waits` output on recurrence before choosing a fix.
+**Open; causes unproved.** Registration shard 1 failed in migration 013 under its 3,000 ms
+statement cap, and PR #1042's merge saw migration 024/035 setup timeouts and a usage-worker
+SIGKILL on shard 3. Passing reruns reproduce none of it. Preserve the caps and assertions;
+read the retained `cloud-test-setup-waits` output on recurrence before choosing a fix.
 See [the failure and qualification limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
-PR #1042's merge additionally reports migration 024/035 setup timeouts and a
-usage-worker SIGKILL on registration shard 3. The four named cases pass on the
-exact merge on Debian; their hosted causes remain unproved and their limits stay.
-The linked D530 bundle retains this occurrence separately from migration 013.
-
-## Passive security-audit session timestamp check (D530)
-
-[PR889's account HTTP job](https://github.com/waitron-io/waitron-cloud/actions/runs/41799209730/job/126471471556)
-fails `security-audit.test.ts:41` because the session's last-used timestamp is one
-millisecond later than its creation timestamp. The unchanged case passes in
-[PR890's job](https://github.com/waitron-io/waitron-cloud/actions/runs/41800780918/job/126476006089).
-A Linux probe calling `createSession` reproduces the same one-millisecond gap
-before any HTTP request. Migration `002_identity.sql` gives the two columns
-independent `clock_timestamp()` defaults. The test now seeds that difference
-and compares activity and creation time independently before and after both
-page reads. Real PostgreSQL reproduces the old one-millisecond failure and
-passes both corrected cases. Four independent controls catch activity or
-creation-time rewrites; every other assertion and deadline is preserved.
-Production session behaviour and landed migrations are unchanged. Activity
-updates delayed by sixty seconds and changes to absolute session expiry remain
-outside this test's coverage, as they were before this repair.
 
 ## Service-proof failure diagnostics (D530)
 
-A 16 November Linux run of `deploy/test-cloud/https-proof.test.mjs` returned
-503 at its final restart-readiness assertion. Other runs of the same image pass;
-a diagnostic run records overlapping proxy-health refusals. The cause of that
-particular response remains unknown; a passing run is not a repair.
-
-The [first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-cloud/actions/runs/41805521835/attempts/1)
-failed after 231 seconds with only `Free-service proof failed`. Its later passing
-attempt does not explain the original failure. That cause remains open.
-
-Recovery diagnostic [43146130590](https://github.com/waitron-io/waitron-cloud/actions/runs/43146130590)
-identified PostgreSQL `53200` during per-case `DROP SCHEMA CASCADE` cleanup.
-The six remaining HTTP-fixture venue-proof callers now clone a migrated database
-instead. This reduces lock pressure; each file still runs one full migration.
-Raising the lock limit would leave the repeated work that fills the lock table.
-The [cleanup plan](superpowers/plans/2026-11-12-venue-recovery-cleanup.md)
-records the focused Linux commands: 102 caller cases and one helper case passed.
-Other historical failures remain unexplained.
-
-You now get `SERVICE_PROOF_FAILURE` records from both proof matrices and the
-single-suite command. An observed failure event identifies its service group,
-zero-based file number, reported source line, runner failure category and an
-allowlisted error code.
-Match the file number against that group's file list in
-`scripts/test-cloud-free-services.mjs`. Unknown codes stay unclassified; messages,
-test names, paths, arbitrary assertion values and child output remain private.
-The translation disconnect case reports its failing check and available backend
-IDs and termination results. It keeps fixed worker output and marks other
-output `output withheld` (`node --test scripts/translation-disconnect-diagnostics.test.mjs`).
-The CI occurrences and the fixture repair are in
-[translation work](backlog/translation.md).
-Unexpected output still refuses the proof and records only its stream and file position.
-The sender retains at most sixteen event records plus a truncation marker.
-The command also reports its final refusal stage and allowlisted code.
-
-Summary refusals retain safe counts and mark the event stream incomplete,
-because Node can report a failed file summary before its failure event. The
-proof still stops at its first refusal. Earlier output can hide a later error,
-and the cap can omit a parent hook failure after many cancelled children. An
-unmapped helper has an unknown position; line zero means unavailable, and a
-file-level line one can be a runner placeholder. These records identify the
-observed boundary, not every underlying error. Single-suite runs now also
-honour the existing optional timing setting.
-
-The receipt parent validates and forwards these records before a child refusal,
-including records split across reads. Controlled real assertion, timeout, output
-and CLI failures exercise reporting without issuing a receipt. A controlled
-late rejection and a dirty checkout after passing cases both report their
-refusal. The existing receipt checks, case counts, cleanup and time limits
-remain unchanged. Historical causes and signal delivery through the parent's
-330-second cutoff remain unqualified.
-
-Repeated venue schema setup now uses the existing migrated database template.
-Each test process prepares it once, and each case gets a separate clone with
-every migration digest checked. The process closes its template after its cases,
-and command fixtures use their clone's connection when starting another process.
-The concurrent-fixture check covers a shared seed, separate rows, the complete
-migration list and clone removal. A refused first setup leaves the next case
-free to initialise its own template. A real child-process check verifies that
-its default template disappears while another template family remains.
-The traffic command reader's recorded Git object moves with its reviewed URL
-change, so the local-stack package graph can still trust that reader.
-Existing service, permission and traffic
-assertions and all proof deadlines stay unchanged. The complete Debian run of
-`node --test scripts/venue-service-proof.test.ts` retains all 360 cases across
-nine groups in about 201 seconds, compared with 289 for the unchanged baseline
-on the same box, within the same 330-second child limit. The Mac proof also
-passes, separately from that x86 comparison. A controlled 1.5-CPU Debian
-run still reaches that limit after 326 cases, compared with 94 before this change.
-That constraint remains unqualified, and the historical hosted slowdown remains
-unexplained.
+**Open.** A 16 November Linux run of `deploy/test-cloud/https-proof.test.mjs` returned 503 at
+its final restart-readiness assertion, and the
+[first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-cloud/actions/runs/41805521835/attempts/1)
+failed with only `Free-service proof failed`; neither has a known cause. Proof runs now emit
+bounded `SERVICE_PROOF_FAILURE` records; match a file number against its group's list in
+`scripts/test-cloud-free-services.mjs`. Earlier output can hide a later error, and the cap can
+omit a parent hook failure. The translation disconnect case is in
+[translation work](backlog/translation.md). At 1.5 CPUs the venue proof still reaches its
+330-second child limit (326 cases); that constraint, the hosted slowdown and signal delivery
+through that cutoff are unqualified. Keep every assertion and time limit.
 
 ## Bound verifier test failure cleanup (D530)
 
-[The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)
-first refuses an invalid-archive verdict because child cleanup fails. Its leftover
-child then causes later empty-state checks and image removal to fail. The original
-Docker refusal remains unexplained; a controlled refusal reproduces this cascade.
-
-The fixture now records each successfully created child's exact ID, image and six
-request labels. After each case's assertions, it removes only a matching recorded
-child and confirms absence. Changed ownership or an uncertain Docker response
-refuses rescue. A failed rescue does not prevent attempts for other recorded
-children. Failed records remain for later rescue attempts, so a persistent Docker
-refusal or changed ownership can still make later cases fail. There is no
-discovery or adoption of unrecorded containers.
-
-Run `node --test packages/backups/test/bound-fixture-cleanup.test.ts` for the
-ownership, absence, malformed-output and failed-rescue controls. With Docker,
-`node --test packages/backups/test/bound-fixture-cascade.test.ts` injects a product
-cleanup refusal into a private copy of the original test file. The original case
-must still fail, its next case must pass, and both its recorded child and image tag
-must be absent. The parent has an independent rescue if that control fails, and
-retains both the original assertion and a later rescue failure. These controls
-also run in ordinary package CI; the cascade control builds its own fixture image.
-Every original verifier assertion, authority check and deadline remains unchanged.
-
-On the Linux test box at `c9130ab7`, the unchanged invalid-archive case passes
-once alone and in three waves of four concurrent copies (twelve more passes).
-Each copy keeps the original assertions and deadlines, with its own random owner,
-image tag and controller directory. Run the selected case with
-`node --test --test-name-pattern='^invalid archive is a bounded verdict' packages/backups/test/bound-container-verifier.test.ts`.
-This bounded concurrency probe does not reproduce the historical 20.197-second
-cleanup failure or establish its cause. Keep that investigation open; do not
-repeat this passing probe without a new failure or hypothesis.
-
-The controller's existing diagnostics must identify a recurrence before you can
-attribute or repair the historical Docker failure. A lost create response before
-an ID is returned and a child created by a separate host remain outside this rescue.
+**Open; the original Docker refusal is unexplained.** [The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)
+refused an invalid-archive verdict because child cleanup failed (20.197 seconds), and the
+leftover child then failed later cases. The fixture now rescues only its own recorded children.
+Use the controller's fixed diagnostics on the next occurrence (discovery, ownership,
+removal, absence) before changing cleanup; do not repeat the passing concurrency probe without
+a new failure or hypothesis. A lost create response before an ID, and a child created by a
+separate host, stay outside the rescue. Keep every verifier assertion, authority check and
+deadline.
 
 ## Bound verifier fixture build timeout (D312)
 
-**Open.** The current image builds on the Linux test box, but the historical CI
-timeout remains unexplained. Three later PostgreSQL image inspections also time out
-before package tests, and a backup-worker fixture build fails at the same limit.
-Inspection timeouts and the two observed Worker build failures retain bounded host
-and Docker-client diagnostics; hosted Linux also records service state, monotonic
-timestamps and a direct socket ping. Worker failures retain plain build progress.
-These do not repair the stall; capture a recurrence before choosing a repair.
-A shared cause is unproved.
+**Open.** The historical CI build timeout, three PostgreSQL image-inspection timeouts and two
+Worker fixture builds at the same limit have no proved cause, shared or not. They now retain
+bounded Docker and host diagnostics; capture a recurrence before choosing a repair.
 See [the evidence and remaining investigation](backlog/verifier-build.md#bound-verifier-fixture-build-timeout-d312).
-Keep every verifier assertion and the existing build and job limits.
-
-PR #994 also records a separate diagnostic-fixture failure in
-[general CI run 42161904817, job 127709403709](https://github.com/waitron-io/waitron-cloud/actions/runs/42161904817/job/127709403709).
-The oversized-daemon inspection case reads an incomplete generated state file
-at `ci-test-postgres.test.mjs:146`. The test, launcher and diagnostic source are
-unchanged from its base and import no SDK. Twenty unchanged native comparisons
-and one Linux comparison pass; they do not establish the historical cause.
-On a matching recurrence, investigate the fixture writer and its termination boundary
-from that run's log, retaining every diagnostic, refusal, cleanup and deadline assertion.
-
+Keep every verifier assertion and the existing build and job limits. PR #994's
+[oversized-daemon inspection case](https://github.com/waitron-io/waitron-cloud/actions/runs/42161904817/job/127709403709)
+read an incomplete state file at `ci-test-postgres.test.mjs:146`; on a recurrence, investigate
+the fixture writer and its termination boundary.
 
 ## Relay reservation admission timestamp (D530)
 
-A delayed reservation-counter query could put the recorded creation time in a
-later policy period than the one checked at admission. Two real PostgreSQL
-controls cross a one-second period while that query waits, with monthly
-allowances enabled and disabled. A reservation now records the same database
-time used to check its period, grant and installation after lock waits. The
-existing monthly-wait, expiry, replay, allowance and rollback assertions remain.
-An independent database-time observation immediately before releasing the monthly
-wait also requires a period that ends after that observation; this prevents the
-shared stored timestamp from hiding a period chosen before the wait.
-The fresh-admission grant-expiry case advances its test clock only after
-PostgreSQL reports the monthly account lock wait.
-No landed migration or historical reservation changes.
-
-The original failure is registration job
-[127430816673](https://github.com/waitron-io/waitron-cloud/actions/runs/42079861800/job/127430816673)
-on main `d108bebc39`. The controlled delay reproduces its assertion, but that
-runner did not retain the two timestamps needed to prove its exact interleaving.
-Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
-node --test test/billing-allowance-relay.test.ts test/relay-grants.test.ts`
-for the admission and legacy-policy checks. Current-head CI still qualifies
-landing; this repair does not close the separate migration-setup or mail failures.
-
-A separate controlled review probe on both paths still admits when a grant expires
-during the counter query, after its admission-time check. The baseline-equivalent
-probe has the same outcome. This change does not move that guard; measuring time
-again at a later write would need its own authority and period design. The original
-CI interleaving, production-role behavior and mixed-version deployment remain
-unqualified.
+A reservation now records the database time used for its admission checks. **Open:** a
+controlled probe still admits when a grant expires during the counter query, after its
+admission check; measuring time again at a later write needs its own authority and period
+design. Production-role behaviour, mixed-version deployment and the original CI interleaving
+(registration job [127430816673](https://github.com/waitron-io/waitron-cloud/actions/runs/42079861800/job/127430816673))
+are unqualified.
 
 ## Storage test socket attribution and live progress (D575)
 
-Unexpected reservation-control binds now report the failed phase, port and
-owning process before cleanup. The admin wrapper forwards each child output chunk
-into its enclosing test output and retains the transcript. Node's ordered file
-reporter can still delay the visible log, and hard-kill survival is unqualified.
-Historical owners and a shared cause with default admin listeners remain unknown.
+Reservation-control binds now report their phase, port and owner before cleanup.
+Historical owners and a shared cause with default admin listeners remain unknown; hard-kill
+survival of the live log is unqualified.
 See [the checks and investigation limits](backlog/storage-cache-fixture.md#storage-test-socket-attribution-and-live-progress-d575).
 
 ## Storage archive download failure reporting (D441)
 
-**Open; historical cause unknown.** Download failure reporting is implemented,
-and all five native controls pass. The retained Linux cold-cache run and PR849
-CI qualify an earlier baseline; the runtime has since changed. Capture the named
+**Open; historical cause unknown.** Capture the named
 request and phase at a new failure before changing the single archive-download
-attempt. D585 adds a 30-second header/body deadline without adding a retry.
+attempt.
 See [the evidence and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
 ## Storage extraction seed acquisition (D530-4)
 
-The extraction-refusal checks now report seed acquisition separately from the
-storage fixture. Cold downloads allow at most three attempts for temporary
-HTTP 5xx, reset connections and ten seconds without transfer progress, within
-one unchanged 30-second budget. Permanent HTTP refusals and invalid digests stop
-immediately. All three extraction checks, pins, cache preservation and outer
-limits remain. Disk and cleanup failures have separate stages, with both errors
-retained when removal also fails. The historical CI timeout has no recorded HTTP stage, so its
-provider cause stays unknown. Capture a new labelled failure before attributing
-it to the registry. The historical inventory names thirteen acquisition sites. Ten storage suites
-and the seed-control suite now share supervision with native fixture startup,
-which retains one attempt and adds a 30-second deadline. Conformance also uses
-that acquisition helper while retaining three attempts, a 120-second total
-budget, 30-second inactivity and its existing diagnostic and digest checks.
-Caller cancellation interrupts requests and retry pauses without replacing the
-cancellation reason. The image now runs the same acquisition helper before its
-architecture checksum and extraction, using three temporary attempts within
-30 seconds and ten-second inactivity. Full application image preparation
-qualification remains open. The owner has deferred
+Bounded acquisition is shared by the suites, conformance and the image build. The historical
+timeout has no recorded HTTP stage: capture a labelled failure before attributing it to the
+registry. Full application image preparation remains open. The owner has deferred
 the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 
 ## Parallel storage-cache fixture failure on main
 
-Native admin-port fallback and explicit HTTP refusal now have controlled checks;
-see [the remaining collision boundaries](backlog/storage-cache-fixture.md).
-
-Retain diagnostics to explain the original read-only-cache rejection; the readiness
-and S3 port repairs do not establish its cause. Reproduce an admin-listener bind
+The original read-only-cache rejection is unexplained; the readiness
+and port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
-child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md).
-
-The qualified current browser fixture and identity-port repair retain separate
-historical bind and reconnect investigations. See [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
+child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md)
+and [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
 
 ## Reduce unnecessary CI work (D613)
 
 The [9 November report](ci-proof-selection.md#remaining-ci-work-measured-on-9-november-2026-d613)
-closes the accepted three-category measurement. Ordinary code PRs still run about
+closes the accepted three-category measurement. Ordinary code PRs still ran about
 25 job-minutes of root tests and every receipt suite in that sample. The first
-root cut omits nine audited synthetic suites on selected package-only PRs, keeps
-the live-reader suite and full-command fallback, and retains all tests nightly.
-The main-push CLI fixtures set their own full-run flags, independently of the
-outer nightly invocation (`scripts/ci-reuse-source.test.mjs`,
-`scripts/ci-root-inputs.test.mjs`).
-Measure its hosted job-minute saving on a healthy natural eligible PR. Then model
+root cut omits nine audited synthetic suites on selected package-only PRs.
+**Open:** measure its hosted job-minute saving on a healthy natural eligible PR. Then model
 registration test times by area over recent merged PRs before proposing a package
 split and agree the pairing boundary before moving code. Review the retained
 receipt fallback and weekly cost-check policy separately. Sample infrastructure
@@ -2399,81 +1101,26 @@ See [the phase timings and remaining qualification](backlog/ci-cache-saving.md#h
 
 ## Audit fixture dependency preparation (D530)
 
-The translation-vector audit, remote-access and portal guard fixtures copy installed
-dependencies into their own checkouts and pass with an empty download cache and
-an unavailable registry. Setup refusals retain a readable reason. Their original
-vector, planner, mismatch, restoration and denial checks remain. See the
+The audit and guard fixtures copy installed dependencies and pass with an empty cache. See the
 [nested-install investigation](backlog/ci-pnpm-setup.md#nested-package-installs-d530)
-for the reproduced refusal, source isolation checks and remaining cache questions.
+for the remaining cache questions.
 
 ## CI PostgreSQL image pull
 
-D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)
-failed before account HTTP shard 3 started its tests: Docker's request to
-`auth.docker.io` timed out while pulling `postgres:18-alpine`. The recorded failure
-is in the container-start path of `scripts/test-postgres.mjs`, before the owned
-container is marked running.
-This is separate from the reset-mail capture failure below. No runtime, test,
-fixture, workflow or dependency change accompanied the incident, and the external
-registry failure's cause remains unproved.
-
-The test launcher now acquires both images before creating either container. It
-uses cached images without registry access. For a missing image, it retries a
-recognised connection failure with at most three attempts within each image's
-120-second acquisition budget, including inspection and retry waits. A pull
-killed at that deadline has no time left for another attempt. Access refusals and
-other terminal errors stop immediately; a failed daemon inspection does not
-become an image pull. Container starts disable implicit pulling and are never
-retried. Package commands, assertions, readiness deadlines and owned cleanup retain
-their existing behaviour. Run `node --test scripts/ci-test-postgres.test.mjs` for
-the controlled launcher checks, including timeout termination, retry exhaustion,
-Mailpit acquisition, command exit status and cleanup. These checks qualify local
-failure handling; they do not prove Docker Hub availability or explain its outage.
-
-The launcher also retries registry HTTP 5xx responses, including the HTTP 500
-failures before package tests in [this merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/40856632619).
-Each failed HTTP attempt logs its status and attempt number. Both pinned images
-keep the same three-attempt, 120-second acquisition limits. Controlled launcher
-checks cover recovery, exhausted server responses, both retry-wait deadline
-boundaries and immediate refusal of HTTP 401, 403, 404 and 429. Container creation,
-image pins, cancellation and cleanup retain their existing behaviour. These
-bounded retries handle registry server failures; the cause of Docker Hub's outage
-remains unknown. Real Docker qualification continues in CI while local Docker is
-unavailable.
-
-The controlled checks also cover both deadline boundaries around retry waits,
-a pull client that ignores graceful termination, and every recognised connection
-response. Deliberate faults must make the matching checks fail. An early injected
-`ETIMEDOUT` separately qualifies retry classification; a real launcher timeout
-still exhausts the unchanged per-image budget. Cancellation checks cover SIGINT
-and SIGTERM during successful and hanging synchronous pulls and at a retry wait.
-They check the exit status, prevent the package command from starting and require
-cleanup of every created container. Cancellation during a synchronous pull is deferred
-until that call returns, so containers can still be created before cleanup.
-A pull killed at its deadline exits with the acquisition error, rather than the
-cancellation status, before creating any container.
-These fake-client checks leave one question open: whether stopping the client
-also stops Docker's own registry transfer. Qualify that with a real daemon and a
-controlled registry when local Docker is available; do not infer it from client
-termination.
+The launcher acquires both images first, with bounded retries for connection failures and
+registry HTTP 5xx (`node --test scripts/ci-test-postgres.test.mjs`); the Docker Hub outage's
+cause is unknown. **Open:** whether stopping the pull client also stops Docker's own registry
+transfer. Qualify that with a real daemon and a controlled registry; do not infer it from
+client termination.
 
 ## Portal reset-mail boundary reporting
 
 **Open; the missing reset email remains unexplained.** Capture a diagnostic
 recurrence before changing delivery or inbox capture, preserving the original
-assertions, single lookup and deadlines. Read the [reporting boundaries and
-redaction limits](backlog/mail-capture.md#portal-reset-mail-boundary-reporting).
-All monitoring and signup/recovery mail lookups now include their fixture's queue,
-worker and SMTP evidence, alongside the authenticator lookup. A one-off controlled
-check at `e31dea70` verified every call. Three concurrent Debian 13 trials passed
-all 63 checks without reproducing the mail loss. The evidence read now has one
-shared second for connection acquisition and its query. Real PostgreSQL controls
-cover exhausted pools, blocked outbox reads and terminated backends. Controlled
-TCP peers cover a simulated stalled handshake and abrupt connection loss. A late
-connection is returned without a query, and repeated misses keep at most one
-connection request. The natural missing-mail cause remains open.
-See the [separate five-second Mailpit send failures](backlog/mail-capture.md#package-test-mailpit-send-timeout)
-for the launcher fix and what to capture if a send fails again.
+assertions, single lookup and deadlines. Every mail lookup now reports its queue, worker and
+SMTP evidence. Read the [reporting boundaries and
+redaction limits](backlog/mail-capture.md#portal-reset-mail-boundary-reporting) and the
+[separate five-second Mailpit send failures](backlog/mail-capture.md#package-test-mailpit-send-timeout).
 
 ## Account HTTP reset-mail capture
 
@@ -2489,41 +1136,22 @@ attributing the initial signed-in timeout. See the [investigation and diagnostic
 
 ## Recovery and remote browser waits (D530)
 
-The owner-recovery browser test covers a delayed proof-status reply and a passkey
-list that starts after the enrolment click. The portal waits for both, and the
-test reports their timing on failure. The historical CI order remains unknown.
-See [the recovery evidence](backlog/portal-panel-waits.md#owner-recovery-enrolment-wait).
+**Open; the historical causes are unknown.** Delayed proof-status and passkey-list replies, the
+changed-email click lost when the session list started, and an authenticator code rollover
+are covered; sign-out and revoke still have the changed-email window. Capture the activation
+response if the owner-handover wait returns. Read the
+[evidence and next reproduction](backlog/portal-panel-waits.md) before attributing either
+timeout or repeating the passing baseline.
 
-A held session check reproduced the changed-email click being lost when the
-session list started. The confirmation now waits through both reads. The two
-historical CI logs lack the request order, and sign-out and revoke still have
-the earlier window. See [the changed-email evidence](backlog/portal-panel-waits.md#changed-email-sign-in-wait).
-
-The owner-handover fixture now holds its authenticator clock through a code
-boundary. The cause of the earlier CI waits remains unverified. Capture the
-activation response if the wait returns.
-See [the Linux reproduction and fix](backlog/portal-panel-waits.md#owner-handover-enrolment-wait).
-
-15 November 2026: [run 43694844056, portal job 132753088334](https://github.com/waitron-io/waitron-cloud/actions/runs/43694844056/job/132753088334) has one `account_without_registry es light 1280` sign-out timeout waiting four seconds for the sign-in heading (`fiscal-registry-removed-browser.test.ts:63`); no matching history was found, and the cause remains unknown. Preserve every assertion and deadline; a recurrence needs priority root-cause investigation.
-
-**Open; both historical causes remain unknown.** The two affected browser files
-pass 88 unchanged Linux checks. Recovery and remote-name failures now report their
-named step, bounded request progress and redacted panel state, while retaining
-every original assertion and deadline. Read the [evidence and next reproduction](backlog/portal-panel-waits.md)
-before attributing either timeout or repeating the passing baseline.
+[Run 43694844056](https://github.com/waitron-io/waitron-cloud/actions/runs/43694844056/job/132753088334)
+timed out at sign-out waiting four seconds for the sign-in heading
+(`fiscal-registry-removed-browser.test.ts:63`); a recurrence needs priority root-cause work.
 
 ## Portal lost-reply test ordering
 
-D530 records the unresolved consent-uncertainty and usage rate-limit waits from
-[PR #598's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019).
-The usage journey now reports its named stage, static request lifecycle events
-and a bounded controller snapshot when a page wait or setup step fails. Read
-[the diagnostic limits and next reproduction](backlog/portal-lost-reply-ordering.md#usage-rate-limit-wait-d530)
-before attributing either failure. Consent failures also report a separately bounded,
-redacted [database wait snapshot](backlog/portal-lost-reply-ordering.md#consent-database-waits-d530).
-All existing usage and consent assertions and deadlines remain.
-
-**Open:** the historical reset-link, lost-reply and translation-control failures
+**Open:** the historical reset-link, lost-reply and translation-control failures, and the
+consent-uncertainty and usage rate-limit waits from
+[PR #598](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019),
 remain unexplained. Capture a diagnostic recurrence, reproduce its named stage
 and fix the proved cause while preserving every existing assertion and deadline.
 See [the investigation and retained ordering controls](backlog/portal-lost-reply-ordering.md).
@@ -2551,31 +1179,14 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
 - **Cloud-only redundancy.** Implement and qualify the approved failure and recovery
   direction through P6/D115 and P7. The [reconciled Cloud hosting design](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
   uses the owner-selected cold recovery shape and the revised A1018 controlled or
-  explicit emergency handover where selected. After either takeover M2 alone handles
-  AEAT, including copied and returned old originals in their generating identities;
-  returning M1 transfers missing originals and all received outcomes without AEAT
-  contact. The external stop-proof requirement
-  is superseded; human shutdown declarations do not prove an isolated M1 stopped.
-  A running follower needs separate future approval. D88's duplicate design gate
-  is closed; no owner question is ready now. A1018's examples and retained defaults
-  are approved at Waitron `060966c2b3e9203acf0849042814997307cae463`.
-  Exact formats, compatible A947 amendments, separate A1018 build authority,
-  implementation and runtime/provider qualification remain open, with P1/P4,
-  existing country owner checks/D608, A951 and D101 dependencies. Reliability
-  promises and pricing follow measurements.
-  The old managed-Postgres framing
+  explicit emergency handover where selected (its terms are in Current state and Launch
+  platform work). Human shutdown declarations do not prove an isolated M1 stopped.
+  A running follower needs separate future approval. The old managed-Postgres framing
   is historical; Waitron targets SQLite and Litestream.
-- **Production object-store proof.** The executable local SeaweedFS 4.47 contract admits
-  exactly one writer in eight-way create-only and compare-and-swap races, refuses stale
-  replacements, retains accepted versions, isolates venue credentials, revokes a rotated
-  key, refuses an expired issued credential and commits no partial interrupted upload.
-  A [one-day AWS Stockholm sandbox rehearsal](aws-storage-rehearsal.md) now proves
-  real S3 conditional-write races, stale-write refusal, version retention, two-prefix
-  isolation, role-session revocation/expiry and interrupted multipart cleanup. It
-  restores an older-key retained archive through PostgreSQL-backed Cloud verification
-  and Waitron, and a continuous Waitron database through Litestream. Its receipt
-  records the conservative US$1.37 pretax estimate, cleanup and scheduled KMS deletion;
-  charges were not read. This is no Spain-location or production-deployment claim.
+- **Production object-store proof.** The local SeaweedFS contract and a
+  [one-day AWS Stockholm sandbox rehearsal](aws-storage-rehearsal.md) pass (conservative
+  US$1.37 pretax estimate; charges were not read). This is no Spain-location or
+  production-deployment claim.
   Qualify the selected Spain deployment, managed credential delivery/renewal,
   web identity and recovery journey; run a separate Google proof. The existing
   [prototype results](https://github.com/clintongormley/waitron/blob/830cf71fe854c7aa0b0d8c95078d3fe49ca05a10/docs/research/2026-09-16-sqlite-failover-prototype.md)
@@ -2604,271 +1215,81 @@ declare those core prerequisites implemented.
 
 ## Cost conformance image acquisition (D137)
 
-The historical Docker Hub token-request timeout remains unattributed. Keep the
-bounded, cache-first image acquisition and permanent-refusal checks. The D530
-inventory separates launcher HTTP 500, build-metadata HTTP 502 and later Node-pull
-authentication refusals; the first two already have bounded recovery on main.
-The authentication cause remains open and must retain immediate refusal. Use
-the authorised Linux test box for reproduction and current-head CI for landing.
-The separate isolation-test Node acquisition now retries temporary HTTP 5xx and
-transport failures before creating resources, within a shared 120-second
-preparation budget; it retains every isolation assertion and immediate permanent
-refusal. The historical provider outage remains unexplained.
-All 54 unchanged pull, build and isolation-image acquisition controls pass on
-macOS with replacement Docker commands. The 5 November Debian test-box check
-also passes all 104 launcher and acquisition controls and all 29 real-Docker
-isolation and source-copy cases. A live pinned Node pull and fixture build
-succeed using cached images or layers; the owned fixture image and scratch
-directory are collected. This qualifies the current recovery paths, not an
-empty image cache or the historical authentication and provider failures.
-See the
+The historical Docker Hub token-request timeout and the
+[authentication refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40984997048/job/123833975271)
+of `node:26.11.1-slim` are unattributed. Recovery for HTTP 5xx and transport failures is bounded
+and on main; authentication refusals must still stop immediately. Capture the registry
+challenge and credential selection during a controlled reproduction on the Linux test box. An
+empty image cache is unqualified. See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
-
-A later [Linux CI pull](https://github.com/waitron-io/waitron-cloud/actions/runs/40984997048/job/123833975271)
-of `node:26.11.1-slim` refused authentication before any browser case started.
-The registry or runner-credential cause is unknown. Capture the registry challenge
-and credential selection during a controlled reproduction, preserving the rule
-that authentication refusals stop immediately.
-
-### Installation renewal accepted during owner revocation
-
-A controlled Linux scheduler pause reproduces the accepted renewal after an
-observed revocation wait. The test now queues renewal behind revocation before
-releasing the held installation. Existing security checks and deadlines remain;
-production locking is unchanged. The historical scheduling was not captured.
-See [the reproduction and qualification](backlog/installation-renewal-revocation.md).
-
-### Interrupted source-fetch fixture state (D530)
-
-**Interrupted writes reproduced and handled; historical timing remains unknown.**
-[D349's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790)
-failed to read an empty generated JSON state file while checking the historical browser
-revision. A controlled interruption reproduces that read failure by stopping the
-fixture's Git helper between truncation and writing. The helper now writes a
-temporary file and renames it into place, so you retain the last complete state
-when the supervisor kills a fetch. The new case still requires revision refusal,
-one bounded retry and collection of both fetch children. All original assertions,
-source pins, deadlines and cleanup checks remain unchanged. The historical run
-did not capture the write boundary or explain the helper's delay; those details
-remain unknown. A separate control kills the supervisor while its helper is
-paused; fixture cleanup records that helper's PID independently and waits for
-it to exit, so a failing supervisor cannot leave the test process behind.
 
 ### Litestream LIST-response interruption (D352 qualification)
 
-[Cost run40546771851, job122339634344](https://github.com/waitron-io/waitron-cloud/actions/runs/40546771851/job/122339634344)
-refused the transport body-accounting case after10.20seconds. At stop/idle, a
-response listing storage objects closed prematurely after headers; the native
-process exited0 but the audit remained unfinished. Retain the parsed diagnostic
-with the [Litestream shutdown investigation](backlog/cost-stack-replication.md).
-The cause is unknown. Keep all accounting guards and deadlines unchanged.
-A later [qualification run41183089824, job124484426019](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019)
-failed two unchanged portal cases: translation consent waited five seconds for
-its uncertain-write message at `translation-consent-browser.test.ts:76`, and
-usage waited four seconds for its rate-limit state at
-`usage-read-message-browser.test.ts:46`. The consent trace ends with an activity
-request and consent write received by the server, without their finish events.
-The usage failure has no equivalent request trace. Both focused cases passed
-on the Linux test box (eight checks); the usage case also passed natively
-(seven checks). None of eight recent failed main runs contained these exact
-failures. D530 retains the historical failures. Fresh current-head CI qualifies this
-separate clock change; a passing retest does not establish the cause of those
-timeouts or the storage interruption. Keep every assertion and deadline.
+[Cost run 40546771851](https://github.com/waitron-io/waitron-cloud/actions/runs/40546771851/job/122339634344)
+refused the transport body-accounting case: at stop/idle a LIST response closed after headers,
+and the native process exited 0 with the audit unfinished. The cause is unknown; keep all
+accounting guards and deadlines. See the
+[Litestream shutdown investigation](backlog/cost-stack-replication.md).
 
-### Storage startup retry notice can replace the original refusal (D530)
+### Storage startup readiness
 
-**Fixed by D526; the throwing notice preserves the permitted retry.**
-[PR788 root shard 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41164895176/job/124430391561)
-reached the port-handoff retry notice in `startBackupStorage`, where a throwing
-reporter replaced the expected readiness error. A controlled wrapper probe
-isolated that defect; D526's native S3 port collision reproduces it and verifies
-the fix. The fixture contains the reporting failure, completes the one permitted
-restart and preserves the final readiness error. Original-error identity,
-bounded reporting, request budgets and every child's cleanup remain checked.
-The separate historical provisioning timeout and Linux internal error remain
+The historical provisioning timeout and Linux internal error remain
 open under the [readiness investigation](backlog/storage-authority-timeout.md).
 
 ### Conformance image acquisition during D135 qualification
 
-**Open; the registry timeout and metadata HTTP 502 remain unexplained.** Fixture
-builds now handle Docker Hub metadata HTTP 5xx within the original build budget,
-with native controls for bounded retries, permanent refusals and cleanup. D135
-still needs fresh Docker-backed qualification on the acquisition repair. A bounded
-2026-11-04 attempt passed all 39 native acquisition and build controls; the test
-box was occupied, so real preparation did not run. The historical causes remain
-open. Keep the separate generated HTTP 408 and native fixture timings under
-[their scheduling investigation](backlog/cost-conformance-fixtures.md#cost-fixture-timing-under-ordinary-ci-load-d530);
-the original runner’s load remains unmeasured. See the
-[image acquisition investigation](backlog/cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
+**Open; the registry timeout and metadata HTTP 502 remain unexplained.** D135
+still needs fresh Docker-backed qualification on the acquisition repair. Keep the separate
+generated HTTP 408 and native fixture timings under
+[their scheduling investigation](backlog/cost-conformance-fixtures.md#cost-fixture-timing-under-ordinary-ci-load-d530).
+See the [image acquisition investigation](backlog/cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
 
 ### Litestream conformance transport-close refusal (D141)
 
 **Open; the historical close refusal and later result-assembly failures remain
-unexplained.** Meter snapshot refusals now identify the failed check and first
-invalidation boundary without exposing request details. D513's historical failure
-is the body-byte comparison, not the storage-lifetime comparison named in the
-initial inventory. The unchanged body-byte case passes on the Linux test box;
-this does not identify or repair the old refusal. D513 and G474 still need causal
+unexplained.** D513's failure is the body-byte comparison. D513 and G474 still need causal
 attribution, preserving redaction, cleanup, accounting and deadlines; see the
 [transport and result diagnostics](backlog/cost-conformance-fixtures.md#litestream-conformance-transport-close-refusal-d141).
 
 ## Cloud cost Mailpit fixture startup
 
-[Merge CI run 40000552513](https://github.com/waitron-io/waitron-cloud/actions/runs/40000552513)
-on `57bc23ad6f61d67c66ae43ec123d5232a4c05f28`, stack-conformance shard 3,
-job 120575313226, fails
-`generatedServiceKeepsItsMutableFilesOffTheScannedHostTree_mailpit` after 4.17 s.
-It stops at fixture startup (`stack-conformance.test.mjs:762`), before the mail,
-storage and host-file assertions. `scripts/cloud-cost/local.mjs` at that revision replaced the
-underlying startup error with `Invalid cloud cost local run`; the historical cause
-remains unknown.
-Both files have the same Git blobs as the preceding main `917e586`, and the
-identical candidate tree passed exact-head cost run 39999259906. That comparison
-does not explain the failure or prove a fix. This is a different case from D141's
-storage-lifetime close refusal. Startup now emits `stack_startup=` before cleanup and attaches the same bounded
-record to its rejection. It names ownership, plan, configuration, runtime files,
-certificate, resource discovery, Compose, container policy, isolation, readiness
-or cancellation handoff. Only fixed error categories, exit codes, signals and
-elapsed time are retained; paths, credentials and raw subprocess output are
-excluded. Cancelled requests and expired deadlines have separate categories.
-Opaque thrown values also fall back to a fixed category so inspecting them cannot
-prevent cleanup. A cleanup failure gets a separate record and cannot replace the original
-startup refusal. Reporting failure cannot prevent cleanup.
-
-Docker-free tests run the actual orchestration, ownership checks, files and
-OpenSSL with a controlled Docker-command boundary. They inject a fault at each
-stage, command timeouts and missing executables, unknown private errors, cleanup
-failure and reporting failure, with a successful start/cleanup control. These
-prove diagnostic handling, not the historical Linux cause. Qualify the genuine
-Mailpit journey on the changed Linux CI head; a passing run alone does not explain
-the earlier refusal. On a diagnostic recurrence, reproduce the named cause and
-fix it test-first.
-Preserve every isolation, storage, accounting and cleanup assertion and deadline.
-Use GitHub CI while local Docker is down; do not rerun the unchanged merge for a
-passing result. The exact job log and source-identity receipt are retained in lane
-G's `receipts/d142/`.
+**Open; the historical cause is unknown.** [Merge CI run 40000552513](https://github.com/waitron-io/waitron-cloud/actions/runs/40000552513)
+failed `generatedServiceKeepsItsMutableFilesOffTheScannedHostTree_mailpit` at fixture startup.
+Startup now emits `stack_startup=` with a fixed stage before cleanup. Reproduce the stage a
+recurrence names and fix it test-first, preserving every isolation, storage, accounting and
+cleanup assertion and deadline.
 
 ## Cost-stack replication interruption (D152)
 
 **Open; historical interruption causes and production shutdown qualification
-remain unresolved.** Read the [replication and shutdown investigations](backlog/cost-stack-replication.md)
-for retained limits, diagnostic findings and remaining reproduction work. Local
-Docker proof waits for Docker to return; reproduce each new diagnostic recurrence
-before changing transport, accounting or cleanup.
-The D325 stop diagnostic now distinguishes child exit code and signal from an
-invalid request audit, retains the first failed audit stage and identifies an
-interrupted producer attempt. Premature-close response-pipeline refusals now
-retain body counts, expected lengths and request/response completion flags. Real HTTP controls
-reproduce a complete upstream LIST followed by a downstream close, including
-equal producer/observer byte totals but different outcomes. The session remains
-refused before and after a validated stop acknowledgement. These controlled
-exchanges do not establish the historical cancellation cause or change which
-shutdown evidence is accepted. Stop refusals after a validated acknowledgement also retain up to sixteen active
-transfer snapshots from immediately before the signal helper, with the total
-pending count and a truncation flag. A failed diagnostic read leaves an
-unavailable marker and shutdown continues. A generated writer with a real HTTP
-socket proves that this earlier snapshot survives cancellation and writer exit;
-it does not identify the native writer's historical request. The historical stop/exit cause still needs a
-labelled recurrence; see the linked investigation before changing the stop rule.
-Five controlled Linux triples with the official writer show that a valid database
-stop and one completed LIST do not stop later retention LISTs. Waiting through
-the observed last retention level avoids cancellation in that toy setup. This
-does not reproduce the historical premature-close code or qualify a production
-drain method; retain the existing acceptance guard.
-The delayed-PUT fixture also records up to sixteen uploads on a stop refusal,
-including which upload released readiness and their arrival, backend-response and
-reply-forwarding times relative to stop. Its readiness gate now requires a
-transaction newer than every known pre-sale upload, including pending ones,
-refuses multipart parts, and waits for older post-sale replies already admitted
-when the new response arrives, while the new reply remains held. Native HTTP controls
-catch the earlier admission-only gate and the missing settlement order. Use the
-records to investigate the remaining historical idle timeout; this fixture change
-does not qualify production shutdown.
-
+remain unresolved.** Stop refusals now retain exit code, signal, the first failed audit stage,
+interrupted attempts, body counts and up to sixteen active transfers. A valid database stop and
+one completed LIST do not stop later retention LISTs; waiting through the observed last level
+works only in a toy setup. Read the [replication and shutdown investigations](backlog/cost-stack-replication.md)
+and reproduce each new diagnostic recurrence before changing transport, accounting, cleanup or
+the stop rule.
 
 ## Initial upload admitted after stop (D393)
 
-[PR635's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40634308325/job/122638015466)
-refused an initial PUT after a validated stop reply, with writer exit zero.
-A controlled macOS reproduction uses the checksum-verified official 0.5.17
-binary and a toy SQLite database with two rows. A loopback relay holds a snapshot
-upload before the measuring transport receives it. The runtime confirms stop
-while that upload remains held; forwarding it then reproduces the same
-`after-stop-admission / post-stop-operation / put / initial` refusal.
-A private macOS stack identifies that controlled upload as `DB.Snapshot` under
-`Store.monitorCompactionLevel`. Completing it before stop passes the macOS paired case.
-
-The official Linux x86-64 release now reproduces that admission refusal on the
-authorised test box with the same two-row, loopback-storage probe and current
-Cloud modules. Its archive matches the pinned SHA-256
-`cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d`.
-At stop confirmation, the measuring transport has zero pending exchanges and
-sixteen completed ones. Forwarding the held initial PUT afterward refuses
-measurement despite the writer's zero exit code. This establishes the mechanism
-on Linux; it does not identify the upload in the historical CI failure or its native task.
-
-The original Linux completed-upload control also refuses: a different LIST is
-active at stop confirmation, and signalling the writer is followed by
-`client-error / ECONNRESET`. A disposable control that waits for the transport to
-be idle before signalling passes with eighteen reconciled exchanges and no
-shutdown allowance used. That single controlled ordering result does not prove
-that all native background work has drained or qualify a production stop change.
-The failed original control remains part of the evidence.
-
-With the snapshot barrier, the genuine PostgreSQL/SeaweedFS request-log case
-passes on the box: both sales restore, nineteen replication exchanges and
-thirty-three restore exchanges reconcile, and no shutdown allowance is used.
-This confirms preparation for that workload. The historical late-admission and
-active-LIST controls above still leave production shutdown qualification open.
-
-You cannot infer first HTTP admission from the earlier SDK request log, an idle
-transfer count or a zero writer exit. Run `node --test
-scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for the two real HTTP
-ordering controls. Removing the admission guard makes the late upload return
-200 instead of the required 400; restoring it passes both checks. Original
-assertions, accounting, pins, allowances and deadlines remain unchanged.
-D530 retains the historical cause and production shutdown qualification as open.
-Do not delay production stop or admit late uploads on the strength of these probes.
-
-The native admin-port qualification also encounters an
-[initial PUT after stop](https://github.com/waitron-io/waitron-cloud/actions/runs/41037164023/job/124000805980).
-Its admin checks pass on Linux; the upload's underlying cause remains unproved.
+**Open.** [PR635's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40634308325/job/122638015466)
+refused an initial PUT after a validated stop reply, with writer exit zero, and the
+[native admin-port qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41037164023/job/124000805980)
+met another. Controlled macOS and Linux runs of the official 0.5.17 binary reproduce the
+admission refusal with a held snapshot upload (`DB.Snapshot` under
+`Store.monitorCompactionLevel` on macOS); they do not identify the historical upload. You cannot infer first
+HTTP admission from the SDK request log, an idle transfer count or a zero writer exit. Do not
+delay production stop or admit late uploads on the strength of these probes; a pre-signal idle
+wait passes one controlled ordering only. Controls:
+`node --test scripts/cloud-cost/litestream-pre-admission-put.test.mjs`.
 
 ## Held-list control failure ordering (D391)
 
-The official held-metadata control failed in [PR633's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40631222000/job/122627856885)
-on its first LIST attempt. The transport reported an interrupted response while
-the storage observer reported success. Matching byte totals and a zero writer exit
-do not explain or permit that refusal.
-
-Failure-only fixture records now distinguish the initial, held retention and other
-LISTs. You can compare arrival, forwarding, response and per-counter settlement
-order with the stop request, reply, validated acknowledgement, release and signal.
-The record holds at most sixteen LISTs, marks truncation, omits private request
-identities and freezes before cleanup. Native HTTP/process controls cover ordering,
-invalid replies, truncation and an actual pre-acknowledgement interruption. That
-controlled partial response remains refused at a different boundary from the
-historical Linux event. It records the producer's interrupted response while the
-storage observer is still pending, so it does not qualify the historical pair of
-producer interruption and observer success or identify that event's cause. The official
-0.5.17 binary, allowance, both counters, assertions and deadlines remain unchanged.
-
-The unchanged genuine held-metadata case now passes on the authorised Linux test
-box with the official 0.5.17 writer. All four SDK requests match storage requests,
-but one permitted late LIST is interrupted: the first counter records a transport
-error while storage records success. Body counts differ by 213 bytes, and cost
-accuracy remains incomplete under the existing after-stop allowance.
-
-This passes
-the case's request-count checks; it does not reproduce the historical initial LIST
-failure or establish its cause. The historical log does not record acknowledgement
-timing. Run
-`node scripts/cloud-cost/conformance.mjs --only stack-conformance.test.mjs --pattern
-'^genuinePinnedLitestreamCountsHeldMetadataAfterValidatedRuntimeStop$'` on the test
-box. All six native ordering and diagnostic controls also pass.
-
-Use a labelled
-recurrence to establish the historical cause before changing any shutdown rule.
+**Open.** In [PR633's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40631222000/job/122627856885)
+the first LIST was interrupted at the transport while the storage observer reported success.
+Failure-only records now order up to sixteen LISTs against stop and acknowledgement. The genuine
+case passes on Linux with one permitted late LIST interrupted, which does not reproduce the
+historical event. Use a labelled recurrence to establish the cause before changing any shutdown
+rule.
 
 ## Recovery deployment qualification
 
@@ -2896,267 +1317,64 @@ limits across gateways and HAProxy connection-table pressure remain open. Verify
 IPv6 connection accounting with HAProxy's configured `stick-table type ip`; native
 gate checks do not qualify that separate layer.
 
-
 ## Storage-authority request timeout evidence (D212)
 
-**Historical cause unknown.** A later Linux run of the same case reports a
-startup `InternalError` before authority opening. The fixture now retains the last
-readiness request, attempt and request counts, and prints them when attempts run
-out, without changing its retry budget. D526 reproduces a separate test-count
-failure after a port collision: five abandoned-client requests plus 120 final-client
-requests fail the test's aggregate 120 assertion. The final diagnostic correctly
-reports 120. The owner-approved correction checks each client separately,
-requires all 120 requests on the final client and verifies every child stops.
-A permanent native collision control also reproduces a throwing retry logger
-replacing the readiness error. Logging now preserves the permitted retry and
-the final SDK error; request budgets and retry limits are unchanged.
-All four unchanged authority cases pass on the Linux test box, including delayed
-identity publication in 5.01 seconds. The test and operation-label helper match
-the later failing revision; its runtime and dependencies differ. An isolated
-checkout of that exact historical revision with its frozen dependencies also
-passes all four cases. Neither run reproduces the failures or recreates the
-original CI job's concurrency. The authority, fixture, diagnostic tests and
-dependency lock still match the earlier Linux check and current main. This
-preserves that result's scope without explaining either historical failure.
-Use the next labelled recurrence to find the cause, preserving the existing
+**Historical cause unknown.** A port collision and a throwing retry logger were found and
+fixed separately (D526); neither explains the old timeout or the later startup
+`InternalError`. Use the next labelled recurrence to find the cause, preserving the existing
 assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
 
+## Paced replay deletion refusals (D344, D351)
 
-## Paced replay deletion recurrence (D351 qualification)
-
-[Cost run 40541558126, job 122321994540](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
-records another `storage-cleanup` / `delete-object` refusal, after 75.35 seconds,
-following native restore and validation. Retain it with the D344 qualification
-trace below and lane D's D121 investigation. The deletion cause remains unknown;
-source equality with the parent does not establish independence. Keep ownership,
-accounting, cleanup and deadlines unchanged; genuine reproduction needs Docker.
-
-## Paced replay object deletion refusal (D344 qualification)
-
-The passkey keyboard qualification run also captured a paced-replay refusal at
-`storage-cleanup` / `delete-object`, after native restore, file, integrity, sales
-and accounting stages. The failure is in
-[run 40516366868, job 122231317704](https://github.com/waitron-io/waitron-cloud/actions/runs/40516366868/job/122231317704)
-at `c1c2ea77e2005e2e88c6a8da9a5b989782d55d82`; the case refused after 75.33 seconds.
-The branch changes no cost-runner code. This labels the refused operation but
-does not identify its cause. Resume D121 with this trace and reproduce the
-deletion refusal without changing ownership, accounting, cleanup or deadlines.
-Genuine local reproduction waits for Docker to return; a later passing run does
-not establish a repair.
+Cost runs [40541558126](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
+and [40516366868](https://github.com/waitron-io/waitron-cloud/actions/runs/40516366868/job/122231317704)
+refused at `storage-cleanup` / `delete-object` after about 75 seconds, following native restore
+and validation. Resume D121 with these traces and reproduce the deletion refusal without
+changing ownership, accounting, cleanup or deadlines.
 
 ## Passkey keyboard browser handler observation (D373)
 
-The keyboard fixture waits for its options handler before checking the exact
-password and pending controls. The waiter has its own four-second limit, matching
-the page timeout. Original journeys remain alongside delayed-handler and
-missing-record controls.
-
-Historical qualification recorded a [gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085):
-the session was accepted but the request check failed. Its cause remains unknown;
-lane D's D201 owns the investigation. Keep the accounting checks and deadlines.
-The owner's test box now provides focused Docker reproduction. Fresh qualification
-does not identify the historical cause.
+The fixture now waits for its options handler. A
+[gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085)
+with an accepted session remains unexplained and belongs to D201's investigation; keep the
+accounting checks and deadlines.
 
 ## A way forward after every refusal (D254)
 
 The [self-service refusal audit](refusal-self-service-audit.md) traces current
 English/Spanish portal messages, public pages and account emails to their server
-causes. Native probes confirm 50 client refusal mappings and 34 rendered emails
-and HTTP pages. Database causes are source evidence, not local runtime proof.
-No current customer message asks you to contact Cloud support, and no shared
-refusal code is classified as possible only through a product bug.
+causes; most rows are delivered and it records their limits. Authentication, recovery, tenant
+permissions and fiscal changes keep their full review and owner gates. Still open, each a
+separate small change with tests first:
 
-Cloud follow-ups, each a separate small change with tests before implementation:
-
-- R1 delivered: refused authenticator management requests offer Check authenticator
-  settings in English and Spanish. The read-only refresh discards the old local
-  setup and inputs, reads current status and requires fresh password/codes before
-  another change. General 400 responses retain general feedback, without blaming
-  a code field or claiming a specific cause. Server responses, proof checks and
-  uncertain-write reconciliation remain unchanged. Native and stubbed-browser
-  checks cover stale setup, changed status and restart; database qualification
-  runs in CI. The audit records each server cause and the remaining shared-code limit.
-- R2 delivered: refused passkey registration and removal requests offer Check
-  passkeys in English and Spanish. The read-only action clears the old password
-  and refreshes your account's list before you start a fresh prompt or removal.
-  The shared 400 response gives general guidance, including choosing another
-  passkey if already registered; it does not identify expiry, duplication or a
-  verification failure. Password sign-in, credential feedback, rate waits and
-  uncertain-write reconciliation remain available. Native and stubbed-browser
-  checks cover the path; database and HTTP qualification runs in CI. The browser
-  checks wait until the list handler counts the refresh before asserting its count,
-  while holding the reply. The handler-count wait has a separate four-second
-  timeout. Its bypass control requires refusal before a separate five-second timer
-  finishes; it does not pin the exact four-second setting. All original journeys
-  and assertions remain; concurrent background list reads remain unqualified.
-  Generic passkey failures now give neutral English/Spanish feedback with the
-  existing password sign-in as an alternative. Browser checks exercise a refused
-  prompt and unavailable options, a second refused passkey attempt, a rejected
-  password then successful password sign-in, and a failed list read followed by
-  a successful retry. They use synthetic
-  HTTP responses; real credential and database checks remain in CI. The shared
-  message cannot diagnose browser restrictions, configuration or transport faults.
-  These failure checks explicitly provide a simulated passkey device; a paired
-  native check records whether the machine can begin without it.
-  Malformed JSON (400) and billing request-body refusals remain open.
-  An earlier [reconnect check](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
-  refused with an accepted session and no page or relay error. Its historical
-  cause remains unknown and belongs to the shared CI-failure investigation;
-  a successful requalification does not establish a repair of that cause.
-- R3 delivered: recovery approval and replacement refusals now distinguish missing
-  confirmations, unverified or incompatible sources, reused replacement keys,
-  another open recovery, changed request bindings and missing approval in English
-  and Spanish. Check request status reads the existing request without repeating
-  a write; refreshing snapshots and choosing a different source still requires
-  both confirmations. Replacement conflicts first ask you to check for completed
-  replacement; source refusals point to setup requirements without assuming the
-  snapshot is at fault or that verification guarantees compatibility. An unapproved
-  request can be left to expire. If another recovery blocks approval, the refusal
-  shows its expiry. Early closure still needs the original link. Unknown replies and
-  transport failures retain read-after-uncertain-write reconciliation. Native API/controller
-  and stubbed-browser checks cover these paths; real database authority, locking
-  and compatibility checks run in CI. Finding another request without its original
-  link, displaying source compatibility before approval, and the box button to set
-  aside an unreadable reconnection request remain follow-ups in their owning
-  Cloud/Waitron surfaces. No recovery,
-  permission, proof or single-writer rule changes.
-- R4: recovery now explains a refused test-only action in English and Spanish.
-  Open a new recovery link from the replacement server’s setup, then choose a test venue;
-  production recovery remains unavailable. Native API/controller and browser
-  checks cover the 403 restriction, cleared authority, retained permission errors
-  and uncertain-write reconciliation. Server scope and proof requirements stay
-  unchanged; PostgreSQL scope checks run in CI.
-- R5 venue panels now distinguish denied permission from request verification.
-  Installations, snapshots, diagnostics, usage, remote setup and translation consent
-  ask you to check your account, organisation and venue. Both languages offer **Account**
-  without reloading and **Sign out** beside the refusal, with retry if sign-out
-  fails. Native HTTP/controller and two-venue browser checks cover six reachable
-  panels, heading focus and cleared private state; real database/locking checks run
-  in CI. Existing permission conditions remain; specific remote refusals get a
-  fresh session and ownership check before their cause is returned. Shared
-  backup/installation reads inherit the wording; recovery-specific guidance stays
-  in R3. Pairing keeps its existing guidance.
-  Remote setup now explains a missing paid trial plan, missing gateway setup,
-  a production venue outside the test-only trial and stopped installation access
-  in English and Spanish. Use **Account** to check your sign-in and refresh installations
-  to check current service status. Plan changes, gateway provisioning and restoring stopped
-  access are unavailable here. Shared callers keep `permission_denied`; Account
-  exposes only a known refusal cause after its ownership check. Native SQL-boundary,
-  API/controller and browser checks cover the mapping; real database and late-DNS
-  rechecks run in CI. Customer plan/setup/restart controls and membership changes
-  still need real product paths and remain open.
-- R8 delivered: the no-eligible-business message explains the existing sign-out
-  and owning-account sign-in path in English and Spanish. You can reload the
-  connection or sign-in page and enter the code shown on the box to continue the
-  request. Same-account membership and business creation during connection remain open.
-- R9 private forwarding diagnostics now appear in Account for the current owner.
-  The [approved plan](superpowers/plans/2026-10-26-private-forwarding-causes.md)
-  keeps five fixed failure categories, separate success and unknown states,
-  five-minute visibility and 30-second batching. Visitors retain neutral bilingual
-  guidance with no upstream details. Refresh reads stored evidence without probing
-  or repairing; Account clears it on expiry and navigation. Gateway/collector
-  container mounts, primary-only reads and P1 country backup integration still need
-  deployment qualification. Reporting stays disabled in deployments. See the
-  [collection and Account guide](local-monitoring.md#private-gateway-forwarding-collection).
-  The invalid equal-timestamp fixture uses one captured observation; its owning
-  refusal test advances the clock on every read so a tick cannot make it valid.
-  Client validation and the guard-deletion checks retain their assertions.
-- R10 delivered: direct navigation to rejected public requests receives bilingual
-  guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay
-  empty; host, proof, quota, size and forwarding checks retain their status codes.
-  Unmatched hosts receive no retry link. The worker reports exhaustion after its
-  20-second search budget; the page stops stalled challenge, worker or proof
-  requests after 30 seconds, terminates the worker and ignores late results.
-  Unsupported/blocked workers offer another-browser and JavaScript guidance;
-  disabled JavaScript gets a static explanation. Native HTTP, executed scripts
-  and browser checks cover these outcomes. A failed page attempt ignores late
-  replies and does not redirect; proof and access remain server decisions.
-  If the browser-check script cannot load or JavaScript is disabled, bilingual
-  guidance stays visible below the heading. It disappears when the script starts
-  and reveals the waiting line, so a failed download does not leave you without
-  a next step. Native Chromium checks cover failed, disconnected and delayed
-  script downloads, recovery on reload, disabled JavaScript and later retry
-  feedback in both languages, themes and phone/desktop widths. Other browser
-  engines, screen readers and production timing remain unqualified. A new script
-  can still start on the previous page markup during a rollout. The fallback
-  offers Reload page / Volver a cargar as an ordinary link to the same public page.
-  Pointer and keyboard checks cover restarting after a failed script download;
-  without JavaScript, the link returns to the static guidance. Reloading repeats
-  the browser check and does not grant access. A script from before fallback hiding was introduced may
-  leave the guidance visible during a mixed rollout. If a running check fails,
-  the Reload page link reappears beside the existing failure-specific message.
-  With matching page and script versions, static download/disabled-JavaScript
-  advice stays hidden after startup, so a failed request offers reload guidance
-  while blocked/unfinished checks keep their browser guidance. Mixed versions can
-  keep the previous advice until reload. Chromium checks cover both languages,
-  themes and widths; this wording does not diagnose why a request or check failed.
-  Pointer and keyboard
-  checks cover restarting after challenge, worker, proof and timeout failures,
-  with no automatic retry or granted access; the new attempt hides the fallback
-  while it runs. The older-page
-  browser fixture now serves the exact shipped HTML from before the static
-  fallback, with a pinned digest independent of current page generation. Its
-  existing waiting, bilingual failure, no-forwarding and no-cookie checks run
-  against the current script. Native Chromium also completes the real worker and
-  proof exchange on that historical page, then opens the local HTTPS venue response.
-  Both languages, themes and widths retain zero cookies and upstream requests before
-  proof, followed by the scoped access cookie and one forwarded request. Other
-  historical versions, browser engines and production networks remain unqualified.
-  In the reverse rollout pairing, the shipped older script also runs on the
-  current page: after a failed challenge, Reload page restarts the real worker
-  and proof exchange before opening the local HTTPS venue response. Chromium
-  checks cover both languages, themes and widths, with no cookie or forwarding
-  before proof. The older script leaves the current static advice and reload
-  link visible while checking; these tests preserve that known mixed-version limit.
-  The browser-check page groups its heading, waiting or failure message and
-  reload guidance in one main content region. Native Chromium checks cover
-  disabled JavaScript, a failed script download and a running check that fails,
-  in both languages, themes and widths. Automated landmark checks run with
-  JavaScript enabled. The waiting message and later failure share a status
-  region so assistive software can observe the change without moving your focus.
-  Chromium exposes a polite, whole-message region while waiting; the failure
-  message replaces its contents in place. Checks cover challenge and worker
-  failures in both languages, themes and widths. The reload link returns after
-  failure and access still requires proof. Actual screen-reader announcements,
-  other engines and production networks remain unqualified.
-- R11 delivered: public/staff alerts in Account and email name the existing remote
-  setup and refresh controls in English and Spanish. Failed checks ask you to
-  check venue internet, the selected hostname and setup status. Unknown monitoring
-  asks you to look for new observations without declaring an outage.
-  Native mail and stubbed-browser checks cover the guidance, read-only setup/status
-  requests and later healthy evidence. The local monitoring guide explains the
-  checks and their limits; refreshing neither starts a probe nor repairs a route.
-  Gateway assignment remains operator tooling. Public keys and renewal come from the
-  worker; staff requests use the database exchange. Production certificate delivery
-  still needs qualification. Owner-facing repair controls, appliance certificate delivery
-  and live provider activation remain unfinished. No monitoring, certificate,
-  gateway, permission or delivery rule changes. Real database/gateway qualification
-  remains in CI and the Docker-based local proof.
-
-Authentication, recovery, tenant permissions and fiscal changes keep their full
-review and owner gates. This audit does not enable services or change policy.
+- R2: malformed JSON (400) and billing request-body refusals. Concurrent background passkey
+  list reads are unqualified. An earlier [reconnect check](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
+  refusal belongs to the shared CI-failure investigation.
+- R3: finding another recovery request without its original link, showing source compatibility
+  before approval, and the box button to set aside an unreadable reconnection request.
+- R5: customer plan, setup and restart controls and membership changes need real product
+  paths.
+- R8: same-account membership and business creation during connection.
+- R9: private forwarding evidence ([approved plan](superpowers/plans/2026-10-26-private-forwarding-causes.md),
+  [guide](local-monitoring.md#private-gateway-forwarding-collection)) needs container mounts,
+  primary-only reads and P1 country backup integration qualified; reporting stays disabled in
+  deployments.
+- R10: other browser engines, screen readers, production timing and other historical
+  page/script versions are unqualified. An older script can leave static advice visible while
+  checking, and a mixed rollout can keep previous advice until reload.
+- R11: owner-facing repair controls, appliance certificate delivery, production certificate
+  delivery and live provider activation.
 
 ## Remote hostname save qualification
 
 **Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
-The Route 53 challenge adapter now plugs into the existing reconciler and staff
-exchange. It writes only challenge TXT records below its configured suffix, waits
-for propagation and deletes the exact issued value. Native checks exercise the
-real AWS client against a local HTTP boundary, including scope refusal, pending
-propagation, provider refusal and cleanup after a newer challenge. Production
-installation refusal remains in place. The single-suffix trial has completed
-staging and real issuance, trusted browser password sign-in from outside the home
-network, and automatic app and tunnel restart. Reboot, renewal, revocation,
-offline sales and connected-machine isolation still need joint qualification.
-Cross-suffix moves also need qualification here: the retained staff hostname and
-the destination-derived challenge name currently differ. Keep that production
-renewal and routing gate open; the single-suffix test does not discharge it.
-The existing signed certificate status action also discovers the stored request
-when its ID is lost, including stale configuration needed to replace it. This
-metadata read retains installation, lease, plan and test-environment checks;
-known-ID status and submit replies keep their existing contract.
-Native save and read-back checks pass; permission and retry rules remain in force.
+Production installation refusal remains in place. The single-suffix trial completed
+staging and real issuance, trusted browser sign-in from outside the home network, and automatic
+app and tunnel restart. Reboot, renewal, revocation, offline sales and connected-machine
+isolation still need joint qualification. Cross-suffix moves also need it: the retained staff
+hostname and the destination-derived challenge name currently differ, so keep that production
+renewal and routing gate open. Permission and retry rules remain in force.
 See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 
 ## Remote status and DNS-preview deployment qualification
