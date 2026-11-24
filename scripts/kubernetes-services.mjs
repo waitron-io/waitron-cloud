@@ -202,6 +202,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     const score = node => [...uncovered].filter(role => roles[role] === node).length;
     const node = remaining.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best);
     remaining.splice(remaining.indexOf(node), 1);
+    const checkReservations = roles.primary === node ? await probes?.signedBackupReservations?.() : undefined;
     process.stderr.write('D621 stop inventory ' + JSON.stringify({node, roles}) + '\n');
     const survivors = nodes.filter(name => name !== node);
     const stopped = Promise.withResolvers();
@@ -240,6 +241,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     if (roles.primary === node) assert.ok(publication?.worker && Number.isFinite(publication.completedMs), 'services.stop_publication');
     for (const role of uncovered) if (roles[role] === node) uncovered.delete(role);
     const rejoin = await healthy(node, signal);
+    await checkReservations?.();
     legs.push({...receipt, roles, rejoin});
     if (remaining.length && spaceSignup) {
       await spaceSignup(signal);

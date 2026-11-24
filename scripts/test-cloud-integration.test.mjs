@@ -315,6 +315,20 @@ test('the signed upload rehearsal checks the first fresh reply and any later res
   }
 });
 
+test('the venue records a dropped reserve and keeps reply bodies private', async () => {
+  const {observeBackupReservation} = await import('../deploy/test-cloud/test-fixtures/integration-snapshot-client.mjs');
+  const replies = [], record = async reply => replies.push(reply);
+  const error = new Error('connection dropped');
+  await assert.rejects(observeBackupReservation(async () => {throw error;}, record), cause => cause === error);
+  for (const body of ['upstream error', JSON.stringify({uploadUrl: 'https://store.example.test/backup?synthetic-signature',
+    recoveryKey: 'synthetic-key'})]) {
+    const response = new Response(body);
+    assert.equal(await observeBackupReservation(async () => response, record), response);
+    assert.equal(await response.text(), body);
+  }
+  assert.deepEqual(replies, [{status: 0}, {status: 200}, {status: 200, uploadMethod: 'signed-put'}]);
+});
+
 test('after a full restart the last acknowledged backup is read before restoring a different capture', async () => {
   const {measureOutsideColdBackup} = await load();
   const original = {pointId: 'last-acknowledged', workerVerification: {attemptId: 'verified-before'}};

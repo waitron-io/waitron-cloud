@@ -6,6 +6,29 @@ import {Agent,request} from 'node:https';
 import {lookup} from 'node:dns';
 import {observeSnapshotExposure} from './integration-snapshot-exposure.mjs';
 
+export async function observeBackupReservation(request, record) {
+  let response;
+  try {response = await request();}
+  catch (error) {
+    await record({status: 0});
+    throw error;
+  }
+  const observed = {status: response.status};
+  if (response.status === 200) {
+    const body = await response.clone().json().catch(() => null);
+    // The address and credentials are private. Record only the reply shape.
+    if (typeof body?.uploadUrl === 'string' && body.uploadUrl && body.credentials === undefined) observed.uploadMethod = 'signed-put';
+    if (body?.credentials && body.uploadUrl === undefined) observed.uploadMethod = 'storage-session';
+  }
+  if (response.status === 403) {
+    const body = await response.clone().json();
+    observed.error = body.error === 'permission_denied' ? 'permission_denied' : 'unexpected';
+    observed.grantIssued = Object.keys(body).some(key => key !== 'error');
+  }
+  await record(observed);
+  return response;
+}
+
 export async function reserveLegacyIntegrationSnapshot(root,id) {
   const {machinePayload}=await import('/waitron/apps/server/src/cloud-installation.ts');
   const {signCloudPayload}=await import('/waitron/apps/server/src/cloud-signed-request.ts');

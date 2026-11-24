@@ -1396,8 +1396,9 @@ attempts.
 When the Waitron image supports signed backup uploads, set
 `TEST_CLOUD_INTEGRATION_REQUIRE_SIGNED_UPLOAD=1` with the machine-stop check.
 The venue records the reply status and upload method without saving the signed
-address. The check requires a signed address on the first fresh reservation
-and refuses storage-session replies and HTTP 503 responses during the stops.
+address. When a stop takes the PostgreSQL primary offline, the check requires
+a signed address on the first fresh reservation and refuses storage-session
+replies and HTTP 503 responses during that stop.
 
 After a healthy rejoin, the local test waits if its shared signup allowance
 has fewer than two calls left. It starts the next machine stop once there

@@ -758,6 +758,13 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             const requireSignedUpload = process.env.TEST_CLOUD_INTEGRATION_REQUIRE_SIGNED_UPLOAD === '1';
             const reserveReplies = async () => (await docker(['exec', id, 'cat', venueRoot + '/exchanges.jsonl'], '', 'client-reserve-replies'))
               .split('\n').map(parseIntegrationJson).filter(row => row.path === '/api/installations/backup-reserve');
+            const signedBackupReservations = requireSignedUpload ? async () => {
+              const before = (await reserveReplies()).length;
+              return async () => {
+                const evidence = checkSignedBackupReservations((await reserveReplies()).slice(before));
+                process.stderr.write('D621 fresh backup reservations ' + JSON.stringify(evidence) + '\n');
+              };
+            } : undefined;
             proveServiceStops = (remote, publication, cold) => observeRetainedClients({paid: {id}, browser, api, docker, control, login,
               remote: signal => remote(signal),
               signupMail: async signal => {
@@ -777,12 +784,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                   }
                   runSignal().throwIfAborted();
                 }));
-                const before = requireSignedUpload ? (await reserveReplies()).length : 0;
-                const serviceStops = await kubernetes.stopServices({...probes, publication}, spaceSignup);
-                if (requireSignedUpload) {
-                  const evidence = checkSignedBackupReservations((await reserveReplies()).slice(before));
-                  process.stderr.write('D621 fresh backup reservations ' + JSON.stringify(evidence) + '\n');
-                }
+                const serviceStops = await kubernetes.stopServices({...probes, publication, signedBackupReservations}, spaceSignup);
                 const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({
