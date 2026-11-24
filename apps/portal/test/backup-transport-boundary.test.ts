@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test, type TestContext} from 'node:test';
-import {accountRequest} from '../src/api.ts';
+import {accountRequest,enrollmentRequiredEvent} from '../src/api.ts';
 import {BackupController} from '../src/backup-controller.ts';
 import type {BackupPage} from '../src/backup-types.ts';
 
@@ -20,7 +20,7 @@ type Reply = {body?: unknown; status?: number; raw?: string; retry?: string; bro
 
 function fixture(t: TestContext) {
   for (const [name, value] of [
-    ['location', {protocol: 'https:'}], ['document', {cookie: '__Host-cloud_csrf=backup-proof'}],
+    ['location', {protocol: 'https:'}], ['document', Object.assign(new EventTarget(),{cookie: '__Host-cloud_csrf=backup-proof'})],
   ] as const) {
     const previous = Object.getOwnPropertyDescriptor(globalThis, name);
     Object.defineProperty(globalThis, name, {configurable: true, value});
@@ -48,6 +48,44 @@ function fixture(t: TestContext) {
   controller.account('owner');
   return {controller, replies, requests, changes: () => changes};
 }
+
+test('backup download preserves the account enrollment event and distinguishes CSRF from loss of ownership',async t=>{
+  const f=fixture(t);
+  const downloadable={...page,exitDownloadAvailable:true};
+  f.replies.push({body:downloadable});
+  await f.controller.open(venueId);
+  let enrollment=0;
+  document.addEventListener(enrollmentRequiredEvent,()=>{enrollment++;});
+  f.replies.push({status:403,body:{error:'enrollment_required'}});
+  await f.controller.download(false);
+  assert.equal(enrollment,1);
+  assert.equal(f.controller.error,'pairEnrollment');
+  assert.equal(f.controller.downloadProof,true);
+  f.replies.push({status:403,body:{error:'forbidden'}});
+  await f.controller.download(false);
+  assert.equal(f.controller.error,'forbidden');
+  f.replies.push({status:403,body:{error:'permission_denied'}});
+  await f.controller.download(false);
+  assert.equal(f.controller.error,'permissionBusiness');
+  assert.equal(f.controller.page,undefined);
+  assert.equal(f.controller.selected,undefined);
+});
+
+test('changing snapshot clears a download refusal and keeps a catalogue refusal visible',async t=>{
+  const f=fixture(t);
+  f.replies.push({body:{...page,exitDownloadAvailable:true,points:[page.points[0],olderPage.points[0]]}});
+  await f.controller.open(venueId);
+  f.replies.push({status:403,body:{error:'proof_required'}});
+  await f.controller.download(true);
+  assert.equal(f.controller.error,'snapshotDownloadProof');
+  f.controller.select(olderPointId);
+  assert.equal(f.controller.error,undefined);
+  assert.equal(f.controller.downloadProof,false);
+  f.replies.push({status:503,body:{error:'temporarily_unavailable'}});
+  await f.controller.load();
+  f.controller.select(pointId);
+  assert.equal(f.controller.error,'unavailable');
+});
 
 function assertRequest(request: {url: string; init: RequestInit}, cursor?: string) {
   assert.equal(request.url, '/api/account/backups/list');

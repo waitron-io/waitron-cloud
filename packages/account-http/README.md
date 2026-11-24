@@ -602,16 +602,25 @@ Switching organisation or account clears the open catalogue.
 
 POST `/api/account/backups/list` accepts `{"venueId":"<uuid>"}` and an optional
 `"cursor":"<nextCursor>"` from the preceding response. Send the session cookie, exact
-Origin and CSRF token. This read does not renew your session. This endpoint allows 30 requests
-per account per minute across API workers, separately from other endpoint limits. A cursor belongs to one venue, including
+Origin and CSRF token. This read does not renew your session. The list and both download endpoints share
+30 requests per account per minute across API workers. A cursor belongs to one venue, including
 when its boundary snapshot is subsequently deleted.
 
 The response contains `venueId`, `points`, `nextCursor`, `defaultPointId` and
-`continuousRecoveryAvailable:false`. Each point includes only `id`, `capturedAt`,
+`continuousRecovery` (null or the latest recoverable time, time checked and source node ID).
+Test venues with downloads enabled also receive `exitDownloadAvailable:true`. Each point includes only `id`, `capturedAt`,
 `verification`, `retention`, `expiresAt` and `protection`. Protection is `fallback`,
 `recovery` or null; `recovery` takes precedence when both protections apply. It describes retention, separately from current verification.
-Object locations, keys, source node identities and download authority are excluded.
+The catalogue omits archive locations and keys.
 Only undeleted snapshots appear; an unprovisioned venue has an empty list.
+
+On test Cloud, POST to `/api/account/backups/download` to save a currently verified
+encrypted snapshot up to 16 MiB. POST to `/api/account/backups/download-key` to save its
+matching recovery key. Both accept `venueId` and `pointId` and require the same browser
+credentials as the list, plus fresh confirmation from an enrolled account owner. The
+server matches the archive to the stored checksum and rechecks authority after reading the
+archive. Both responses are attachments with `Cache-Control: no-store`. Test mode and
+test venue ownership are required on both routes.
 
 Daily snapshots have 30-day ordinary retention and monthly snapshots have 12 calendar
 months, calculated in UTC for both display and cleanup. The last snapshot that passed verification remains protected even if a later

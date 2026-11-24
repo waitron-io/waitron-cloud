@@ -1112,6 +1112,39 @@ Ordinary recovery keeps its separate fiscal authority requirement.
 Keep snapshots unavailable and deployment enforcement off until the remaining Cloud
 implementation, complete integration proof and release gates pass.
 
+### Save a verified backup while the test box stays online
+
+Sign in as the owner of a synthetic test venue. Open **View snapshots** and
+choose a verified snapshot. Select **Download backup**. If asked, confirm your
+sign-in and select **Download backup** again. Select **Download recovery key**
+for the same snapshot. Keep the matching key private so you can open the
+encrypted archive later. This test download accepts archives up to 16 MiB.
+Actual venue exit still needs the rest of the return and deletion process.
+
+Use the disposable Cloud image and a verifier built from Waitron revision
+`44dc45af7a64d399037747499ba633594a63f84d`. This client uses the pairing proof
+format the Cloud account service expects.
+On your disposable Docker host, give the verifier a private 1 GiB ext4 volume
+using the [Amazon scratch settings](#rehearse-backup-on-the-amazon-test-cloud).
+Use a unique volume name and a separate empty directory for the worker to stage
+the encrypted archive. The worker and the saved-file check use the volume in turn.
+Load `postgres:18-alpine` and `axllent/mailpit:v1.31.1` in Docker first because
+the rehearsal starts with image pulls disabled.
+
+```sh
+TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
+TEST_CLOUD_INTEGRATION_WAITRON_REVISION=44dc45af7a64d399037747499ba633594a63f84d \
+TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=<local-verifier-image-id> \
+TEST_CLOUD_EXIT_VERIFIER_VOLUME=<private-verifier-volume> \
+TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
+  node --test scripts/test-cloud-exit-download.test.mjs
+```
+
+The test compares the saved archive with the stored checksum and opens it in a
+verifier with networking disabled. It checks the original box is still serving
+with the same installation after the download. The receipt reports the archive
+size and checksum without including the key.
+
 ## Check real free and paid clients
 
 You can prove the connection before testing paid services. The client runner creates

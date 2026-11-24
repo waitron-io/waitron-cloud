@@ -8,12 +8,13 @@ import {
   type StorageLocation,
 } from "./storage.ts";
 import { bufferObject, MAX_LEGACY_BACKUP_BYTES, MAX_OBJECT_BYTES, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
-import type { PublicationDeadline } from "./publication-deadline.ts";
+import { PublicationDeadline } from "./publication-deadline.ts";
 import { isBackupCancellation } from "./cancellation.ts";
 import {prepareVerification,admitVerification,recordVerificationUnavailable,lockVerificationPolicy,type VerificationClaim} from './verification-admission.ts';
 import type {DataRestoreVerifier,VerifiedChildOutput} from './container-verifier.ts';
 import {DISK_VERIFIER_CLEANUP_MS,type BackupVerificationReason} from './verification-protocol.ts';
 export type MutationFence = (client:PoolClient)=>Promise<void>;
+const exitDownloadMaxBytes = 16 * 1024 * 1024;
 interface StreamingObjectStore {
   stage(
     key: string,
@@ -287,6 +288,53 @@ export class BackupCatalogue {
     this.#pool = pool;
     this.#vault = vault;
     this.#objects = objects;
+  }
+  async #exitPoint(client: PoolClient, venueId: string, pointId: string, fence: MutationFence, deadline: PublicationDeadline) {
+    if (this.#planMode !== 'test-free-paid' && this.#planMode !== 'test-venue-levels') backupFail('local_integration_only');
+    // The database must release its locks even when the HTTP request times out first.
+    await client.query("SELECT set_config('transaction_timeout',$1,true)",[`${deadline.remaining()}ms`]);
+    await fence(client);
+    await lockVerificationPolicy(client);
+    const storage = location(await lockVenue(client, venueId));
+    const {rows:[row]} = await client.query<StoredPoint>(`SELECT ${pointColumns} FROM ${qualifiedPoints}
+      WHERE p.id=$1 AND p.venue_id=$2 AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL`, [pointId, venueId]);
+    if (!row) backupFail('unavailable');
+    const selected = decodedPoint(row);
+    if (selected.verification !== 'verified') backupFail('unverified');
+    if (selected.size > exitDownloadMaxBytes) backupFail('download_too_large');
+    await fence(client);
+    return {storage, selected};
+  }
+  async exitArchive(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal) {
+    const deadline = new PublicationDeadline(Date.now() + 10_000);
+    const signal = AbortSignal.any([deadline.signal, requestSignal]);
+    const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence, deadline));
+    const first = await deadline.run(read);
+    signal.throwIfAborted();
+    const objects = this.#objects(first.storage);
+    if (!('stage' in objects)) backupFail('unavailable');
+    const source = await deadline.run(() => objects.stage(first.selected.objectKey, undefined, {
+      maxBytes: exitDownloadMaxBytes, signal,
+    }), late => { void late.dispose().catch(() => {}); });
+    try {
+      const {selected, storage} = await deadline.run(read);
+      signal.throwIfAborted();
+      // The same qualified encrypted bytes must still belong to the selected point and store.
+      if (source.receipt.digest !== selected.digest || source.receipt.size !== selected.size ||
+          first.selected.objectKey !== selected.objectKey || first.selected.keyVersion !== selected.keyVersion ||
+          JSON.stringify(first.storage) !== JSON.stringify(storage)) backupFail('unavailable');
+      return source;
+    } catch (error) {
+      await source.dispose();
+      throw error;
+    }
+  }
+  async exitArchiveKey(venueId: string, pointId: string, fence: MutationFence) {
+    const deadline = new PublicationDeadline(Date.now() + 10_000);
+    return deadline.run(() => transaction(this.#pool, async client => {
+      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline);
+      return (await pointKeys(client, this.#vault, venueId, selected.keyVersion)).recoveryKey;
+    }));
   }
   async provision(installationId: string, l: StorageLocation) {
     validateLocation(l);

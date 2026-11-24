@@ -90,6 +90,10 @@ export class PortalApp {
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'))this.billing.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.recovery?.error==='pairEnrollment')this.recovery.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.recovery?.error==='actionProofUnavailable'||this.recovery?.error==='recoveryProofRequired'))this.recovery.error=undefined;
+      if(!this.actionProof.pending&&this.backups?.downloadProof){
+        if(this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.backups.downloadError==='pairEnrollment')this.backups.downloadError=undefined;
+        if(this.actionProof.status?.freshUntil&&(this.backups.downloadError==='actionProofUnavailable'||this.backups.downloadError==='snapshotDownloadProof'))this.backups.downloadError=undefined;
+      }
       this.draw();
     });
     this.authenticator = new AuthenticatorController(() => this.draw());
@@ -307,6 +311,7 @@ export class PortalApp {
   }
   navigate(path: string, push = true) {
     this.sentReports.close();
+    this.backups.cancelDownload();
     this.#signOutCheck = undefined;
     if (path !== '/connect' && (path !== '/login' || this.session.state.kind !== 'anonymous')) this.pairing.discardLinkedCode();
     if(path!=='/login')this.#operatorSignin=false;
@@ -393,6 +398,17 @@ export class PortalApp {
     if(this.actionProof.status?.methods.every(m=>m==='email'))recovery.error='pairEnrollment';
     else if(!proved)recovery.error=this.actionProof.error?'actionProofUnavailable':'recoveryProofRequired';
     else {await recovery.approve();return;}
+    this.draw();
+  }
+  async downloadBackup(key:boolean){
+    const b=this.backups,page=b.page,point=b.selected;
+    if(!b.downloadable||b.pending||b.downloading||b.waiting||this.actionProof.pending)return;
+    b.downloadProof=true;
+    const route=this.#route,proved=await this.#requireActionProof();
+    if(route!==this.#route||page!==b.page||point!==b.selected||!b.downloadProof)return;
+    if(this.actionProof.status?.methods.every(method=>method==='email'))b.downloadError='pairEnrollment';
+    else if(!proved)b.downloadError=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
+    else{b.downloadProof=false;await b.download(key);return;}
     this.draw();
   }
   async startPaymentMethod(kind:'card'|'direct_debit'){

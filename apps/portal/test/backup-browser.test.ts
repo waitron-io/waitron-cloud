@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {admitPointFixture} from '../../../packages/backups/test/fixtures/verification.ts';
@@ -28,6 +29,42 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);await page.screenshot({path:new URL(`../dist/backups-${locale}.png`,import.meta.url).pathname,fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),JSON.stringify(await page.evaluate(()=>[...document.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth).map(e=>({tag:e.tagName,width:e.getBoundingClientRect().width})))));
   await page.getByRole('button',{name:older,exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#snapshot-choice option').length===2);assert.equal(await page.getByRole('button',{name:older,exact:true}).count(),0);
   await page.getByRole('button',{name:refresh,exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#snapshot-choice option').length===50);
+  const saveArchive=page.getByRole('button',{name:locale==='en'?'Download backup':'Descargar copia',exact:true});
+  assert.equal(await saveArchive.count(),0);
+  const flag=async(route:import('playwright').Route)=>{
+   const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),exitDownloadAvailable:true}});
+  };
+  await page.route('**/api/account/backups/list',flag);
+  let proof=false;
+  await page.route('**/api/account/action-proof',route=>route.fulfill({json:{methods:['app','recovery'],freshUntil:proof?new Date(Date.now()+60_000).toISOString():null}}));
+  await page.route('**/api/account/action-proof/factor',route=>{
+   assert.deepEqual(route.request().postDataJSON(),{kind:'recovery',code:'1'.repeat(32)});
+   proof=true;return route.fulfill({status:204});
+  });
+  const archive='synthetic encrypted archive',key='k'.repeat(43)+'\n';
+  for(const [action,body,contentType] of [['download',archive,'application/octet-stream'],['download-key',key,'text/plain; charset=utf-8']] as const){
+   await page.route('**/api/account/backups/'+action,route=>{
+    assert.equal(route.request().method(),'POST');assert.ok(route.request().headers()['x-csrf-token']);
+    assert.deepEqual(route.request().postDataJSON(),{venueId:v.venueId,pointId:verifiedId});
+    return route.fulfill({body,contentType});
+   });
+  }
+  await page.getByRole('button',{name:refresh,exact:true}).click();
+  await choices.selectOption(verifiedId);
+  await saveArchive.click();
+  const proofPrompt=page.getByRole('alert').filter({hasText:locale==='en'?'Verify it’s you before downloading.':'Verifica que eres tú antes de descargar.'});
+  await proofPrompt.waitFor();
+  await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
+  await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
+  await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+  assert.equal(await proofPrompt.count(),0);
+  for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[page.getByRole('button',{
+   name:locale==='en'?'Download recovery key':'Descargar clave de recuperación',exact:true}),key,'key']] as const){
+   const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
+   assert.equal(download.suggestedFilename(),`waitron-backup-${verifiedId}.${extension}`);
+   const file=await download.path();assert.ok(file);assert.equal(await readFile(file,'utf8'),contents);
+  }
+  await page.unroute('**/api/account/backups/list',flag);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:refresh,exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await choices.count(),0);
  }finally{await f.close();}
 });

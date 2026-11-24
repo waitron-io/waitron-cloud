@@ -39,6 +39,7 @@ import {authenticatorResponse} from './authenticator-factor.ts';
 import {recoveryResponse} from './recovery.ts';
 import {remoteAccessResponse,type RemoteResolver} from './remote-access.ts';
 import {BackupCaptures,type CaptureOptions} from '@waitron-cloud/backups/captures';
+import {BackupCatalogue} from '@waitron-cloud/backups/catalogue';
 import {captureResponse} from './captures.ts';
 import {ManagedStreamMachines,managedStreamResponse} from './managed-streams.ts';
 import {alertPreferencesResponse} from './alerts.ts';
@@ -127,6 +128,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,{...options.captures,planMode:options.planMode},options.leaseTrust):undefined;
+  const exitDownloads=options.captures&&(options.planMode==='test-free-paid'||options.planMode==='test-venue-levels')
+    ?new BackupCatalogue(pool,options.captures.vault,options.captures.objects,options.planMode):undefined;
   const translation=options.translation&&options.leaseIssuer?(options.translationMachine??new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,undefined,options.planMode,allowances)):undefined;
   const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,options.planMode):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
@@ -208,7 +211,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(['/api/account/billing/method/start','/api/account/billing/method/verify'].includes(c.req.path))return billingMethodsResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methods:billingMethods});
     if(billingAccountPaths.includes(c.req.path))return billingAccountResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methodsEnabled:!!billingMethods});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
-    if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
+    if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume,exitDownloads});
     if(c.req.path.startsWith('/api/account/sent-reports/'))return sentReportsResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/installations/billing-display')return billingDisplayResponse(c,{machine:billingDisplay,ip,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
