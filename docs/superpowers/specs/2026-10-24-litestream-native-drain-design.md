@@ -1,6 +1,6 @@
 # D152: capped after-stop accounting with official Litestream
 
-Status: revised design, 25 October 2026. This documentation milestone precedes runtime implementation. The [implementation plan](../plans/2026-10-24-litestream-native-drain.md) is for a later inline implementation step. You keep the official Litestream **0.5.17** pins and report a small amount of shutdown traffic separately, because a runtime stop reply does not prove that storage work has finished.
+Status: revised design, 25 October 2026. The runtime implementation is on main. You keep the official Litestream **0.5.17** pins and report a small amount of shutdown traffic separately, because a runtime stop reply does not prove that storage work has finished.
 
 **Custom binary, Go graceful-drain extension and custom build pipeline: REJECTED by the owner on 25 October 2026.** The earlier `/drain` proposal is superseded. This design changes the synthetic cost smoke's accounting contract; it authorizes no product replication, deployment, provider or Docker work. The driver owns backlog and campaign updates.
 

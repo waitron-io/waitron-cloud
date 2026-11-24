@@ -14,7 +14,7 @@ The subsequent [signup backend](cloud-signup-implementation.md) creates customer
 credentials after email proof. The [recovery backend](password-recovery-implementation.md)
 now resets passwords and revokes existing sessions. The [account HTTP API](../packages/account-http/README.md)
 provides the account routes and serves the [bilingual portal](../README.md#run-the-account-portal).
-Optional passkeys are implemented in [the passkey slice](superpowers/specs/2026-09-26-cloud-passkeys-design.md),
+Optional passkeys are implemented,
 with fresh identity verification for enrolment and removal, account-scoped credentials
 and Chromium sign-in checks. When you choose **Add a passkey**, the portal continues
 after you verify your identity. If the browser declines the continued prompt,
