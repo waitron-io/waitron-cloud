@@ -1,9 +1,11 @@
 import {bodyRefusal} from './body-refusal.ts';
-import {accountRequest} from './api.ts';
+import {accountRequest,downloadBackupFile} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {BackupPage} from './backup-types.ts';
 export class BackupController {
  venueId:string|undefined;page:BackupPage|undefined;selected:string|undefined;selectedSource:'continuous'|'snapshot'|undefined;error:keyof Copy|undefined;pending=false;
+ downloadProof=false;
+ #download:AbortController|undefined;
  // Relative retry waits use elapsed time; retryAt projects the remainder for the shared wall-clock countdown.
  #retryUntil=0;#account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
@@ -11,9 +13,29 @@ export class BackupController {
  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  async open(venueId:string){if(!this.#account)return;this.close();this.venueId=venueId;await this.load();this.#changed();}
- close(){this.#generation++;this.venueId=undefined;this.page=undefined;this.selected=undefined;this.selectedSource=undefined;this.pending=false;this.error=undefined;}
+ close(){this.cancelDownload();this.#generation++;this.venueId=undefined;this.page=undefined;this.selected=undefined;this.selectedSource=undefined;this.pending=false;this.error=undefined;}
+ cancelDownload(){this.#download?.abort();this.#download=undefined;this.downloadProof=false;}
+ get downloading(){return !!this.#download;}
+ get downloadable(){return this.page?.exitDownloadAvailable===true&&this.page.points.some(point=>point.id===this.selected&&point.verification==='verified');}
  selectContinuous(){if(this.page?.continuousRecovery){this.selectedSource='continuous';this.#changed();}}
  select(id:string){if(this.page?.points.some(p=>p.id===id)){this.selected=id;this.selectedSource='snapshot';this.#changed();}}
+ async download(key:boolean){
+  const venueId=this.venueId,pointId=this.selected;
+  if(!this.#account||!venueId||!pointId||!this.downloadable||this.pending||this.#download||this.waiting)return;
+  const transfer=new AbortController();this.#download=transfer;this.error=undefined;this.#changed();
+  try{
+   const result=await downloadBackupFile(key,{venueId,pointId},transfer.signal);
+   if(transfer.signal.aborted)return;
+   if(result.ok){
+    const url=URL.createObjectURL(result.value),link=document.createElement('a');
+    try{link.href=url;link.download=`waitron-backup-${pointId}.${key?'key':'backup.enc'}`;link.click();}finally{URL.revokeObjectURL(url);}
+   }else{
+    this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+    this.error=result.code==='proof_required'?'snapshotDownloadProof':result.status===429?'limited':result.status===401?'pairSession':result.status===403?'permissionBusiness':result.status===413?'snapshotDownloadTooLarge':'snapshotDownloadUnavailable';
+    this.downloadProof=result.code==='proof_required';
+   }
+  }finally{if(this.#download===transfer){this.#download=undefined;this.#changed();}}
+ }
  async load(next=false){
   if(!this.#account||!this.venueId||this.pending||this.waiting||(next&&!this.page?.nextCursor))return;
   const generation=this.#generation,venueId=this.venueId;this.pending=true;this.error=undefined;this.#changed();

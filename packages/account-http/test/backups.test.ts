@@ -2,12 +2,15 @@ import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {Pool} from 'pg';
 import {BackupCatalogue} from '../../backups/src/catalogue.ts';
+import {bufferObject,receipt,type StageOptions} from '../../backups/src/object-transfer.ts';
+import {recoveryFixture} from '../../backups/test/fixtures/recovery-v2.ts';
+import {verifyPointFixture} from '../../backups/test/fixtures/verification.ts';
 import {BackupKeyVault} from '../../backups/src/keys.ts';
 import type {HttpBindings} from '@hono/node-server';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
-import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
+import {createLeaseIssuer,SignupStore,RegistrationStore,type PlanMode} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
 import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
@@ -109,7 +112,7 @@ test('default snapshot selection requires current target evidence rather than th
  const body=await response.json();assert(body.points.some((p:{id:string})=>p.id===id));assert.equal(body.defaultPointId,null);
 });
 test('default snapshot selection loses eligibility immediately when release readiness is withdrawn',async()=>{
- const {recoveryFixture}=await import('../../backups/test/fixtures/recovery-v2.ts'),f=await recoveryFixture(db);
+ const f=await recoveryFixture(db);
  const headers={cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken};
  assert.equal((await (await request({venueId:f.installed.venueId},headers)).json()).defaultPointId,f.point.id);
  await db.pool.query('UPDATE backup_verification_policy SET release_ready=false');
@@ -133,4 +136,77 @@ test('recovered scope: backup HTTP metadata refuses a retained outside membershi
  const a=(await db.pool.query('SELECT id FROM cloud_accounts')).rows[0].id,org=(await db.pool.query('SELECT organisation_id FROM venues WHERE id=$1',[venues[0]!.venueId])).rows[0].organisation_id;
  await setRecoveryScope(db.pool,a);assert.equal((await request({venueId:venues[0]!.venueId})).status,403);
  await setRecoveryScope(db.pool,a,org);assert.equal((await request({venueId:venues[0]!.venueId})).status,200);
+});
+
+type ExitFixture=Awaited<ReturnType<typeof recoveryFixture>>;
+function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:StageOptions|undefined)=>Promise<ReturnType<typeof bufferObject>>){
+ const server=createAccountApp({pool:db.pool,outbox:db.outbox,planMode,
+  config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
+  leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),
+  captures:{vault:f.vault,objects:()=>({stage:(key,_streamKey,options)=>stage(key,options),
+  async putStaged(){throw Error('unexpected write');},async remove(){throw Error('unexpected delete');}}),
+  async grant(){throw Error('unexpected grant');}}});
+ return (path:string,pointId=f.point.id)=>server.request(origin+'/api/account/backups/'+path,{method:'POST',headers:{origin,'content-type':'application/json',
+  cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken},body:JSON.stringify({venueId:f.installed.venueId,pointId})},bindings);
+}
+test('exit download returns the verified archive and its matching key while the installation stays active',async()=>{
+ const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;
+ let disposals=0;
+ const send=exitDownload(f,'test-free-paid',async(key,options)=>{
+  assert.equal(key,f.point.objectKey);
+  assert.equal(options?.maxBytes,16*1024*1024);
+  return {...bufferObject(bytes),async dispose(){disposals++;}};
+ });
+ const archive=await send('download');
+ assert.equal(archive.status,200);
+ assert.match(archive.headers.get('cache-control')??'',/\bno-store\b/);
+ assert.equal(archive.headers.get('content-type'),'application/octet-stream');
+ assert.deepEqual(Buffer.from(await archive.arrayBuffer()),bytes);
+ assert.equal(disposals,1);
+ await db.pool.query('INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,2,$2)',[f.installed.venueId,f.vault.create(f.installed.venueId,2)]);
+ const key=await send('download-key');
+ assert.equal(key.status,200);
+ assert.match(key.headers.get('cache-control')??'',/\bno-store\b/);
+ assert.equal((await key.text()).trim(),f.capture.keys.recoveryKey);
+ assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
+});
+
+test('exit download refuses unavailable copies and stale or non-owner authority before reading storage',async()=>{
+ const f=await recoveryFixture(db);
+ let reads=0;
+ const stage=async()=>{reads++;throw Error('unexpected read');};
+ assert.equal((await exitDownload(f,'existing',stage)('download')).status,404);
+ const send=exitDownload(f,'test-venue-levels',stage);
+ const foreign=await point(),unchecked=await point(f.installed);
+ assert.equal((await send('download',foreign)).status,410);
+ assert.equal((await send('download-key',foreign)).status,410);
+ assert.equal((await send('download',unchecked)).status,400);
+ assert.equal((await send('download-key',unchecked)).status,400);
+ const large=Buffer.alloc(16*1024*1024+1),capture=await f.catalogue.reserveCapture(f.installed.installationId,randomUUID());
+ f.objects.set(capture.incomingKey,large);
+ const oversized=await f.catalogue.publish(f.installed.installationId,capture.id,{...receipt(large),capturedAt:new Date().toISOString(),
+  retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});
+ await verifyPointFixture(db.pool,f.catalogue,oversized.id);
+ assert.equal((await send('download',oversized.id)).status,413);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);
+ assert.equal((await send('download')).status,403);
+ assert.equal((await send('download-key')).status,403);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.owner.accountId]);
+ await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes' WHERE account_id=$1",[f.owner.accountId]);
+ assert.deepEqual(await (await send('download')).json(),{error:'proof_required'});
+ assert.deepEqual(await (await send('download-key')).json(),{error:'proof_required'});
+ assert.equal(reads,0);
+});
+
+test('exit download disposes the staged archive if ownership is lost during the read',async()=>{
+ const f=await recoveryFixture(db);
+ let disposals=0;
+ const send=exitDownload(f,'test-free-paid',async()=>{
+  await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);
+  return {...bufferObject(f.objects.get(f.point.objectKey)!),async dispose(){disposals++;}};
+ });
+ const response=await send('download');
+ assert.equal(response.status,403);
+ assert.deepEqual(await response.json(),{error:'permission_denied'});
+ assert.equal(disposals,1);
 });

@@ -71,6 +71,28 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
   return path === '/password-reset/complete' && status === 200 && data.status === 'completed';
 }
+function browserCsrfToken() {
+ const name=location.protocol==='https:'?'__Host-cloud_csrf':'cloud_csrf';
+ const values=document.cookie.split(';').map(value=>value.trim()).filter(value=>value.startsWith(name+'='));
+ return values.length===1?values[0]!.slice(name.length+1):'';
+}
+export async function downloadBackupFile(key:boolean,body:{venueId:string;pointId:string},signal:AbortSignal):Promise<ApiResult<Blob>>{
+ try{
+  const response=await fetch(key?'/api/account/backups/download-key':'/api/account/backups/download',{
+   method:'POST',credentials:'same-origin',mode:'same-origin',redirect:'error',cache:'no-store',
+   headers:{'Content-Type':'application/json','X-CSRF-Token':browserCsrfToken()},body:JSON.stringify(body),
+   signal:AbortSignal.any([signal,AbortSignal.timeout(30_000)]),
+  });
+  if(response.status===200&&response.headers.get('content-type')===(key?'text/plain; charset=utf-8':'application/octet-stream')){
+   const value=await response.blob();
+   if(key?value.size===44:value.size>0&&value.size<=16*1024*1024)return {ok:true,value};
+  }
+  const retry=Number(response.headers.get('retry-after'));
+  const failure:unknown=response.ok?null:await response.json().catch(()=>null);
+  const code=failure&&typeof failure==='object'&&'error' in failure&&typeof failure.error==='string'?failure.error:'unexpected_response';
+  return {ok:false,status:response.ok?503:response.status,code,retryAfterMs:Number.isFinite(retry)?Math.max(0,retry)*1000:0};
+ }catch{return {ok:false,status:0,code:'network_error',retryAfterMs:0};}
+}
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const installationWrite = path === '/installations/remove';
   const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
@@ -78,9 +100,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
   if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
-    const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
-    const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
-    headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';
+    headers['X-CSRF-Token'] = browserCsrfToken();
   }
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',

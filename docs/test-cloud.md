@@ -955,6 +955,28 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node --test deploy/test-cloud/snapshot-proof.test.mjs
 ```
 
+### Save a verified backup while the test box stays online
+
+Sign in as the owner of a synthetic test venue. Open **View snapshots** and
+choose a verified snapshot. Confirm your sign-in, then select **Download backup**
+and **Download recovery key**. Keep the matching key private so you can open the
+encrypted archive later. This test download accepts archives up to 16 MiB.
+Actual venue exit still needs the rest of the return and deletion process.
+
+Use the Cloud image and the verifier built from the Waitron revision in
+`deploy/backup-verifier/target.json` to check that both files work together:
+
+```sh
+TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
+TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=<pinned-verifier-image-id> \
+  node --test scripts/test-cloud-exit-download.test.mjs
+```
+
+The test compares the saved archive with the stored checksum and opens it in a
+verifier with networking disabled. It checks the original box is still serving
+with the same installation after the download. The receipt reports the archive
+size and checksum without including the key.
+
 The current candidate is the reviewed pairing-v2 build named in
 `deploy/backup-verifier/target.json`. Its complete compiled target includes eight
 module owners and core schema 1. The older A1004 descriptor remains a historical

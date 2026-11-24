@@ -275,6 +275,8 @@ const enBase = {
   diagnosticUnavailable:"The diagnostic report is temporarily unavailable. Retry or refresh the status.",
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
+  snapshotDownload:'Download backup', snapshotDownloadKey:'Download recovery key', snapshotDownloadProof:'Verify it’s you before downloading.',
+  snapshotDownloadTooLarge:'This backup is too large to download.', snapshotDownloadUnavailable:'The download is unavailable. Try again.',
   snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'To restore a snapshot, open the Cloud recovery link from the replacement server’s setup screen.',
   snapshotPending:'Awaiting verification', snapshotVerified:'Verified', snapshotFailed:'Verification failed', snapshotCaptured:'Captured', snapshotCheck:'Verification', snapshotRetention:'Retention', snapshotExpiry:'Ordinary retention ends', snapshotIdentifier:'Snapshot identifier',
   snapshotDaily:'Daily · 30 days', snapshotMonthly:'Monthly · 12 months', snapshotRecoveryHold:'Protected by an active recovery. Fallback retention can also apply.', snapshotFallback:'Retained as the fallback snapshot.',
@@ -627,6 +629,8 @@ const esBase: typeof enBase = {
   diagnosticUnavailable:"El informe de diagnóstico no está disponible temporalmente. Reinténtalo o actualiza el estado.",
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
+  snapshotDownload:'Descargar copia', snapshotDownloadKey:'Descargar clave de recuperación', snapshotDownloadProof:'Verifica que eres tú antes de descargar.',
+  snapshotDownloadTooLarge:'Esta copia es demasiado grande para descargarla.', snapshotDownloadUnavailable:'La descarga no está disponible. Inténtalo de nuevo.',
   snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'Para restaurar una instantánea, abre el enlace de recuperación de Cloud desde la configuración del servidor de sustitución.',
   snapshotPending:'Pendiente de verificación', snapshotVerified:'Verificada', snapshotFailed:'Verificación fallida', snapshotCaptured:'Fecha de captura', snapshotCheck:'Verificación', snapshotRetention:'Conservación', snapshotExpiry:'Fin de la conservación ordinaria', snapshotIdentifier:'Identificador de la instantánea',
   snapshotDaily:'Diaria · 30 días', snapshotMonthly:'Mensual · 12 meses', snapshotRecoveryHold:'Protegida por una recuperación activa. También puede conservarse como reserva.', snapshotFallback:'Se conserva como instantánea de reserva.',

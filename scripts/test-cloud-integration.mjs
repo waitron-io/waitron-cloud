@@ -5,7 +5,7 @@ import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {createHmac, randomUUID} from 'node:crypto';
+import {createHash, createHmac, randomUUID} from 'node:crypto';
 import {request} from 'node:https';
 import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
@@ -197,6 +197,37 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
+async function proveExitDownload({api, browser, request, directory, waitronImage, runId, online}) {
+  const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
+  const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
+  const {venueId, pointId, archive, backupKey} = request;
+  const body = {venueId, pointId};
+  const archivePath = join(directory, 'exit.backup.enc'), keyPath = join(directory, 'exit.key');
+  for (const [path, saveTo, type] of [
+    ['download', archivePath, 'application/octet-stream'], ['download-key', keyPath, 'text/plain; charset=utf-8'],
+  ]) {
+    const response = await api('/api/account/backups/' + path, body, browser);
+    assert.equal(response.status, 200, 'integration.exit_' + path);
+    assert.equal(response.headers['content-type'], type);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    await writeFile(saveTo, response.body, {mode: 0o600});
+  }
+  const saved = await readFile(archivePath), secret = (await readFile(keyPath, 'utf8')).trim();
+  const sha256 = createHash('sha256').update(saved).digest('hex');
+  assert.equal(sha256, archive.sha256, 'integration.exit_stored_digest');
+  assert.equal(saved.length, archive.bytes);
+  assert.ok(/^[A-Za-z0-9_-]{43}$/.test(secret), 'integration.exit_saved_key');
+  const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage, owner: runId});
+  const {result, receipt} = await verify(bufferObject(saved), {...backupKey, secret}, {...request,
+    attempt: {...request.attempt, controllerScope, childToken: randomUUID(), deadline: new Date(Date.now()+30_000).toISOString()}},
+  AbortSignal.any([runSignal(), AbortSignal.timeout(30_000)].filter(Boolean)));
+  assert.equal(result.status, 'passed', 'integration.exit_offline_open');
+  assert.equal(result.activation, 'not_attempted');
+  assert.equal(receipt.cleanupConfirmed, true);
+  await online();
+  return {sha256, bytes: saved.length, offline: true, boxOnline: true};
+}
+
 export async function captureInboxWitness(readInbox, signal) {
   const id = (await readInbox('messages', signal)).messages?.[0]?.ID;
   assert.ok(typeof id === 'string' && id.length, 'integration.inbox_witness_missing');
@@ -258,6 +289,7 @@ export async function measureOutsideColdBackup({original, capture, verify, inspe
 }
 
 export async function runTestCloudClients(options = {}) {
+  assert.ok(!options.paidExitDownload || (options.paidVerification && !options.kubernetes), 'integration.exit_download_scope');
   const waitronTunnelImage = options.waitronTunnelImage ??
     (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
   if (waitronTunnelImage !== undefined) {
@@ -333,7 +365,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmBaseline = false, stockholmGatewayMachineLoss = false, waitronTunnelImage, kubernetes}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidExitDownload = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmBaseline = false, stockholmGatewayMachineLoss = false, waitronTunnelImage, kubernetes}, fixedProject, waitronSource) {
   const origin = services ? servicesOrigin : composeOrigin;
   const {host: cloudHost, hostname: cloudHostname} = new URL(origin);
   measureCapacity ||= measureIntegration;
@@ -507,16 +539,24 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal, fresh = false) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path.startsWith('/api/account/signup/')) budget?.attempt('signup', body.email);
+      const download = paidExitDownload && /^\/api\/account\/backups\/download(?:-key)?$/.test(path);
       return new Promise((resolve, reject) => {
       const req = request({hostname: stockholmBaseline ? kubernetes.proxyIp : '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
         ...(fresh && {agent: false}), headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
+        if (download && res.statusCode === 200) {
+          const chunks = []; let bytes = 0;
+          res.on('data', chunk => {bytes += chunk.length; if (bytes > 16 * 1024 * 1024) req.destroy(Error('integration.response_large')); else chunks.push(chunk);});
+          res.once('error', reject);
+          res.once('end', () => resolve({status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks, bytes)}));
+          return;
+        }
         let text = '';
         res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
         res.once('error', reject); res.once('end', () => {
           try {resolve({status: res.statusCode, headers: res.headers, body: text ? parseIntegrationJson(text) : null});} catch (error) {reject(error);}
         });
       });
-      req.once('error', reject); req.setTimeout(signal ? 5000 : 10000, () => req.destroy(Error('integration.api_timeout')));
+      req.once('error', reject); req.setTimeout(download ? 30_000 : signal ? 5000 : 10000, () => req.destroy(Error('integration.api_timeout')));
       req.end(body === undefined ? undefined : JSON.stringify(body));
     });
     };
@@ -573,7 +613,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       assert.equal(registered.status, 200, 'integration.register_business');
       assert.equal(registered.body.businesses.length, 1, 'integration.first_business');
       const {id: legalBusinessId, organisationId} = registered.body.businesses[0];
-      const browser = services ?
+      const browser = services || (paidExitDownload && plan === 'paid') ?
         await completeServicesConnectionProof({api, mailbox, readMail, email, password, login}) :
         browserSession(login);
       const sessionToken = /__Host-cloud_session=([^;]+)/.exec(browser.cookie)?.[1];
@@ -741,6 +781,16 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', diskMeasurement: 'docker-data-filesystem',
               shippingQualification: false, baseline: hostCapacity.baseline, startup: {samples: startupCapacity.samples}, samples: measured.samples};
           } else await verifyPublished();
+          if (paidExitDownload) {
+            journeyStage = 'exit-download';
+            const request = parseIntegrationJson(await accountPhase('inspect-exit-download', {...captured, image:verifierImage, revision, nativeTarget}));
+            const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
+            publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage, runId, online: async () => {
+              await control(id, 'ready');
+              assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
+              assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
+            }});
+          }
           if (measured) {
             const original = publishedSnapshot;
             // The venue account uses an authenticator. A separate sign-in exercises email challenge delivery.

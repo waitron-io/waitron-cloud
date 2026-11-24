@@ -168,7 +168,7 @@ try {
       assert.ok(row, 'integration.recovery_missing');
       console.log(JSON.stringify(inspectIntegrationRecovery(row,
         {requestId, venueId: rows[0].venue_id, organisationId, pointId, attemptId, targetDigest, sha256, bytes}, desiredStatus)));
-    } else if (phase === 'configure-verification' || phase === 'inspect-verification') {
+    } else if (phase === 'configure-verification' || phase === 'inspect-verification' || phase === 'inspect-exit-download') {
       assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/);
       const pinnedTarget = services ? await readRehearsalVerificationTarget() :
         JSON.parse(await readFile(new URL('../../backup-verifier/target.json', import.meta.url), 'utf8'));
@@ -189,7 +189,7 @@ try {
         assert.equal(job.status, 'pending'); assert.equal(job.attempts, 0); assert.ok(job.last_success_at); assert.equal(job.last_error, null);
         assert.equal((await pool.query('SELECT superseded_by FROM installations WHERE id=$1', [installationId])).rows[0].superseded_by, null);
         assert.equal(Number((await pool.query('SELECT count(*) FROM backup_recoveries WHERE venue_id=$1', [rows[0].venue_id])).rows[0].count), 0);
-        console.log(JSON.stringify({...evidence, noSupersession: true}));
+        console.log(JSON.stringify(phase === 'inspect-exit-download' ? attempt.request : {...evidence, noSupersession: true}));
       }
     } else if (services && phase === 'inspect-unpublished') {
       const {rows: [row]} = await pool.query(`SELECT

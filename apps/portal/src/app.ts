@@ -307,6 +307,7 @@ export class PortalApp {
   }
   navigate(path: string, push = true) {
     this.sentReports.close();
+    this.backups.cancelDownload();
     this.#signOutCheck = undefined;
     if (path !== '/connect' && (path !== '/login' || this.session.state.kind !== 'anonymous')) this.pairing.discardLinkedCode();
     if(path!=='/login')this.#operatorSignin=false;
@@ -393,6 +394,17 @@ export class PortalApp {
     if(this.actionProof.status?.methods.every(m=>m==='email'))recovery.error='pairEnrollment';
     else if(!proved)recovery.error=this.actionProof.error?'actionProofUnavailable':'recoveryProofRequired';
     else {await recovery.approve();return;}
+    this.draw();
+  }
+  async downloadBackup(key:boolean){
+    const b=this.backups,venue=b.venueId,point=b.selected;
+    if(!b.downloadable||b.pending||b.downloading||b.waiting||this.actionProof.pending)return;
+    b.downloadProof=true;
+    const route=this.#route,proved=await this.#requireActionProof();
+    if(route!==this.#route||venue!==b.venueId||point!==b.selected)return;
+    if(this.actionProof.status?.methods.every(method=>method==='email'))b.error='pairEnrollment';
+    else if(!proved)b.error=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
+    else{b.downloadProof=false;await b.download(key);return;}
     this.draw();
   }
   async startPaymentMethod(kind:'card'|'direct_debit'){
