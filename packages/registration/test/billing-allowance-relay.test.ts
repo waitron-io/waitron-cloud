@@ -105,7 +105,8 @@ test('monthly relay refuses a grant that expires during its allowance bucket wai
  try{
   let time=(await f.pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
   const clock=databaseClock(f.pool,()=>time);
-  const grant=(await f.pool.query('UPDATE relay_grants SET expires_at=$2 WHERE id=$1 RETURNING expires_at',[v.grant.id,new Date(time+300)])).rows[0];
+  // The grant outlives the test on the real clock so an early timestamp cannot prove expiry.
+  const grant=(await f.pool.query('UPDATE relay_grants SET expires_at=$2 WHERE id=$1 RETURNING expires_at',[v.grant.id,new Date(time+60_000)])).rows[0];
   const month=(await f.pool.query("SELECT date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date::text AS month")).rows[0].month;
   await holder.query('BEGIN');await holder.query('SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext($1))',['allowance-account:'+v.account+':transactional_email:'+month]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let done=false;
@@ -117,7 +118,7 @@ test('monthly relay refuses a grant that expires during its allowance bucket wai
   let waiting=false;const until=performance.now()+5000;
   while(!done&&performance.now()<until){waiting=!!(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount;if(waiting)break;await setImmediate();}
   assert.equal(waiting,true,'admission must reach its monthly account lock');
-  time=grant.expires_at.getTime()+1;
+  time=grant.expires_at.getTime();
   await holder.query('COMMIT');await assert.rejects(pending,{code:'grant_unavailable'});assert.deepEqual(await f.rows(),[]);
   assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'0');
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}
