@@ -87,7 +87,8 @@ export function screen(app: PortalApp) {
   else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {
     content = html`<p>${app.link.invalid ? c.linkUnavailable : c.missingLink}</p><nav>${link(retryLink, c.requestLink)} ${link('/login', c.login)}</nav>`;
   } else if (app.requested) {
-    content = html`<p role="status">${c.emailSent}</p>${app.setupPairing ? html`<p>${c.pairSetupEmail}</p>` : nothing}${action(c.resend)}
+    content = html`<p role="status">${c.emailSent}</p>
+      ${app.path === '/signup' ? html`<p>${c.signupEmailLimit}</p>` : nothing}${app.setupPairing ? html`<p>${c.pairSetupEmail}</p>` : nothing}${action(c.resend)}
       <button class="text-button" type="button" ?disabled=${app.pending} @click=${() => {app.requested = false; app.error = undefined; app.draw(); app.focusHeading();}}>${c.changeEmail}</button>
       ${app.setupPairing ? html`<p>${link('/login', c.login)}</p>` : nothing}`;
   } else if (app.path === '/login') {

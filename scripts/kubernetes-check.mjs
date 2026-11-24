@@ -240,6 +240,10 @@ try {
       preferredDuringSchedulingIgnoredDuringExecution: [{weight: 100, preference: {matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'In', values: [cluster + '-worker2']}]}}],
     }};
   }
+  if (env.CLOUD_SIGNUP_LIMITS !== undefined) {
+    const account = manifest.items.find(item => item.metadata.name === 'cloud').spec.containers.find(container => container.name === 'account');
+    account.env.push({name: 'CLOUD_SIGNUP_LIMITS', value: env.CLOUD_SIGNUP_LIMITS});
+  }
   if (observerLoss || amazon?.observer) {
     // The remote source archive runs without installed package dependencies.
     const emailLimit = {limit: 1000, windowSeconds: 300};

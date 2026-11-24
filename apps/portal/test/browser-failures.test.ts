@@ -22,7 +22,9 @@ test('pending requests, language changes, resend cooldown and Retry-After do not
     assert.equal(calls,1); release?.();
     await page.getByRole('heading',{name:'Revisa tu correo'}).waitFor();
     assert.ok(await page.getByRole('button',{name:'Reenviar correo'}).isDisabled());
-    await page.clock.runFor(61_000);
+    await page.clock.fastForward(60_000);
+    assert.ok(await page.getByRole('button',{name:'Reenviar correo'}).isDisabled());
+    await page.clock.fastForward(241_000);
     await page.getByRole('button',{name:'Reenviar correo'}).click();
     await page.getByText('Demasiadas solicitudes. Espera antes de volver a intentarlo.').waitFor();
     await page.clock.runFor(61_000); assert.ok(await page.getByRole('button',{name:'Reenviar correo'}).isDisabled());

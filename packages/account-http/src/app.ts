@@ -61,6 +61,7 @@ import { EmailOutbox, pairingCodeKeysFromEnv, type PairingCodeKeys, PasskeyStore
 import { type AccountHttpConfig, validateConfig, factorConfigFromEnv, validateFactorConfig, type FactorConfig } from './config.ts';
 import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError} from '@waitron-cloud/registration';
 import { AccountRateLimiter, type RateRule } from './rate-limit.ts';
+import {admitSignup, warnAboutSignupVolume} from './signup-limits.ts';
 import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
 import { readSessionCookie, writeSessionCookies, readBrowserCookie } from './cookies.ts';
@@ -251,15 +252,24 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         return c.json({accountId: credentials.accountId});
       }
       if (path.endsWith('/request')) {
+        if (path === '/signup/request') {
+          const decision = await limiter.consume([{scope: 'signup-request-hour-ip', subject: ip, limit: config.signupLimits.requestsPerHour, windowSeconds: 3600}]);
+          if (!decision.allowed) throw new AccountHttpError(429, 'signup_rate_limited', decision.retryAfterSeconds);
+          return c.json(await signup.request(email!, locale, config.signupLimits), 202);
+        }
         await consume([{scope: `${path}-ip`, subject: ip, limit: 10, windowSeconds: 900}]);
-        const result = await (path === '/signup/request' ? signup.request(email!, locale) : recovery.request(email!, locale));
-        return c.json(result, 202);
+        return c.json(await recovery.request(email!, locale), 202);
       }
       if (path.endsWith('/complete')) {
         await consume([{scope: `${path}-ip`, subject: ip, limit: 10, windowSeconds: 900},
           {scope: `${path}-token`, subject: body.token!, limit: 10, windowSeconds: 900}]);
         if (path === '/signup/complete') {
-          return c.json(await signup.completeAccount(body.token!, {password: body.password!}), 201);
+          let warningDay: string | undefined;
+          const account = await signup.completeAccount(body.token!, {password: body.password!}, async (client, address) => {
+            warningDay = await admitSignup(client, limiter, config.signupLimits, ip, address);
+          });
+          if (warningDay) await warnAboutSignupVolume(pool, outbox, options.operatorAccountId, warningDay, config.signupLimits.operatorWarningThreshold);
+          return c.json(account, 201);
         }
         return c.json(await recovery.complete(body.token!, body.password!, locale));
       }

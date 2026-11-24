@@ -116,7 +116,7 @@ test('request cooldown is durable, generic and shared by concurrent workers', as
   } finally { await blocker.query('ROLLBACK'); blocker.release(); await requests; }
   assert.equal(messages.length, 1);
   assert.equal(await count('signup_requests'), 1);
-  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '61 seconds'");
+  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '301 seconds'");
   await request();
   assert.equal(messages.length, 2);
   assert.notEqual(messages[0]!.token, messages[1]!.token);
@@ -124,9 +124,30 @@ test('request cooldown is durable, generic and shared by concurrent workers', as
   await store.complete(messages[0]!.token, details);
 });
 
+test('a resend within five minutes acknowledges the request without queueing mail', async () => {
+  await request();
+  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '4 minutes'");
+  assert.deepEqual(await store.request(email.toUpperCase()), { status: 'accepted' });
+  assert.equal(await count('email_outbox'), 1);
+  assert.equal(messages.length, 1);
+});
+
+test('the daily mailbox cap queues no fourth confirmation and resets the next UTC day', async () => {
+  await pool.query(`INSERT INTO signup_requests (token_hash, email, created_at, expires_at)
+    SELECT token_hash, $1, midnight, midnight + interval '30 minutes'
+    FROM unnest($2::text[]) AS token_hash, date_trunc('day', clock_timestamp(), 'UTC') AS midnight`,
+  [email, ['a', 'b', 'c'].map(character => character.repeat(64))]);
+  assert.deepEqual(await store.request(email.toUpperCase()), {status: 'accepted'});
+  assert.equal(await count('email_outbox'), 0);
+  assert.equal(messages.length, 0);
+  await pool.query("UPDATE signup_requests SET created_at = created_at - interval '1 day'");
+  await request();
+  assert.equal(messages.length, 1);
+});
+
 test('two valid links for one email and concurrent repeats create only one customer', async () => {
   const first = await request();
-  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '61 seconds'");
+  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '301 seconds'");
   const second = await request();
   const results = await Promise.allSettled([store.complete(first.token, details), store.complete(second.token, details), store.complete(first.token, details)]);
   assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
@@ -138,7 +159,7 @@ test('a new verification request never replaces or re-enables an existing accoun
   const original = await store.complete((await request()).token, details);
   await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
   const before = (await pool.query('SELECT * FROM cloud_credentials')).rows;
-  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '61 seconds'");
+  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '301 seconds'");
   assert.deepEqual(await store.request(email), { status: 'accepted' });
   await expectCode(store.complete(messages.at(-1)!.token, { ...details, password: 'attacker replacement password' }), 'verification_unavailable');
   assert.deepEqual((await pool.query('SELECT * FROM cloud_credentials')).rows, before);

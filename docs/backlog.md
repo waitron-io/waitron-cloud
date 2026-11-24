@@ -626,6 +626,9 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 ## Cloud signup and business moves
 
+Add the browser check to sign-up and password-reset email requests. Email confirmation,
+connection and mailbox limits, and the operator volume warning already cover sign-up.
+
 The [Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
 covered sign-in after Admin and return to the original tab on a synthetic box.
 Qualify the same setup on the released Waitron box, including the setup services.

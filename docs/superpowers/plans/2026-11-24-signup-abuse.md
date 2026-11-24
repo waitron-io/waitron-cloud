@@ -1,10 +1,42 @@
 # Slow down bulk Cloud sign-up
 
-People request a confirmation email and set a password from its link. Cloud checks the browser before sign-up and password-reset email requests, limits bulk sign-up and warns the operator at the 11th completed sign-up in a UTC day. The watcher recorded the owner’s limits for SIGNUP-ABUSE on 24 November at 21:24.
+The owner asked for confirmation emails, rate limits and a browser check on 24 November
+at 21:13. The limits came from the owner at 21:24. The watcher cleared two changes,
+in this order, at 23:06 after Claude read the plan. Show the English and Spanish
+screens in light and dark at 390 and 1280 pixels before each change lands.
 
-1. **Check each email request.** Move signed proof and the worker from `packages/remote-access/src/public-gate.ts` to a shared `browser-puzzle.ts` beside it. Preserve the public-page checks. In `packages/account-http/src/{app,client-address,portal,rate-limit}.ts`, serve the worker at `/browser-puzzle.js` and issue challenges from `POST /api/account/browser-challenge`. Bind each to the form, origin and exact trusted client address. Derive a signing key for this purpose from the HTTP rate key. Check string proof fields inside the existing email response-time floor before charging the form limit or looking up an account. Mark the challenge spent in PostgreSQL across API instances until after its expiry, allowing for clock differences. Test missing, expired, wrong-form, wrong-address and simultaneous reuse in `account-http.test.ts`. Preserve the known-versus-unknown reset checks and existing gateway tests.
-2. **Limit requests and email.** Use the existing limiter with a new one-hour scope for five sign-up requests per connection, grouping IPv6 by /64. Keep password reset on its current limits. In `packages/registration/src/signup.ts`, reuse the per-email lock and request history for three queued confirmation emails per normalized address per UTC day, spaced at least five minutes apart. Keep the generic acknowledgment for suppressed mail. Assert the sixth network request is refused, no account exists before verification and suppressed mail never enters the queue. Age the existing resend fixtures past five minutes and keep their assertions in `signup.test.ts`.
-3. **Limit completed accounts and warn.** In `SignupStore`’s account-and-link transaction, after credential insertion, spend keyed counters for five successful creations per completing connection and five per normalized domain per UTC day. Use database time. A cap refusal rolls back the creation, token use and counters. Requesting a link and completing it can use different connections. Configure exact public-provider exemptions for Gmail, Outlook, Hotmail, Yahoo and iCloud, including their Spanish and legacy domains where applicable. In that transaction, count all public sign-ups separately. When the count exceeds ten, use a second date-keyed rule with capacity one to claim the warning. Admission depends only on the connection and domain caps. Recommend queuing the warning to the configured operator through the account mail worker, with just the date and threshold. Its dedicated mail kind needs an additive migration and local Mailpit coverage. Existing `operator_notice` is tied to pending Cloud actions. The watcher needs to settle delivery before build. Test parallel completions at the cap, rollback, day rollover, exemptions and one warning with further sign-ups succeeding.
-4. **Finish the portal and exercise its callers.** In `apps/portal/src/{app,api,locale}.ts`, run the same-origin worker, handle failure in both languages and use a five-minute sign-up resend while reset stays at one minute. Map sign-up limits to their own error and omit countdowns. Daily refusals omit `Retry-After`. Offer another connection or a fresh link tomorrow without account details. Share proof setup across the portal mocks and HTTP tests listed in the review. Exercise the real browser and Mailpit in `journey.test.ts` and adapt `scripts/test-cloud-integration.mjs`, `scripts/p1-observer.mjs` and the HTTPS proof to the new budget. Wire validated overrides through `config.ts` and the local, test Cloud and Kubernetes launchers. Show the sign-up screen to the owner in both languages and themes at 390 and 1280 pixels before landing. Update the account guides and `docs/backlog.md`.
-
-Start each change with a focused failing test, then rerun after the fix. Measure the browser check in the existing journey and exercise the defaults in disposable PostgreSQL and Mailpit. Expect 400–500 production lines and 350–450 test and fixture lines, including the recommended warning. This covers Cloud account sign-up and reset email requests. Address lookup is a separate queue item.
+1. **Sign-up limits and operator warning.** In `account-http`, admit five sign-up
+   email requests per hour from the same connection, using the existing IPv6 /64
+   grouping. In `registration/src/signup.ts`, keep the per-address lock and generic
+   response. Queue at most three emails to an address per UTC day, at least five
+   minutes apart. A link stays usable for 30 minutes. Complete at most five accounts
+   per connection and five per private email domain per UTC day. Exempt the exact
+   public domains listed in the account API guide. Run those checks after inserting
+   credentials, in the same transaction as consuming the link. A refusal rolls back
+   both the account and its counters. The connection that completes the link counts.
+2. **Warn once per UTC day.** The account API uses the existing PostgreSQL counters
+   to claim a warning above ten completions across Cloud. After commit, log the date
+   and threshold. If a verified operator is configured, queue an encrypted
+   `operator_notice` and recheck that address before handoff. Mailpit can receive it.
+   A missing operator or failed queue still leaves the account created. SMTP and SES
+   keep their existing transport support. No table or migration is needed.
+3. **Keep the portal and proofs aligned.** In the portal, explain that you can try
+   again tomorrow or from another connection. Leave the form available for those
+   sign-up refusals. Show the mailbox limit on the acknowledgment and apply the
+   five-minute resend wait. Password reset keeps its one-minute wait and its rate
+   policy. Use one validated JSON setting for the account launchers and any
+   high-volume fixture. Update the P1 observer to budget the two sign-up routes
+   separately and update the signup guides and backlog. Use PostgreSQL for the
+   request, email, completion and rollback checks, Mailpit for the notice, and the
+   portal browser tests for the copy and waits. Expect about 220 production lines and
+   200 test lines for these three steps.
+4. **Browser check in the following pull request.** Move the reusable puzzle out of
+   the public gateway in `remote-access`. Serve it on the portal origin and require
+   a solution once per sign-up or reset email request. Bind it to the form, origin and
+   connection, including the IPv6 /64 rule. Spend each challenge once using the
+   existing PostgreSQL limiter and keep the spent claim until after expiry. Check the
+   proof before spending the form allowance or looking up an account. Keep the public
+   gateway tests for forged and expired challenges. Cover missing, wrong-form,
+   wrong-connection and reused proofs at account HTTP, then exercise the real browser
+   and Mailpit in the journey. Adapt direct callers. Expect about 220 production and
+   220 test lines in this second change.

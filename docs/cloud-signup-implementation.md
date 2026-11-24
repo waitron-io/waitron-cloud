@@ -22,13 +22,22 @@ never replaced, joined or re-enabled by this flow. Completion with an existing e
 fails without changing its password or memberships. After a lost completion reply,
 sign in with the chosen password; replaying the link never issues a new session.
 
-Allow one verification email per address per minute across workers. A later request
-does not invalidate an earlier unexpired link. Whichever link first creates the
+You can receive up to three verification emails per address per UTC day, at least
+five minutes apart. A later request keeps any earlier unexpired link usable. Whichever link first creates the
 account wins. Other links cannot add organisations or reset its password. Delivery
 happens after the transaction commits. The [email worker](email-delivery-implementation.md)
 retries failures and resumes abandoned work after a restart. You can request another
 link after the cooldown if delivery exhausts its retries or the link expires. A
 production email provider is not connected yet.
+
+By default, a connection can request five sign-up emails per hour and finish five
+new accounts per UTC day. Each private email domain can finish five per day across
+connections. The [account API guide](../packages/account-http/README.md) lists the
+public email domains exempt from that cap. If Cloud refuses a sign-up, use another
+connection or request a fresh link tomorrow. The same message covers both limits.
+Above ten completed sign-ups in one UTC day, Cloud logs a warning and queues a
+notice for its configured verified operator. The warning leaves sign-up available.
+
 
 Use the existing password hash format. New passwords require 15 characters and allow
 spaces and Unicode, up to 1024 UTF-8 bytes. Public deployment also needs a compromised

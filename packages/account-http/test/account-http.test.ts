@@ -5,7 +5,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import type { HttpBindings } from '@hono/node-server';
 import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupStore, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { createAccountApp } from '../src/app.ts';
-import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy,signupVerification} from './fixtures.ts';
 import {createMailCapture} from './mail-capture.ts';
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
@@ -66,6 +66,78 @@ test('signup refuses business details without consuming the verification link', 
   assert.equal(response.headers.has('set-cookie'), false);
   assert.equal((await request('/signup/complete', body)).status, 201);
 });
+async function signupTokens(addresses: string[]) {
+  const signup = new SignupStore(db.pool, db.outbox);
+  const tokens: string[] = [];
+  for (const address of addresses) {
+    await signup.request(address);
+    tokens.push((await signupVerification(db, address)).token);
+  }
+  return tokens;
+}
+
+test('parallel completions share a connection cap and leave the sixth link usable on another connection', async () => {
+  const tokens = await signupTokens(Array.from({length: 6}, (_, index) => `owner@venue-${index}.example.test`));
+  const replies = await Promise.all(tokens.map((token, index) =>
+    request('/signup/complete', {token, password}, {peer: `2001:db8:1:2::${index + 1}`})));
+  assert.equal(replies.filter(reply => reply.status === 201).length, 5);
+  const refusedIndex = replies.findIndex(reply => reply.status === 429);
+  const refusal = replies[refusedIndex]!;
+  assert.equal(refusal.headers.has('retry-after'), false);
+  assert.deepEqual(await refusal.json(), {error: 'signup_rate_limited'});
+  assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '5');
+  assert.equal((await request('/signup/complete', {token: tokens[refusedIndex], password}, {peer: '2001:db8:1:3::1'})).status, 201);
+});
+
+test('completed sign-ups share a private domain cap across connections while a public domain is exempt', async () => {
+  const tokens = await signupTokens(['company.example.test', 'googlemail.com'].flatMap(domain =>
+    Array.from({length: 6}, (_, index) => `synthetic-${index}@${domain}`)));
+  const replies = await Promise.all(tokens.map((token, index) =>
+    request('/signup/complete', {token, password}, {peer: `192.0.2.${index + 1}`})));
+  assert.equal(replies.slice(0, 6).filter(reply => reply.status === 201).length, 5);
+  const refusal = replies.slice(0, 6).find(reply => reply.status === 429)!;
+  assert.equal(refusal.headers.has('retry-after'), false);
+  assert.deepEqual(await refusal.json(), {error: 'signup_rate_limited'});
+  assert.deepEqual(replies.slice(6).map(reply => reply.status), Array(6).fill(201));
+});
+
+test('the eleventh committed sign-up warns once even without an operator and further sign-ups still succeed', async t => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const tokens = await signupTokens(Array.from({length: 12}, (_, index) => `owner@venue-${index}.example.test`));
+  const complete = (token: string, index: number) => request('/signup/complete', {token, password}, {peer: `192.0.2.${index + 1}`});
+  assert.deepEqual((await Promise.all(tokens.slice(0, 10).map(complete))).map(reply => reply.status), Array(10).fill(201));
+  assert.equal(warn.mock.callCount(), 0);
+  const outcomes = await Promise.all(tokens.slice(10).map((token, index) => complete(token, index + 10)));
+  assert.deepEqual(outcomes.map(reply => reply.status), [201, 201]);
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0]!.arguments.join(' '), /\d{4}-\d{2}-\d{2}.*10/);
+  assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'operator_notice'")).rows[0].count, '0');
+});
+
+for (const queueFailure of [false, true]) {
+  test(`a configured operator warning ${queueFailure ? 'cannot undo signup if the queue fails' : 'is queued once after signup'}`, async t => {
+    const operator = await account();
+    const target = createAccountApp({pool: db.pool, outbox: db.outbox, operatorAccountId: operator.accountId,
+      config: {...config(), signupLimits: {operatorWarningThreshold: 1}}});
+    const warn = t.mock.method(console, 'warn', () => {});
+    const tokens = await signupTokens(['first@example.test', 'second@example.test', 'third@example.test']);
+    if (queueFailure) await db.pool.query("ALTER TABLE email_outbox ADD CONSTRAINT reject_warning CHECK (kind <> 'operator_notice')");
+    try {
+      for (const token of tokens) assert.equal((await request('/signup/complete', {token, password}, {target})).status, 201);
+    } finally {
+      if (queueFailure) await db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT reject_warning');
+    }
+    assert.equal(warn.mock.callCount(), 1);
+    const notices = (await db.pool.query("SELECT * FROM email_outbox WHERE kind = 'operator_notice'")).rows;
+    assert.equal(notices.length, queueFailure ? 0 : 1);
+    if (!queueFailure) assert.deepEqual(db.outbox.open(notices[0]), {
+      email: operator.email, locale: 'en', event: 'signup_volume', accountId: operator.accountId,
+      day: (await db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day")).rows[0].day,
+      threshold: 1,
+    });
+  });
+}
+
 test('HTTP signup and recovery through Mailpit preserve accounts, cookies and session revocation', async () => {
   const email = `journey-${randomUUID()}@example.test`;
   const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,
@@ -270,8 +342,14 @@ test('IP limits are shared across apps and cannot be bypassed with untrusted for
   const blocked = await request('/login', {email: 'missing@example.test', password: 'wrong'});
   assert.equal(blocked.status, 429); assert.ok(Number(blocked.headers.get('retry-after')) > 0); protectedHeaders(blocked);
   await db.pool.query('TRUNCATE account_rate_limits');
-  for (let i = 0; i < 10; i++) assert.equal((await request('/signup/request', {email: `a${i}@example.test`}, {peer: `2001:db8:1:2::${i + 1}`})).status, 202);
-  assert.equal((await request('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:2:abcd::1'})).status, 429);
+  for (let i = 0; i < 5; i++) assert.equal((await request('/signup/request', {email: `a${i}@example.test`}, {peer: `2001:db8:1:2::${i + 1}`})).status, 202);
+  const refusal = await request('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:2:abcd::1'});
+  assert.equal(refusal.status, 429);
+  assert.deepEqual(await refusal.json(), {error: 'signup_rate_limited'});
+  const retryAfter = Number(refusal.headers.get('retry-after'));
+  assert.ok(retryAfter > 3500 && retryAfter <= 3600);
+  assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'verification'")).rows[0].count, '5');
+  assert.equal((await request('/signup/request', {email: 'more@example.test'}, {peer: '2001:db8:1:3::1'})).status, 202);
 });
 test('address login limits survive case changes and different IPs', async () => {
   for (let i = 0; i < 30; i++) assert.equal((await request('/login', {email: i % 2 ? 'OWNER@EXAMPLE.TEST' : ' owner@example.test ', password: 'wrong'}, {peer: `192.0.2.${i + 1}`})).status, 401);

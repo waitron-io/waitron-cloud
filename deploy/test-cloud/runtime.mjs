@@ -14,7 +14,7 @@ export function testRuntimeEnvironment(role,config,environment={}){
  let mode;try{mode=parsePlanMode(flag,venueFlag);}catch{throw new Error('test_cloud.plan_mode');}
  let allowances;try{allowances=allowanceOptionsFromEnv(environment,mode);}catch{throw new Error('test_cloud.allowance_mode');}
  const enabled=mode!=='existing';
- const result=runtimeEnvironment(role==='action-demo'?'migrate':role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,role==='account'?{CLOUD_FACTOR_POLICY:environment.CLOUD_FACTOR_POLICY,...(demo?{CLOUD_OPERATOR_ACCOUNT_ID:environment.CLOUD_OPERATOR_ACCOUNT_ID}:{})}:{},canonicalHttpsOrigin(environment.TEST_CLOUD_ORIGIN??'https://waitron.local:3000'));result.CLOUD_TEST_SERVICE_PLANS=flag;
+ const result=runtimeEnvironment(role==='action-demo'?'migrate':role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,role==='account'?{CLOUD_FACTOR_POLICY:environment.CLOUD_FACTOR_POLICY,CLOUD_SIGNUP_LIMITS:environment.CLOUD_SIGNUP_LIMITS,...(demo?{CLOUD_OPERATOR_ACCOUNT_ID:environment.CLOUD_OPERATOR_ACCOUNT_ID}:{})}:{},canonicalHttpsOrigin(environment.TEST_CLOUD_ORIGIN??'https://waitron.local:3000'));result.CLOUD_TEST_SERVICE_PLANS=flag;
  if(environment.TEST_CLOUD_ORIGIN!==undefined)result.TEST_CLOUD_ORIGIN=environment.TEST_CLOUD_ORIGIN;
  if(role==='manifest')for(const name of ['TEST_CLOUD_PUBLIC_REMOTE','TEST_CLOUD_ACME_DIRECTORY','TEST_CLOUD_CHALLENGE_DIR'])if(environment[name]!==undefined)result[name]=environment[name];
  if(venueFlag!==undefined)result.CLOUD_VENUE_SERVICE_LEVELS=venueFlag;

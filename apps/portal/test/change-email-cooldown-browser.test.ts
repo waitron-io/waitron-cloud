@@ -33,12 +33,15 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.clock.pauseAt(new Date('2026-10-25T12:00:01Z'));
       const c = translations[locale], calls: {email: string; locale: string}[] = [];
       const other = flows.find(item => item.path !== flow.path)!, otherCalls: unknown[] = [];
-      let limited = false;
+      let limited: boolean | 'signup' = false;
       await page.route('https://portal.test/**', route => {
         const endpoint = new URL(route.request().url()).pathname.replace('/api/account', '');
         if (endpoint === '/session') return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
         if (endpoint === flow.endpoint) {
           calls.push(route.request().postDataJSON());
+          if (limited === 'signup') return route.fulfill({
+            status: 429, headers: {'Retry-After': '3600'}, json: {error: 'signup_rate_limited'},
+          });
           return limited
             ? route.fulfill({status: 429, headers: {'Retry-After': '90'}, json: {error: 'rate_limited'}})
             : route.fulfill({status: 202, json: {status: 'accepted'}});
@@ -56,11 +59,17 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const resend = page.getByRole('button', {name: c.resend, exact: true});
       const wait = page.getByRole('status').filter({hasText: c.cooldown});
       const change = page.getByRole('button', {name: c.changeEmail, exact: true});
+      const halfResendWait = flow.path === '/signup' ? 150_000 : 30_000;
+      const receiptDirectory = setupDelay ? undefined : process.env.CHANGE_EMAIL_RECEIPT_DIR;
       await input.fill('owner@exmaple.test'); await submit.click();
       await page.getByRole('heading', {name: c.checkEmail, exact: true}).waitFor();
       assert.equal(await resend.isDisabled(), true);
+      if (flow.path === '/signup' && receiptDirectory) {
+        await mkdir(receiptDirectory, {recursive: true});
+        await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-accepted.png`, fullPage: true});
+      }
       await change.click();
-      assert.equal(await submit.isDisabled(), true, 'returning to the same address keeps its minute');
+      assert.equal(await submit.isDisabled(), true, 'returning to the same address keeps its resend wait');
       await input.fill('  OWNER@EXMAPLE.TEST  ');
       assert.equal(await submit.isDisabled(), true, 'case and surrounding spaces identify the same mailbox');
       assert.equal(calls.length, 1);
@@ -73,7 +82,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await mkdir(process.env.CHANGE_EMAIL_RECEIPT_DIR, {recursive: true});
           await page.screenshot({path: `${process.env.CHANGE_EMAIL_RECEIPT_DIR}/${locale}-${theme}-${width}-${flow.path.slice(1)}.png`, fullPage: true});
         }
-        await page.clock.fastForward(30_000);
+        await page.clock.fastForward(halfResendWait);
         await submit.click(); await page.getByRole('heading', {name: c.checkEmail, exact: true}).waitFor();
         assert.deepEqual(calls, [{email: 'owner@exmaple.test', locale}, {email: 'owner@example.test', locale}]);
       });
@@ -85,11 +94,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(await submit.isDisabled(), true, 'sending to another address cannot forget the first wait');
         await page.locator('form').evaluate((form: HTMLFormElement) => form.requestSubmit());
         assert.equal(calls.length, 2, 'the submission guard also enforces the wait');
-        await page.clock.fastForward(30_000);
-        assert.equal(await submit.isEnabled(), true, 'the first address becomes available after its own minute');
+        await page.clock.fastForward(halfResendWait);
+        assert.equal(await submit.isEnabled(), true, 'the first address becomes available after its own wait');
         await input.fill('owner@example.test');
-        assert.equal(await submit.isDisabled(), true, 'the second address still has half its minute left');
-        await page.clock.fastForward(30_000);
+        assert.equal(await submit.isDisabled(), true, 'the second address still has half its wait left');
+        await page.clock.fastForward(halfResendWait);
         assert.equal(await submit.isEnabled(), true);
       });
       await t.test('server Retry-After blocks every address and survives navigation', async () => {
@@ -138,6 +147,17 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(await submit.isDisabled(), true, 'another operation cannot discard this address’s wait');
         await page.locator('form').evaluate((form: HTMLFormElement) => form.requestSubmit());
         assert.equal(calls.length, 4);
+      });
+      if (flow.path === '/signup') await t.test('a one-hour signup refusal leaves the form available', async () => {
+        limited = 'signup';
+        await input.fill('sixth@example.test');
+        await submit.click();
+        const message = locale === 'en' ? 'Try again tomorrow or use another internet connection.'
+          : 'Vuelve a intentarlo mañana o usa otra conexión a internet.';
+        await page.getByRole('alert').filter({hasText: message}).waitFor();
+        assert.equal(await submit.isEnabled(), true);
+        assert.equal(await wait.count(), 0);
+        if (receiptDirectory) await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-refused.png`, fullPage: true});
       });
     } finally { await browser.close(); }
   });

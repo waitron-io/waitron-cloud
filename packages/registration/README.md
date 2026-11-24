@@ -39,8 +39,9 @@ factors and the platform role catalogue remain open.
 
 Use `SignupStore(pool, outbox)` for the independent Cloud account backend. Its
 `request(email)` method saves the verification request and encrypted pending email
-in one transaction. It returns `{ status: 'accepted' }`, including during the
-one-minute cooldown, without waiting for a mail provider. The worker decrypts the
+in one transaction. It returns `{ status: 'accepted' }` without waiting for a mail
+provider, including when the mailbox is within the five-minute cooldown or has
+already received three verification emails that UTC day. The worker decrypts the
 token for delivery; never include it in a browser response or logs. The current email
 parser accepts ASCII dot-atom addresses. International domains must already be
 punycode-encoded; raw Unicode domains, quoted addresses and international local parts

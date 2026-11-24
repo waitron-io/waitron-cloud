@@ -128,7 +128,9 @@ export async function configureServices(context, kube, store, custody) {
   const CLOUD_FACTOR_POLICY = JSON.stringify({loginLifetimeMs: 300000, pendingLifetimeMs: 300000,
     challengeAttempts: 5, enrolmentAttempts: 5, loginAccount: limit, completeIp: limit, completeAccount: limit,
     completeChallenge: limit, manageIp: limit, manageAccount: limit});
+  const signupLimits = context.env?.CLOUD_SIGNUP_LIMITS;
   await secret('services-account', {...emailVariables, CLOUD_HTTP_RATE_KEY, CLOUD_INSTALLATION_ISSUER_KEY,
+    ...(signupLimits !== undefined && {CLOUD_SIGNUP_LIMITS: signupLimits}),
     CLOUD_PAIRING_ACTIVE_KEY_ID, CLOUD_PAIRING_KEYS, CLOUD_PORTAL_ASSETS_DIR, CLOUD_FACTOR_ACTIVE_KEY_ID, CLOUD_FACTOR_KEYS, CLOUD_FACTOR_POLICY, ...storage['services-account']});
   await secret('services-monitor', emailVariables);
   await secret('services-backup', storage['services-backup']);

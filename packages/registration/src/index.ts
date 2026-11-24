@@ -10,7 +10,7 @@ export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueCharg
 export {trialEnd,trialReminderDates,trialWasUsed,trialAllowanceTier,trialOutcome,mayStartTrial,TRIAL_DAYS,TRIAL_EXTENSION_DAYS,type TrialUsage,type TrialOutcome} from './billing-trials.ts';
 export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate,firstChargedRenewal,failureTimeline,refundTimeline,ATTEMPT_LEAD_DAYS,HOSTED_GRACE_DAYS,DIRECT_DEBIT_RETRY_SPACING_DAYS,type CivilDate,type PaymentMethodKind,type PaidLevel,type FailureTimeline} from './billing-calendar.ts';
 export {decideCountryFlow,spainCountryPolicy,type CountryPolicy,type CountryFlow,type FlowRequest,type CountryFlowDecision} from './country-policy.ts';
-export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
+export { SignupStore, SignupError, defaultSignupMailLimits, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 export { PasswordRecoveryStore, PasswordRecoveryError, type PasswordRecoveryMailer } from './password-recovery.ts';
 export {AccountSecurityStore,AccountSecurityError,type EmailChangeMailer} from './account-security.ts';
 export { EmailOutbox, EmailWorker, emailDeliveryStatus, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';

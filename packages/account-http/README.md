@@ -348,6 +348,7 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |
+| 429 | `signup_rate_limited` | Sign-up limit reached. Hourly refusals include `Retry-After`. Daily refusals leave the verification link usable until it expires. |
 | 503 | `temporarily_unavailable`, `password_screening_unavailable` (credential password change only) | Database or password-screening failure, admission limit or shutdown; retry after the advertised delay |
 
 Bodies are limited to 16 KiB, including streamed bodies, except for translation
@@ -364,7 +365,9 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
 | Credential changes, per IP / account | 10 per minute / 20 per 5 minutes |
 | Email-change delivery, per destination address | One per minute; wait before requesting another link to the same address |
-| Each signup/reset email-request route, per IP | 10 per 15 minutes |
+| Sign-up email requests, per connection | 5 per hour |
+| Password-reset email requests, per connection | 10 per 15 minutes |
+| New accounts, per completing connection and per private email domain | 5 per UTC day each |
 | Signup or reset completion, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |
 
@@ -372,10 +375,30 @@ Successes and failures both count once a request reaches a limit. Login checks t
 IP limit first; requests it refuses do not consume the email allowance. This prevents
 an already-blocked IP from spending another person's address allowance. Requests
 admitted by IP limits can still exhaust that address allowance, so distributed
-attacks also need the deployment's ingress controls. The existing shared per-address email cooldown
-is one minute. Login and email-request responses wait at least 300 ms after body
-reading; this reduces simple timing differences but does not guarantee equal timing
-under contention. Deployment load and timing checks remain required.
+attacks also need the deployment's ingress controls. Login and email-request responses wait at
+least 300 ms after body reading. Load and timing checks under contention remain required.
+
+A connection is an IPv4 address or IPv6 /64. The private-domain cap exempts `gmail.com`, `googlemail.com`, `outlook.com`, `outlook.es`, `hotmail.com`,
+`hotmail.es`, `live.com`, `live.es`, `msn.com`, `yahoo.com`, `yahoo.es`, `icloud.com` and
+`me.com`. The connection cap still applies. By default, each address can receive three
+sign-up emails per UTC day, with a five-minute wait between sends. The password-reset
+email wait is one minute.
+
+On the eleventh completed sign-up of a UTC day, the account log records the date and
+threshold. Cloud queues an operator notice if `CLOUD_OPERATOR_ACCOUNT_ID` names an
+enabled, verified account. The local and Test Cloud capture transport can deliver it.
+The SMTP and SES transports leave this notice to the account log. Further sign-ups
+remain subject to their usual connection and domain limits.
+
+Set `CLOUD_SIGNUP_LIMITS` as a JSON object to override limits for a synthetic fixture.
+The JSON below shows the default for each key.
+
+```json
+{"requestsPerHour":5,"accountsPerConnectionPerDay":5,"accountsPerDomainPerDay":5,"emailsPerAddressPerDay":3,"resendSeconds":300,"operatorWarningThreshold":10}
+```
+
+Use positive whole numbers. Keep the default mail settings for the public portal's
+three-email message and five-minute resend countdown.
 
 A bounded local contention run on an 18-core Apple M5 Pro admitted exactly 10 of 12
 same-IP logins and exactly 30 of 31 same-address logins across two API instances. The

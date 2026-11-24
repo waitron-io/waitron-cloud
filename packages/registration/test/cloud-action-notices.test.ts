@@ -54,6 +54,37 @@ test('operatorNoticeIgnoresVenueOptOut: verified operator receives Spanish notic
  assert.equal((await propose()).id,request.id);assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');assert.equal(await status(),'unknown');
 });
 
+test('a sign-up volume notice reaches the verified operator through Mailpit without a pending action', async () => {
+ const day = '2026-11-24';
+ const email = 'operator@example.test';
+ await transaction(pool,client=>outbox.enqueue(client,'operator_notice',{
+  email, locale:'en', event:'signup_volume', accountId:operator, day, threshold:10,
+ }));
+ const row=await queued();
+ const worker=new EmailWorker(pool,outbox,createLocalAccountMailer({
+  port:Number(process.env.MAILPIT_TEST_SMTP_PORT),portalOrigin:'http://localhost:3000',
+ }));
+ assert.equal(await worker.runOnce(),true);
+ assert.equal(await worker.runOnce(),false);
+ assert.equal((await pool.query('SELECT status FROM email_outbox WHERE id=$1',[row.id])).rows[0].status,'sent');
+ const mail=await captured(process.env.MAILPIT_TEST_URL!,'Waitron Cloud: sign-up volume',email);
+ assert.match(mail.Text,/2026-11-24.*10|10.*2026-11-24/s);
+ assert.doesNotMatch(mail.Text,/operator\/actions|token=/);
+});
+
+test('a sign-up volume notice is cancelled if the operator email changes before handoff', async () => {
+ await transaction(pool,client=>outbox.enqueue(client,'operator_notice',{
+  email:'operator@example.test', locale:'en', event:'signup_volume', accountId:operator, day:'2026-11-24', threshold:10,
+ }));
+ await pool.query("UPDATE cloud_credentials SET email='new-operator@example.test' WHERE account_id=$1",[operator]);
+ const forbidden=async()=>{assert.fail('delivered a notice to a previous address');};
+ const worker=new EmailWorker(pool,outbox,{sendVerification:forbidden,sendPasswordReset:forbidden,
+  sendPasswordChanged:forbidden,sendServiceAlert:forbidden,sendOperatorNotice:forbidden});
+ assert.equal(await worker.runOnce(),true);
+ assert.equal(await worker.runOnce(),false);
+ assert.equal((await pool.query("SELECT status FROM email_outbox WHERE kind='operator_notice'")).rows[0].status,'cancelled');
+});
+
 test('providerTransportRefusesOperatorNotice: unsupported mailer handles the row without invoking any sender',async()=>{
  const request=await propose(),row=await queued(),calls:string[]=[];const forbidden=async()=>{calls.push('unexpected');};
  const worker=new EmailWorker(pool,outbox,{sendVerification:forbidden,sendPasswordReset:forbidden,sendPasswordChanged:forbidden,sendServiceAlert:forbidden});

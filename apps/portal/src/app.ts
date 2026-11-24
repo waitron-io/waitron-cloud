@@ -465,17 +465,22 @@ export class PortalApp {
     this.draw();
     const result = await accountRequest(path, body);
     // A late reply still sets the wait for the operation that sent it.
-    if (!result.ok) this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
+    if (!result.ok && result.code !== 'signup_rate_limited') this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
-      if (path.endsWith('/request')) { this.requested = true; this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`, performance.now() + 60_000); }
+      if (path.endsWith('/request')) {
+        this.requested = true;
+        this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`,
+          performance.now() + (path === '/signup/request' ? 300_000 : 60_000));
+      }
       else { this.notice = path.startsWith('/signup/') ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
       const cause = bodyRefusal(result);
       if (cause) this.error = `${path.startsWith('/signup/')&&path.endsWith('/complete')?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
-      else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
+      else this.error = result.code === 'signup_rate_limited' ? 'signupLimited'
+        : result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'
         : result.status === 0 ? (path.endsWith('/complete') ? 'uncertain' : 'unavailable')
