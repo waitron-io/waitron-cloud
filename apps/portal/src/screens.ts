@@ -102,7 +102,7 @@ export function screen(app: PortalApp) {
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
   const signupRefusal = app.error === 'signupConnectionLimited' || app.error === 'signupDomainLimited' ? c[app.error] : undefined;
   const waiting = app.waiting;
-  const minutes = app.requested && app.path === '/signup' && waiting >= 60 ? Math.ceil(waiting / 60) : 0;
+  const minutes = app.waitingForSignupEmail && waiting >= 60 ? Math.ceil(waiting / 60) : 0;
   const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error && !signupRefusal ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
@@ -120,6 +120,7 @@ export function screen(app: PortalApp) {
         ${content}
         ${app.setupPairing ? html`<button type="button" class="text-button" ?disabled=${app.pending || app.passkeys.pending || app.authenticator.pending}
           @click=${() => {void app.returnToSetup(true);}}>${c.pairSetupBack}</button>` : nothing}
+        ${signupRefusal && app.link.token ? html`<nav>${link(retryLink, c.requestLink)}</nav>` : nothing}
         ${app.error === 'uncertain' || app.error === 'linkUnavailable' ? html`<nav>${link('/login', c.login)} ${link(retryLink, c.requestLink)}</nav>` : nothing}
         ${waiting ? html`<p class="help" role="status">${c.cooldown} ${minutes ? `${minutes} ${minutes === 1 ? c.minute : c.minutes}` : `${waiting} ${waiting === 1 ? c.second : c.seconds}`}</p>` : nothing}
       </form>`}</wt-card></main>`;

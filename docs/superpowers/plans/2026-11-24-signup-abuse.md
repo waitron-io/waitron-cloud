@@ -1,7 +1,7 @@
 # Slow down bulk Cloud sign-up
 
 The owner asked for confirmation emails, rate limits and a browser check on 24 November
-at 21:13. The limits came from the owner at 21:24. The watcher cleared two changes,
+at 21:13. The watcher recorded the owner's limits at 21:24 and cleared two changes,
 in this order, at 23:06 after Claude read the plan. Show the English and Spanish
 screens in light and dark at 390 and 1280 pixels before each change lands.
 

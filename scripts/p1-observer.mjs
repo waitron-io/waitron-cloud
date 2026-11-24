@@ -108,16 +108,17 @@ export function p1SignupLimits(setting) {
   try {
     const limits = JSON.parse(setting || '{}');
     if (!limits || typeof limits !== 'object' || Array.isArray(limits)) throw Error();
-    return {requestsPerHour: 8, ...limits};
+    // Two setup requests and up to six useful probes in each of three recovery windows.
+    return {requestsPerHour: 20, ...limits};
   } catch { throw Error('Invalid sign-up limits'); }
 }
 
 // Both signup endpoints and every login share the real proxy's source identity.
 export function createP1Budget(now = () => performance.now(), signupRequestsPerHour = 5) {
-  const logins = [], signupReserve = 2;
+  const logins = [];
   const signups = {
-    'signup-request': {attempts: [], limit: signupRequestsPerHour, windowMs: 3_600_000},
-    'signup-complete': {attempts: [], limit: 8, windowMs: 900_000},
+    'signup-request': {attempts: [], limit: signupRequestsPerHour, windowMs: 3_600_000, reserve: Math.min(6, signupRequestsPerHour)},
+    'signup-complete': {attempts: [], limit: 8, windowMs: 900_000, reserve: 2},
   };
   const recent = (rows, ms, email) => rows.filter(row => now() - row.at < ms && (!email || row.email === email)).length;
   return {
@@ -135,14 +136,14 @@ export function createP1Budget(now = () => performance.now(), signupRequestsPerH
     requireRoom(email) {
       assert.ok(recent(logins, 60000) <= 4, 'p1.login_budget');
       assert.ok(recent(logins, 900000, email) <= 18, 'p1.email_budget');
-      for (const {attempts, limit, windowMs} of Object.values(signups)) {
-        assert.ok(recent(attempts, windowMs) <= limit - signupReserve, 'p1.signup_budget');
+      for (const {attempts, limit, windowMs, reserve} of Object.values(signups)) {
+        assert.ok(recent(attempts, windowMs) <= limit - reserve, 'p1.signup_budget');
       }
     },
     signupDelayMs() {
       const at = now();
-      const {attempts, limit, windowMs} = signups['signup-request'];
-      const limiting = attempts.at(-(limit - signupReserve + 1));
+      const {attempts, limit, windowMs, reserve} = signups['signup-request'];
+      const limiting = attempts.at(-(limit - reserve + 1));
       return limiting ? Math.max(0, limiting.at + windowMs - at) : 0;
     },
   };

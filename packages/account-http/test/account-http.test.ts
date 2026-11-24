@@ -155,9 +155,10 @@ test('public email domains in the account guide are exempt across connections', 
 test('a completion refused at the connection cap can use the same live link after midnight UTC', async t => {
   const pool = new Pool({connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${db.schema},pg_catalog`});
   t.after(() => pool.end());
-  // Shift the database clock by two minutes across midnight while the links stay valid.
+  // Use one day throughout so running at real midnight cannot change the fixture.
+  const day = new Date().toISOString().slice(0, 10);
   const setTime = (offset: string) => pool.query(`CREATE OR REPLACE FUNCTION ${db.schema}.clock_timestamp()
-    RETURNS timestamptz LANGUAGE sql AS $$ SELECT date_trunc('day', pg_catalog.clock_timestamp(), 'UTC') + interval '${offset}' $$`);
+    RETURNS timestamptz LANGUAGE sql AS $$ SELECT '${day}T00:00:00Z'::timestamptz + interval '${offset}' $$`);
   const [first, next] = await signupTokens(['first@venue-one.example.test', 'next@venue-two.example.test']);
   await db.pool.query("UPDATE signup_requests SET expires_at = clock_timestamp() + interval '3 days'");
   const target = createAccountApp({pool, outbox: db.outbox, config: {...config(), signupLimits: {accountsPerConnectionPerDay: 1}}});

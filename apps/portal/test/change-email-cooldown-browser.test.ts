@@ -75,6 +75,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       }
       await change.click();
       assert.equal(await submit.isDisabled(), true, 'returning to the same address keeps its resend wait');
+      if (flow.path === '/signup') await t.test('the same email still shows a five-minute wait on the request form', async () => {
+        assert.equal(await wait.textContent(), `${c.cooldown} 5 ${c.minutes}`);
+        if (receiptDirectory) await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-resend-email.png`, fullPage: true});
+      });
       await input.fill('  OWNER@EXMAPLE.TEST  ');
       assert.equal(await submit.isDisabled(), true, 'case and surrounding spaces identify the same mailbox');
       assert.equal(calls.length, 1);
@@ -103,7 +107,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(await submit.isEnabled(), true, 'the first address becomes available after its own wait');
         await input.fill('owner@example.test');
         assert.equal(await submit.isDisabled(), true, 'the second address still has half its wait left');
-        await page.clock.fastForward(halfResendWait);
+        if (flow.path === '/signup') {
+          await page.clock.fastForward(90_000);
+          assert.equal(await wait.textContent(), `${c.cooldown} 1 ${c.minute}`);
+          await page.clock.fastForward(1000);
+          assert.equal(await wait.textContent(), `${c.cooldown} 59 ${c.seconds}`);
+          await page.clock.fastForward(59_000);
+        } else await page.clock.fastForward(halfResendWait);
         assert.equal(await submit.isEnabled(), true);
       });
       await t.test('server Retry-After blocks every address and survives navigation', async () => {
@@ -163,6 +173,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await alert.waitFor();
         assert.equal(await alert.textContent(), message);
         assert.equal(await alert.getByRole('list').count(), 0);
+        assert.equal(await alert.evaluate(element => element === document.activeElement), true);
         assert.equal(await submit.isEnabled(), true);
         assert.equal(await wait.count(), 0);
         if (receiptDirectory) await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-refused.png`, fullPage: true});
@@ -178,7 +189,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await alert.waitFor();
         assert.equal(await alert.textContent(), message);
         assert.equal(await alert.getByRole('list').count(), 0);
+        assert.equal(await alert.evaluate(element => element === document.activeElement), true);
+        assert.equal(await page.getByRole('button', {name: c.create, exact: true}).isEnabled(), true);
+        const newLink = page.getByRole('link', {name: c.requestLink, exact: true});
+        assert.equal(await newLink.count(), 1);
         if (receiptDirectory) await page.screenshot({path: `${receiptDirectory}/${locale}-${theme}-${width}-signup-domain-refused.png`, fullPage: true});
+        await newLink.click();
+        assert.equal(new URL(page.url()).hash, '');
+        assert.equal(await input.isVisible(), true);
       });
     } finally { await browser.close(); }
   });

@@ -400,8 +400,9 @@ The JSON below shows the default for each key.
 ```
 
 Use positive whole numbers. Keep the default mail settings for the public portal's
-three-email message and five-minute resend countdown. The measured service-stop
-rehearsal uses eight requests per hour so each stop can retry once.
+three-email message and five-minute resend countdown. The test-only recovery
+observer and service-stop rehearsal use 20 requests per hour to leave room for
+retries throughout each stop’s recovery window.
 
 A bounded local contention run on an 18-core Apple M5 Pro admitted exactly 10 of 12
 same-IP logins and exactly 30 of 31 same-address logins across two API instances. The

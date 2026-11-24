@@ -104,7 +104,7 @@ export class OwnerTransferStore {
 async function notices(client:PoolClient,outbox:EmailOutbox,offer:Offer){
  for(const email of new Set([offer.sender_email,offer.recipient_email]))await outbox.enqueue(client,'owner_transfer',{email,locale:offer.locale,offerId:offer.id,event:offer.state as 'accepted'|'cancelled'});
 }
-// Lock organisations before offers, matching cancellation. Account writers already hold their own account.
+// Sign-up holds only its new account. Lock organisations before offers, matching cancellation.
 export async function attachOwnerTransferRecipients(client:PoolClient,accountId:string,email:string):Promise<number>{
  const orgs=(await client.query("SELECT DISTINCT organisation_id FROM owner_transfers WHERE recipient_email=$1 AND recipient_id IS NULL AND state='pending' AND expires_at>clock_timestamp() ORDER BY organisation_id",[email])).rows;
  let attached=0;

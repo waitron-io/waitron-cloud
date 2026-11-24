@@ -266,6 +266,12 @@ export class PortalApp {
     if (this.path === '/reset-password') return '/password-reset/complete';
     return this.path;
   }
+  get #emailCooldown() {
+    return this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0;
+  }
+  get waitingForSignupEmail() {
+    return this.operation === '/signup/request' && this.#emailCooldown > (this.#serverCooldowns.get(this.operation) ?? 0);
+  }
   get waiting() {
     if(this.path==='/reset-password'&&this.ownerRecovery.stage!=='idle')return this.ownerRecovery.waiting;
     if(this.path==='/operator/actions')return Math.max(this.session.waiting,this.cloudActions.waiting);
@@ -277,8 +283,7 @@ export class PortalApp {
       case 'remoteAccess': return Math.max(this.session.waiting, this.installations.waiting, this.remote.waiting, this.actionProof.waiting);
       case 'billing': return Math.max(this.session.waiting, this.billing.waiting, this.actionProof.waiting);
     }
-    const deadline = Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0,
-      this.#serverCooldowns.get(this.operation) ?? 0);
+    const deadline = Math.max(this.#emailCooldown, this.#serverCooldowns.get(this.operation) ?? 0);
     return Math.max(0, Math.ceil((deadline - performance.now()) / 1000), this.path === '/login' ? Math.max(this.authenticator.waiting, this.passkeys.waiting) : 0);
   }
   draw() {
