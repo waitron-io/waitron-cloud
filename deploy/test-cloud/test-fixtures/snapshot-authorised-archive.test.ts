@@ -123,7 +123,7 @@ it('recaptures the authorised source and prepares recovery for its new archive',
    const series=await restored.venue.select({retiredAt:invoiceSeries.retiredAt,nextNumber}).from(invoiceSeries);
    const retiredCounters=series.filter(row=>row.retiredAt!==null).map(row=>row.nextNumber);
    const activeCounters=series.filter(row=>row.retiredAt===null).map(row=>row.nextNumber);
-   // Older verifiers store approval separately. Fi9 stores it on the identity row.
+   // Some builds have the identity table and store approvals separately.
    const hasIdentityApprovals=restored.venue.get(sql`SELECT name FROM pragma_table_info('verifactu_identities') WHERE name='event_key'`);
    const allocationCount=hasIdentityApprovals
     ? sql`SELECT count(*) AS total FROM verifactu_identities WHERE event_key IS NOT NULL`
