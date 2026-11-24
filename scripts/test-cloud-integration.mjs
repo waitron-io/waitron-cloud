@@ -1176,14 +1176,16 @@ export function createObserverLogin({api, mailbox, readMail, email, password, co
       pending = {seen, challengeToken: reply.body.challengeToken, started: now(), expiryLine};
     }
     const challenge = pending;
+    const mailTrace = {skipped: 0};
     const message = await trace('mail-delivered', async () => {
       for (;;) {
         const candidate = await readMail(email, challenge.seen, signal);
         if (candidate.Text.split('\n').some(line => normalizeWhitespace(line) === challenge.expiryLine)) return candidate;
         assert.ok(candidate.ID && !challenge.seen.has(candidate.ID), 'p1.signin_mail_id');
         challenge.seen.add(candidate.ID);
+        mailTrace.skipped++;
       }
-    });
+    }, mailTrace);
     const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
     const messageId = /^<?([a-f0-9-]{36}@[A-Za-z0-9.-]{1,253})>?$/.exec(message.MessageID)?.[1];
     // Two challenges can have the same printed expiry. Only the endpoint can confirm a code.

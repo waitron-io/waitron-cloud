@@ -1939,11 +1939,12 @@ implementation or production evidence.
   backup verification within five minutes and signup email within 90 seconds.
   Repeat the outside rehearsal on the exact Cloud commit and Waitron image
   proposed for any separately approved paid run.
-  The free combined database and gateway stop delivered two sign-in emails after
-  a password reply was lost. The observer now matches the email's expiry to the
-  current challenge and records the submitted Message-ID and confirmation status.
-  Run `node --test scripts/test-cloud-integration.test.mjs` for the delayed-mail
-  and refusal cases. The earlier Stockholm sign-in timeout remains unexplained.
+  The observer matches the email's expiry to the current challenge and records
+  how many messages it skipped, the submitted Message-ID and confirmation status.
+  Run `node --test scripts/test-cloud-integration.test.mjs` for delayed mail and
+  refusal. If the current email is stranded, the measured observer can wait until
+  its 60-second replacement window. The earlier Stockholm sign-in timeout remains
+  unexplained.
   To reproduce the older failure, start with just the first in-cluster journey
   on disposable Debian 13 x86-64 using the paid Cloud revision `f19c12c7` and its
   pinned Waitron image. If it passes on one node, match the original three-node
