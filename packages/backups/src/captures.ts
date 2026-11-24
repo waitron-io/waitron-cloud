@@ -64,9 +64,14 @@ export class BackupCaptures {
    const expires=Date.parse(grant.expiresAt);
    const maxLifetime=signed?900000:901000;
    if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+maxLifetime)backupFail('storage_grant');
-   if('credentials' in grant&&(!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken))backupFail('storage_grant');
    const location=this.#options.uploadOrigin===undefined?current.location:{...current.location,endpoint:this.#options.uploadOrigin};
-   return {id:current.id,installationId:routing.installationId,venueId:current.venueId,keyVersion:current.keyVersion,location,incomingKey:current.incomingKey,recoveryKey:current.keys.recoveryKey,...grant};
+   const reservation={id:current.id,installationId:routing.installationId,venueId:current.venueId,keyVersion:current.keyVersion,location,incomingKey:current.incomingKey,recoveryKey:current.keys.recoveryKey,expiresAt:grant.expiresAt};
+   if(signed){
+    if(!('uploadUrl' in grant)||typeof grant.uploadUrl!=='string'||!grant.uploadUrl)backupFail('storage_grant');
+    return {...reservation,uploadUrl:grant.uploadUrl};
+   }
+   if(!('credentials' in grant)||!grant.credentials?.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken)backupFail('storage_grant');
+   return {...reservation,credentials:grant.credentials};
   }
   let metadata:PointMetadata;try{metadata=JSON.parse(routing.body);}catch{return backupFail('invalid_metadata');}
   const p=await this.#catalogue.publish(routing.installationId,routing.operationId,metadata,fence,deadline);

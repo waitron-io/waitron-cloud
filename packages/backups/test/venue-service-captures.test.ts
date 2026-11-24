@@ -89,17 +89,32 @@ for(const mode of ['existing','test-venue-levels'] as const)test(`direct reserve
   assert.equal(f.grants.length,1);
  }finally{await f.close();}
 });
-for(const change of ['permission','location'] as const)test(`direct reserve withholds the URL when ${change} changes during signing`,async()=>{
+for(const [mode,change] of [['test-venue-levels','permission'],['test-venue-levels','location'],['existing','location']] as const)
+test(`direct reserve withholds the URL when ${change} changes during signing in ${mode} mode`,async()=>{
  const f=await fixture(undefined,async(location,key)=>{
   if(change==='permission'){
    const peer={...f,store:new f.api.BillingStore(f.peer)};
    await set(peer,'registered');await set(peer);await provision(f);
   }else await f.peer.query('UPDATE backup_locations SET bucket=$2 WHERE venue_id=$1',[f.venues[0],'different-bucket']);
   return signedUpload(location,key);
- });
+ },mode);
  try{
-  await provision(f);
+  if(mode==='existing')await f.legacyCatalogue.provision(f.installation,f.location);else await provision(f);
   await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.conflict'});
+ }finally{await f.close();}
+});
+test('direct reserve refuses an empty upload address',async()=>{
+ const f=await fixture(undefined,async(location,key)=>({...signedUpload(location,key),uploadUrl:''}));try{
+  await provision(f);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.storage_grant'});
+ }finally{await f.close();}
+});
+test('direct reserve refuses an upload address valid for more than 900 seconds',async(t)=>{
+ const now=Date.now();
+ const f=await fixture(undefined,async(location,key)=>({...signedUpload(location,key),expiresAt:new Date(now+901_000).toISOString()}));try{
+  await provision(f);
+  t.mock.method(Date,'now',()=>now);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.storage_grant'});
  }finally{await f.close();}
 });
 test('the HTTPS upload proxy refuses the opt-in before requesting a grant',async()=>{

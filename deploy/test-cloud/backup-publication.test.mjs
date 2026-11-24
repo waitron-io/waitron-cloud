@@ -17,6 +17,7 @@ import {EmailOutbox,createLeaseIssuer,encodeMachine} from '../../packages/regist
 import {venueServiceFixture,set} from '../../packages/registration/test/fixtures/venue-service.ts';
 import {diskUsage} from '../../scripts/backup-capacity-fixture.mjs';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
+import {putIntegrationSnapshot} from './test-fixtures/integration-snapshot-client.mjs';
 
 const {getRequestListener}=createRequire(new URL('../../packages/account-http/package.json',import.meta.url))('@hono/node-server');
 const MiB=1024*1024, bytes=Number(process.env.TEST_CLOUD_PUBLISH_BYTES??4*MiB);
@@ -118,18 +119,11 @@ test('signed publication retries an interrupted retained copy through real TLS a
   assert.equal(reserved.status,200);
   assert.ok(typeof reserved.body.uploadUrl==='string');
   const archive=Buffer.from('signed capture fixture');
-  const put=()=>new Promise((resolve,reject)=>{
-   const req=request(reserved.body.uploadUrl,{method:'PUT',ca:storage.ca,signal:AbortSignal.timeout(5000),
-    headers:{'if-none-match':'*','content-length':archive.length}},async response=>{
-    try{await response.toArray();resolve(response.statusCode);}catch(error){reject(error);}
-   });
-   req.on('error',reject);req.end(archive);
-  });
+  const put=()=>putIntegrationSnapshot(reserved.body,archive,join(storage.root,'cert.pem'));
   assert.equal(await put(),200);
   assert.equal(await put(),412);
   const published=await submit('backup-publish',{...metadata,size:archive.length,digest:createHash('sha256').update(archive).digest('hex')},captureId);
   assert.equal(published.status,200);
   assert.equal(published.body.id,captureId);
  });
-
 });
