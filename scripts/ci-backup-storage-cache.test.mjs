@@ -20,7 +20,7 @@ const names = {"darwin-arm64":"darwin_arm64", "linux-arm64":"linux_arm64", "linu
 const name = names[process.platform + "-" + process.arch];
 assert.ok(name, "the probe needs a supported fixture platform");
 const cache = join(tmpdir(), "waitron-cloud-test-binaries");
-const archiveName = "seaweed-4.47-" + name + ".tar.gz";
+const archiveName = "seaweed-4.48-" + name + ".tar.gz";
 const archive = join(cache, archiveName);
 const bytes = mode === "empty" ? Buffer.alloc(0) : Buffer.from("corrupt cached archive");
 if (mode === "cache-file") await writeFile(cache, "existing cache path");

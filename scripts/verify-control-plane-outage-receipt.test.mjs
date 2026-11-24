@@ -12,7 +12,13 @@ function valid(){return {
 };}
 
 test('accepts a complete control-plane outage receipt',()=>assert.deepEqual(verifyControlPlaneOutageReceipt(valid()),valid()));
+test('accepts a receipt from the native 4.48 fixture',()=>{
+  const receipt=valid();
+  receipt.environment.storageProvider='SeaweedFS 4.48';
+  assert.deepEqual(verifyControlPlaneOutageReceipt(receipt),receipt);
+});
 for(const [name,mutate] of [
+  ['unknown storage release',r=>{r.environment.storageProvider='SeaweedFS 4.50';}],
   ['dirty tree',r=>{r.cloudDirty=true;}],
   ['live control plane',r=>{r.controlPlane.connectionRefusedDuringOutage=false;}],
   ['extended cached route',r=>{r.route.refusedAtSignedExpiry=false;}],

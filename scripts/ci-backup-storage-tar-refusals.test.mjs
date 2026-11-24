@@ -68,7 +68,7 @@ net.createServer = https.createServer = () => assert.fail("tar refusal must prec
 syncBuiltinESMExports();
 globalThis.fetch = async url => {
   downloads++;
-  assert.equal(url, "https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + archiveName.slice("seaweed-4.47-".length));
+  assert.equal(url, "https://github.com/seaweedfs/seaweedfs/releases/download/4.48/" + archiveName.slice("seaweed-4.48-".length));
   return new Response(bytes);
 };
 const { startBackupStorage } = await import("./scripts/backup-storage-fixture.mjs");

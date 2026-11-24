@@ -74,7 +74,7 @@ async function runProbe(t, mode) {
   assert.equal(result.calls, 1, "a download failure must not introduce a retry");
   assert.deepEqual(result.cacheEntries, [], "failed bytes must not reach the cache");
   assert.deepEqual(result.roots, [], "failed startup must remove its private root");
-  assert.match(result.requested, /^https:\/\/github\.com\/seaweedfs\/seaweedfs\/releases\/download\/4\.47\/(darwin_arm64|linux_arm64|linux_amd64)\.tar\.gz$/);
+  assert.match(result.requested, /^https:\/\/github\.com\/seaweedfs\/seaweedfs\/releases\/download\/4\.48\/(darwin_arm64|linux_arm64|linux_amd64)\.tar\.gz$/);
   return result;
 }
 

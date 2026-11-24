@@ -18,7 +18,7 @@ export function verifyControlPlaneOutageReceipt(receipt){
     assert(receipt&&typeof receipt==='object');assert.equal(receipt.schemaVersion,1);
     assert.match(receipt.cloudHead,/^[0-9a-f]{40}$/);assert.equal(receipt.cloudDirty,false);
     assert.equal(new Date(receipt.measuredAt).toISOString(),receipt.measuredAt);
-    assert.equal(receipt.environment.storageProvider,'SeaweedFS 4.47');
+    assert.ok(['SeaweedFS 4.47','SeaweedFS 4.48'].includes(receipt.environment.storageProvider));
     for(const [group,field] of requiredTrue)assert.equal(receipt[group]?.[field],true);
     assert(Number.isFinite(receipt.controlPlane.outageMs)&&receipt.controlPlane.outageMs>=0);
     assert.equal(new Date(receipt.storage.credentialExpiresAt).toISOString(),receipt.storage.credentialExpiresAt);

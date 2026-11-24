@@ -89,7 +89,7 @@ for (const status of [401, 403, 404, 429, 503]) {
     assert.equal(last.status, status);
     assert.equal(last.attempt, status === 503 ? 3 : 1);
     assert.equal(last.timeoutMs, 30000);
-    assert.match(last.url, /^https:\/\/github\.com\/seaweedfs\/seaweedfs\/releases\/download\/4\.47\//);
+    assert.match(last.url, /^https:\/\/github\.com\/seaweedfs\/seaweedfs\/releases\/download\/4\.48\//);
     assert.ok(!JSON.stringify(result.events).includes("PRIVATE"));
   });
 }

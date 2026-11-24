@@ -2,7 +2,8 @@ import { downloadStorageArchive } from "./fixtures/storage-archive-download.mjs"
 import { createServer as httpsServer, Agent } from "node:https";
 import { createServer as netServer } from "node:net";
 import { createRequire } from "node:module";
-import { spawn, execFileSync } from "node:child_process";
+import { once } from "node:events";
+import { spawn, execFileSync, fork } from "node:child_process";
 import {
   mkdtemp,
   mkdir,
@@ -31,15 +32,15 @@ const {
 const pins = {
   "darwin-arm64": [
     "darwin_arm64.tar.gz",
-    "3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda",
+    "faa194e72a346755dc4404288b0561eb3c260351702901d8363024d5099bdd7d",
   ],
   "linux-arm64": [
     "linux_arm64.tar.gz",
-    "ba5c9def9ff98f78becdf309a50a9f906922f6383a7c4c772d01ede3cc012e16",
+    "557e92c38c5c7d180748eb8e2b2b45e426f8e5282a4caca8e098a90d09f03a07",
   ],
   "linux-x64": [
     "linux_amd64.tar.gz",
-    "31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d",
+    "4a7d108384d044d95212d1342cdda9533fa55842c1c9b41f606ca3c8a9561124",
   ],
 };
 async function binary(root) {
@@ -47,13 +48,13 @@ async function binary(root) {
   if (!pin) throw Error("Unsupported SeaweedFS test platform");
   const cache = join(tmpdir(), "waitron-cloud-test-binaries");
   await mkdir(cache, { recursive: true });
-  const archive = join(cache, "seaweed-4.47-" + pin[0]);
+  const archive = join(cache, "seaweed-4.48-" + pin[0]);
   let bytes, downloaded = false;
   try {
     bytes = await readFile(archive);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
-    const url = "https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + pin[0];
+    const url = "https://github.com/seaweedfs/seaweedfs/releases/download/4.48/" + pin[0];
     let phase = "headers", httpStatus = null;
     try {
       bytes = await downloadStorageArchive(url, {
@@ -121,7 +122,7 @@ async function startBackupStorageAttempt(options) {
     throw Error("Invalid local storage token duration");
   if (!/^[a-z0-9.-]+$/.test(tlsHostname)) throw Error("Invalid local storage TLS hostname");
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
-  let oidc, child, log, adminClient, allocatedPorts, readiness;
+  let oidc, child, reaper, log, adminClient, allocatedPorts, readiness;
   const managed = new Map();
   const portReservations = [];
   const portClaims = [];
@@ -165,6 +166,9 @@ async function startBackupStorageAttempt(options) {
     if (oidc) await new Promise((r) => oidc.close(r));
     await log?.close();
     await rm(root, { recursive: true, force: true });
+    if (reaper?.connected) {
+      await new Promise((resolve, reject) => reaper.send("done", error => error ? reject(error) : resolve()));
+    }
     if (claimCleanupFailure) throw claimCleanupFailure;
   }
   try {
@@ -409,6 +413,12 @@ async function startBackupStorageAttempt(options) {
       "-s3.port.iceberg=0",
       "-s3.port.lance=0",
     ];
+    reaper = fork(new URL("./backup-storage-child.mjs", import.meta.url), [root], {
+      detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], execArgv: [], env: {},
+    });
+    await once(reaper, "spawn");
+    reaper.unref();
+    reaper.channel?.unref();
     await releasePorts();
     child = spawn(bin, args, {
       env: { PATH: process.env.PATH, HOME: root, TMPDIR: root },

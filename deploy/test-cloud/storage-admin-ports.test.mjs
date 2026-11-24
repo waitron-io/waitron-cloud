@@ -3,6 +3,7 @@ import test from 'node:test';
 import childProcess from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
 import {connect} from 'node:net';
+import {networkInterfaces} from 'node:os';
 import {access, readFile, rm} from 'node:fs/promises';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -114,3 +115,36 @@ for (const {kinds, explicit} of [
     for (const owner of owners) assert.equal(await readOwner(owner.port), owner.marker, 'cleanup must preserve the competing listener');
   });
 }
+
+test('native admin gRPC accepts only loopback connections', {timeout:60000}, async t => {
+  const outside = Object.values(networkInterfaces()).flat().find(entry => entry?.family === 'IPv4' && !entry.internal);
+  if (!outside) return t.skip('requires a non-loopback IPv4 address');
+  let pid;
+  // Keep the gRPC port implicit and use a private HTTP port while other fixtures start.
+  const adminHttp = randomInt(14000, 19000);
+  const spawn = childProcess.spawn;
+  t.mock.method(childProcess, 'spawn', (binary, args, options) => {
+    const child = spawn(binary, args[0] === 'mini' ? ['-v=1', ...args, '-admin.port=' + adminHttp] : args, options);
+    if (args[0] === 'mini') pid = child.pid;
+    return child;
+  });
+  syncBuiltinESMExports();
+  t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
+  const storage = await startBackupStorage();
+  t.after(() => storage.stop());
+  const log = await readFile(join(storage.root, 'store.log'), 'utf8');
+  const port = Number(/gRPC port configuration[^\n]*Admin: (\d+)/.exec(log)?.[1]);
+  assert.ok(port, 'find the implicit admin gRPC port in the native startup log');
+  childProcess.execFileSync('lsof', ['-wnP', '-a', '-p', String(pid), '-iTCP:' + port, '-sTCP:LISTEN'], {
+    timeout: 2000,
+  });
+  function dial(host) {
+    return new Promise((resolve, reject) => {
+      const socket = connect({host, port}, () => {socket.destroy(); resolve();});
+      socket.on('error', reject);
+      socket.setTimeout(2000, () => socket.destroy(Error('admin connection timed out')));
+    });
+  }
+  await dial('127.0.0.1');
+  await assert.rejects(dial(outside.address), {code:'ECONNREFUSED'});
+});

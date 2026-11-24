@@ -8,14 +8,15 @@ at 22:10 on 24 November.
 The real 55-second probe timeout left a native child alive in a controlled
 stall. This establishes the failure mechanism. The historical slowdown
 remains unexplained. The test box reached 4.47 over the LAN and got
-connection refused on 4.49. See the lane’s `receipts/test-store-leftover/`.
+connection refused on 4.48. See the lane’s `receipts/test-store-leftover/`.
 
 Compose and the test Cloud publish no host port for the admin listener.
 A peer in an isolated Linux bridge reached it on 4.47. The image stays
-on 4.47. The new native results qualify 4.49 only.
-[SeaweedFS 4.49 release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.49)
+on 4.47. The watcher cleared 4.48 for the native fixture at 22:35. The 4.49 comparison
+failed the existing port ownership deadline.
+[SeaweedFS 4.48 release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.48)
 
-1. In `scripts/ci-backup-storage-readiness-diagnostics.test.mjs`, first
+1. In `scripts/ci-backup-storage-child-lifecycle.test.mjs`, first
    see a live native process and socket survive fixture SIGKILL. Test
    SIGTERM, a paused launch, removal of its root and port claims, and
    preservation of a separate owned process.
@@ -38,10 +39,10 @@ on 4.47. The new native results qualify 4.49 only.
    non-loopback connection. Require loopback success and non-loopback
    refusal, with a visible skip where there is no non-loopback IPv4.
    Pin the native fixture and `scripts/fixtures/storage-tar-seed.mjs`
-   to 4.49 with verified checksums. Run the port, exhaustion and handoff
+   to 4.48 with verified checksums. Run the port, exhaustion and handoff
    checks before accepting the pin. Preserve their assertions.
    Update live pin checks, receipt writers and reader ownership.
-   Verify saved 4.47 and new 4.49 receipts and refuse other versions.
+   Verify saved 4.47 and new 4.48 receipts and refuse other versions.
 
 Allow about 110 lines of fixture code and pin changes and 150 lines
 of tests and pin-check adjustments. Update the storage readiness backlog
