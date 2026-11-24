@@ -1022,8 +1022,8 @@ The verifier requires every module check in `deploy/backup-verifier/target.json`
 to pass. It prepares a new recovery operation for these
 exact recaptured bytes, using the fixture's controlled later clock, and executes
 the ordinary restore. The recovered counters stay at 123; the restored series
-start at 1 and the database holds two fiscal allocations. A wrong node key and a
-valid key without module preparation both refuse and preserve the destination.
+start at 1 and the database holds two fiscal allocations. A wrong recovery key and
+a valid key without module preparation both refuse and preserve the destination.
 No venue server starts, and generated keys stay inside the disposable container.
 
 You can check the private delivery handoff, including changed bytes, a wrong
