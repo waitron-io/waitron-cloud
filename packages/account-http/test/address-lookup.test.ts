@@ -30,17 +30,25 @@ async function fixture(configured=true){
   await ensureBusiness(db.pool,v);
   const limit={transactional_email:'0',address_lookup:'100',sms:'0',content_translation:'0',rota_solver:'0'};
   if(configured)await new AllowanceConfigStore(db.pool).publish({revision:1,effectiveFrom:'2020-01-01',limits:{registered:limit,connected:limit,hosted:limit},unpaidTrial:{content_translation:'0',rota_solver:'0'}});
-  const calls:{kind:string;token:string}[]=[];
+  const calls:string[]=[],providerTokens:string[]=[];
   let failed=false;
-  const provider=createGoogleAddressClient({apiKey:'synthetic-key',fetcher:async(url,options)=>{
-   const body=JSON.parse(String(options!.body)),kind=String(url).includes('autocomplete')?'suggest':'validate';
-   calls.push({kind,token:body.sessionToken});if(failed)return new Response('PRIVATE-REPLY',{status:503});
+  const google=createGoogleAddressClient({apiKey:'synthetic-key',fetcher:async url=>{
+   const kind=String(url).includes('autocomplete')?'suggest':'validate';
+   calls.push(kind);if(failed)return new Response('PRIVATE-REPLY',{status:503});
    return Response.json(kind==='suggest'?{suggestions:[{placePrediction:{text:{text:'Calle de Prueba 12, Madrid'}}}]}:
     {result:{address:{postalAddress:{regionCode:'ES',postalCode:'28013',locality:'Madrid'},addressComponents:[
      {componentType:'route',componentName:{text:'Calle de Prueba'}},{componentType:'street_number',componentName:{text:'12'}},
      {componentType:'administrative_area_level_2',componentName:{text:'Madrid'}},{componentType:'country',componentName:{text:'España'}},
     ]}}});
   }});
+  const provider={...google,
+   suggest(input:Parameters<typeof google.suggest>[0],signal?:AbortSignal){
+    providerTokens.push(input.sessionToken);return google.suggest(input,signal);
+   },
+   validate(input:Parameters<typeof google.validate>[0],signal?:AbortSignal){
+    providerTokens.push(input.sessionToken);return google.validate(input,signal);
+   },
+  };
   const options={pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
    addressLookup:{accountId:v.accountId,venueId:v.venueId,installationId:v.installationId,provider}};
   const app=createAccountApp(options);
@@ -49,7 +57,7 @@ async function fixture(configured=true){
   },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as HttpBindings);
   const post=(body:unknown,operationId=randomUUID())=>request(v.proof('address-lookup',body,operationId,v.lease));
   const fakeProvider={[syntheticAddressProvider]:true,suggest:provider.suggest,validate:provider.validate};
-  return {db,v,issuer,calls,provider,fakeProvider,app,options,post,request,setFailure:()=>{failed=true;}};
+  return {db,v,issuer,calls,providerTokens,provider,fakeProvider,app,options,post,request,setFailure:()=>{failed=true;}};
  }catch(error){await db.close();throw error;}
 }
 test('the signed trial reuses one counted hold and token, validates once and stores no address content',async()=>{
@@ -71,7 +79,7 @@ test('the signed trial reuses one counted hold and token, validates once and sto
   assert.equal((await f.post(body)).status,409);
   const rows=(await f.db.pool.query("SELECT * FROM billing_allowance_reservations WHERE service='address_lookup'")).rows;
   assert.equal(rows.length,1);assert.equal(rows[0].units,'1');assert.equal(rows[0].state,'spent');assert.equal(rows[0].operation_id,workflowId);
-  assert.deepEqual(f.calls.map(c=>c.kind),['suggest','suggest','validate']);assert.deepEqual(f.calls.map(c=>c.token),[rows[0].id,rows[0].id,rows[0].id]);
+  assert.deepEqual(f.calls,['suggest','suggest','validate']);assert.deepEqual(f.providerTokens,[rows[0].id,rows[0].id,rows[0].id]);
   assert.equal(JSON.stringify(rows).includes('PRIVATE-QUERY'),false);
   assert.deepEqual((await f.db.pool.query('SELECT * FROM installation_operations WHERE installation_id=$1',[f.v.installationId])).rows,operations);
  }finally{await f.db.close();}
@@ -93,7 +101,7 @@ test('registered boxes get separate holds and cannot validate another box workfl
   [f.v,other].sort((a,b)=>a.installationId.localeCompare(b.installationId)).map(box=>({
    account_id:box.accountId,venue_id:box.venueId,installation_id:box.installationId,
   })));
-  assert.equal(new Set(f.calls.map(call=>call.token)).size,2);
+  assert.equal(new Set(f.providerTokens).size,2);
  }finally{await f.db.close();}
 });
 test('a second registered box shares the current owner monthly cap',async()=>{
