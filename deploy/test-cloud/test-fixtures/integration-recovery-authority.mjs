@@ -1,7 +1,7 @@
 import {readIntegrationSourceIdentity} from './integration-source-identity.mjs';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {mintBreakGlassKey} from '/waitron/apps/server/src/break-glass.ts';
+import {existsSync} from 'node:fs';
 import {establishNodeIdentity} from '/waitron/apps/server/src/node-identity.ts';
 import {loadBoxEnv} from '/waitron/apps/server/src/box-env.ts';
 const {openVenueDatabase} = createRequire('/waitron/apps/server/package.json')('@waitron/db');
@@ -15,7 +15,15 @@ export async function prepareIntegrationRecoveryAuthority(root) {
   try {
     await establishNodeIdentity({ownerDb: store.venue, node: store.node, ring: loadKeyRing(await loadBoxEnv({}, root))}, sourceIdentity.nodeId);
     const currentRecovery = process.env.CLOUD_INTEGRATION_CURRENT_RECOVERY === '1';
-    const key = await mintBreakGlassKey(currentRecovery ? store : store.venue, sourceIdentity.nodeId);
+    const masterKeyFixture = '/waitron/apps/server/src/testing/master-key.ts';
+    let key;
+    if (existsSync(masterKeyFixture)) {
+      const {mintMasterKey} = await import(masterKeyFixture);
+      key = await mintMasterKey(store.venue);
+    } else {
+      const {mintBreakGlassKey} = await import('/waitron/apps/server/src/break-glass.ts');
+      key = await mintBreakGlassKey(currentRecovery ? store : store.venue, sourceIdentity.nodeId);
+    }
     return {...key, sourceNodeId: sourceIdentity.nodeId, streamId: sourceIdentity.streamId};
   } finally {await store.close();}
 }

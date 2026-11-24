@@ -33,6 +33,9 @@ vi.mock('@waitron/fiscal-verifactu/src/hour-clock-internet.js', () => ({
 
 it('restores the native paired stream using its owner-approved kit and separate source authority', async () => {
   const input = JSON.parse(await readFile('/tmp/cloud-integration-stream-input.json', 'utf8'));
+  const {variable: keyVariable, wrongKey} = currentRecovery
+    ? await (await import('./cloud-integration-current-recovery.mjs')).integrationRestoreKey(input.authority)
+    : {variable: 'WAITRON_NODE_RECOVERY_KEY', wrongKey: 'wrong node key'};
   const kit = parseRecoveryKit(input.kit);
   expect(kit.streamId).toBe(input.selected.streamId);
   const root = await mkdtemp('/tmp/cloud-integration-stream-restore-');
@@ -66,8 +69,12 @@ it('restores the native paired stream using its owner-approved kit and separate 
         const binding = {module: 'fiscal-verifactu', action: 'restore', eventId: randomUUID(),
           sourceId: copy.sourceId!, targetNodeId: prepared.nodeId};
         const source = await openVenueDatabase(dirname(copy.databasePath));
-        try {expect(await verifyBreakGlass(currentRecovery ? source.node : source.venue, prepared.nodeId, input.authority.secret)).toBe(true);}
-        finally {await source.close();}
+        try {
+          const verified = keyVariable === 'WAITRON_MASTER_KEY'
+            ? await verifyBreakGlass(source.venue, input.authority.secret)
+            : await verifyBreakGlass(currentRecovery ? source.node : source.venue, prepared.nodeId, input.authority.secret);
+          expect(verified).toBe(true);
+        } finally {await source.close();}
         const db = new DatabaseSync(copy.databasePath, {readOnly: true});
         let installationCodes: string[];
         try {installationCodes = db.prepare('SELECT numero_instalacion FROM registro_sif WHERE node_id=?').all(prepared.nodeId).map(row => String(row.numero_instalacion));}
@@ -115,10 +122,10 @@ it('restores the native paired stream using its owner-approved kit and separate 
     await writeFile(operationPath, JSON.stringify(operation), {mode: 0o600});
     const env = {WAITRON_ENV: 'dev', WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: venueDir,
       WAITRON_MIGRATIONS_DIR: restore.migrationsRoot, WAITRON_LITESTREAM_BIN: restore.litestreamBin,
-      WAITRON_RECOVERY_OPERATION_FILE: operationPath, WAITRON_NODE_RECOVERY_KEY: input.authority.secret};
+      WAITRON_RECOVERY_OPERATION_FILE: operationPath, [keyVariable]: input.authority.secret};
     const argv = ['restore', '--from-bucket', kitPath, '--confirm-venue', taxId, '--confirm-old-box-gone', '--confirm-sole-recovery'];
     let wrongOutput = '';
-    expect(await runRestore({argv, env: {...env, WAITRON_NODE_RECOVERY_KEY: 'wrong node key'}, out: line => {wrongOutput += line;}})).toBe(1);
+    expect(await runRestore({argv, env: {...env, [keyVariable]: wrongKey}, out: line => {wrongOutput += line;}})).toBe(1);
     expect(wrongOutput.includes('promotion.break_glass_invalid')).toBe(true);
     expect(records(join(venueDir, 'venue.db'))).toEqual(originalRecords);
     await expect(stat(join(stateDir, 'trading.env'))).rejects.toMatchObject({code: 'ENOENT'});

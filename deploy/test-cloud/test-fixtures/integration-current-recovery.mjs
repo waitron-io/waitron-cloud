@@ -3,6 +3,15 @@ import {createFirstSetupCoordinator} from '@waitron/provisioning';
 import {createInteractiveRecoveryPreparation} from './recovery-preparation.js';
 import {createFakeTimersHourClock, recoverySelectPastWaits} from './testing/hour-test-clock.js';
 
+export async function integrationRestoreKey(authority) {
+  if (!Number.isInteger(authority.number)) {
+    return {variable: 'WAITRON_NODE_RECOVERY_KEY', wrongKey: 'wrong node key'};
+  }
+  const {makeMasterKey} = await import('@waitron/credentials');
+  const {encodeMasterKeyCode} = await import('@waitron/shared');
+  return {variable: 'WAITRON_MASTER_KEY', wrongKey: encodeMasterKeyCode(makeMasterKey())};
+}
+
 // The native minute fixture moves both clocks through each wait and requires fresh comparison after restart.
 export async function prepareCurrentIntegrationRecovery({copy, sourceId, binding, secret, roots}) {
   vi.useFakeTimers({toFake: ['Date', 'performance']});

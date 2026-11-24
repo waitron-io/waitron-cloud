@@ -99,7 +99,14 @@ it('recaptures the authorised source and prepares recovery for its new archive',
   await writeFile(destination,'original destination database');await writeFile(identity,'original destination identity');
   const preserved=async()=>await readFile(destination,'utf8')==='original destination database'&&await readFile(identity,'utf8')==='original destination identity';
   let wrongOutput='';
-  const wrongExit=await runRestore({...command,env:{...command.env,WAITRON_NODE_RECOVERY_KEY:'wrong node key'},out:line=>{wrongOutput+=line+'\n';}});
+  const keyVariable=Object.hasOwn(command.env,'WAITRON_MASTER_KEY')?'WAITRON_MASTER_KEY':'WAITRON_NODE_RECOVERY_KEY';
+  let wrongKey='wrong node key';
+  if(keyVariable==='WAITRON_MASTER_KEY'){
+   const {makeMasterKey}=await import('@waitron/credentials');
+   const {encodeMasterKeyCode}=await import('@waitron/shared');
+   wrongKey=encodeMasterKeyCode(makeMasterKey());
+  }
+  const wrongExit=await runRestore({...command,env:{...command.env,[keyVariable]:wrongKey},out:line=>{wrongOutput+=line+'\n';}});
   const wrongNodeKey={exit:wrongExit,code:wrongOutput.match(/restore failed: ([a-z_.]+)/)?.[1],destinationPreserved:await preserved()};
   expect(wrongNodeKey).toEqual({exit:1,code:'promotion.break_glass_invalid',destinationPreserved:true});
   expect(wrongOutput.includes(key.secret)).toBe(false);
