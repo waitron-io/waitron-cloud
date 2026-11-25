@@ -1157,7 +1157,10 @@ Keep the matching key private so you can open the encrypted archive later. The
 manifest gives the capture time
 and SHA-256 checksum of the encrypted file. Later changes may be missing. After
 service ends, Backups reminds you to keep your fiscal records and check your copies
-while the downloads are open. This test download accepts archives up to 16 MiB.
+while the downloads are open. This test download accepts archives up to 16 MiB
+and databases up to 512 MiB after opening. Your browser keeps a temporary
+database copy for up to ten minutes after saving. It clears the copy sooner
+when you save another database, sign out, change accounts or open the portal.
 Actual venue exit still needs the rest of the return and deletion process.
 
 On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
@@ -1185,7 +1188,8 @@ TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
 
 The test compares the saved archive with the stored and downloaded checksums and opens it in a
 verifier with networking disabled. It also saves the selected SQLite database
-in Chromium and opens it to check its integrity. It checks the original box is
+in Chromium, checks its integrity and compares its bytes with the independently
+opened archive. It checks the original box is
 still serving with the same installation after both downloads. It then ends
 service for that same synthetic venue and records a fixed cutoff 90 days later.
 The fixture sets the end in the past so the cutoff is about 90 seconds away.

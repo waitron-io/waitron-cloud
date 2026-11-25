@@ -6,16 +6,16 @@ export const venueDatabase = Buffer.from('SQLite format 3\0synthetic venue rows'
 const frame = Buffer.concat([Buffer.from('WBK1\x01'), Buffer.alloc(16, 42), Buffer.alloc(12, 24)]);
 const key = scryptSync(recoveryKey, frame.subarray(5, 21), 32, {N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 ** 2});
 
-export function backupBytes({gzip = false, oversized = false, database = venueDatabase} = {}) {
-  const entry = (name: string, bytes: Buffer, size = BigInt(bytes.length)) => {
+export function backupBytes({gzip = false, database = venueDatabase, databaseLength}: {gzip?:boolean; database?:Buffer; databaseLength?:number} = {}) {
+  const entry = (name: string, bytes: Buffer, length = bytes.length) => {
     const nameLength = Buffer.alloc(4), dataLength = Buffer.alloc(8);
     nameLength.writeUInt32LE(name.length);
-    dataLength.writeBigUInt64LE(size);
+    dataLength.writeBigUInt64LE(BigInt(length));
     return Buffer.concat([nameLength, Buffer.from(name), dataLength, bytes]);
   };
   const archive = Buffer.concat([Buffer.from('WBA1\x01\x02\0\0\0'),
     entry('node.db', Buffer.from('private box data')),
-    entry('db.dump', database, oversized ? 5n * 1024n ** 3n : undefined)]);
+    entry('db.dump', database, databaseLength)]);
   const cipher = createCipheriv('aes-256-gcm', key, frame.subarray(21));
   cipher.setAAD(frame);
   const encrypted = Buffer.concat([cipher.update(gzip ? gzipSync(archive) : archive), cipher.final()]);

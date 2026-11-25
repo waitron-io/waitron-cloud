@@ -106,7 +106,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    try { await root.getDirectoryHandle('waitron-backup-download'); return expected; }
    catch(error){if(error instanceof DOMException&&error.name==='NotFoundError')return !expected;throw error;}
   };
-  await page.waitForFunction(stageIsPresent,false);
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(stageIsPresent,true),true);
   for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[saveKey,key,'key'],[saveManifest,manifest,'manifest.json']] as const){
    const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
    assert.equal(download.suggestedFilename(),`waitron-backup-${verifiedId}.${extension}`);
@@ -156,5 +157,6 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await captureWindow('ended');
   await page.unroute('**/api/account/backups/list',flag);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:refresh,exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await choices.count(),0);
+
  }finally{await f.close();}
 });

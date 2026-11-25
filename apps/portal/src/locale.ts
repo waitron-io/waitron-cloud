@@ -295,6 +295,7 @@ const enBase = {
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
   snapshotDownload:'Download backup', snapshotDownloadKey:'Download recovery key', snapshotDownloadProof:'Verify it’s you before downloading.',
+  snapshotDatabaseStorageUnavailable:"This browser can't save the database. If you are using a private/incognito browser window then try again with a normal window. Alternatively, try another browser.",
   snapshotDownloadDatabase:'Download database', snapshotDatabaseOpenFailed:'The backup could not be opened.',
   snapshotDownloadManifest:'Download backup manifest', snapshotLaterChanges:'Later changes may be missing.',
   snapshotFiscalWarning:'You are now responsible for keeping your fiscal records. Download and check your copies.',
@@ -679,6 +680,7 @@ const esBase: typeof enBase = {
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
   snapshotDownload:'Descargar copia', snapshotDownloadKey:'Descargar clave de recuperación', snapshotDownloadProof:'Verifica que eres tú antes de descargar.',
+  snapshotDatabaseStorageUnavailable:'Este navegador no puede guardar la base de datos. Si usas una ventana privada o de incógnito, inténtalo de nuevo en una ventana normal. También puedes usar otro navegador.',
   snapshotDownloadDatabase:'Descargar base de datos', snapshotDatabaseOpenFailed:'No se pudo abrir la copia.',
   snapshotDownloadManifest:'Descargar manifiesto de la copia', snapshotLaterChanges:'Puede que falten cambios posteriores.',
   snapshotFiscalWarning:'Ahora debes conservar tus registros fiscales. Descarga y comprueba tus copias.',

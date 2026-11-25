@@ -6,7 +6,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
-import {createHash, createHmac, randomUUID} from 'node:crypto';
+import {createDecipheriv, createHash, createHmac, randomUUID, scryptSync} from 'node:crypto';
+import {gunzipSync} from 'node:zlib';
 import {request} from 'node:https';
 import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
@@ -280,6 +281,28 @@ async function saveExitDatabase({origin, port, session, pointId}) {
   } finally { await browser.close(); }
 }
 
+// Replay the archive accepted by the offline verifier with Node's crypto and SQLite-independent bytes.
+function offlineExitDatabaseDigest(archive, secret) {
+  const key = scryptSync(secret, archive.subarray(5, 21), 32, {N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 ** 2});
+  const decipher = createDecipheriv('aes-256-gcm', key, archive.subarray(21, 33));
+  key.fill(0);
+  decipher.setAAD(archive.subarray(0, 33));
+  decipher.setAuthTag(archive.subarray(33, 49));
+  const opened = Buffer.concat([decipher.update(archive.subarray(49)), decipher.final()]);
+  const bytes = opened[0] === 0x1f && opened[1] === 0x8b ? gunzipSync(opened, {maxOutputLength: 32 * 1024 ** 2}) : opened;
+  assert.equal(bytes.toString('ascii', 0, 5), 'WBA1\x01');
+  const entries = bytes.readUInt32LE(5);
+  for (let offset = 9, n = 0; n < entries; n++) {
+    const nameEnd = offset + 4 + bytes.readUInt32LE(offset);
+    const name = bytes.toString('utf8', offset + 4, nameEnd);
+    const end = nameEnd + 8 + Number(bytes.readBigUInt64LE(nameEnd));
+    assert.ok(end <= bytes.length);
+    if (name === 'db.dump') return createHash('sha256').update(bytes.subarray(nameEnd + 8, end)).digest('hex');
+    offset = end;
+  }
+  assert.fail('integration.exit_offline_database_missing');
+}
+
 async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online, origin, port}) {
   const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
   const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
@@ -316,6 +339,7 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   assert.equal(receipt.cleanupConfirmed, true);
   assert.deepEqual(await verifierChildren(controllerScope), [], 'integration.exit_verifier_child_remains');
   const database = await saveExitDatabase({origin, port, session: browser, pointId});
+  assert.equal(database.sha256, offlineExitDatabaseDigest(saved, secret), 'integration.exit_browser_matches_verified_database');
   await online();
   return {sha256, bytes: saved.length, offline: true, boxOnline: true, database};
 }

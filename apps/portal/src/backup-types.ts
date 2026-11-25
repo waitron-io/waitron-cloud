@@ -17,8 +17,11 @@ export function validBackupPage(value:unknown):value is BackupPage{
 }
 export type BackupDownload = 'download'|'download-key'|'download-manifest'|'download-database';
 export const backupDownloadDirectory = 'waitron-backup-download';
-export interface DatabaseDownloadRequest {venueId: string; pointId: string; csrfToken: string;}
+export interface DatabaseDownloadRequest {venueId: string; pointId: string; attempt: string; csrfToken: string;}
 export async function removeDatabaseDownload(root: FileSystemDirectoryHandle) {
  try { await root.removeEntry(backupDownloadDirectory, {recursive: true}); }
  catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }
+}
+export function isDatabaseStorageRefusal(error: unknown) {
+ return error instanceof DOMException && ['QuotaExceededError','NotSupportedError','UnknownError','SecurityError','NotAllowedError'].includes(error.name);
 }
