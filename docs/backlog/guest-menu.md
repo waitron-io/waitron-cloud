@@ -9,3 +9,8 @@ Waitron [#4266](https://github.com/clintongormley/waitron/pull/4266) stopped the
 ## Live ordering
 
 [Waitron A509](https://github.com/clintongormley/waitron/blob/main/docs/backlog/till.md#a509-online-ordering-for-collection-at-the-counter) owns online ordering. The 13 November 2026 design expected a stored read-only fallback for menus. The 24 November customer-menu design above supersedes that choice.
+
+The owner’s 13 November direction still applies to A509. “Online ordering requires
+forwarding cloud requests to the server.” The central ordering relay would share the
+gateway’s existing limit of 120 requests per source per minute. Settle that capacity and
+the browser challenge policy before building the ordering relay.

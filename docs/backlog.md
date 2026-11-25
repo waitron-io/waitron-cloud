@@ -412,7 +412,8 @@ until release qualification. Recheck active migration reservations before new da
 Build and qualify live, read-only menus from the serving box on test installations. The
 [Cloud plan](superpowers/plans/2026-11-25-d643-public-customer-menu.md) covers the gateway,
 venue block and retirement of the [hosted copy](backlog/guest-menu.md) after the paired test.
-Production DNS, certificates and rollout remain open.
+Cloud caching, including photos, is due before production. Production DNS, certificates
+and rollout remain open.
 
 ## Custom domains with one record, and names that follow the venue
 
