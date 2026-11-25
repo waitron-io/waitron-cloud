@@ -57,10 +57,10 @@ function checkLimits(usage:UsageRow[],tier:'paid'|'free',kind:LookupRequest['kin
 
 export async function admitAddressLookup(client:PoolClient,box:AddressScope,request:LookupRequest,policy:AddressLookupPolicy){
  await requireAllowanceTransaction(client);
- // Both the count and its debit are committed before the next admission checks the same budget.
- await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('address-lookup:google'))");
  const {scope,business}=await lockAllowanceScope(client,box,{allowMissingBusiness:true});
  await lockAllowanceInstallation(client,box);
+ // Wait for this box's authority before taking the shared budget lock.
+ await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('address-lookup:google'))");
  if((await client.query('SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id=$1',[box.venueId])).rowCount)
   throw new AddressLookupAdmissionError('forbidden');
  const {now,day}=(await client.query<{now:Date;day:CivilDate}>(`SELECT now,(now AT TIME ZONE 'America/Los_Angeles')::date::text AS day
@@ -72,7 +72,8 @@ export async function admitAddressLookup(client:PoolClient,box:AddressScope,requ
   else if(business.current_method_id!==null){
    const card=await client.query("SELECT 1 FROM billing_payment_methods WHERE organisation_id=$1 AND legal_business_id=$2 AND id=$3 AND kind='card'",
     [scope.organisationId,scope.legalBusinessId,business.current_method_id]);
-   if(card.rowCount&&effectiveVenueLevel(base,(await readVenueHistory(context,box.venueId)).trials,day)!=='registered')tier='paid';
+   const billingDay=now.toISOString().slice(0,10);
+   if(card.rowCount&&effectiveVenueLevel(base,(await readVenueHistory(context,box.venueId)).trials,billingDay)!=='registered')tier='paid';
   }
  }
  if(request.kind==='available'){

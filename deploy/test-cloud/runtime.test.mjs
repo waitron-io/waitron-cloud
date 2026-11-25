@@ -54,7 +54,10 @@ test('only the test account process gets enabled address lookup settings and its
  for(const env of [{},{CLOUD_ADDRESS_LOOKUP_SETTINGS:enabled.CLOUD_ADDRESS_LOOKUP_SETTINGS},
   {...enabled,GOOGLE_MAPS_SERVER_KEY:' '},{...enabled,NODE_ENV:'production'},
   {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,environment:'production'})},
-  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudMonth:{...month,limitMicros:-1}})}])
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudMonth:{...month,limitMicros:-1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,suggestionMicros:0})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudDay:{...day,limitMicros:month.limitMicros+1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeDay:{...budget.freeDay,freeSuggestions:day.freeSuggestions+1}})}])
   assert.equal(address.addressLookupOptionsFromEnv(env),undefined);
  assert.equal(testRuntimeEnvironment('account',config,{GOOGLE_MAPS_SERVER_KEY:'ambient-key'}).GOOGLE_MAPS_SERVER_KEY,undefined);
 });

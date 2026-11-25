@@ -21,7 +21,7 @@ readback, and the privacy wording are ready and the owner enables it.
   store account, venue, installation, workflow and operation IDs, free or paid class, call kind
   and admission time. Include the venue stop row and check. Reuse the authority row locks from
   `billing-allowances.ts`, preserving refusal of missing billing records for email and translation.
-  A connected or hosted base level, or an active trial with a business payment method, counts as
+  A connected or hosted base level, or an active trial with a business card, counts as
   paid. Cardless trials and missing billing records count as free for lookup. Keep the verified
   current owner and active installation checks. A short transaction lock waits for other admissions.
   After waits, recheck proof and time, count the attempt, commit and release the connection before
@@ -56,7 +56,9 @@ caps allow 2,642 and 880 choices per month, or 264 and 88 per day. At Enterprise
 1,363 and 454 per month, or 136 and 45 per day. If Pro is configured but Google bills Enterprise,
 2,642 choices cost about EUR 55. The Pro illustration allows up to 1,321 search-only attempts in a
 day across Cloud and 440 across free accounts, with room for one validation. One paying venue can
-make at most 500 such searches in a month. Many free accounts can fill their collective share.
+make at most 500 such searches in a month. One owner with three paid venues can use the entire
+Cloud daily search allowance in about 22 minutes at 60 requests per minute. Many free accounts
+can fill their collective share.
 Use the confirmed pricing tier and remaining billing-account free quantities before enabling
 production. Google publishes 6,000 validation requests per minute and a separate per-project quota
 for each Places API method. Record the project’s actual Autocomplete quota and both daily quotas,

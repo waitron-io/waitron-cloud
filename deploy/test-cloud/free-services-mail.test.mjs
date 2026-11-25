@@ -50,9 +50,9 @@ test('deployment drops provider inputs and exposes neither address lookup nor en
   let running;
   try {
     const config = await bootstrap(directory);
-    const environment = testRuntimeEnvironment('account', config, {CLOUD_TEST_SERVICE_PLANS: '1', CLOUD_TRANSLATION: '1', CLOUD_ADDRESS_LOOKUP: '1', GOOGLE_MAPS_API_KEY: 'fake-only', GEOAPIFY_API_KEY: 'fake-only'});
+    const environment = testRuntimeEnvironment('account', config, {CLOUD_TEST_SERVICE_PLANS: '1', CLOUD_TRANSLATION: '1', GOOGLE_MAPS_SERVER_KEY: 'fake-only', GEOAPIFY_API_KEY: 'fake-only'});
     assert.equal(environment.CLOUD_TRANSLATION, '0');
-    for (const key of ['CLOUD_ADDRESS_LOOKUP', 'GOOGLE_MAPS_API_KEY', 'GEOAPIFY_API_KEY']) assert.equal(environment[key], undefined);
+    for (const key of ['CLOUD_ADDRESS_LOOKUP_SETTINGS', 'GOOGLE_MAPS_SERVER_KEY', 'GEOAPIFY_API_KEY']) assert.equal(environment[key], undefined);
     running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: 0, translation: environment.CLOUD_TRANSLATION === '1',
       config: {portalOrigin: 'http://localhost', production: false, rateKey: db.rateKey, trustedProxyIps: []}});
     const post = (path, browser = true) => new Promise((resolve, reject) => {

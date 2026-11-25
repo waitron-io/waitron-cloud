@@ -24,7 +24,6 @@ const suggest=(workflowId=randomUUID())=>({version:1,kind:'suggest',workflowId,q
 const validate=(workflowId:string)=>({version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY selected'});
 const available={version:1,kind:'available'};
 const calls=(pool:Pool)=>pool.query('SELECT * FROM address_lookup_calls ORDER BY admitted_at').then(result=>result.rows);
-const counters=(pool:Pool)=>pool.query('SELECT key,attempts,expires_at FROM account_rate_limits ORDER BY key').then(result=>result.rows);
 function rateKey(secret:string,scope:string,subject:string){
  return createHmac('sha256',Buffer.from(secret,'hex')).update(JSON.stringify([scope,subject])).digest('hex');
 }
@@ -98,9 +97,28 @@ test('lookups spend their own minute counters and availability uses ordinary ins
   assert.equal((await f.post(available)).status,429);
   const lookupKey=rateKey(f.db.rateKey,'address-lookup-box',installation);
   assert.equal((await f.db.pool.query('SELECT attempts FROM account_rate_limits WHERE key=$1',[lookupKey])).rows[0].attempts,1);
+  const ownerKey=rateKey(f.db.rateKey,'address-lookup-owner',f.v.accountId);
+  await f.db.pool.query('UPDATE account_rate_limits SET attempts=60 WHERE key=$1',[ownerKey]);
+  assert.equal((await f.post(suggest())).status,429);
+  await f.db.pool.query('UPDATE account_rate_limits SET attempts=1 WHERE key=$1',[ownerKey]);
   await f.db.pool.query('UPDATE account_rate_limits SET attempts=30 WHERE key=$1',[lookupKey]);
   assert.equal((await f.post(suggest())).status,429);
   assert.equal((await calls(f.db.pool)).length,1);assert.deepEqual(f.sent,['suggest']);
+ }finally{await f.db.close();}
+});
+
+test('refused signed lookups still use the minute limits',async()=>{
+ const f=await fixture();try{
+  for(let i=0;i<15;i++){
+   assert.equal((await f.post(validate(randomUUID()))).status,409);
+   assert.equal((await f.post({...suggest(),language:'fr'})).status,400);
+  }
+  assert.equal((await f.post(validate(randomUUID()))).status,429);
+  const network=rateKey(f.db.rateKey,'address-lookup-network',ip);
+  await f.db.pool.query('UPDATE account_rate_limits SET attempts=60 WHERE key=$1',[network]);
+  const signed=f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease);
+  assert.equal((await f.request({...signed,signature:'a'.repeat(86)})).status,429);
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);
  }finally{await f.db.close();}
 });
 
@@ -136,6 +154,8 @@ test('the current owner controls access after a transfer and pairing history cle
 
 test('disabled lookup, browser origin and invalid installation proofs send nothing',async()=>{
  const f=await fixture();try{
+  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider:f.provider,policy:{...policy,validationMicros:0}}}),
+   /invalid_address_lookup_configuration/);
   const body=suggest(),signed=f.v.proof('address-lookup',body,randomUUID(),f.v.lease);
   assert.equal((await f.request(signed,createAccountApp({...f.options,addressLookup:undefined}))).status,503);
   assert.equal((await f.request(signed,f.app,{origin})).status,403);
@@ -190,6 +210,22 @@ async function blocked(pool:Pool,schema:string){
  assert.fail('the lookup never reached its controlled database lock');
 }
 
+test('waiting for one owner does not hold up another owner’s search',async()=>{
+ const f=await fixture(),holder=await f.db.pool.connect();
+ let waiting:Promise<Response>|undefined,unrelated:Promise<Response>|undefined;
+ try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  await holder.query('BEGIN');
+  await holder.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[f.v.accountId]);
+  waiting=f.post(suggest());await blocked(f.db.pool,f.db.schema);
+  unrelated=f.request(other.proof('address-lookup',suggest(),randomUUID(),other.lease));
+  const result=await Promise.race([unrelated,delay(1500)]);
+  assert.equal(result?.status,200,'the unrelated owner must finish while the first owner is locked');
+ }finally{
+  await holder.query('ROLLBACK');holder.release();await Promise.allSettled([waiting,unrelated]);await f.db.close();
+ }
+});
+
 test('losing verified-account authority during a lock wait rolls back the debit',async()=>{
  const f=await fixture(),holder=await f.db.pool.connect();let pending:Promise<Response>|undefined;
  try{
@@ -211,7 +247,7 @@ test('a lease expiring during counter contention cannot authorize a provider cal
   pending=f.request(f.v.proof('address-lookup',body,randomUUID(),lease));await blocked(f.db.pool,f.db.schema);
   await delay(Math.max(0,expiresAt-Date.now()+20));await holder.query('COMMIT');
   assert.equal((await pending).status,401);assert.equal(f.sent.length,1);
-  assert.equal((await f.db.pool.query('SELECT attempts FROM account_rate_limits WHERE key=$1',[key])).rows[0].attempts,1);
+  assert.equal((await f.db.pool.query('SELECT attempts FROM account_rate_limits WHERE key=$1',[key])).rows[0].attempts,2);
   assert.equal((await calls(f.db.pool)).length,1);
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });
@@ -303,52 +339,62 @@ test('at the illustrative test prices, one paid venue stops at 500 searches and 
  }finally{await running?.close();await f.db.close();}
 });
 
-function admissionMachine(f:Awaited<ReturnType<typeof fixture>>,control:(sql:string,client:PoolClient)=>Date|{now:Date;day:string}|void){
- const pool={connect:async()=>{
+function admissionMachine(f:Awaited<ReturnType<typeof fixture>>,control:(sql:string,client?:PoolClient)=>Date|{now:Date;day:string}|void){
+ function query(target:Pool|PoolClient,client?:PoolClient){
+  return (sql:string,...args:unknown[])=>{
+   const clock=control(sql,client);if(clock)return Promise.resolve({rows:[clock instanceof Date?{now:clock}:clock]});
+   return Reflect.apply(target.query,target,[sql,...args]);
+  };
+ }
+ const pool={query:query(f.db.pool),connect:async()=>{
   const client=await f.db.pool.connect();
   return new Proxy(client,{get(target,key){
-   if(key==='query')return (sql:string,...args:unknown[])=>{
-    const clock=control(sql,target);if(clock)return Promise.resolve({rows:[clock instanceof Date?{now:clock}:clock]});
-    return Reflect.apply(target.query,target,[sql,...args]);
-   };
+   if(key==='query')return query(target,client);
    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
   }});
  }} as Pool;
  return new AddressLookupMachine(pool,f.issuer,origin,f.db.rateKey,f.options.addressLookup);
 }
 
+async function assertLookupThrottles(f:Awaited<ReturnType<typeof fixture>>,attempts:number){
+ const keys=[rateKey(f.db.rateKey,'address-lookup-box',f.v.installationId),rateKey(f.db.rateKey,'address-lookup-owner',f.v.accountId)];
+ const {rows}=await f.db.pool.query('SELECT key,attempts FROM account_rate_limits ORDER BY key');
+ assert.deepEqual(rows,keys.sort().map(key=>({key,attempts})));
+}
+
 test('workflow expiry during admission rolls back suggestions and validations',async()=>{
  const f=await fixture();try{
-  for(const kind of ['suggest','validate'] as const){
+  for(const [index,kind] of (['suggest','validate'] as const).entries()){
    const workflowId=randomUUID(),now=Date.now();await seedSearch(f.db.pool,f.v,workflowId,new Date(now-895000));
-   const before=await counters(f.db.pool),saved=await calls(f.db.pool);let reads=0;
+   const saved=await calls(f.db.pool);let reads=0;
    const machine=admissionMachine(f,sql=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===2)return new Date(now+10000);});
    const body=kind==='suggest'?suggest(workflowId):validate(workflowId);
-   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),ip),{status:410});
-   assert.deepEqual(f.sent,[]);assert.deepEqual(await counters(f.db.pool),before);assert.deepEqual(await calls(f.db.pool),saved);
+   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',body,randomUUID(),f.v.lease)),{status:410});
+   assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),saved);
+   await assertLookupThrottles(f,index+1);
   }
  }finally{await f.db.close();}
 });
 
 test('crossing a Pacific date before dispatch rolls back the earlier date’s debit',async()=>{
  const f=await fixture();try{
-  const before=await counters(f.db.pool),now=new Date('2026-01-02T07:59:59.900Z'),after=new Date('2026-01-02T08:00:00.100Z');
+  const now=new Date('2026-01-02T07:59:59.900Z'),after=new Date('2026-01-02T08:00:00.100Z');
   let reads=0;
   const machine=admissionMachine(f,sql=>{
    if(sql==='SELECT clock_timestamp() AS now')return ++reads===1?now:after;
    if(sql.startsWith('SELECT now,(now AT TIME ZONE'))return {now,day:'2026-01-01'};
   });
   const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'test',publicKey:f.v.installationKey,issuedAt:+now,expiresAt:+now+3600000});
-  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),lease,undefined,+now),ip),{status:503});
-  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
+  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),lease,undefined,+now)),{status:503});
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);await assertLookupThrottles(f,1);
  }finally{await f.db.close();}
 });
 
-test('connection loss during admission commits no usage or counters and sends nothing',async()=>{
+test('connection loss during admission commits no address usage and sends nothing',async()=>{
  const f=await fixture();try{
-  const before=await counters(f.db.pool);let reads=0;
-  const machine=admissionMachine(f,(sql,client)=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===2)client.emit('error',new Error('controlled connection loss'));});
-  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease),ip),{code:'unavailable',dispatched:false});
-  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
+  let reads=0;
+  const machine=admissionMachine(f,(sql,client)=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===2)client?.emit('error',new Error('controlled connection loss'));});
+  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease)),{code:'unavailable',dispatched:false});
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);await assertLookupThrottles(f,1);
  }finally{await f.db.close();}
 });

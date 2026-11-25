@@ -14,6 +14,8 @@ export type AddressLookupOptions={provider:AddressProvider;policy:AddressLookupP
 type Body={version:1;kind:'available'}
  |{version:1;kind:'suggest';workflowId:string;query:string;language:'es'|'en'}
  |{version:1;kind:'validate';workflowId:string;selectedText:string};
+type AddressLookupBox={accountId:string;venueId:string;installationId:string};
+type LookupConnection=Pick<PoolClient,'query'>;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const spendBuckets=['cloudDay','cloudMonth','freeDay','freeMonth'] as const;
 const spendFields=['freeSuggestions','freeValidations','limitMicros'] as const;
@@ -32,8 +34,11 @@ function validPolicy(value:unknown):value is AddressLookupPolicy{
  const validBucket=(name:string,fields:readonly string[])=>{
   const bucket=value[name];return hasFields(bucket,fields)&&fields.every(field=>units(bucket[field],0));
  };
- return units(value.suggestionMicros,1)&&units(value.validationMicros,1)
-  &&spendBuckets.every(name=>validBucket(name,spendFields))&&quantityBuckets.every(name=>validBucket(name,quantityFields));
+ if(!units(value.suggestionMicros,1)||!units(value.validationMicros,1)
+  ||!spendBuckets.every(name=>validBucket(name,spendFields))||!quantityBuckets.every(name=>validBucket(name,quantityFields)))return false;
+ const {cloudDay,cloudMonth,freeDay,freeMonth}=value as AddressLookupPolicy;
+ return spendFields.every(field=>cloudDay[field]<=cloudMonth[field]&&freeMonth[field]<=cloudMonth[field]
+  &&freeDay[field]<=cloudDay[field]&&freeDay[field]<=freeMonth[field]);
 }
 export function addressLookupOptionsFromEnv(environment:NodeJS.ProcessEnv):AddressLookupOptions|undefined{
  if(environment.NODE_ENV==='production'||!environment.CLOUD_ADDRESS_LOOKUP_SETTINGS||!environment.GOOGLE_MAPS_SERVER_KEY)return;
@@ -57,7 +62,10 @@ function parseBody(raw:string):Body{
  if(suggest&&v.language!=='es'&&v.language!=='en')throw new AccountHttpError(400,'invalid_input');
  return v as Body;
 }
-async function instant(client:PoolClient):Promise<Date>{return (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;}
+function isAvailability(raw:string):boolean{
+ try{return parseBody(raw).kind==='available';}catch{return false;}
+}
+async function instant(client:LookupConnection):Promise<Date>{return (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;}
 function httpError(error:unknown):never{
  if(error instanceof AllowanceError&&error.code==='allowance_scope_not_found')throw new InstallationError('permission_denied');
  if(!(error instanceof AddressLookupAdmissionError))throw error;
@@ -78,7 +86,7 @@ export class AddressLookupMachine{
  authenticate(envelope:SignedEnvelope){
   return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate('address-lookup',envelope);
  }
- async #authorize(client:PoolClient,envelope:SignedEnvelope,installationId:string,now:Date){
+ async #authorize(client:LookupConnection,envelope:SignedEnvelope,installationId:string,now:Date):Promise<AddressLookupBox>{
   const {rows}=await client.query<RegisteredBox>(`SELECT i.id,i.venue_id,i.public_key,i.revoked_at,i.superseded_by,v.environment,
    m.account_id,c.email_verified_at IS NOT NULL AND a.disabled_at IS NULL AS verified
    FROM installations i JOIN venues v ON v.id=i.venue_id
@@ -97,23 +105,14 @@ export class AddressLookupMachine{
   if(lease.installationId!==row.id||lease.venueId!==row.venue_id||lease.publicKey!==row.public_key||lease.environment!==row.environment)throw new InstallationError('invalid_proof');
   return {accountId:row.account_id,venueId:row.venue_id,installationId};
  }
- async #admit(envelope:SignedEnvelope,body:Body,ip:string,installationId:string,operationId:string){
+ async #admit(envelope:SignedEnvelope,body:Body,box:AddressLookupBox,operationId:string){
   const client=await this.#pool.connect();
   let discard=false;
   const onError=()=>{discard=true;};client.on('error',onError);
   try{
    await client.query('BEGIN');
-   const box=await this.#authorize(client,envelope,installationId,await instant(client));
-   if(body.kind!=='available'){
-    const limit=await this.#limiter.consume([
-     {scope:'address-lookup-box',subject:installationId,limit:30,windowSeconds:60},
-     {scope:'address-lookup-network',subject:ip,limit:60,windowSeconds:60},
-     {scope:'address-lookup-owner',subject:box.accountId,limit:60,windowSeconds:60},
-    ],client);
-    if(!limit.allowed)throw new AccountHttpError(429,'rate_limited',limit.retryAfterSeconds);
-   }
    const admission=await admitAddressLookup(client,box,body.kind==='available'?body:{kind:body.kind,workflowId:body.workflowId,operationId},this.#policy);
-   const now=await instant(client),confirmed=await this.#authorize(client,envelope,installationId,now);
+   const now=await instant(client),confirmed=await this.#authorize(client,envelope,box.installationId,now);
    if(confirmed.accountId!==box.accountId||confirmed.venueId!==box.venueId)throw new InstallationError('permission_denied');
    if(admission&&now>=admission.expiresAt)throw new AccountHttpError(410,'expired');
    if(admission&&pacificDate.format(now)!==admission.day)throw new AccountHttpError(503,'temporarily_unavailable');
@@ -128,9 +127,19 @@ export class AddressLookupMachine{
    if(discard)throw new AddressLookupError('unavailable',false);
   }
  }
- async execute(envelope:SignedEnvelope,ip:string){
-  const claims=readMachineClaims(envelope),body=parseBody(claims.body);
-  const admission=await this.#admit(envelope,body,ip,claims.installationId,claims.operationId);
+ async execute(envelope:SignedEnvelope){
+  const claims=readMachineClaims(envelope);
+  const box=await this.#authorize(this.#pool,envelope,claims.installationId,await instant(this.#pool));
+  if(!isAvailability(claims.body)){
+   // A rejected lookup still used the service. Its request counters commit before admission.
+   const limit=await this.#limiter.consume([
+    {scope:'address-lookup-box',subject:box.installationId,limit:30,windowSeconds:60},
+    {scope:'address-lookup-owner',subject:box.accountId,limit:60,windowSeconds:60},
+   ]);
+   if(!limit.allowed)throw new AccountHttpError(429,'rate_limited',limit.retryAfterSeconds);
+  }
+  const body=parseBody(claims.body);
+  const admission=await this.#admit(envelope,body,box,claims.operationId);
   if(!admission)return {available:true};
   if(body.kind==='available')throw new Error('Unexpected address lookup admission');
   const result=body.kind==='suggest'
@@ -145,13 +154,13 @@ export async function addressLookupResponse(c:Context,options:{machine?:AddressL
  if(!options.machine)throw new AccountHttpError(503,'temporarily_unavailable');
  const envelope=await readAccountBody(c.req.raw,['payload','signature']);
  const signed={payload:envelope.payload!,signature:envelope.signature!};
+ let availability=false;
+ try{availability=isAvailability(readMachineClaims(signed).body);}catch{}
+ await options.consume([{scope:availability?'installation-ip':'address-lookup-network',subject:options.ip,limit:60,windowSeconds:60}]);
  const claims=await options.machine.authenticate(signed);
  try{
-  if(parseBody(claims.body).kind==='available'){
-   await options.consume([{scope:'installation-ip',subject:options.ip,limit:60,windowSeconds:60}]);
-   await options.consume([{scope:'installation-key',subject:claims.installationId,limit:30,windowSeconds:60}]);
-  }
-  return c.json(await options.machine.execute(signed,options.ip));
+  if(availability)await options.consume([{scope:'installation-key',subject:claims.installationId,limit:30,windowSeconds:60}]);
+  return c.json(await options.machine.execute(signed));
  }catch(error){
   if(!(error instanceof AddressLookupError))throw error;
   if(error.code==='rate_limited')c.header('Retry-After','1');

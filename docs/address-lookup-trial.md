@@ -127,7 +127,8 @@ server checks. A draft is not a saved or fiscally accepted address.
 
 Keep manual text editable and show Google Maps attribution. Choosing a suggestion
 starts validation. Keep every field visible and editable so **Save** confirms the
-address the person sees. Cloud stores counts and discards queries and drafts.
+address the person sees. Cloud records the call type, time and the account, venue,
+box, workflow and operation IDs for its limits. Queries and drafts are discarded.
 
 ## How the limits work
 
