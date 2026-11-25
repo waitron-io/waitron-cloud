@@ -13,11 +13,6 @@ stays separate.
 
 **Open:**
 
-- Fix the preparation-timeout fixture in `scripts/disposable-tests/local.test.mjs`.
-  [The failed CI job](https://github.com/waitron-io/waitron-cloud/actions/runs/45676083562/job/139430231740)
-  got exit 75 instead of 124. Advancing the clock past the 150 ms lease before start
-  reproduced exit 75 on unchanged main without reaching preparation. The timing in
-  the failed CI job is unknown. Lane J owns the investigation through D530.
 - For a replacement release, qualify a full busy hour below about 4,000 used requests in
   each returned quota series, and confirm automatic zero-capacity publication if it crosses
   that threshold. The App quota ran out again on 12 November; the later lower counts come
