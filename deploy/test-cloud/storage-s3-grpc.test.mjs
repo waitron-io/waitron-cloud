@@ -4,7 +4,7 @@ import net, {Server} from 'node:net';
 import {syncBuiltinESMExports} from 'node:module';
 import childProcess from 'node:child_process';
 import https from 'node:https';
-import {readFile} from 'node:fs/promises';
+import {access, readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
@@ -178,4 +178,18 @@ test('identity discovery, provider configuration and tokens use the bound HTTPS 
   await storage.bucket('identity-port-works');
   await storage.stop();
   assert.equal(identity.listening, false, 'stopping the fixture closes its original identity listener');
+});
+
+test('two callers stopping the native storage fixture wait for the same cleanup', {timeout:90000}, async () => {
+  const storage = await startBackupStorage();
+  const first = storage.stop();
+  const second = storage.stop();
+  // Let both calls settle even when the old cleanup runs twice.
+  const results = await Promise.allSettled([first, second]);
+  assert.equal(first, second, 'both callers must receive the same cleanup promise');
+  assert.deepEqual(results, [
+    {status:'fulfilled', value:undefined},
+    {status:'fulfilled', value:undefined},
+  ]);
+  await assert.rejects(access(storage.root), {code:'ENOENT'});
 });

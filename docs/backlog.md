@@ -1106,6 +1106,7 @@ and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every
 
 ## Parallel storage-cache fixture failure on main
 
+Repeated calls to stop a native test store now share one cleanup.
 The original read-only-cache rejection is unexplained; the readiness
 and port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
