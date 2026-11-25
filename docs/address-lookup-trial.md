@@ -160,8 +160,9 @@ key are missing, the box loses authority, or admission fails.
 
 ## Stop or resume a test venue
 
-Use the test Cloud account database to stop or resume a test venue. Replace the
-example ID with the test venue's ID. To stop it, run:
+Connect to the account database for your test Cloud deployment, including the
+LAN action demo. Replace the example ID with the test venue's ID in each
+command. Use this command to stop lookup.
 
 ```sql
 INSERT INTO address_lookup_stopped_venues (venue_id)
@@ -169,12 +170,24 @@ SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-81
 ON CONFLICT DO NOTHING;
 ```
 
-New availability checks and lookups are refused. Calls already admitted can
-finish. To resume lookup with the venue's usage intact, run:
+`INSERT 0 1` means you stopped the venue. `INSERT 0 0` means it was already
+stopped or the ID matched no test venue. Once the venue is stopped, Cloud
+refuses new availability checks and lookups. Calls already admitted can finish.
+Use this command to resume lookup with the venue's usage intact.
 
 ```sql
 DELETE FROM address_lookup_stopped_venues
 WHERE venue_id IN (SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111');
+```
+
+`DELETE 1` means you resumed lookup. `DELETE 0` means there was no stop for
+that test venue, or the ID matched no test venue. After either command, check
+the state. `t` means stopped, `f` means resumed, and no row means the ID matched
+no test venue.
+
+```sql
+SELECT EXISTS (SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id = venues.id) AS lookup_stopped
+FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111';
 ```
 
 To stop lookup for every test box, remove
