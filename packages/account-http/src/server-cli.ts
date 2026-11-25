@@ -4,7 +4,7 @@ import {billingMethodsOptionsFromEnv} from './billing-methods.ts';
 import {sweepTranslationJobs} from '@waitron-cloud/translation';
 import {captureRuntime} from '@waitron-cloud/backups/capture-config';
 import { Pool } from 'pg';
-import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv } from '@waitron-cloud/registration';
+import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv, pruneAddressLookupCalls } from '@waitron-cloud/registration';
 import { billingAccountOptionsFromEnv, accountHttpConfig, passwordScreeningFromEnv, factorConfigFromEnv } from './config.ts';
 import { AccountRateLimiter } from './rate-limit.ts';
 import { loadPortalAssets } from './portal.ts';
@@ -80,7 +80,12 @@ try {
     cleanup = setInterval(async () => {
       if (pruning || stopRequested) return;
       pruning = true;
-      try {await limiter.prune();} catch {console.error('Account server rate cleanup failed');}
+      try {
+        await Promise.all([
+          limiter.prune().catch(()=>console.error('Account server rate cleanup failed')),
+          pruneAddressLookupCalls(pool!).catch(()=>console.error('Address lookup cleanup failed')),
+        ]);
+      }
       finally {pruning = false;}
     }, 60000); cleanup.unref();
     let sweeping = false;

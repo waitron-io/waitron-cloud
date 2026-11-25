@@ -17,7 +17,7 @@ export class AccountRateLimiter {
       if (!rule || typeof rule.scope !== 'string' || !rule.scope || rule.scope.length > 64
         || typeof rule.subject !== 'string' || !rule.subject || rule.subject.length > 1024
         || !Number.isInteger(rule.limit) || rule.limit < 1 || rule.limit > 1000000
-        || !Number.isInteger(rule.windowSeconds) || rule.windowSeconds < 1 || rule.windowSeconds > 86400) throw new Error('Invalid rate rule');
+        || !Number.isInteger(rule.windowSeconds) || rule.windowSeconds < 1 || rule.windowSeconds > 32 * 86400) throw new Error('Invalid rate rule');
       return {...rule, key: createHmac('sha256', this.#key).update(JSON.stringify([rule.scope, rule.subject])).digest('hex')};
     }).sort((a, b) => a.key.localeCompare(b.key));
     if (new Set(entries.map(entry => entry.key)).size !== entries.length) throw new Error('Invalid rate rule');

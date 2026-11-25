@@ -156,3 +156,33 @@ and 60 per owner. Cloud charges the owner’s counter after the box’s check pa
 Provider errors include `dispatched`. `true` means Cloud attempted the request.
 Google billing is reported separately. Cloud sends nothing when settings or the
 key are missing, the box loses authority, or admission fails.
+
+## Stop or resume a test venue
+
+In the LAN action demo, sign in as the configured operator and open
+`/operator/actions`. Under **Address lookup**, enter the test venue ID, then
+choose **Stop lookup** or **Resume lookup**. A fresh verification is required.
+Once you stop the venue, new availability checks and lookups are refused. Calls
+already admitted can finish. Resuming preserves the venue's usage.
+
+The Amazon test Cloud has no operator screen for this. To stop a venue there,
+run this in the account database, replacing the example ID with the test venue's ID.
+
+```sql
+INSERT INTO address_lookup_stopped_venues (venue_id) SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111' ON CONFLICT DO NOTHING;
+```
+
+Delete that venue's row to resume. To stop lookup for every test box, unset
+`CLOUD_ADDRESS_LOOKUP_SETTINGS` and restart the account worker.
+
+The first refusal for a cap and period writes the cap and period to the account
+log. When a verified operator is configured, it also queues one warning for the
+same cap and scope. Shared caps cover either all lookups or all free accounts.
+An own-cap warning includes the affected venue ID. A venue that stops exactly
+at its limit sends no warning. The LAN action demo captures the email in its
+private inbox. A deployment needs an operator and a qualified relay to send it.
+
+The account worker checks for old call records every minute. It deletes up to
+1,000 per pass once they belong to a previous Pacific calendar month and are
+more than 30 minutes old. That short overlap lets near-midnight lookups finish
+without reopening an expired search.

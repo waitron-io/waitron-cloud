@@ -5,6 +5,7 @@ import {CloudActionError,readCloudActionRequests,proposeCloudAction,decideCloudA
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
+const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const action=(id:string,policy:'ask-first'|'act-and-report'='ask-first')=>Object.freeze({id,policy,available:false as const});
 // The two exceptions allow initiation only; neither supplies hosted writer authority.
 export const cloudActionCatalogue=Object.freeze([
@@ -16,7 +17,7 @@ export const cloudActionCatalogue=Object.freeze([
 export class CloudActions{
  readonly #pool:Pool;readonly #operator:string|undefined;readonly #outbox:EmailOutbox|undefined;
  constructor(pool:Pool,operatorAccountId?:string,outbox?:EmailOutbox){
-  if(operatorAccountId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(operatorAccountId))throw Error('cloud_operator_account_invalid');
+  if(operatorAccountId&&!uuid.test(operatorAccountId))throw Error('cloud_operator_account_invalid');
   this.#pool=pool;this.#operator=operatorAccountId||undefined;this.#outbox=outbox;
  }
  async #write<T>(token:string,csrfToken:string,write:(client:PoolClient,actor:string)=>Promise<T>){
@@ -35,6 +36,18 @@ export class CloudActions{
  }
  async decide(token:string,csrfToken:string,input:CloudActionDecision){
   return this.#write(token,csrfToken,(client,actor)=>decideCloudAction(client,input,actor));
+ }
+ async setAddressLookupStop(token:string,csrfToken:string,input:Record<string,unknown>){
+  const {venueId,stopped}=input;
+  if(Object.keys(input).length!==2||typeof venueId!=='string'||!uuid.test(venueId)||typeof stopped!=='boolean')
+   throw new CloudActionError('invalid_input');
+  return this.#write(token,csrfToken,async client=>{
+   const venue=await client.query("SELECT id FROM venues WHERE id=$1 AND environment='test' FOR SHARE",[venueId]);
+   if(!venue.rowCount)throw new CloudActionError('not_found');
+   if(stopped)await client.query('INSERT INTO address_lookup_stopped_venues(venue_id) VALUES($1) ON CONFLICT DO NOTHING',[venueId]);
+   else await client.query('DELETE FROM address_lookup_stopped_venues WHERE venue_id=$1',[venueId]);
+   return {venueId,stopped};
+  });
  }
  async read(token:string){
   return transaction(this.#pool,async client=>{

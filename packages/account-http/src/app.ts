@@ -19,7 +19,7 @@ import {validateBillingAccountOptions,type BillingAccountOptions} from './config
 import {BoxErrorReports} from '@waitron-cloud/registration';
 import {boxErrorResponse} from './box-error-reports.ts';
 import {TunnelProvisionMachine,tunnelProvisionResponse,type TunnelProvisionOptions} from './tunnel-provision.ts';
-import {AddressLookupMachine,addressLookupResponse,type AddressLookupOptions} from './address-lookup.ts';
+import {AddressLookupMachine,addressLookupResponse,warnAboutAddressCap,type AddressLookupOptions} from './address-lookup.ts';
 import {createBillingDisplayMachine,billingDisplayResponse,type BillingDisplayOptions} from './billing-display.ts';
 import {validateAllowanceOptions,type AllowanceOptions,type PlanMode} from '@waitron-cloud/registration';
 import {TranslationMachine} from '@waitron-cloud/translation';
@@ -79,7 +79,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
   if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
   if(error instanceof OwnerTransferError)return new AccountHttpError(error.code==='transfer_unavailable'?404:error.code==='invalid_input'?400:409,error.code);
-  if(error instanceof CloudActionError)return new AccountHttpError(error.code==='conflict'?409:400,error.code);
+  if(error instanceof CloudActionError)return new AccountHttpError(error.code==='not_found'?404:error.code==='conflict'?409:400,error.code);
   if(error instanceof AccountActionProofError)return new AccountHttpError(403,'proof_required');
   if(error instanceof AccountSecurityError)return new AccountHttpError(400,'link_unavailable');
   if (error instanceof IdentityError) {
@@ -142,7 +142,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const verifyBrowser = config.turnstile && createTurnstileGuard({limiter, hostname: origin.hostname,
     secret: config.turnstile.secretKey, fetcher: options.turnstileFetch});
-  const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
+  const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust,
+   (cap,venueId)=>warnAboutAddressCap(pool,limiter,outbox,options.operatorAccountId,cap,venueId)):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);

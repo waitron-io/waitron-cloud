@@ -5,7 +5,9 @@ import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
-import {BillingStore,createLeaseIssuer,type SignedEnvelope} from '@waitron-cloud/registration';
+import {BillingStore,createLeaseIssuer,transaction,type SignedEnvelope} from '@waitron-cloud/registration';
+import {createSession} from '@waitron-cloud/identity';
+import {openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
 import {AddressLookupMachine} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
@@ -398,5 +400,54 @@ test('connection loss during admission commits no address usage and sends nothin
   const machine=admissionMachine(f,(sql,client)=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===2)client?.emit('error',new Error('controlled connection loss'));});
   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease)),{code:'unavailable',dispatched:false});
   assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);await assertLookupThrottles(f,1);
+ }finally{await f.db.close();}
+});
+
+test('the operator can stop one venue and resume it with its address usage intact',async()=>{
+ const f=await fixture();try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  const operator=await transaction(f.db.pool,client=>createSession(client,other.accountId));
+  await openProofWindow(f.db.pool,operator.token);
+  const app=createAccountApp({...f.options,operatorAccountId:other.accountId});
+  const save=(stopped:boolean)=>app.request(origin+'/api/account/operator/actions/address-lookup',{method:'POST',
+   headers:{cookie:`__Host-cloud_session=${operator.token}`,origin,'content-type':'application/json','x-csrf-token':operator.csrfToken},
+   body:JSON.stringify({venueId:f.v.venueId,stopped})},{incoming:{socket:{remoteAddress:ip}}} as HttpBindings);
+  const first=suggest();assert.equal((await f.post(first)).status,200);
+  assert.equal((await save(true)).status,200);
+  assert.equal((await f.post(available)).status,403);
+  assert.equal((await f.post(suggest())).status,403);
+  assert.equal((await f.request(other.proof('address-lookup',suggest(),randomUUID(),other.lease))).status,200);
+  assert.deepEqual(f.sent,['suggest','suggest']);
+  assert.equal((await save(false)).status,200);
+  assert.equal((await f.post(validate(first.workflowId))).status,200);
+  assert.deepEqual((await calls(f.db.pool)).map(row=>[row.venue_id,row.kind]),[
+   [f.v.venueId,'suggest'],[other.venueId,'suggest'],[f.v.venueId,'validate'],
+  ]);
+ }finally{await f.db.close();}
+});
+
+test('a failed cap warning retries and concurrent refusals queue only one warning without spending a lookup',async()=>{
+ const f=await fixture();try{
+  const operator=await connectedVenue(f.db,f.issuer,origin);
+  const app=createAccountApp({...f.options,operatorAccountId:operator.accountId,addressLookup:{provider:f.provider,
+   policy:{...policy,freeAccountMonth:{suggestions:1,validations:1}}}});
+  const request=(body:unknown)=>f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
+  const queued=()=>f.db.pool.query("SELECT * FROM email_outbox WHERE kind='operator_notice'").then(result=>result.rows);
+  assert.equal((await request(suggest())).status,200);
+  assert.deepEqual(await queued(),[]);
+  await f.db.pool.query(`ALTER TABLE email_outbox ADD CONSTRAINT test_refuse_operator_notice CHECK (kind<>'operator_notice')`);
+  assert.equal((await request(available)).status,429);
+  assert.deepEqual(await queued(),[]);
+  await f.db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT test_refuse_operator_notice');
+  const replies=await Promise.all([request(suggest()),request(available),request(suggest())]);
+  assert.deepEqual(replies.map(reply=>reply.status),[429,429,429]);
+  assert.deepEqual(replies.map(reply=>reply.headers.get('retry-after')),['60','60','60']);
+  const notices=await queued();assert.equal(notices.length,1);
+  const message=f.db.outbox.open(notices[0]);
+  const email=(await f.db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[operator.accountId])).rows[0].email;
+  assert.deepEqual(message,{email,locale:'en',event:'address_cap',accountId:operator.accountId,
+   bucket:'free_account_month',period:(await f.db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'America/Los_Angeles','YYYY-MM') AS month")).rows[0].month,venueId:f.v.venueId});
+  assert.equal((await calls(f.db.pool)).length,1);
+  assert.deepEqual(f.sent,['suggest']);
  }finally{await f.db.close();}
 });

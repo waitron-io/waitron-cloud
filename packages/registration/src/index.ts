@@ -337,7 +337,7 @@ export {AllowanceConfigStore,reserveAllowance,spendAllowance,recordAllowanceAtte
 export type {AllowanceReservation} from './billing-allowances.ts';
 export {AllowanceError,validateAllowanceOptions,allowanceOptionsFromEnv} from './billing-allowance-rules.ts';
 export type {AllowanceOptions} from './billing-allowance-rules.ts';
-export {admitAddressLookup,AddressLookupAdmissionError,type AddressLookupPolicy} from './address-lookup-admission.ts';
+export {admitAddressLookup,pruneAddressLookupCalls,AddressLookupAdmissionError,type AddressLookupPolicy,type AddressLookupCap} from './address-lookup-admission.ts';
 
 export {BoxErrorReports,BoxErrorReportError} from './box-error-reports.ts';
 export {authorizeFlow,FlowAuthorityError} from './flow-authority.ts';

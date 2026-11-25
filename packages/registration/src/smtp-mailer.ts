@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { connect, type TLSSocket } from 'node:tls';
 import nodemailer from 'nodemailer';
 import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
-import { normaliseEmail, validSignupVolumeNotice, type AccountEmail, type AccountNotification, type AccountSignInCheck, type OwnerTransferMail } from './account-input.ts';
+import { normaliseEmail, validOperatorWarning, type AccountEmail, type AccountNotification, type AccountSignInCheck, type OwnerTransferMail } from './account-input.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
 import {sesSmtpHeaders,sesProviderReceipt} from './ses-smtp-metadata.ts';
 import {isValidatedSesFeedbackConfig,type SesFeedbackConfig,type MailPurpose} from './ses-feedback-config.ts';
@@ -93,7 +93,7 @@ export function createSmtpAccountMailer(config:SmtpAccountMailConfig,trust:{ca?:
  const origin=new URL(config.portalOrigin),domain=config.from.split('@')[1]!;
  const send=async(kind:AccountMailKind,message:AccountEmail|AccountNotification|AccountSignInCheck|ServiceAlert|OwnerTransferMail,context?:EmailDeliveryContext)=>{
   if(!message||typeof message.email!=='string'||normaliseEmail(message.email)!==message.email
-   ||(kind==='operator_notice'&&!validSignupVolumeNotice(message))
+   ||(kind==='operator_notice'&&!validOperatorWarning(message))
    ||(kind!=='operator_notice'&&kind!=='owner_transfer'&&kind!=='password_changed'&&kind!=='email_changed'&&kind!=='service_alert'&&(!('token' in message)||!/^[A-Za-z0-9_-]{43}$/.test(message.token)||!Number.isFinite(Date.parse(message.expiresAt)))))throw new EmailDeliveryError('delivery_rejected');
   const deliveryId=context?.deliveryId??randomUUID();
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(deliveryId))throw new EmailDeliveryError('delivery_rejected');

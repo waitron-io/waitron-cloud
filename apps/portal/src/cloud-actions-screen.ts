@@ -12,6 +12,19 @@ export function cloudActionsScreen(app:PortalApp){
   ${actions.error?html`<p role="alert">${c[actions.error]}</p>`:nothing}
   ${actions.pending?html`<p role="status">${c.checking}</p>`:nothing}
   ${actions.view?html`
+   <section id="address-lookup-control" class="business-choice" aria-labelledby="address-lookup-heading">
+    <h2 id="address-lookup-heading">${c.cloudLookupTitle}</h2>
+    <wt-input name="venueId" .label=${c.cloudLookupVenue} .value=${actions.lookupVenue} .disabled=${disabled} autocomplete="off"
+     @wt-change=${(event:CustomEvent<{value:string}>)=>actions.setLookupVenue(event.detail.value)}
+     @keydown=${(event:KeyboardEvent)=>{if(event.key==='Enter'){event.stopPropagation();if(!event.isComposing)event.preventDefault();}}}></wt-input>
+    <wt-form-actions>
+     <wt-button .disabled=${disabled} @click=${()=>{void app.setAddressLookupStop(true);}}>${c.cloudLookupStop}</wt-button>
+     <wt-button .disabled=${disabled} @click=${()=>{void app.setAddressLookupStop(false);}}>${c.cloudLookupResume}</wt-button>
+    </wt-form-actions>
+    ${actions.lookupError?html`<p role="alert">${c[actions.lookupError]}</p>`:nothing}
+    ${actions.lookupSaved?html`<p role="status"><span>${actions.lookupSaved.stopped?c.cloudLookupStopped:c.cloudLookupResumed}</span><br>
+      <code class="venue-id">${actions.lookupSaved.venueId}</code></p>`:nothing}
+   </section>
    <section aria-labelledby="cloud-requests-heading"><h2 id="cloud-requests-heading">${c.cloudActionsRequests}</h2><p>${c.cloudActionsRecent}</p>
     ${actions.view.requests.length===0?html`<p>${c.cloudActionsEmpty}</p>`:actions.view.requests.map(request=>html`<article class="installation" aria-labelledby=${'request-'+request.id}>
      <h3 id=${'request-'+request.id}>${c[`cloudAction_${request.actionId}` as keyof Copy]}</h3>

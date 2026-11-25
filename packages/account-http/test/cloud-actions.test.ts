@@ -68,3 +68,42 @@ test('operator proposal and decision routes preserve exact identity and reject c
  assert.equal((await post('/execute',decision)).status,404);
  assert.equal(approved.headers.get('cache-control'),'no-store');
 });
+
+test('only a freshly verified operator can save a test venue address stop',async()=>{
+ const {openProofWindow}=await import('../../registration/test/fixtures/action-proof.ts');
+ const operator=randomUUID(),other=randomUUID(),venue=randomUUID(),production=randomUUID();
+ await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[operator,other]);
+ await db.pool.query("INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES ($1,'lookup-operator@example.test','synthetic-hash',clock_timestamp()),($2,'lookup-other@example.test','synthetic-hash',clock_timestamp())",[operator,other]);
+ const organisation=randomUUID(),business=randomUUID();
+ await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisation]);
+ await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);
+ await db.pool.query("INSERT INTO venues(id,environment,organisation_id,legal_business_id) VALUES($1,'test',$3,$4),($2,'production',$3,$4)",[venue,production,organisation,business]);
+ const actor=await transaction(db.pool,c=>createSession(c,operator));
+ const customer=await transaction(db.pool,c=>createSession(c,other));
+ await openProofWindow(db.pool,customer.token);
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,operatorAccountId:operator,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+ const post=(body:unknown,session=actor)=>app.request(origin+'/api/account/operator/actions/address-lookup',{method:'POST',
+  headers:{cookie:`__Host-cloud_session=${session.token}`,origin,'content-type':'application/json','x-csrf-token':session.csrfToken},
+  body:JSON.stringify(body)}, {incoming:{socket:{remoteAddress:'192.0.2.13'}}} as any);
+ const stop={venueId:venue,stopped:true};
+ assert.equal((await post(stop)).status,403);
+ await openProofWindow(db.pool,actor.token);
+ assert.equal((await post(stop,customer)).status,403);
+ for(const body of [{...stop,extra:true},{...stop,stopped:'true'},{...stop,venueId:'invalid'}]){
+  const invalid=await post(body);
+  assert.equal(invalid.status,400);
+  assert.deepEqual(await invalid.json(),{error:'invalid_input'});
+ }
+ for(const venueId of [production,randomUUID()]){
+  const missing=await post({...stop,venueId});
+  assert.equal(missing.status,404);
+  assert.deepEqual(await missing.json(),{error:'not_found'});
+ }
+ assert.equal((await db.pool.query('SELECT venue_id FROM address_lookup_stopped_venues')).rowCount,0);
+ for(const change of [stop,stop,{...stop,stopped:false},{...stop,stopped:false}]){
+  const saved=await post(change);
+  assert.equal(saved.status,200);
+  assert.deepEqual(await saved.json(),change);
+  assert.equal((await db.pool.query('SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id=$1',[venue])).rowCount,Number(change.stopped));
+ }
+});

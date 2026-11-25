@@ -193,3 +193,48 @@ test('without a billing business only address lookup gets the free admission pat
     {...box,service,operationId:randomUUID(),binding:'synthetic',units:1n})),{code:'allowance_scope_not_found'});
  }finally{await f.close();}
 });
+
+test('admission labels a shared monthly refusal before the daily cap and uses the Pacific period',async()=>{
+ const f=await venueServiceFixture();try{
+  const box=await ownerScope(f,f.scope.organisationId,f.venues[0]!);
+  const zero={freeSuggestions:0,freeValidations:0,limitMicros:0};
+  const limits={...policy,cloudMonth:zero,cloudDay:zero};
+  for(const [instant,day,period] of [
+   ['2026-02-01T07:59:59Z','2026-01-31','2026-01'],
+   ['2026-02-01T08:00:00Z','2026-02-01','2026-02'],
+  ]){
+   const refuse=registration.transaction(f.pool,client=>registration.admitAddressLookup(at(client,new Date(instant!),day!),box,request(),limits));
+   await assert.rejects(refuse,{code:'limit',cap:{bucket:'cloud_month',scope:'*',period}});
+  }
+  const instant=new Date('2026-02-01T07:59:59Z');
+  await assert.rejects(registration.transaction(f.pool,client=>registration.admitAddressLookup(at(client,instant,'2026-01-31'),box,request(),
+   {...policy,cloudDay:zero})),{code:'limit',cap:{bucket:'cloud_day',scope:'*',period:'2026-01-31'}});
+  await assert.rejects(registration.transaction(f.pool,client=>registration.admitAddressLookup(at(client,instant,'2026-01-31'),box,request(),
+   {...policy,freeAccountMonth:{suggestions:0,validations:0}})),
+   {code:'limit',cap:{bucket:'free_account_month',scope:box.accountId,period:'2026-01'}});
+  await set(f,'connected',f.venues[0]!);
+  await assert.rejects(registration.transaction(f.pool,client=>registration.admitAddressLookup(at(client,instant,'2026-01-31'),box,request(),
+   {...policy,paidVenueMonth:{suggestions:0,validations:0}})),
+   {code:'limit',cap:{bucket:'paid_venue_month',scope:box.venueId,period:'2026-01'}});
+ }finally{await f.close();}
+});
+
+test('lookup cleanup is bounded and keeps the current Pacific month and recently expired workflows',async()=>{
+ const f=await venueServiceFixture();try{
+  const box=await ownerScope(f,f.scope.organisationId,f.venues[0]!);
+  const rows=await f.pool.query(`INSERT INTO address_lookup_calls(installation_id,operation_id,workflow_id,venue_id,account_id,class,kind,admitted_at)
+   SELECT $1,gen_random_uuid(),gen_random_uuid(),$2,$3,'free','suggest',stamp FROM
+   unnest(ARRAY['2026-01-01T08:00:00Z','2026-02-01T07:49:59Z','2026-02-01T07:50:00Z','2026-02-01T07:59:59Z','2026-02-01T08:00:00Z']::timestamptz[]) stamp
+   RETURNING operation_id`,[box.installationId,box.venueId,box.accountId]);
+  await f.pool.query(`INSERT INTO address_lookup_calls
+   SELECT installation_id,gen_random_uuid(),gen_random_uuid(),venue_id,account_id,class,kind,admitted_at
+   FROM address_lookup_calls CROSS JOIN generate_series(1,1000) WHERE operation_id=$1`,[rows.rows[0].operation_id]);
+  const prune=(registration as Record<string,unknown>).pruneAddressLookupCalls as (pool:typeof f.pool,now:Date)=>Promise<number>;
+  assert.equal(typeof prune,'function');
+  assert.equal(await prune(f.pool,new Date('2026-02-01T08:20:00Z')),1000);
+  assert.equal(await prune(f.pool,new Date('2026-02-01T08:20:00Z')),2);
+  assert.equal(await prune(f.pool,new Date('2026-02-01T08:30:00Z')),2);
+  const saved=await f.pool.query('SELECT operation_id FROM address_lookup_calls');
+  assert.deepEqual(saved.rows,[rows.rows[4]]);
+ }finally{await f.close();}
+});
