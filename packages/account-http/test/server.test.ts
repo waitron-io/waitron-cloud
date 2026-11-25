@@ -422,7 +422,7 @@ test('slow Turnstile requests leave server slots for sign-in', async () => {
     config: {...config(), turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}},
     turnstileFetch: async () => {
       verifying++;
-      await promise;
+      if (verifying <= 4) await promise;
       return Response.json({success: false});
     }});
   const address = running.server.address(); assert.ok(address && typeof address !== 'string');
@@ -438,6 +438,26 @@ test('slow Turnstile requests leave server slots for sign-in', async () => {
   } finally {
     resolve();
     await Promise.all(pending.map(item => item.result));
+    await running.close();
+  }
+});
+
+test('unfinished Turnstile uploads do not occupy verification slots', async () => {
+  let verified = 0;
+  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: 0,
+    config: {...config(), turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}},
+    turnstileFetch: async () => {verified++; return Response.json({success: false});}});
+  const address = running.server.address(); assert.ok(address && typeof address !== 'string');
+  const port = address.port;
+  const incomplete = Array.from({length: 4}, () => send(port, '/signup/request', '{', {}, false));
+  try {
+    await until(async () => Number((await db.pool.query('SELECT sum(attempts) AS n FROM account_rate_limits')).rows[0].n) >= 4);
+    const result = await send(port, '/signup/request', JSON.stringify({email: 'guest@example.test', turnstileToken: 'proof'})).result;
+    assert.equal(result.status, 400);
+    assert.deepEqual(JSON.parse(result.body), {error: 'browser_check_failed'});
+    assert.equal(verified, 1);
+  } finally {
+    incomplete.forEach(request => request.abort());
     await running.close();
   }
 });

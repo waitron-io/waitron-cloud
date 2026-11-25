@@ -153,9 +153,18 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (this.sessionPage) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (this.sessionPage) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.#pageHidden = true; this.turnstileToken = ''; this.sentReports.account(undefined); this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    if (this.turnstileSiteKey) window.addEventListener('pagehide', () => {
+      this.#pageHidden = true;
+      this.turnstileToken = '';
+      this.draw();
+    });
+    window.addEventListener('pagehide', () => { this.sentReports.account(undefined); this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
-      if (event.persisted) { this.#pageHidden = false; this.draw(); this.session = this.#session(); void this.session.check(); }
+      if (event.persisted) {
+        this.session = this.#session();
+        if (this.turnstileSiteKey) {this.#pageHidden = false; this.draw();}
+        void this.session.check();
+      }
     });
     this.installations.showRecovery(this.path==='/recover');
     this.draw(); void this.session.check();
@@ -290,6 +299,11 @@ export class PortalApp {
     this.draw();
   }
   retryTurnstile() {
+    if (!this.turnstileSiteKey) {
+      this.#carryEmailRequest(this.path);
+      location.reload();
+      return;
+    }
     this.readFields();
     this.turnstileUnavailable = false;
     this.error = undefined;
@@ -343,6 +357,10 @@ export class PortalApp {
     if (this.accountPage) return c[this.accountPage];
     return c.login;
   }
+  #carryEmailRequest(path: string) {
+    // Only the operation IDs and language cross a document boundary. Codes and link secrets stay in memory.
+    saveEmailRequestReturn({path, pairingId: this.pairing.requestId, recoveryId: this.recovery.requestId, locale: this.locale});
+  }
   navigate(path: string, push = true) {
     if (!push && this.turnstileSiteKey && path === '/signup' && new URLSearchParams(location.hash.slice(1)).has('token')) {
       // An email link can arrive as a fragment change in the tab where the widget already ran.
@@ -351,8 +369,7 @@ export class PortalApp {
     }
     if (this.#turnstileEnabled && push && (path !== this.path && (emailRequestDocument(path) || !!this.turnstileSiteKey)
       || emailRequestDocument(path) && !this.turnstileSiteKey)) {
-      // Only tab-local operation IDs cross a document boundary. Codes and link secrets stay in memory.
-      saveEmailRequestReturn({path, pairingId: this.pairing.requestId, recoveryId: this.recovery.requestId, locale: this.locale});
+      this.#carryEmailRequest(path);
       location.assign(path);
       return;
     }

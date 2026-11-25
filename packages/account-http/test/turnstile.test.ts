@@ -36,3 +36,11 @@ test('the Siteverify deadline covers an unfinished response body', async () => {
   assert.equal(await verifyWith(async () => response), false);
   assert.equal(cancelled, true);
 });
+
+test('Siteverify reports a rejected configured secret without logging credentials or proof', async t => {
+  const error = t.mock.method(console, 'error', () => {});
+  const response = Response.json({success: false, 'error-codes': ['invalid-input-secret']});
+  assert.equal(await verifyWith(async () => response), false);
+  assert.equal(error.mock.callCount(), 1);
+  assert.deepEqual(error.mock.calls[0]!.arguments, ['Turnstile rejected the configured secret']);
+});

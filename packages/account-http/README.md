@@ -432,11 +432,13 @@ With both keys set, send the browser's proof as `turnstileToken` in the JSON bod
 with the email and optional locale. The account service sends only the secret
 and proof to Cloudflare Siteverify. It checks the reply's hostname and form
 action, and claims the proof once across account processes before spending a mail
-allowance. A connection can start up to 20 checks in 15 minutes. Four protected
-requests per account process can be in flight at once so a slow provider leaves
-room for sign-in. A missing, expired or refused proof returns
-`{"error":"browser_check_failed"}`. A busy account process can return the same
-error with HTTP 503. These failures spend no mail allowance or resend wait.
+allowance. A connection can start up to 20 checks in 15 minutes. Requests above
+that limit return HTTP 429 and a retry wait. Each account process can run four
+verifications at once, which leaves room for sign-in while Cloudflare responds.
+A missing, expired or refused proof returns `{"error":"browser_check_failed"}`.
+A busy account process can return the same error with HTTP 503. These failures
+spend no mail allowance or resend wait. The 300 ms response floor still applies
+after successful verification.
 
 If Cloudflare is down or blocked, sign-up and reset email requests stop until the
 browser check works again. Existing links and sign-in still work. See the

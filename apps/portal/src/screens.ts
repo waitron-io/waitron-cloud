@@ -46,14 +46,16 @@ export function screen(app: PortalApp) {
   const password = () => field('password', app.completion ? 'newPassword' : 'password', app.reveal ? 'text' : 'password', app.completion ? 'new-password' : 'current-password');
   const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending || (app.requiresTurnstile && !app.turnstileToken) || (app.path === '/login' && app.passkeys.pending)}
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
+  const retryBrowserCheck = () => html`<button type="button" class="text-button" @click=${() => app.retryTurnstile()}>${c.retry}</button>`;
   const browserCheck = () => app.showTurnstile ? html`
     <p class="help">${c.browserCheckNotice} <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener noreferrer">${c.browserCheckPrivacy}</a></p>
     ${app.turnstileUnavailable || !app.turnstileSiteKey
-      ? html`<button type="button" class="text-button" @click=${() => app.retryTurnstile()}>${c.retry}</button>`
+      ? retryBrowserCheck()
       : html`${keyed(app.locale, html`<turnstile-widget .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
         .action=${app.path === '/signup' ? 'signup' : 'password_reset'}
         @check-result=${(event: CustomEvent<string | null>) => app.checkResult(event.detail)}></turnstile-widget>`)}
-        ${app.turnstileToken ? nothing : html`<p class="help" role="status">${c.browserChecking}</p>`}`}` : nothing;
+        ${app.turnstileToken ? nothing : html`<p class="help" role="status">${c.browserChecking}</p>`}`}`
+    : app.error === 'browserCheckFailed' && !app.turnstileSiteKey ? retryBrowserCheck() : nothing;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   const accountPage = app.accountPage;
   const state = app.session.state;

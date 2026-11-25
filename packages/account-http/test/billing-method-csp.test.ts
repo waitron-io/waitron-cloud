@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {portalResponse,portalErrorResponse} from '../src/portal.ts';
+import {portalResponse,portalErrorResponse,turnstilePortalAssets} from '../src/portal.ts';
 const assets=new Map([['/index.html',{body:Buffer.from('<!doctype html><title>Synthetic portal</title>'),contentType:'text/html'}],['/app.js',{body:Buffer.from('void 0'),contentType:'text/javascript'}]]);
 const policy=(response:Response)=>response.headers.get('content-security-policy')!;
 for(const enabled of [false,true])test(`portal method policy ${enabled?'enabled':'disabled'} applies to assets and every error`,()=>{
@@ -45,4 +45,19 @@ test('the HTTP server refuses method settings without the synthetic-account choo
    config:{portalOrigin:'http://localhost',production:false,rateKey:'b'.repeat(64),trustedProxyIps:[]},portalAssets:assets,planMode:'test-venue-levels',
    billingMethods:{stripeAccount:'stripe-test:acct_synthetic',sumupAccount:'sumup-sandbox:MSYNTHETIC',client:{async start(){throw new Error('not called');},async verify(){throw new Error('not called');}}}});},/billing_methods.test_mode_required/);
  }finally{await running?.close();await pool.end();}
+});
+
+test('the existing payment policy and Turnstile can share the request document', () => {
+ const requestAssets = new Map([['/index.html', {body: Buffer.from('<!doctype html><head></head>'), contentType: 'text/html'}]]);
+ const browserCheck = turnstilePortalAssets(requestAssets, 'test-site');
+ const email = policy(portalResponse(new Request('http://localhost/signup'), requestAssets, true, false, browserCheck));
+ const billing = policy(portalResponse(new Request('http://localhost/account/billing'), requestAssets, true, false, browserCheck));
+ const origin = 'https://challenges.cloudflare.com';
+ const directives = email.split(';').map(part => part.trim().split(/\s+/));
+ assert.ok(directives.find(([name]) => name === 'script-src')?.includes(origin));
+ const frames = directives.find(([name]) => name === 'frame-src');
+ assert.ok(frames?.includes(origin));
+ assert.ok(frames?.includes('https://gateway.sumup.com'));
+ assert.ok(billing.includes('https://gateway.sumup.com'));
+ assert.ok(!billing.includes(origin));
 });

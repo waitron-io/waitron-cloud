@@ -66,7 +66,7 @@ import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
 import { readSessionCookie, writeSessionCookies, readBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
-import {requireTurnstile, turnstileAction} from './turnstile.ts';
+import {createTurnstileGuard, turnstileAction} from './turnstile.ts';
 const paths: Record<string, readonly string[]> = {
   '/signup/request': ['email'], '/signup/complete': ['token', 'password'],
   '/login': ['email', 'password'], '/session/activity': [], '/logout': [],
@@ -140,6 +140,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const guestMenus=options.guestOrigin&&options.leaseIssuer?new GuestMenuMachine(pool,options.leaseIssuer,config.portalOrigin,options.guestOrigin,options.leaseTrust,options.planMode):undefined;
   const boxErrors=options.leaseIssuer?new BoxErrorReports(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
+  const verifyBrowser = config.turnstile && createTurnstileGuard({limiter, hostname: origin.hostname,
+    secret: config.turnstile.secretKey, fetcher: options.turnstileFetch});
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
@@ -227,14 +229,13 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const turnstile = config.turnstile;
-    const action = turnstile && turnstileAction(c.req.path);
+    const action = turnstileAction(c.req.path);
     const optional = ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : [];
     if (action) optional.push('turnstileToken');
     const body = await readAccountBody(c.req.raw, fields!, optional);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
-    const started = performance.now();
+    let started = performance.now();
     const slow = ['/login', '/signup/request', '/password-reset/request'].includes(path);
     try {
       const email = 'email' in body ? normaliseEmail(body.email) : undefined;
@@ -257,8 +258,11 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         return c.json({accountId: credentials.accountId});
       }
       if (path.endsWith('/request')) {
-        if (turnstile && action) await requireTurnstile({limiter, ip, hostname: origin.hostname, action,
-          token: body.turnstileToken, secret: turnstile.secretKey, fetcher: options.turnstileFetch});
+        if (verifyBrowser && action) {
+          await verifyBrowser(ip, action, body.turnstileToken);
+          // A slow provider reply must leave the same padding for the email lookup.
+          started = performance.now();
+        }
         if (path === '/signup/request') {
           const decision = await limiter.consume([{scope: 'signup-request-hour-ip', subject: ip, limit: config.signupLimits.requestsPerHour, windowSeconds: 3600}]);
           if (!decision.allowed) throw new AccountHttpError(429, 'signup_rate_limited', decision.retryAfterSeconds);

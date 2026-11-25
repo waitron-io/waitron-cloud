@@ -15,7 +15,6 @@ import type { RelayAdmissionConfig, EmailOutbox, LeaseIssuer, PasswordScreeningP
 import { validateConfig, type AccountHttpConfig, type FactorConfig } from './config.ts';
 import { portalErrorResponse, portalResponse, portalSecurityHeaders, securityHeaders, turnstilePortalAssets, type PortalAssets } from './portal.ts';
 import { createAccountApp } from './app.ts';
-import {turnstileAction} from './turnstile.ts';
 import { clientAddress } from './client-address.ts';
 import { submitPath, submitRequestMs, submitSlots } from './translation.ts';
 import {RequestMetrics,requestGroup} from './request-metrics.ts';
@@ -33,7 +32,6 @@ export async function startAccountServer(options: {operatorAccountId?:string;gue
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
   const turnstileAssets = options.portalAssets && config.turnstile
     ? turnstilePortalAssets(options.portalAssets, config.turnstile.siteKey) : undefined;
-  let checkingBrowsers = 0;
   let publishing=0;const publishers=new Set<string>();
   let submitting = 0; const submitters = new Set<string>();
   const listener = getRequestListener(async (request, bindings) => {
@@ -70,15 +68,11 @@ export async function startAccountServer(options: {operatorAccountId?:string;gue
         finally{publishing--;publishers.delete(ip);}
       }
     }
-    // Leave ordinary account traffic room while the protected requests await Cloudflare.
-    const checksBrowser = !!config.turnstile && request.method === 'POST' && !!turnstileAction(getPath(request));
-    if (checksBrowser && checkingBrowsers >= 4)
-      return Response.json({error: 'browser_check_failed'}, {status: 503, headers: securityHeaders});
     const readiness=url.pathname==='/api/health/ready';
     if (active >= 8||(readiness&&readinessActive>=1)) return unavailable();
-    active++;if(readiness)readinessActive++;if(checksBrowser)checkingBrowsers++;
+    active++;if(readiness)readinessActive++;
     try {return await app.fetch(request, bindings);}
-    finally {active--;if(readiness)readinessActive--;if(checksBrowser)checkingBrowsers--;}
+    finally {active--;if(readiness)readinessActive--;}
   }, {overrideGlobalObjects: false, errorHandler: () => unavailable()});
   const metrics=new RequestMetrics();
   const receiving=new WeakMap<Duplex,(status:number)=>void>();

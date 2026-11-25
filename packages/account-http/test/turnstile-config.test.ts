@@ -11,3 +11,7 @@ test('Turnstile is off with neither key and refuses to start with just one', () 
   assert.deepEqual(accountHttpConfig({...environment, CLOUD_TURNSTILE_SITE_KEY: 'test-site', CLOUD_TURNSTILE_SECRET_KEY: 'test-secret'}).turnstile,
     {siteKey: 'test-site', secretKey: 'test-secret'});
 });
+
+test('blank Turnstile values keep the check off in an example environment', () => {
+  assert.equal(accountHttpConfig({...environment, CLOUD_TURNSTILE_SITE_KEY: '', CLOUD_TURNSTILE_SECRET_KEY: ''}).turnstile, undefined);
+});

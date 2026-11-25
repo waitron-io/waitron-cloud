@@ -99,7 +99,7 @@ export function accountHttpConfig(env: NodeJS.ProcessEnv) {
   const {CLOUD_SETUP_PAIRING_PUBLIC_KEY: publicKey, CLOUD_SETUP_PAIRING_REDIRECT_URI: redirectUri} = env;
   const setupPairing = publicKey === undefined && redirectUri === undefined ? undefined : {publicKey: publicKey ?? '', redirectUri: redirectUri ?? ''};
   const {CLOUD_TURNSTILE_SITE_KEY: siteKey, CLOUD_TURNSTILE_SECRET_KEY: secretKey} = env;
-  const turnstile = siteKey === undefined && secretKey === undefined ? undefined : {siteKey: siteKey ?? '', secretKey: secretKey ?? ''};
+  const turnstile = siteKey || secretKey ? {siteKey: siteKey ?? '', secretKey: secretKey ?? ''} : undefined;
   let limits: unknown;
   try { limits = env.CLOUD_SIGNUP_LIMITS ? JSON.parse(env.CLOUD_SIGNUP_LIMITS) : undefined; }
   catch { throw new Error('Invalid sign-up limits'); }

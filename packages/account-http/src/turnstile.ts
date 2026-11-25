@@ -44,17 +44,27 @@ export async function verifyTurnstile(secret: string, hostname: string, action: 
   }
 }
 
-export async function requireTurnstile(options: {
-  limiter: AccountRateLimiter; ip: string; hostname: string; action: 'signup' | 'password_reset';
-  token?: string; secret: string; fetcher?: typeof fetch;
+export function createTurnstileGuard(options: {
+  limiter: AccountRateLimiter; hostname: string; secret: string; fetcher?: typeof fetch;
 }) {
-  const {limiter, ip, hostname, action, token, secret, fetcher} = options;
-  const refused = new AccountHttpError(400, 'browser_check_failed');
-  if (!token?.trim() || token.length > 2048) throw refused;
-  const allowance = await limiter.consume([{scope: 'turnstile-ip', subject: ip, limit: 20, windowSeconds: 900}]);
-  if (!allowance.allowed || !await verifyTurnstile(secret, hostname, action, token, fetcher)) throw refused;
-  // Cloudflare's replay state can lag between servers. Claim the token before spending mail allowances.
-  const digest = createHash('sha256').update(token).digest('hex');
-  const claim = await limiter.consume([{scope: 'turnstile-token', subject: digest, limit: 1, windowSeconds: 300}]);
-  if (!claim.allowed) throw refused;
+  const {limiter, hostname, secret, fetcher} = options;
+  let checking = 0;
+  return async (ip: string, action: 'signup' | 'password_reset', token?: string) => {
+    const refused = new AccountHttpError(400, 'browser_check_failed');
+    if (!token?.trim() || token.length > 2048) throw refused;
+    const allowance = await limiter.consume([{scope: 'turnstile-ip', subject: ip, limit: 20, windowSeconds: 900}]);
+    if (!allowance.allowed) throw new AccountHttpError(429, 'rate_limited', allowance.retryAfterSeconds);
+
+    // Only requests waiting for Cloudflare use these slots. The server also bounds unfinished request bodies.
+    if (checking >= 4) throw new AccountHttpError(503, 'browser_check_failed');
+    checking++;
+    try {
+      if (!await verifyTurnstile(secret, hostname, action, token, fetcher)) throw refused;
+    } finally {checking--;}
+
+    // Cloudflare's replay state can lag between servers. Claim the token before spending mail allowances.
+    const digest = createHash('sha256').update(token).digest('hex');
+    const claim = await limiter.consume([{scope: 'turnstile-token', subject: digest, limit: 1, windowSeconds: 300}]);
+    if (!claim.allowed) throw refused;
+  };
 }
