@@ -94,14 +94,14 @@ test('backup download preserves the account enrollment event and distinguishes C
 
 test('database download forwards server refusals and the enrollment event',async t=>{
   const f=fixture(t);
-  const responses=[{status:410,code:'unavailable'},{status:403,code:'enrollment_required'}];
+  let locked=true;
   class WorkerReply {
     onmessage:((event:{data:unknown})=>void)|undefined;
-    postMessage(){this.onmessage?.({data:{ok:false,retryAfterMs:0,...responses.shift()}});}
+    postMessage(){this.onmessage?.({data:{ok:false,retryAfterMs:0,status:403,code:'enrollment_required'}});}
     terminate(){}
   }
   for(const [object,name,value] of [[globalThis,'Worker',WorkerReply],
-    [navigator,'storage',{async getDirectory(){return {async removeEntry(){}};}}]] as const){
+    [navigator,'storage',{async getDirectory(){if(locked)throw new DOMException('File in use','NoModificationAllowedError');return {async removeEntry(){}};}}]] as const){
     const previous=Object.getOwnPropertyDescriptor(object,name);
     Object.defineProperty(object,name,{configurable:true,value});
     t.after(()=>{if(previous)Object.defineProperty(object,name,previous);else Reflect.deleteProperty(object,name);});
@@ -112,6 +112,7 @@ test('database download forwards server refusals and the enrollment event',async
   document.addEventListener(enrollmentRequiredEvent,()=>{enrollment++;});
   await f.controller.download('download-database');
   assert.equal(f.controller.error,'snapshotDownloadUnavailable');
+  locked=false;
   await f.controller.download('download-database');
   assert.equal(f.controller.error,'pairEnrollment');
   assert.equal(enrollment,1);

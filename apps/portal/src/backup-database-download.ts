@@ -1,8 +1,9 @@
 import {browserCsrfToken, type ApiResult} from './api.ts';
-import {backupDownloadDirectory, isDatabaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
+import {backupDownloadDirectory, databaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
 
 const refused = (code = 'database_open_failed'): ApiResult<never> => ({ok: false, status: 503, code, retryAfterMs: 0});
 let revokeSavedFile: (() => void) | undefined;
+const savedLockPrefix = `${backupDownloadDirectory}:`;
 
 async function removeWhenUnlocked(root: FileSystemDirectoryHandle) {
   const deadline = AbortSignal.timeout(10_000);
@@ -16,11 +17,34 @@ async function removeWhenUnlocked(root: FileSystemDirectoryHandle) {
   }
 }
 
+async function hasLiveSave(root: FileSystemDirectoryHandle) {
+  const {held} = await navigator.locks.query();
+  const names = new Set(held?.map(lock => lock.name).filter(name => name?.startsWith(savedLockPrefix)));
+  if (!names.size) return false;
+  try {
+    const staging = await root.getDirectoryHandle(backupDownloadDirectory);
+    for await (const attempt of staging.keys()) if (names.has(savedLockPrefix + attempt)) return true;
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
+  }
+  return false;
+}
+
+function holdLiveSave(attempt: string) {
+  return new Promise<() => void>((ready, reject) => {
+    void navigator.locks.request(savedLockPrefix + attempt, () => new Promise<void>(release => {
+      ready(release);
+    })).catch(reject);
+  });
+}
+
 export async function clearAbandonedDatabaseDownload() {
   revokeSavedFile?.();
   try {
     await navigator.locks?.request(backupDownloadDirectory, {ifAvailable: true}, async lock => {
-      if (lock) await removeWhenUnlocked(await navigator.storage.getDirectory());
+      if (!lock) return;
+      const root = await navigator.storage.getDirectory();
+      if (!await hasLiveSave(root)) await removeWhenUnlocked(root);
     });
   } catch { /* Storage can be unavailable before any download is requested. */ }
 }
@@ -51,6 +75,7 @@ export async function downloadDatabase(venueId: string, pointId: string, signal:
       await removeWhenUnlocked(root);
       const attempt = crypto.randomUUID();
       let saved = false;
+      let releaseLiveSave: (() => void) | undefined;
       try {
         signal.throwIfAborted();
         const result = await openInWorker({venueId, pointId, attempt, csrfToken: browserCsrfToken()}, signal);
@@ -58,6 +83,7 @@ export async function downloadDatabase(venueId: string, pointId: string, signal:
         const staging = await root.getDirectoryHandle(backupDownloadDirectory);
         const directory = await staging.getDirectoryHandle(attempt);
         const file = await (await directory.getFileHandle('venue.db')).getFile();
+        releaseLiveSave = await holdLiveSave(attempt);
         signal.throwIfAborted();
         const url = URL.createObjectURL(file);
         const link = document.createElement('a');
@@ -72,10 +98,17 @@ export async function downloadDatabase(venueId: string, pointId: string, signal:
             await removeWhenUnlocked(root);
           }).catch(() => {});
         }, 10 * 60_000);
-        revokeSavedFile = () => { clearTimeout(timer); URL.revokeObjectURL(url); revokeSavedFile = undefined; };
+        revokeSavedFile = () => {
+          clearTimeout(timer);
+          URL.revokeObjectURL(url);
+          releaseLiveSave?.();
+          revokeSavedFile = undefined;
+        };
         saved = true;
         return result;
-      } finally { if (!saved) await removeWhenUnlocked(root); }
+      } finally {
+        if (!saved) { releaseLiveSave?.(); await removeWhenUnlocked(root); }
+      }
     });
-  } catch (error) { return refused(isDatabaseStorageRefusal(error) ? 'database_storage_unavailable' : undefined); }
+  } catch (error) { return refused(databaseStorageRefusal(error)); }
 }

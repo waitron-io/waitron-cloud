@@ -22,6 +22,8 @@ export async function removeDatabaseDownload(root: FileSystemDirectoryHandle) {
  try { await root.removeEntry(backupDownloadDirectory, {recursive: true}); }
  catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }
 }
-export function isDatabaseStorageRefusal(error: unknown) {
- return error instanceof DOMException && ['QuotaExceededError','NotSupportedError','UnknownError','SecurityError','NotAllowedError','NoModificationAllowedError'].includes(error.name);
+export function databaseStorageRefusal(error: unknown) {
+ if (!(error instanceof DOMException)) return undefined;
+ if (error.name === 'NoModificationAllowedError') return 'temporarily_unavailable';
+ if (['QuotaExceededError','NotSupportedError','UnknownError','SecurityError','NotAllowedError'].includes(error.name)) return 'database_storage_unavailable';
 }

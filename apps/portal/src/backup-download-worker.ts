@@ -5,7 +5,7 @@ import forge from 'node-forge/lib/forge.js';
 import 'node-forge/lib/aes.js';
 import {accountRequest, type ApiResult} from './api.ts';
 import {readBytes} from './backup-download-bytes.ts';
-import {backupDownloadDirectory, isDatabaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
+import {backupDownloadDirectory, databaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
 
 interface SyncFile {
   read(bytes: Uint8Array, options: {at: number}): number;
@@ -166,6 +166,6 @@ async function openDatabase({venueId, pointId, csrfToken, attempt}: DatabaseDown
 self.addEventListener('message', (event: MessageEvent<DatabaseDownloadRequest>) => {
   void openDatabase(event.data).then(result => self.postMessage(result), error => {
     self.postMessage(refused(error === databaseTooLarge ? 'download_too_large'
-      : error === downloadInterrupted ? 'network_error' : isDatabaseStorageRefusal(error) ? 'database_storage_unavailable' : undefined));
+      : error === downloadInterrupted ? 'network_error' : databaseStorageRefusal(error)));
   });
 }, {once: true});

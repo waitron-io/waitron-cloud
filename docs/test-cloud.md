@@ -1161,7 +1161,8 @@ while the downloads are open. This test download accepts archives up to 16 MiB
 and databases up to 512 MiB after opening. Your browser keeps a temporary
 database copy for ten minutes while the portal stays open. It clears the copy
 sooner if you save another database, sign out or change accounts. If the page
-closes before clearing the file, opening the portal clears it.
+closes before clearing the file, opening the portal clears it. Opening another
+portal tab leaves a save in an open tab alone.
 Actual venue exit still needs the rest of the return and deletion process.
 
 On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
