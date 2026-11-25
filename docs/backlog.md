@@ -13,6 +13,11 @@ stays separate.
 
 **Open:**
 
+- Fix the preparation-timeout fixture in `scripts/disposable-tests/local.test.mjs`.
+  [The failed CI job](https://github.com/waitron-io/waitron-cloud/actions/runs/45676083562/job/139430231740)
+  got exit 75 instead of 124. Advancing the clock past the 150 ms lease before start
+  reproduced exit 75 on unchanged main without reaching preparation. The timing in
+  the failed CI job is unknown. Lane J owns the investigation through D530.
 - For a replacement release, qualify a full busy hour below about 4,000 used requests in
   each returned quota series, and confirm automatic zero-capacity publication if it crosses
   that threshold. The App quota ran out again on 12 November; the later lower counts come
@@ -411,8 +416,9 @@ until release qualification. Recheck active migration reservations before new da
 
 In the [test Cloud](test-cloud-service-controls.md), an owner can block sharing before
 the venue publishes a menu. The private eligibility check applies the same block.
+The gateway forwards menus only in a loopback test with a synthetic box.
 The [Cloud plan](superpowers/plans/2026-11-25-d643-public-customer-menu.md) still calls for
-the disabled gateway, pairing with the serving box and retirement of the
+pairing and enabling the gateway on test installations, then retiring the
 [hosted copy](backlog/guest-menu.md) after the paired test.
 Cloud caching, including photos, is due before production. Production DNS, certificates
 and rollout remain open.

@@ -6,7 +6,7 @@ import {spawn,execFileSync,type ChildProcess} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GatewayForwardReports} from './gateway-forward-reports.ts';
 import {GatewayAuthority} from './authority.ts';
-import {gatewayAlpnPort,renderHaproxy,renderWireGuard} from './config.ts';
+import {gatewayAlpnPort,renderHaproxy,renderWireGuard,requireDisabledGuestMenu} from './config.ts';
 import {gatewayTrafficOptions,trafficManifestOptions,gatewayTrafficFingerprint} from './gateway-traffic-options.ts';
 import {gatewayTrafficRuntimeConfiguration,gatewayTrafficRuntimeOptions} from './gateway-traffic-runtime-options.ts';
 import {GatewayTrafficRuntime} from './gateway-traffic-runtime.ts';
@@ -23,6 +23,7 @@ if(statusDirectory!==undefined&&(!isAbsolute(statusDirectory)||
  [root,...(checkFolder?[checkFolder]:[])].some(directory=>containsPath(directory,statusDirectory)||containsPath(statusDirectory,directory))))
  throw new Error('Invalid gateway status directory');
 const trafficOptions=gatewayTrafficOptions(process.env);
+requireDisabledGuestMenu(process.env.GATEWAY_LIVE_GUEST_MENU,trafficOptions!==undefined);
 const publicCertificates=process.env.GATEWAY_PUBLIC_CERTIFICATES??'/input/public-certs';
 const artifactBundle=process.env.GATEWAY_ARTIFACT_BUNDLE;
 const certificateRefresh=process.env.GATEWAY_CERTIFICATE_REFRESH??'1';if(!['0','1'].includes(certificateRefresh))throw new Error('Invalid gateway certificate refresh');

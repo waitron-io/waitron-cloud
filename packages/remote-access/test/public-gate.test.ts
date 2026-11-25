@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import {test,mock} from 'node:test';
 import {createServer,request} from 'node:http';
-import {IncomingMessage,type ServerResponse} from 'node:http';
+import {IncomingMessage,type RequestListener,type ServerResponse} from 'node:http';
 import {Socket} from 'node:net';
 import {EventEmitter} from 'node:events';
 import {createServer as httpsServer} from 'node:https';
 import https from 'node:https';
 import {syncBuiltinESMExports} from 'node:module';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes,createHash} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
-import {createPublicGate} from '../src/public-gate.ts';
+import {createPublicGate,type PublicGateOptions} from '../src/public-gate.ts';
 const host='sol.example.test';
 for(const outcome of ['403','429','network','worker','challenge','success'])test(`served challenge script recovers from ${outcome}`,async()=>{
  const f=await fixture();try{
@@ -71,20 +71,22 @@ for(const outcome of ['403','429','network','worker','challenge','success'])test
   }
  }finally{await f.close();}
 });
-async function fixture(beginForward?:(route:Readonly<{publicHostname:string;staffHostname:string;address:string;port:number}>,startedAt:number)=>((category:string|null,observedAt:number)=>void)|undefined){
+async function fixture(beginForward?:(route:Readonly<{publicHostname:string;staffHostname:string;address:string;port:number}>,startedAt:number)=>((category:string|null,observedAt:number)=>void)|undefined,
+ liveMenu?:{authorize?:NonNullable<PublicGateOptions['menu']>['authorize'];respond:RequestListener}){
+ let routed=true;
  let now=Date.now(),available=true,disconnect=false,failureStatus=503,mode='normal';
  let start:()=>void=()=>{};const started=new Promise<void>(resolve=>{start=resolve;});
  const root=await mkdtemp(join(tmpdir(),'cloud-gate-pki-'));
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=staff.sol.example.test','-addext','subjectAltName=DNS:staff.sol.example.test','-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem')],{stdio:'ignore'});
  const key=await readFile(join(root,'key.pem')),certificate=await readFile(join(root,'cert.pem'));await rm(root,{recursive:true});
  let upstream=0;let headers:Record<string,unknown>={};
- const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;start();if(mode==='timeout'||mode==='cancel')return;if(mode==='limit'){res.end('x'.repeat(65537));return;}if(mode==='partial'){res.writeHead(200,{'Content-Length':'50'});res.write('partial');setImmediate(()=>res.destroy());return;}if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=failureStatus;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
- const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,beginForward,routes:()=>[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',get port(){if(mode==='internal')throw 'secret construction failure';return address.port;}}]});
+ const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;start();if(liveMenu&&req.url?.startsWith('/synthetic-menu')){liveMenu.respond(req,res);return;}if(mode==='timeout'||mode==='cancel')return;if(mode==='limit'){res.end('x'.repeat(65537));return;}if(mode==='partial'){res.writeHead(200,{'Content-Length':'50'});res.write('partial');setImmediate(()=>res.destroy());return;}if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=failureStatus;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
+ const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,beginForward,menu:liveMenu&&{port:address.port,match:path=>path==='/synthetic-menu'?'page':path==='/synthetic-menu/abc.jpg'?'asset':undefined,authorize:liveMenu.authorize??(async()=>true)},routes:()=>routed?[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',get port(){if(mode==='internal')throw 'secret construction failure';return address.port;}}]:[]});
  const server=createServer(gate.handle);await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const bound=server.address();assert.ok(bound&&typeof bound!=='string');
  const send=(path='/public/availability',extra:Record<string,string>={},method='GET',body?:string)=>new Promise<Response>((resolve,reject)=>{
-  const req=request({host:'127.0.0.1',port:bound.port,path,method,headers:{host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,...extra}},res=>{const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('end',()=>{const headers=new Headers();for(const [key,value]of Object.entries(res.headers)){if(Array.isArray(value))for(const v of value)headers.append(key,v);else if(value)headers.set(key,value);}resolve(new Response(res.statusCode===204?null:Buffer.concat(chunks),{status:res.statusCode!,headers}));});});req.on('error',reject);req.end(body);
+  const req=request({host:'127.0.0.1',port:bound.port,path,method,headers:{host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,...extra}},res=>{const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);res.on('end',()=>{const headers=new Headers();for(const [key,value]of Object.entries(res.headers)){if(Array.isArray(value))for(const v of value)headers.append(key,v);else if(value)headers.set(key,value);}resolve(new Response(res.statusCode===204?null:Buffer.concat(chunks),{status:res.statusCode!,headers}));});});req.on('error',reject);req.end(body);
  });
- return {send,gate,started,bound,setMode:(value:string)=>{mode=value;},advance:(ms:number)=>{now+=ms;},unavailable:(dropConnection=false,status=503)=>{available=false;disconnect=dropConnection;failureStatus=status;},recover:()=>{available=true;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
+ return {send,gate,started,bound,withdraw:()=>{routed=false;},setMode:(value:string)=>{mode=value;},advance:(ms:number)=>{now+=ms;},unavailable:(dropConnection=false,status=503)=>{available=false;disconnect=dropConnection;failureStatus=status;},recover:()=>{available=true;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
 }
 function solve(challenge:string,bits:number){for(let n=0;;n++){const hash=createHash('sha256').update(`${challenge}:${n}`).digest();if(hash.readUInt32BE(0)<2**(32-bits))return n;}}
 
@@ -423,5 +425,198 @@ for(const locale of ['en','es'])for(const failure of [403,404,503,'disconnect'] 
   assert.equal(recovered.status,200);assert.equal(await recovered.text(),'available');
   assert.equal(recovered.headers.get('set-cookie'),null);assert.equal(f.count(),3);
   assert.equal(f.gate.stats().unavailable,2);assert.equal(f.gate.stats().forwarded,3);assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
+const menuPath='/synthetic-menu',menuAccept={accept:'text/html'};
+test('public menu forwards only an allowed GET or HEAD over verified box TLS',async()=>{
+ const requests:string[]=[];
+ const f=await fixture(undefined,{respond:(req,res)=>{
+  requests.push(req.method!);
+  assert.equal(req.headers.host,'staff.sol.example.test');
+  assert.equal(req.headers.cookie,undefined);
+  assert.equal(req.headers.authorization,undefined);
+  assert.equal(req.headers['accept-language'],'es');
+  res.writeHead(200,{'content-type':'text/html','content-language':'es','cache-control':'public, max-age=120','age':'17','set-cookie':'private=value','x-frame-options':'DENY'});
+  res.end('Menú');
+ }});
+ try{
+  const headers={...menuAccept,'accept-language':'es',cookie:'session=private',authorization:'Bearer private'};
+  const page=await f.send(menuPath,headers);
+  assert.equal(page.status,200);
+  assert.equal(await page.text(),'Menú');
+  assert.equal(page.headers.get('content-language'),'es');
+  assert.equal(page.headers.get('cache-control'),'public, max-age=60');
+  assert.equal(page.headers.get('age'),'17');
+  assert.equal(page.headers.get('set-cookie'),null);
+  assert.equal(page.headers.get('x-frame-options'),null);
+  assert.doesNotMatch(page.headers.get('content-security-policy')??'',/frame-ancestors/);
+  assert.equal(await (await f.send(menuPath,headers,'HEAD')).text(),'');
+  assert.equal((await f.send(menuPath,headers,'POST')).status,405);
+  assert.equal((await f.send(menuPath+'?unknown=1',headers)).status,404);
+  assert.equal((await f.send(menuPath,{...headers,'x-waitron-sni':'other.example.test'})).status,421);
+  assert.equal((await f.send('/public/availability')).status,403);
+  assert.deepEqual(requests,['GET','HEAD']);
+  assert.equal(f.gate.stats().forwarded,0);
+ }finally{await f.close();}
+});
+
+for(const [change,status] of [['off',404],['blocked',404],['read failure',503],['blocked at headers',404],['withdrawn at headers',404]] as const)
+ test(`public menu withholds box bytes when ${change}`,async()=>{
+  let reads=0;
+  const f=await fixture(undefined,change==='off'?undefined:{
+   authorize:async()=>{
+    reads++;
+    if(change==='read failure')throw Error('private authority error');
+    return change!=='blocked'&&(change!=='blocked at headers'||reads===1);
+   },
+   respond:(_req,res)=>{if(change==='withdrawn at headers')f.withdraw();res.end('private box bytes');},
+  });
+  try{
+   const response=await f.send(menuPath,menuAccept);
+   assert.equal(response.status,status);
+   assert.equal(response.headers.get('cache-control'),'no-store');
+   const body=await response.text();
+   assert.match(body,/<h1>/);
+   assert.doesNotMatch(body,/private/);
+   if(change!=='off'){
+    assert.doesNotMatch(body,/public\/availability/);
+    assert.equal(response.headers.get('content-security-policy'),"default-src 'none'; base-uri 'none'");
+   }
+   assert.equal(f.count(),change.endsWith('headers')?1:0);
+  }finally{await f.close();}
+ });
+
+test('public menu keeps forward slots while bodies stream and waits briefly for a slot',async()=>{
+ const held:ServerResponse[]=[];
+ const f=await fixture(undefined,{respond:(_req,res)=>{
+  if(held.length===4){res.end('next');return;}
+  held.push(res);res.write('part');
+ }});
+ const first=Array.from({length:4},()=>f.send(menuPath));
+ try{
+  for(let i=0;i<100&&held.length<4;i++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(held.length,4);
+  const next=f.send(menuPath);
+  await new Promise(resolve=>setTimeout(resolve,350));
+  assert.equal(f.count(),4);
+  held[0]!.end(' done');
+  assert.equal(await (await first[0]!).text(),'part done');
+  const response=await next;
+  assert.equal(response.status,200);
+  assert.equal(await response.text(),'next');
+  for(const res of held.slice(1))res.end();
+  await Promise.all(first);
+ }finally{
+  const settled=Promise.allSettled(first);
+  await f.close();
+  await settled;
+ }
+});
+
+test('public menu replaces an oversized response declared at headers with a readable 503',async()=>{
+ const f=await fixture(undefined,{respond:(_req,res)=>{
+  res.writeHead(200,{'content-length':String(2*1024*1024+1)});res.end('private box bytes');
+ }});
+ try{
+  const response=await f.send(menuPath,menuAccept);
+  assert.equal(response.status,503);
+  assert.doesNotMatch(await response.text(),/private box bytes|public\/availability/);
+ }finally{await f.close();}
+});
+
+test('gateway refuses public menu with signed metering before network startup',()=>{
+ const result=spawnSync(process.execPath,[new URL('../src/gateway-cli.ts',import.meta.url).pathname],{
+  encoding:'utf8',timeout:5000,env:{PATH:process.env.PATH,GATEWAY_LIVE_GUEST_MENU:'1',
+   GATEWAY_CELL_ID:'00000000-0000-0000-0000-000000000001',GATEWAY_TRAFFIC_MODE:'test',GATEWAY_TRAFFIC_COUNTRY:'ES',
+   GATEWAY_TRAFFIC_ENVIRONMENT:'test',GATEWAY_TRAFFIC_SOCKET_DIRECTORY:'/state/traffic',GATEWAY_TRAFFIC_OPERATIONAL_SOURCES:'["127.0.0.2"]'},
+ });
+ assert.equal(result.status,1);
+ assert.match(result.stderr,/guest_menu_metering_incompatible/);
+});
+
+test('public menu returns readable 429 when the wait expires and keeps availability separate',async()=>{
+ const held:ServerResponse[]=[];
+ const f=await fixture(undefined,{respond:(_req,res)=>{held.push(res);res.write('part');}});
+ try{
+  const first=Array.from({length:4},()=>f.send(menuPath));
+  for(let i=0;i<100&&held.length<4;i++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(held.length,4);
+  const refused=await f.send(menuPath,menuAccept);
+  assert.equal(refused.status,429);
+  const body=await refused.text();
+  assert.match(body,/<h1>/);
+  assert.doesNotMatch(body,/public\/availability/);
+  assert.equal(f.count(),4);
+  assert.equal((await f.send('/public/availability')).status,403);
+  for(const res of held)res.end();
+  await Promise.all(first);
+ }finally{await f.close();}
+});
+
+test('public menu stops an oversized stream after delivering its first bytes',async()=>{
+ const f=await fixture(undefined,{respond:(_req,res)=>{
+  res.writeHead(200,{'content-type':'text/html'});res.write('first');
+  setTimeout(()=>res.end('x'.repeat(2*1024*1024)),150).unref();
+ }});
+ try{
+  let body='';
+  await assert.rejects(new Promise<void>((resolve,reject)=>{
+   const req=request({host:'127.0.0.1',port:f.bound.port,path:menuPath,headers:{
+    host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,
+   }},res=>{
+    res.on('data',chunk=>{body+=chunk;});res.on('end',resolve);res.on('error',reject);
+   });
+   req.on('error',reject);req.end();
+  }),/aborted/);
+  assert.ok(body.startsWith('first'));
+  assert.ok(Buffer.byteLength(body)<=2*1024*1024);
+ }finally{await f.close();}
+});
+
+test('public menu releases its slot when a box tries to upgrade the response',async()=>{
+ const f=await fixture(undefined,{respond:(_req,res)=>{
+  res.writeHead(101,{Connection:'Upgrade',Upgrade:'synthetic'});res.end();
+ }});
+ try{
+  const deadline=AbortSignal.timeout(750);
+  const response=await Promise.race([f.send(menuPath,menuAccept),new Promise<never>((_resolve,reject)=>{
+   deadline.addEventListener('abort',()=>reject(Error('gateway gave no reply after upgrade')),{once:true});
+  })]);
+  assert.equal(response.status,503);
+  assert.equal(f.gate.stats().menu?.active,0);
+ }finally{await f.close();}
+});
+
+for(const heldRead of [1,2])test(`public menu releases the slot if the visitor leaves during authority read ${heldRead}`,async()=>{
+ let entered!:()=>void,reads=0;
+ const reading=new Promise<void>(resolve=>{entered=resolve;});
+ const f=await fixture(undefined,{authorize:async()=>{
+  if(++reads!==heldRead)return true;
+  entered();return new Promise(()=>{});
+ },respond:(_req,res)=>res.end('menu')});
+ try{
+  const req=request({host:'127.0.0.1',port:f.bound.port,path:menuPath,headers:{
+   host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,
+  }});
+  req.on('error',()=>{});req.end();
+  await reading;
+  req.destroy();
+  for(let i=0;i<50&&f.gate.stats().menu?.active;i++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(f.gate.stats().menu?.active,0);
+  assert.equal(f.count(),heldRead-1);
+ }finally{await f.close();}
+});
+
+test('public menu returns 503 at its deadline even when the authority reader stays pending',async t=>{
+ const timeout=AbortSignal.timeout;
+ t.mock.method(AbortSignal,'timeout',(ms:number)=>timeout(ms===10000?100:ms));
+ const f=await fixture(undefined,{authorize:()=>new Promise(()=>{}),respond:(_req,res)=>res.end()});
+ try{
+  const response=await Promise.race([f.send(menuPath),new Promise<never>((_resolve,reject)=>{
+   timeout(750).addEventListener('abort',()=>reject(Error('gateway missed the forward deadline')),{once:true});
+  })]);
+  assert.equal(response.status,503);
+  assert.equal(f.gate.stats().menu?.active,0);
  }finally{await f.close();}
 });
