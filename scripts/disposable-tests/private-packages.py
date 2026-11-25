@@ -49,6 +49,10 @@ PACKAGES = [{
     'url': 'https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.34/43f624221a8a7499dea2d9d49a93237f16b6ecca',
     'integrity': 'sha512-59/NOGjBOVcOoS6+/yR0c/5caZe3ZfC7lSfnFExs8fcmHMIXcJVRsbVmLNxAwB2Nn6IVzKI8jmeXi9aiSNXxgw=='
 }, {
+    'file': 'ui-core-0.2.45.tgz',
+    'url': 'https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.45/5065de6d3dff095336b4c41d55b1ad69515393a2',
+    'integrity': 'sha512-a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ=='
+}, {
     'file': 'contract-0.2.9.tgz',
     'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.9/9a5a01d89bf30a5df255f2c22ca0116d99da5508',
     'integrity': 'sha512-L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g=='
