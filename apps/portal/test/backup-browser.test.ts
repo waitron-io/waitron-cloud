@@ -12,7 +12,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   const email='backups@example.test',password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
   const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(f.db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());const v=await r.complete(b);
   const viewport={width:375,height:812};
-  const context=await f.browser.newContext({locale,timezoneId:'Europe/Madrid',viewport}),page=await context.newPage();page.setDefaultTimeout(4000);const c=translations[locale];
+  const context=await f.browser.newContext({locale,timezoneId:'Europe/Madrid',colorScheme:'light',viewport}),page=await context.newPage();page.setDefaultTimeout(4000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const browse=locale==='en'?'View snapshots':'Ver instantáneas',refresh=locale==='en'?'Latest snapshots':'Últimas instantáneas',older=locale==='en'?'Older snapshots':'Instantáneas anteriores',choose=locale==='en'?'Choose a snapshot':'Elige una instantánea';
@@ -53,7 +53,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await page.screenshot({path:new URL(`../dist/backup-exit-${locale}-${colorScheme}-${width}-${state}.png`,import.meta.url).pathname,fullPage:true});
    }
-   await page.emulateMedia({colorScheme:null});await page.setViewportSize(viewport);
+   await page.emulateMedia({colorScheme:'light'});await page.setViewportSize(viewport);
   };
   await page.route('**/api/account/backups/list',flag);
   let proof=false;

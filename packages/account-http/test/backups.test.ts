@@ -275,7 +275,7 @@ test('backups list refuses a session that expires while waiting for the exit win
   await held.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[f.installed.venueId]);
   response=Promise.resolve(send('list'));
   await t.waitFor(async()=>{
-   const {rows:[{waiting}]}=await held.query('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))) AS waiting',[pid]);
+   const {rows:[{waiting}]}=await db.pool.query('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))) AS waiting',[pid]);
    assert.equal(waiting,true);
   },{timeout:3000});
   await held.query("CREATE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT pg_catalog.clock_timestamp()+interval '2 days'$$");
