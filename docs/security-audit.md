@@ -30,7 +30,7 @@ subject kind `venue`. Each venue disclosed by the operator search or a direct
 read gets a `venue.viewed` event before Cloud returns it. The name and search
 text stay out of the history. `venue.address_lookup_stopped` and
 `venue.address_lookup_allowed` record changes. Setting a venue to its current
-state leaves history as it was.
+state records a view for the venue name in the reply.
 
 The schema has no arbitrary details or payload field. Matching codes, session tokens, public keys, leases, storage credentials, recovery keys and raw errors therefore have nowhere to be copied. PostgreSQL rejects row updates and row deletes. Repeating a successful action returns the original event; reusing its source identity with different event fields fails closed. Credential-renewal sources combine the installation and its installation-scoped operation ID, so another installation may use the same operation UUID safely.
 

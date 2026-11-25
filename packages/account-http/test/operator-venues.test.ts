@@ -27,11 +27,11 @@ function app(enabled=true,production=false,countryCode='ES'){
  return createAccountApp(options);
 }
 const session=(accountId=operator)=>transaction(db.pool,c=>createSession(c,accountId));
-const send=(app:ReturnType<typeof createAccountApp>,actor?:Awaited<ReturnType<typeof session>>)=>
+const send=(app:ReturnType<typeof createAccountApp>,actor?:Awaited<ReturnType<typeof session>>,ip='192.0.2.25')=>
  async (path:'read'|'address-lookup',body:unknown)=>app.request(origin+'/api/account/operator/venues/'+path,{
   method:'POST',headers:{origin,'content-type':'application/json','x-csrf-token':actor?.csrfToken??'',
    cookie:actor?'__Host-cloud_session='+actor.token:''},body:JSON.stringify(body),
- },{incoming:{socket:{remoteAddress:'192.0.2.25'}}} as HttpBindings);
+ },{incoming:{socket:{remoteAddress:ip}}} as HttpBindings);
 
 async function venue(name:string|null,environment='test',scope={organisation,business}){
  const id=randomUUID();
@@ -71,7 +71,7 @@ test('venue search ignores accents and case, treats wildcards literally and reco
  const outside=await venue('Café Lunar','production');
  const unnamed=await venue(null);
  const actor=await session(),read=send(app(),actor);
- assert.equal((await read('read',{query:'ca'})).status,400);
+ assert.deepEqual(await (await read('read',{query:'ca'})).json(),{venues:[]});
  assert.equal((await read('read',{query:'\u0301'.repeat(3)})).status,400);
  assert.deepEqual(await (await read('read',{query:'caf%'})).json(),{venues:[]});
  const response=await read('read',{query:'CAFE LUNAR'});
@@ -100,6 +100,21 @@ test('a broad venue search shows no rows until narrowed',async()=>{
  assert.deepEqual(rows,[]);
 });
 
+test('exact venue names come first, including short names and names with many partial matches',async()=>{
+ const name='Lagar',exact=await venue(name),partial=await venue('A Lagar'),short=await venue('Bo');
+ const longName='Esquina luminosa '.repeat(6).trim(),long=await venue(longName);
+ await venue('Bodega');
+ const read=send(app(),await session(),'192.0.2.26');
+ const result=(id:string,name:string)=>({id,name,stopped:false});
+ assert.deepEqual(await (await read('read',{query:name})).json(),{venues:[result(exact,name),result(partial,'A Lagar')]});
+ assert.deepEqual(await (await read('read',{query:'bo'})).json(),{venues:[result(short,'Bo')]});
+ assert.deepEqual(await (await read('read',{query:longName})).json(),{venues:[result(long,longName)]});
+ for(let n=0;n<10;n++)await venue('Lagar '+n);
+ assert.deepEqual(await (await read('read',{query:name})).json(),{venues:[result(exact,name)]});
+ for(let n=0;n<10;n++)await venue(name);
+ assert.deepEqual(await (await read('read',{query:name})).json(),{venues:[],tooMany:true});
+});
+
 test('a failed history insert blocks disclosure and rolls back the stop',async()=>{
  const venueId=await venue('Audit failure');
  const actor=await session();await openProofWindow(db.pool,actor.token);
@@ -110,6 +125,9 @@ test('a failed history insert blocks disclosure and rolls back the stop',async()
   const read=await request('read',{venueId});
   assert.equal(read.status,503);
   assert.deepEqual(await read.json(),{error:'temporarily_unavailable'});
+  const unchanged=await request('address-lookup',{venueId,stopped:false});
+  assert.equal(unchanged.status,503);
+  assert.deepEqual(await unchanged.json(),{error:'temporarily_unavailable'});
   const write=await request('address-lookup',{venueId,stopped:true});
   assert.equal(write.status,503);
   const saved=await db.pool.query('SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id=$1',[venueId]);

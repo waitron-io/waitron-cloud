@@ -19,6 +19,7 @@ export function operatorVenuesScreen(app:PortalApp){
  if(app.link.operatorVenueId){
   const id=app.link.operatorVenueId;
   return html`${notice}${venue?html`
+    <p class="help venue-id">${c.operatorVenueId} ${venue.id}</p>
     <p role="status">${venue.stopped?c.operatorSuggestionsStopped:c.operatorSuggestionsAllowed}</p>
     <wt-button id="operator-venue-switch" .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.setOperatorVenue(venue);}}>
      ${venue.stopped?c.operatorAllowSuggestions:c.operatorStopSuggestions}</wt-button>
@@ -35,7 +36,7 @@ export function operatorVenuesScreen(app:PortalApp){
  const count=results?.venues.length??0;
  return html`<search><form id="operator-venue-search" class="business-choice" method="post" action="/api/account/operator/venues/read" @submit=${search}>
   <label for="operator-venue-query">${c.operatorVenueName}</label>
-  <input type="search" id="operator-venue-query" name="query" minlength="3" maxlength="80" required autocomplete="off"
+  <input type="search" id="operator-venue-query" name="query" required autocomplete="off"
    aria-describedby="operator-venue-hint">
   <p class="help" id="operator-venue-hint">${c.operatorVenueSearchHint}</p>
   <wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}>

@@ -166,7 +166,14 @@ In the LAN action demo, sign in as the configured operator and open
 sign-in when prompted. The page records which venues you view and each change
 you make. Allowing suggestions keeps the provider settings and usage limits in force.
 
-### Database fallback outside the LAN demo
+Search for a full name of any length or enter at least three characters for
+a partial match. Exact names come first. The venue page shows its ID to help
+you distinguish venues with the same name.
+
+### Database fallback
+
+Use this fallback outside the LAN demo or when more than ten venues share
+the exact name. A cap email in the LAN demo can also open the affected venue directly.
 
 Connect to your test Cloud account database. These commands leave no entry in
 the operator history. Replace the example ID with the test venue's ID in each

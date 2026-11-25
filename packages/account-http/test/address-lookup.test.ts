@@ -435,7 +435,7 @@ test('an operator stop affects only its test venue and allowing it again preserv
    [venueId,'suggest'],[other.venueId,'suggest'],[venueId,'validate'],
   ]);
   const {rows}=await pool.query('SELECT event_type FROM security_audit_events WHERE subject_id=$1 ORDER BY occurred_at',[venueId]);
-  assert.deepEqual(rows.map(row=>row.event_type),['venue.address_lookup_stopped','venue.address_lookup_allowed']);
+  assert.deepEqual(rows.map(row=>row.event_type),['venue.address_lookup_stopped','venue.viewed','venue.address_lookup_allowed','venue.viewed']);
  }finally{await f.db.close();}
 });
 

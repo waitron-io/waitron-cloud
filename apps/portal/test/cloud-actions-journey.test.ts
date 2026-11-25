@@ -88,6 +88,7 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   await page.locator('#submit').click();
   await completeBrowserEmail(fixture,page,email,locale);
   await page.getByRole('heading',{name,exact:true,level:1}).waitFor();
+  await page.getByText(venueId).waitFor();
   assert.equal(new URL(page.url()).pathname,venuePath);
   assert.equal(new URL(page.url()).hash,'');
   await page.goto(fixture.origin+'/operator/actions#lang='+locale);
@@ -127,13 +128,24 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   assert.equal(await stopButton.evaluate(button=>(button.getRootNode() as Document|ShadowRoot).activeElement===button),true);
   assert.equal(searchStyle,'none','Search is styled as a button');
   await capture('allowed');
+  const operatorTraffic:{path:string;outcome:number|string}[]=[];
+  const record=(url:string,outcome:number|string)=>{
+   const path=new URL(url).pathname;
+   if(path.startsWith('/api/account/operator/venues/'))operatorTraffic.push({path,outcome});
+  };
+  page.on('response',response=>record(response.url(),response.status()));
+  page.on('requestfailed',request=>record(request.url(),request.failure()?.errorText??'request failed'));
   await page.route('**/operator/venues/address-lookup',async route=>{
    const response=await route.fetch();assert.equal(response.status(),200);await route.abort('failed');
   },{times:1});
   const lostReply=page.waitForEvent('requestfailed',request=>request.url().endsWith('/operator/venues/address-lookup'));
   await stopButton.click();
   assert.ok((await lostReply).failure());
-  await allowButton.waitFor();
+  try{await allowButton.waitFor();}
+  catch(error){
+   const panel=await page.locator('main').innerText({timeout:1000}).catch(()=>'<unavailable>');
+   throw Error(`Expected the saved stop after a lost reply: ${JSON.stringify({operatorTraffic,panel})}`,{cause:error});
+  }
   await capture('stopped');
   await page.reload();
   await allowButton.click();

@@ -17,6 +17,8 @@ const venueScope=`FROM venues v JOIN legal_businesses b ON b.id=v.legal_business
 const columns=`v.id,v.display_name AS name,v.organisation_id,
  EXISTS(SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id=v.id) AS stopped`;
 const fold=(sql:string)=>String.raw`lower(regexp_replace(normalize(${sql}, NFD), U&'[\0300-\036f]', '', 'g'))`;
+const foldedName=fold('v.display_name'),foldedQuery=fold('$2::text');
+const exactName=`${foldedName}=${foldedQuery}`;
 
 type Venue={id:string;name:string|null;organisation_id:string;stopped:boolean};
 const publicVenue=({id,name,stopped}:Venue)=>({id,name,stopped});
@@ -57,21 +59,28 @@ export async function operatorVenuesResponse(c:Context,o:Boundary|undefined){
    const change=await client.query(stopped?
     'INSERT INTO address_lookup_stopped_venues(venue_id) VALUES($1) ON CONFLICT DO NOTHING':
     'DELETE FROM address_lookup_stopped_venues WHERE venue_id=$1',[venueId]);
-   if(change.rowCount)await audit(client,venue,actor,stopped?'venue.address_lookup_stopped':'venue.address_lookup_allowed');
+   const event=change.rowCount?(stopped?'venue.address_lookup_stopped':'venue.address_lookup_allowed'):'venue.viewed';
+   await audit(client,venue,actor,event);
    await requireAccountActionProof(client,token,csrfToken);
    return publicVenue({...venue,stopped});
   }));
  }
  const query=typeof body.query==='string'?body.query.trim():'';
- if(Object.keys(body).length!==1||(!venueId&&(!/^.{3,80}$/u.test(query)||/[\x00-\x1f\x7f]/.test(query)
-   ||!/^.{3,}$/u.test(query.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()))))throw invalid();
+ const queryLength=[...query.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()].length;
+ if(Object.keys(body).length!==1||(!venueId&&(!queryLength||/[\x00-\x1f\x7f]/.test(query))))throw invalid();
  return c.json(await transaction(o.pool,async client=>{
   await authorize(client);
-  const {rows}=await client.query<Venue>(`SELECT ${columns} ${venueScope}
-   ${venueId?'AND v.id=$2':`AND strpos(${fold('v.display_name')},${fold('$2::text')})>0 ORDER BY v.display_name,v.id LIMIT 11`}`,
-   [o.country,venueId??query]);
+  let {rows}=await client.query<Venue&{exact_name?:boolean}>(venueId
+   ?`SELECT ${columns} ${venueScope} AND v.id=$2`
+   :`SELECT ${columns},(${exactName}) AS exact_name ${venueScope}
+     AND (${exactName} OR ($3::boolean AND strpos(${foldedName},${foldedQuery})>0))
+     ORDER BY exact_name DESC,v.display_name,v.id LIMIT 11`,
+   venueId?[o.country,venueId]:[o.country,query,queryLength>=3]);
   if(venueId&&!rows.length)throw missing();
-  if(rows.length>10)return {venues:[],tooMany:true};
+  if(rows.length>10){
+   rows=rows.filter(row=>row.exact_name);
+   if(!rows.length||rows.length>10)return {venues:[],tooMany:true};
+  }
   // History inserts lock their referenced organisations in the same order as owner setup.
   for(const venue of rows.toSorted((a,b)=>a.organisation_id.localeCompare(b.organisation_id)))
    await audit(client,venue,actor,'venue.viewed');
