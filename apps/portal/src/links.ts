@@ -84,18 +84,23 @@ export function saveEmailRequestReturn(value: PageReturn) {
   try {sessionStorage.setItem(pageReturnKey, JSON.stringify(value));} catch { /* Storage is optional. */ }
 }
 
-function emailRequestReturn(value: Partial<PageReturn> | null | undefined, path: string): Omit<PageReturn, 'path'> | undefined {
+function emailRequestReturn(value: Partial<PageReturn> | null | undefined, path: string): PageReturn | undefined {
   if (value?.path !== path || (value.locale !== 'en' && value.locale !== 'es')) return;
   const id = (candidate: unknown) => typeof candidate === 'string' && pairingId.test(candidate) ? candidate : undefined;
-  return {locale: value.locale, pairingId: id(value.pairingId), recoveryId: id(value.recoveryId)};
+  return {path, locale: value.locale, pairingId: id(value.pairingId), recoveryId: id(value.recoveryId)};
 }
 
-export function takeEmailRequestReturn(path: string): Omit<PageReturn, 'path'> | undefined {
+export function takeEmailRequestReturn(path: string): (PageReturn & {forwarded: boolean}) | undefined {
   let forwarded: ReturnType<typeof emailRequestReturn>;
   try {
     const raw = sessionStorage.getItem(pageReturnKey);
     sessionStorage.removeItem(pageReturnKey);
     if (raw) forwarded = emailRequestReturn(JSON.parse(raw), path);
   } catch { /* Unavailable or invalid tab storage carries no context. */ }
-  return forwarded ?? emailRequestReturn(history.state?.emailRequestReturn, path);
+  if (forwarded) {
+    history.replaceState({...history.state, emailRequestReturn: forwarded}, '');
+    return {...forwarded, forwarded: true};
+  }
+  const restored = emailRequestReturn(history.state?.emailRequestReturn, path);
+  return restored && {...restored, forwarded: false};
 }

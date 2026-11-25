@@ -6,6 +6,8 @@ import {loadPortalAssets, portalResponse, turnstilePortalAssets} from '../../../
 import {translations} from '../src/locale.ts';
 import {interceptTurnstile} from './turnstile-fixture.ts';
 
+const pairingRequestId = '11111111-1111-4111-8111-111111111111';
+
 async function servePortal(page: Page, enabled: () => boolean = () => true) {
   const assets = await loadPortalAssets(new URL('../dist', import.meta.url).pathname);
   const turnstile = turnstilePortalAssets(assets, 'test-site');
@@ -94,20 +96,19 @@ test('the password reset round trip preserves the pairing request and link langu
   t.after(() => browser.close());
   const page = await browser.newPage({locale: 'en'});
   page.setDefaultTimeout(3000);
-  const requestId = '11111111-1111-4111-8111-111111111111';
   const documents: string[] = [];
   page.on('request', request => {
     if (request.isNavigationRequest()) documents.push(new URL(request.url()).pathname);
   });
   await servePortal(page);
   await interceptTurnstile(page);
-  await page.goto(`https://portal.test/connect#request=${requestId}&lang=es`);
+  await page.goto(`https://portal.test/connect#request=${pairingRequestId}&lang=es`);
   await page.getByRole('link', {name: translations.es.forgot, exact: true}).click();
   await page.getByRole('button', {name: 'Verificar (simulación)'}).waitFor();
   await page.getByRole('link', {name: translations.es.login, exact: true}).click();
   await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
   assert.deepEqual(documents, ['/connect', '/forgot-password', '/login']);
-  assert.equal(await page.evaluate(() => history.state.pairingRequestId), requestId);
+  assert.equal(await page.evaluate(() => history.state.pairingRequestId), pairingRequestId);
   assert.equal(await page.locator('html').getAttribute('lang'), 'es');
   assert.equal(await page.locator('script[src*="challenges.cloudflare.com"]').count(), 0);
 });
@@ -135,8 +136,7 @@ test('opening a sign-up completion link in the request tab unloads the widget an
   page.setDefaultTimeout(3000);
   await servePortal(page);
   await interceptTurnstile(page);
-  const requestId = '11111111-1111-4111-8111-111111111111';
-  await page.goto(`https://portal.test/connect#request=${requestId}&lang=es`);
+  await page.goto(`https://portal.test/connect#request=${pairingRequestId}&lang=es`);
   await page.getByRole('link', {name: translations.es.signup, exact: true}).click();
   await page.getByRole('button', {name: 'Verificar (simulación)'}).waitFor({timeout: 2000});
   await page.goto(`https://portal.test/signup#token=${'b'.repeat(43)}`);
@@ -146,7 +146,7 @@ test('opening a sign-up completion link in the request tab unloads the widget an
   await page.getByRole('link', {name: 'Waitron Cloud', exact: true}).click();
   await page.waitForURL('**/login');
   await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
-  assert.equal(await page.evaluate(() => history.state.pairingRequestId), requestId);
+  assert.equal(await page.evaluate(() => history.state.pairingRequestId), pairingRequestId);
 });
 
 test('browser Back from password reset keeps the recovery request and link language', async t => {
@@ -239,3 +239,44 @@ test('the widget fits a narrow phone at its real dimensions', async t => {
   await page.getByRole('button', {name: 'Verify (stand-in)'}).waitFor({timeout: 3000});
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });
+
+test('an explicit language choice survives Back and reload', async t => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({locale: 'en'});
+  page.setDefaultTimeout(3000);
+  await servePortal(page);
+  await interceptTurnstile(page);
+  await page.goto('https://portal.test/login');
+  await page.getByRole('link', {name: translations.en.forgot, exact: true}).click();
+  await page.getByRole('combobox').selectOption('es');
+  await page.goBack();
+  await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
+  await page.reload();
+  await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
+});
+
+for (const transition of ['switching the keys off', 'browser Forward']) {
+  test(`a pairing request and its language survive ${transition}`, async t => {
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({locale: 'en'});
+    page.setDefaultTimeout(3000);
+    let enabled = true;
+    await servePortal(page, () => enabled);
+    await interceptTurnstile(page);
+    await page.goto(`https://portal.test/connect#request=${pairingRequestId}&lang=es`);
+    if (transition === 'switching the keys off') enabled = false;
+    await page.getByRole('link', {name: translations.es.forgot, exact: true}).click();
+    if (enabled) {
+      await page.getByRole('button', {name: 'Verificar (simulación)'}).waitFor();
+      await page.goBack();
+      await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
+      await page.goForward();
+    }
+    await page.getByRole('link', {name: translations.es.login, exact: true}).click();
+    await page.waitForURL('**/login');
+    await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
+    assert.equal(await page.evaluate(() => history.state?.pairingRequestId), pairingRequestId);
+  });
+}

@@ -430,9 +430,13 @@ test('slow Turnstile requests leave server slots for sign-in', async () => {
   const pending = Array.from({length: 4}, () => sendSignup());
   try {
     await until(async () => verifying === 4, 1500);
+    const attempts = () => db.pool.query(`SELECT attempts FROM account_rate_limits
+      WHERE expires_at BETWEEN clock_timestamp() + interval '14 minutes' AND clock_timestamp() + interval '15 minutes'`);
+    assert.deepEqual((await attempts()).rows, [{attempts: 4}]);
     const excess = await sendSignup('/%73ignup/request').result;
     assert.equal(excess.status, 503);
     assert.deepEqual(JSON.parse(excess.body), {error: 'browser_check_failed'});
+    assert.deepEqual((await attempts()).rows, [{attempts: 4}], 'a busy reply does not spend a verification attempt');
     assert.equal((await send(address.port, '/login', JSON.stringify({email: 'guest@example.test', password: 'wrong password'})).result).status, 401);
     assert.equal(verifying, 4);
   } finally {

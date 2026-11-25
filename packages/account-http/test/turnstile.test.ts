@@ -19,6 +19,7 @@ test('Siteverify sends only the secret and proof to the fixed HTTPS endpoint', a
 for (const [name, response] of [
   ['redirect', () => new Response(null, {status: 302, headers: {location: 'https://other.example.test/'}})],
   ['upstream error', () => new Response(null, {status: 503})],
+  ['a success-shaped HTTP 400', () => Response.json({success: true, hostname: 'cloud.example.test', action: 'signup'}, {status: 400})],
   ['oversize', () => new Response(' '.repeat(16_384) + '{"success":true,"hostname":"cloud.example.test","action":"signup"}')],
   ['bad JSON', () => new Response('{')],
   ['wrong hostname', () => Response.json({success: true, hostname: 'other.example.test', action: 'signup'})],

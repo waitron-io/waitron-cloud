@@ -236,7 +236,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
     let started = performance.now();
-    const slow = ['/login', '/signup/request', '/password-reset/request'].includes(path);
+    let padReply = ['/login', '/signup/request', '/password-reset/request'].includes(path) && !(verifyBrowser && action);
     try {
       const email = 'email' in body ? normaliseEmail(body.email) : undefined;
       if ('email' in body && !email) throw new AccountHttpError(400, 'invalid_input');
@@ -262,6 +262,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
           await verifyBrowser(ip, action, body.turnstileToken);
           // A slow provider reply must leave the same padding for the email lookup.
           started = performance.now();
+          padReply = true;
         }
         if (path === '/signup/request') {
           const decision = await limiter.consume([{scope: 'signup-request-hour-ip', subject: ip, limit: config.signupLimits.requestsPerHour, windowSeconds: 3600}]);
@@ -299,7 +300,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         if (!(error instanceof IdentityError) || !['session_unavailable', 'session_expired'].includes(error.code)) throw error;
       }
       writeSessionCookies(c, secure); return c.body(null, 204);
-    } finally {if (slow) await delay(Math.max(0, 300 - (performance.now() - started)));}
+    } finally {if (padReply) await delay(Math.max(0, 300 - (performance.now() - started)));}
   });
   return app;
 }
