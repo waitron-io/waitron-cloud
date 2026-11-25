@@ -13,6 +13,14 @@ wt-input { margin: 1rem 0; }
   border-inline-start: var(--wt-space-1) solid var(--wt-color-danger);
   background: var(--wt-color-surface-raised);
 }
+.browser-check-failure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--wt-space-3);
+  margin-block-end: var(--wt-space-4);
+}
+.browser-check-failure #form-refusal { margin: 0; }
 turnstile-widget { display: block; min-height: 65px; }
 .help { color: var(--wt-color-text-muted); font-size: .9rem; }
 nav { display: grid; gap: .8rem; margin-top: 1.25rem; }

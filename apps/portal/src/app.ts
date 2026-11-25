@@ -449,7 +449,8 @@ export class PortalApp {
     queueMicrotask(() => {
       const field = Object.keys(this.errors)[0];
       if (field) this.root.querySelector<HTMLElement>(`wt-input[name="${field}"]`)?.focus();
-      else this.root.querySelector<HTMLElement>('#form-refusal, wt-form-error-summary')?.focus();
+      else (this.root.querySelector<HTMLElement>('#form-refusal')
+        ?? this.root.querySelector<HTMLElement>('wt-form-error-summary'))?.focus();
     });
   }
   async submitPairing() {

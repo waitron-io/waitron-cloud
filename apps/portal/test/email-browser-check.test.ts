@@ -7,6 +7,7 @@ import {translations} from '../src/locale.ts';
 import {interceptTurnstile} from './turnstile-fixture.ts';
 
 const pairingRequestId = '11111111-1111-4111-8111-111111111111';
+const turnstilePrivacyUrl = 'https://www.cloudflare.com/turnstile-privacy-policy/';
 
 async function servePortal(page: Page, enabled: () => boolean = () => true) {
   const assets = await loadPortalAssets(new URL('../dist', import.meta.url).pathname);
@@ -48,6 +49,21 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       const alert = page.getByRole('alert').getByText(copy, {exact: true});
       await alert.waitFor();
       assert.equal(await alert.evaluate(element => getComputedStyle(element).borderInlineStartStyle), 'solid');
+      const retry = page.getByRole('button', {name: c.retry, exact: true});
+      const privacyLink = page.getByRole('link').and(page.locator(`a[href="${turnstilePrivacyUrl}"]`));
+      const emailBox = (await email.boundingBox())!;
+      const alertBox = (await alert.boundingBox())!;
+      const retryBox = (await retry.boundingBox())!;
+      assert.deepEqual({
+        alertBelowEmail: alertBox.y >= emailBox.y + emailBox.height,
+        retryBesideAlert: retryBox.x >= alertBox.x + alertBox.width
+          && retryBox.y < alertBox.y + alertBox.height && alertBox.y < retryBox.y + retryBox.height,
+        privacyLink: await privacyLink.textContent(),
+      }, {
+        alertBelowEmail: true,
+        retryBesideAlert: true,
+        privacyLink: locale === 'en' ? "Cloudflare's privacy notice" : 'Aviso de privacidad de Cloudflare',
+      });
       assert.equal(await email.inputValue(), 'venue@example.test');
       assert.equal(proofs.length, 0);
       const screen = async (stage: string) => {
@@ -59,7 +75,7 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       };
       await screen('blocked');
       blocked = false;
-      await page.getByRole('button', {name: c.retry, exact: true}).click();
+      await retry.click();
       const widget = page.getByRole('button', {name: locale === 'en' ? 'Verify (stand-in)' : 'Verificar (simulación)'});
       await widget.waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -67,7 +83,7 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       if (locale === 'en' && colorScheme === 'light' && width === 390 && signUp) {
         await widget.dispatchEvent('error-fixture');
         await alert.waitFor();
-        await page.getByRole('button', {name: c.retry, exact: true}).click();
+        await retry.click();
       }
       await widget.click();
       await email.focus();
@@ -80,6 +96,11 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       assert.equal(await alert.evaluate(element => element === document.activeElement), true);
       assert.equal(await email.inputValue(), 'venue@example.test');
       assert.equal(await submit.isDisabled(), true);
+      assert.equal(await widget.count(), 0, 'the rejected check is replaced by its retry action');
+      await page.keyboard.press('Tab');
+      assert.equal(await retry.evaluate(element => element === document.activeElement), true);
+      await screen('rejected');
+      await retry.press('Enter');
       await widget.click();
       await submit.click();
       await page.getByRole('heading', {name: c.checkEmail}).waitFor();
@@ -188,6 +209,7 @@ test('a tab opened before Turnstile activation can reload to get the widget', as
   await page.getByLabel(translations.en.email).fill('owner@example.test');
   enabled = true;
   await page.getByRole('button', {name: translations.en.continue, exact: true}).click();
+  await page.getByRole('alert').getByText(translations.en.browserCheckFailed, {exact: true}).waitFor();
   await page.getByRole('button', {name: translations.en.retry, exact: true}).click();
   await page.getByRole('button', {name: 'Verify (stand-in)'}).waitFor();
 });
