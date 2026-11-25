@@ -57,7 +57,9 @@ test('the email forms allow a fresh browser check after a worker fails', async t
       } finally {release();}
       const copy = locale === 'en' ? 'The browser check failed. Try again or use another browser.'
         : 'No se pudo comprobar tu navegador. Vuelve a intentarlo o usa otro navegador.';
-      await page.getByRole('alert').getByText(copy, {exact: true}).waitFor();
+      const alert = page.getByRole('alert').getByText(copy, {exact: true});
+      await alert.waitFor();
+      assert.equal(await alert.evaluate(element => getComputedStyle(element).borderInlineStartStyle), 'solid');
       assert.equal(await email.inputValue(), 'venue@example.test');
       assert.equal(await submit.isEnabled(), true);
       assert.equal(proofs.length, 0);

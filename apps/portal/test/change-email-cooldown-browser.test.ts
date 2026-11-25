@@ -175,6 +175,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await alert.waitFor();
         assert.equal(await alert.textContent(), message);
         assert.equal(await alert.getByRole('list').count(), 0);
+        assert.equal(await alert.evaluate(element => getComputedStyle(element).borderInlineStartStyle), 'solid');
         assert.equal(await alert.evaluate(element => element === document.activeElement), true);
         assert.equal(await submit.isEnabled(), true);
         assert.equal(await wait.count(), 0);
@@ -191,6 +192,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await alert.waitFor();
         assert.equal(await alert.textContent(), message);
         assert.equal(await alert.getByRole('list').count(), 0);
+        assert.equal(await alert.evaluate(element => getComputedStyle(element).borderInlineStartStyle), 'solid');
         assert.equal(await alert.evaluate(element => element === document.activeElement), true);
         assert.equal(await page.getByRole('button', {name: c.create, exact: true}).isEnabled(), true);
         const newLink = page.getByRole('link', {name: c.requestLink, exact: true});
