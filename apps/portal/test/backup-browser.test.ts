@@ -53,6 +53,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   const captureWindow=async(state:string)=>{
    for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
     await page.emulateMedia({colorScheme});await page.setViewportSize({width,height:900});
+    await choices.evaluate(element=>element.scrollIntoView({block:'start'}));
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await page.screenshot({path:new URL(`../dist/backup-exit-${locale}-${colorScheme}-${width}-${state}.png`,import.meta.url).pathname,fullPage:true});
    }
@@ -81,7 +82,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.getByText(locale==='en'?'Later changes may be missing.':'Puede que falten cambios posteriores.',{exact:true}).waitFor();
   await captureWindow('open');
   assert.deepEqual(page.viewportSize(),viewport);
-  await saveManifest.click();
+  await saveArchive.click();
   const proofPrompt=page.getByRole('alert').filter({hasText:locale==='en'?'Verify it’s you before downloading.':'Verifica que eres tú antes de descargar.'});
   await proofPrompt.waitFor();
   await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
