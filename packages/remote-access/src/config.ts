@@ -3,6 +3,11 @@ import {isIP} from 'node:net';
 export interface TrafficRenderOptions {socket:string;operationalSources:readonly string[]}
 export const gatewayAlpnPort=8445;
 interface HaproxyOptions {alpnPort?:number;port:number;publicTlsPort:number;gatePort:number;certificateDirectory:string;traffic?:TrafficRenderOptions;proxySource?:string}
+export function requireDisabledGuestMenu(value:string|undefined,metered:boolean):void{
+ if(value===undefined||value==='0')return;
+ if(value==='1')throw new Error(metered?'guest_menu_metering_incompatible':'guest_menu_pairing_required');
+ throw new Error('invalid_guest_menu_switch');
+}
 export function validateTrafficRenderOptions(value:TrafficRenderOptions):void{
  if(!value||typeof value.socket!=='string'||value.socket.length>100||!/^\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.sock$/.test(value.socket)
   ||!Array.isArray(value.operationalSources)||value.operationalSources.length<1||value.operationalSources.length>64
