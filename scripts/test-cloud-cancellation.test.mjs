@@ -51,7 +51,8 @@ mock.module('node:https',{namedExports:{request:(options,respond)=>{
   clearTimeout(deadline);
   if(options.ca===null||options.servername==='wrong.local')return req.destroy(Error('certificate verify refused'));
   const res=new EventEmitter();res.statusCode=options.path.includes('signup')?202:200;respond(res);
-  options.signal?.removeEventListener('abort',abort);res.emit('data','{}');res.emit('end');
+  const body=options.path==='/api/account/browser-check'?{challenge:'synthetic',difficulty:8}:{};
+  options.signal?.removeEventListener('abort',abort);res.emit('data',JSON.stringify(body));res.emit('end');
  });return req;
 }}});
 const {runTestCloudClients}=await import(${JSON.stringify(runner)});
