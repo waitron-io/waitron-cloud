@@ -388,9 +388,10 @@ email wait is one minute.
 
 On the eleventh completed sign-up of a UTC day, the account log records the date and
 threshold. Cloud queues an operator notice if `CLOUD_OPERATOR_ACCOUNT_ID` names an
-enabled, verified account. The local capture transport can deliver it. Test Cloud supplies the operator account in its action demo.
-The SMTP and SES transports leave this notice to the account log. Further sign-ups
-remain subject to their usual connection and domain limits.
+enabled, verified account. The local inbox, SMTP and Amazon SES can deliver this
+warning. The hosted SES pilot keeps it in the local inbox. Test Cloud supplies the
+operator account in its action demo. Further sign-ups remain subject to their
+usual connection and domain limits.
 
 Set `CLOUD_SIGNUP_LIMITS` as a JSON object to override limits for a synthetic fixture.
 The JSON below shows the default for each key.

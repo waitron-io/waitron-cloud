@@ -106,6 +106,25 @@ test('production adapter authenticates over verified TLS and sends all account m
   }
 });
 
+const malformedWarning = {email: 'operator@example.test', event: 'signup_volume',
+  accountId: randomUUID(), day: '2026-11-24', threshold: 0};
+for (const [name, notice] of [
+  ['a malformed sign-up volume warning', malformedWarning],
+  ['a pending-action notice', {email: 'operator@example.test'}],
+] as const) {
+  test(`SMTP refuses ${name} before connecting`, async () => {
+    const smtp = await server();
+    try {
+      const mailer = createSmtpAccountMailer({...base, port: smtp.port}, {ca: cert});
+      assert.ok(mailer.sendOperatorNotice, 'SMTP has no operator notice sender');
+      await assert.rejects(mailer.sendOperatorNotice(notice, context()), {code: 'delivery_rejected'});
+      assert.equal(smtp.connections, 0);
+    } finally {
+      await smtp.close();
+    }
+  });
+}
+
 test('untrusted TLS certificates fail closed without sending mail', async () => {
   const smtp = await server();
   try {
