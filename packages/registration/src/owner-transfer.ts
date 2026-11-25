@@ -87,6 +87,8 @@ export class OwnerTransferStore {
    if((await client.query(`SELECT 1 FROM backup_recoveries r JOIN venues v ON v.id=r.venue_id
     LEFT JOIN installation_replacements replacement ON replacement.id=r.id
     WHERE v.organisation_id=$1 AND (r.status IN ('pending','restored') OR replacement.id IS NOT NULL AND replacement.completed_at IS NULL) LIMIT 1`,[offer.organisation_id])).rowCount)throw new OwnerTransferError('recovery_in_progress');
+   // Take venue locks before relay grant locks, matching mail handoff.
+   await client.query('UPDATE venues SET waitron_mail_reply_to=NULL WHERE organisation_id=$1 AND waitron_mail_reply_to IS NOT NULL',[offer.organisation_id]);
    await client.query('UPDATE support_grants SET revoked_at=clock_timestamp(),revoked_by_account_id=$2 WHERE organisation_id=$1 AND approved_by_account_id=$2 AND revoked_at IS NULL',[offer.organisation_id,offer.sender_id]);
    await client.query('UPDATE relay_grants SET revoked_at=clock_timestamp(),enabled=false WHERE organisation_id=$1 AND account_id=$2 AND revoked_at IS NULL',[offer.organisation_id,offer.sender_id]);
    await client.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE organisation_id=$1 AND account_id=$2 AND withdrawn_at IS NULL',[offer.organisation_id,offer.sender_id]);

@@ -113,11 +113,11 @@ test('a Connected venue owner can save the Waitron reply address',async t=>{
  const f=await setup(t);await f.set('connected');
  const request=venueEmailSettings(f),installationId=f.v.installation;
  const before=await request('status',f.v.session,{installationId});
- assert.equal(before.status,200);assert.deepEqual((await before.json()).venueEmail,{available:true,replyTo:null});
+ assert.equal(before.status,200);assert.deepEqual((await before.json()).venueEmail,{replyTo:null});
  const saved=await request('save',f.v.session,{installationId,replyTo:'office@example.test'});
- assert.equal(saved.status,200);assert.deepEqual(await saved.json(),{available:true,replyTo:'office@example.test'});
+ assert.equal(saved.status,200);assert.deepEqual(await saved.json(),{replyTo:'office@example.test'});
  const read=await request('status',f.v.session,{installationId});
- assert.equal(read.status,200);assert.deepEqual((await read.json()).venueEmail,{available:true,replyTo:'office@example.test'});
+ assert.equal(read.status,200);assert.deepEqual((await read.json()).venueEmail,{replyTo:'office@example.test'});
 });
 test('only the venue owner can read or change its Waitron reply address',async t=>{
  const f=await setup(t);await f.set('hosted');
@@ -135,4 +135,14 @@ test('Registered venues cannot save the Waitron reply address',async t=>{
  const before=await request('status',f.v.session,{installationId});
  assert.equal(before.status,200);assert.equal((await before.json()).venueEmail,undefined);
  assert.equal((await request('save',f.v.session,{installationId,replyTo:'office@example.test'})).status,403);
+});
+
+test('a Connected owner can clear the Waitron reply address',async t=>{
+ const f=await setup(t);await f.set('connected');
+ const request=venueEmailSettings(f),installationId=f.v.installation;
+ assert.equal((await request('save',f.v.session,{installationId,replyTo:'office@example.test'})).status,200);
+ const clear=await request('save',f.v.session,{installationId,replyTo:''});
+ assert.equal(clear.status,200);assert.deepEqual(await clear.json(),{replyTo:null});
+ const read=await request('status',f.v.session,{installationId});
+ assert.equal(read.status,200);assert.deepEqual((await read.json()).venueEmail,{replyTo:null});
 });

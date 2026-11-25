@@ -86,7 +86,6 @@ summary { cursor: pointer; }
   box-sizing: border-box; width: 100%; min-width: 0; padding: .5rem; font: inherit;
   color: var(--wt-color-text); background: var(--wt-color-bg); border: 1px solid var(--wt-color-text-muted); border-radius: .35rem;
 }
-.venue-email-options form wt-button { justify-self: start; }
 
 .separator { align-items: center; display: flex; gap: .75rem; margin: 1.25rem 0; }
 .separator::before, .separator::after { background: var(--wt-color-border); content: ""; flex: 1; height: 1px; }

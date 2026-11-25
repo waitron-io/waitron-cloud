@@ -70,6 +70,6 @@ test('Sent reports upgrade dates existing owners without exposing legacy staff r
   const after=(await pool.query('SELECT name,digest FROM schema_migrations ORDER BY name')).rows;
   assert.deepEqual(after.slice(0,82),before);
   assert.equal(after.length,87);
-  assert.equal(after.at(82)?.name,'083_sent_report_bodies.sql');assert.equal(after.at(83)?.name,'084_venue_snapshot_recovery.sql');assert.equal(after.at(84)?.name,'085_address_lookup.sql');assert.equal(after.at(-1)?.name,'086_operator_venues.sql');
+  assert.equal(after.at(82)?.name,'083_sent_report_bodies.sql');assert.equal(after.at(83)?.name,'084_venue_snapshot_recovery.sql');assert.equal(after.at(84)?.name,'085_address_lookup.sql');assert.equal(after.at(85)?.name,'086_operator_venues.sql');assert.equal(after.at(-1)?.name,'087_venue_mail_sender.sql');
  }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
 });

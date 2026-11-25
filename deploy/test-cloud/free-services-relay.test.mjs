@@ -225,6 +225,12 @@ test('Mailpit gets the venue sender and reply address until downgrade', async t 
   const paid = await deliver(await venue.submit({locale: 'en'}));
   assert.deepEqual([paid.From.Name, paid.From.Address], ['Café del Sol', 'relay@example.test']);
   assert.deepEqual(paid.ReplyTo.map(address => address.Address), ['office@example.test']);
+  await f.pool.query('UPDATE venues SET display_name=NULL WHERE id=$1', [venueId]);
+  await f.pool.query('UPDATE legal_businesses SET name=$2 WHERE id=$1', [legalBusinessId, 'Synthetic legal name']);
+  const unnamed = await deliver(await venue.submit({locale: 'en'}));
+  assert.deepEqual([unnamed.From.Name, unnamed.From.Address], ['Waitron', 'relay@example.test']);
+  assert.deepEqual(unnamed.ReplyTo.map(address => address.Address), ['office@example.test']);
+  await f.pool.query('UPDATE venues SET display_name=$2 WHERE id=$1', [venueId, 'Café del Sol']);
   const queued = await venue.submit({locale: 'en'});
   await level('registered');
   const free = await deliver(queued);

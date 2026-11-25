@@ -68,8 +68,8 @@ function date(value: unknown): value is string {
   return typeof value === 'string' && Number.isFinite(Date.parse(value))
     && new Date(value).toISOString() === value;
 }
-function label(value: unknown, max: number): value is string {
-  return typeof value === 'string' && [...value].length <= max && !/[\p{Cc}\p{Cf}<>]/u.test(value);
+export function validRelayDisplayName(value: unknown): value is string {
+  return typeof value === 'string' && [...value].length <= 200 && !/[\p{Cc}\p{Cf}<>]/u.test(value);
 }
 function noticeLabel(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && [...value].length <= 80
@@ -169,7 +169,7 @@ export function relayBody(text: string, submit: boolean): RelayBody | {version: 
     || !isPairingUuid(value.messageId) || !isPairingUuid(value.grantId)
     || !Number.isSafeInteger(value.grantRevision) || Number(value.grantRevision) < 1
     || typeof value.recipient !== 'string' || normaliseEmail(value.recipient) !== value.recipient
-    || Buffer.byteLength(value.recipient) > 254 || !label(value.displayName, 200)
+    || Buffer.byteLength(value.recipient) > 254 || !validRelayDisplayName(value.displayName)
     || typeof value.locale !== 'string' || !['en', 'en-GB', 'en-US', 'es', 'es-ES'].includes(value.locale)
     || typeof value.timeZone !== 'string' || value.timeZone.length > 100 || !date(value.expiresAt)) {
     messageError('invalid_message');

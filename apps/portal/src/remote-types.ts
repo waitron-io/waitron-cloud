@@ -1,3 +1,4 @@
+import {validEmail} from './email.ts';
 import {isGuestMenuLanguageShape} from '../../../packages/remote-access/src/guest-menu-language.ts';
 import type {RemoteDnsRecord} from '../../../packages/remote-access/src/certificates.ts';
 export type RemoteKind='staff'|'public';
@@ -5,7 +6,7 @@ export type ForwardCause='upstream_non_200'|'upstream_timeout'|'upstream_respons
 export interface PublicForwardView {category:ForwardCause|null;observedAt:string;expiresAt:string}
 export interface GuestMenuView {version:1;venueId:string;url:string;revision:number;state:'off'|'current'|'blocked';publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};}
 interface RemoteName {assigned:string;current:string;recordMoved?:boolean;}
-export interface VenueEmailSettings {available:true;replyTo:string|null}
+export interface VenueEmailSettings {replyTo:string|null}
 export interface RemoteView {venueEmail?:VenueEmailSettings;guestMenu?:GuestMenuView;publicForward?:PublicForwardView|null;connectedRequired?:true;installationId:string;revision:number;revoked:boolean;names:Record<RemoteKind,RemoteName>|null;service:{state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';observedAt:string|null;validUntil:string|null};}
 export interface RemoteDns {installationId:string;kind:RemoteKind;hostname:string;records:[RemoteDnsRecord];}
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -31,7 +32,7 @@ function validRemoteName(v:unknown):v is RemoteName{
   &&(v.recordMoved!==true||v.current!==v.assigned);
 }
 export function validVenueEmail(v:unknown):v is VenueEmailSettings{
- return object(v)&&v.available===true&&(v.replyTo===null||typeof v.replyTo==='string'&&v.replyTo.length<=254&&v.replyTo.includes('@'));
+ return object(v)&&(v.replyTo===null||typeof v.replyTo==='string'&&validEmail(v.replyTo));
 }
 export function validRemoteView(v:unknown):v is RemoteView{
  if(!object(v)||(v.venueEmail!==undefined&&!validVenueEmail(v.venueEmail))||(v.guestMenu!==undefined&&!validGuestMenuView(v.guestMenu))||!validForward(v.publicForward)||(v.publicForward!=null&&(v.revoked===true||v.names===null))||!id(v.installationId)||!Number.isSafeInteger(v.revision)||(v.revision as number)<0||typeof v.revoked!=='boolean'||!object(v.service))return false;

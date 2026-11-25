@@ -4,7 +4,7 @@ import {createHmac,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {normaliseEmail} from './account-input.ts';
 import {RelayError,RelayGrantStore,type RelayConfig} from './relay-grants.ts';
-import {RelayKeys,messageError,type RelayKeyConfig,type RelayPayloadBinding} from './relay-payload.ts';
+import {RelayKeys,messageError,validRelayDisplayName,type RelayKeyConfig,type RelayPayloadBinding} from './relay-payload.ts';
 import {localRelaySmtp,relayTemplate,type RelayContent,type RelayDelivery,type RelaySender} from './relay-smtp.ts';
 import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
@@ -172,14 +172,13 @@ export class RelayWorker {
    }
    let sender:RelaySender|undefined;
    if(this.#planMode==='test-venue-levels'){
-    const saved=(await c.query<{id:string;name:string|null;reply_to:string}>(`SELECT v.id,
-     COALESCE(v.display_name,b.name,o.name) AS name,v.waitron_mail_reply_to AS reply_to
-     FROM installations i JOIN venues v ON v.id=i.venue_id JOIN legal_businesses b ON b.id=v.legal_business_id
-     JOIN organisations o ON o.id=v.organisation_id WHERE i.id=$1 AND v.waitron_mail_reply_to IS NOT NULL`,[row.installation_id])).rows[0];
+    const saved=(await c.query<{id:string;display_name:string|null;reply_to:string}>(`SELECT v.id,v.display_name,v.waitron_mail_reply_to AS reply_to
+     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 AND v.waitron_mail_reply_to IS NOT NULL`,[row.installation_id])).rows[0];
     if(saved){
      // Grant reservation already holds venue policy through handoff.
      const {level}=await readVenuePermissions(c,saved.id,this.#planMode);
-     if(level==='connected'||level==='hosted')sender={name:saved.name??undefined,replyTo:saved.reply_to};
+     const name=saved.display_name?.trim();
+     if(level==='connected'||level==='hosted')sender={name:name&&validRelayDisplayName(name)?name:undefined,replyTo:saved.reply_to};
     }
    }
    // This commit is the handoff boundary. Later revoke/cancel cannot recall SMTP.

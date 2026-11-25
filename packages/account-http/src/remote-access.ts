@@ -50,7 +50,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const permission=options.planMode==='test-venue-levels'?await readVenuePermissions(client,binding.venue_id,options.planMode):undefined;
   const paid=permission?permission.level==='connected'||permission.level==='hosted':await readVenuePlan(client,binding.venue_id,options.planMode??'existing')==='paid';
   const installation=(await client.query('SELECT configuration_revision,revoked_at,lease_expires_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];
-  const venueEmail=permission&&paid&&!installation.revoked_at?{available:true,
+  const venueEmail=permission&&paid&&!installation.revoked_at?{
    replyTo:(await client.query<{waitron_mail_reply_to:string|null}>('SELECT waitron_mail_reply_to FROM venues WHERE id=$1',[binding.venue_id])).rows[0]!.waitron_mail_reply_to}:undefined;
   const names=(await client.query(`SELECT h.kind,h.assigned_hostname,h.hostname,h.record_moved_at
    FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id

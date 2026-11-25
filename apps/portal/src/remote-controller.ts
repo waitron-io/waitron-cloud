@@ -1,10 +1,11 @@
 import {bodyRefusal} from './body-refusal.ts';
+import {validEmail} from './email.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:[]|RemoteDns['records']}|undefined;
- venueEmailResult:'saved'|'invalid'|'failed'|undefined;
+ venueEmailResult:'saved'|'cleared'|'invalid'|'failed'|undefined;
  error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
@@ -20,21 +21,25 @@ export class RemoteController {
   this.#changed();
  }
  async saveVenueEmail(replyTo:string){
-  const id=this.installationId,view=this.view;
-  if(!this.#account||!id||!view?.venueEmail||this.pending||this.waiting)return;
+  const id=this.installationId;
+  if(!this.#account||!id||!this.view?.venueEmail||this.pending||this.waiting)return;
+  if(replyTo!==''&&!validEmail(replyTo)){this.venueEmailResult='invalid';this.#changed();return;}
   const generation=this.#generation;
-  this.pending=true;this.venueEmailResult=undefined;this.#changed();
+  this.pending=true;this.error=undefined;this.venueEmailResult=undefined;this.#changed();
   const result=await this.#request<VenueEmailSettings>('/venue-email/save',{installationId:id,replyTo});
   if(generation!==this.#generation)return;
   this.pending=false;
-  if(result.ok){
-   this.view={...view,venueEmail:result.value};
-   this.venueEmailResult='saved';
-  }else{
-   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-   this.venueEmailResult=result.status===400?'invalid':'failed';
+  if(result.ok&&this.view){
+   this.view={...this.view,venueEmail:result.value};
+   this.venueEmailResult=result.value.replyTo===null?'cleared':'saved';
+  }else if(!result.ok){
+   if(result.status===401||result.status===403||result.status===429)this.#failure(result);
+   else this.venueEmailResult=result.status===400?'invalid':'failed';
   }
   this.#changed();
+ }
+ editVenueEmail(){
+  if(this.venueEmailResult){this.venueEmailResult=undefined;this.#changed();}
  }
  get hostnameChanged(){return !!this.view?.names&&this.hostname.trim().toLowerCase().replace(/\.$/,'')!==this.view.names[this.kind].current;}
  // Relative server waits keep their deadline across wall-clock corrections and account changes.
@@ -61,7 +66,7 @@ export class RemoteController {
  async load(){return this.#load(false);}
  async #load(reconcile:boolean){
   if(!this.#account||!this.installationId||this.pending||(!reconcile&&this.waiting))return;
-  this.#clearForward();const generation=this.#generation,id=this.installationId;this.pending=true;this.error=undefined;this.confirmation=undefined;this.#changed();
+  this.#clearForward();const generation=this.#generation,id=this.installationId;this.pending=true;this.error=undefined;this.confirmation=undefined;this.venueEmailResult=undefined;this.#changed();
   const result=await this.#request<RemoteView>('/remote-access/status',{installationId:id});if(generation!==this.#generation)return;
   this.pending=false;
   if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';}

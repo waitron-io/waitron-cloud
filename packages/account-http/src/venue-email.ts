@@ -14,8 +14,8 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
  await consume([{scope:'venue-email-ip',subject:ip,limit:60,windowSeconds:60}]);
  const body=await readAccountBody(c.req.raw,['installationId','replyTo']);
- const installationId=body.installationId!,replyTo=normaliseEmail(body.replyTo);
- if(!isUuid(installationId)||!replyTo)throw new AccountHttpError(400,'invalid_input');
+ const installationId=body.installationId!,replyTo=body.replyTo===''?null:normaliseEmail(body.replyTo);
+ if(!isUuid(installationId)||replyTo===undefined)throw new AccountHttpError(400,'invalid_input');
  const token=readSessionCookie(c,secure)??'',csrfToken=c.req.header('x-csrf-token')??'';
  return c.json(await transaction(pool,async client=>{
   const session=await resolveSession(client,token,{csrfToken,touch:false});
@@ -31,6 +31,6 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
   if(!active||permission.organisationId!==venue.organisation_id)throw new AccountHttpError(403,'permission_denied');
   if(permission.level!=='connected'&&permission.level!=='hosted')throw new AccountHttpError(403,'permission_denied');
   await client.query('UPDATE venues SET waitron_mail_reply_to=$2 WHERE id=$1',[venue.id,replyTo]);
-  return {available:true,replyTo};
+  return {replyTo};
  }));
 }
