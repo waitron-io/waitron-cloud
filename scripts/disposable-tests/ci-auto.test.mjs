@@ -760,6 +760,47 @@ test('pickup does not reselect a retry while its first worker awaits admission',
  assert.equal(retryWorkers,1);assert.equal(result.served,2);
 });
 
+test('an unused admission retry waits one polling interval while a sibling runs',{timeout:10000},async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(3);
+ const identity=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ const failed=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0,now:()=>Date.now()-60000});
+ const lease=failed.reserveLocal(ciRequest('I',identity)).lease;
+ failed.release(lease,{resourceId:lease.resourceId,absent:true});failed.forgetRunner(failed.inspect().orphanRunners[0]);
+ assert.equal(failed.recordCIRetryFailure({code:125,cleanup:'absent',lease,error:'GitHub GET refused (503)'},'registration-5xx'),true);
+ let finishSibling,finishWake,resume,paused=false,launches=0;
+ const sibling=new Promise(resolve=>{finishSibling=resolve;}),wake=new Promise(resolve=>{finishWake=resolve;});
+ const cooldown=new Promise(resolve=>{resume=resolve;}),events=[];
+ const signal=AbortSignal.timeout(8000);
+ signal.addEventListener('abort',()=>{finishSibling({code:0});finishWake({code:0});resume();},{once:true});
+ f.api.get=async path=>{
+  if(paused && path.includes('/actions/runs?status=queued')){
+   paused=false;
+   resume();finishSibling({code:0});
+  }
+  return path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ };
+ const options={configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},signal,
+  // A completed sibling wakes the next scan while the retry is still paused.
+  wait:async ms=>{events.push(ms);paused=true;finishWake({code:0});await cooldown;events.push('resumed');},runWorker:async ci=>{
+   if(ci.jobId===902)return sibling;
+   if(ci.jobId===903)return wake;
+   if(++launches===1){events.push('refused');throw new Error('GitHub GET refused (503)');}
+   finishSibling({code:0});finishWake({code:0});
+   return withAvailableSlot(config,async({leases})=>{
+    const reserved=leases.reserveLocal(ciRequest('I',ci));assert.equal(reserved.code,0);
+    leases.release(reserved.lease,{resourceId:reserved.lease.resourceId,absent:true});
+    leases.forgetRunner(leases.inspect().orphanRunners[0]);events.push('reserved');return {code:0};
+   });
+  }};
+ assert.equal((await automaticTick(options)).served,3);
+ assert.deepEqual(events,['refused',30000,'resumed']);
+ f.jobs.splice(1);
+ assert.equal((await automaticTick(options)).served,1);
+ assert.deepEqual(events,['refused',30000,'resumed','reserved']);
+ assert.equal(failed.inspect().turns['I:ci-789-1-901'].registration5xxRetried,true);
+});
+
 test('automatic pickup refills a completed slot before a slow sibling finishes',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;

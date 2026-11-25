@@ -40,13 +40,13 @@ stays separate.
 
 ### CI self-recovery (A1473)
 
-The controller is installed, with quota holds, one delayed registration-5xx retry,
-obsolete-PR cancellation and forward overflow; the
+The controller supports quota holds, one delayed HTTP 5xx retry for the final admission reads or
+runner registration, obsolete-PR cancellation and forward overflow. The
 [forward-overflow plan](superpowers/plans/2026-11-10-a1473-forward-overflow.md) records
 the rules and their measurement prerequisite. One owned overflow drill ran on 13 November;
 it qualifies no product test or speed.
 
-**Open:** natural outcomes for registration failure, a live rate limit (the six recorded
+**Open:** natural pickup after an admission or registration 5xx, a live rate limit (the six recorded
 403s have no headers), the busy-runner retry, obsolete-PR cancellation, marker retirement
 and stale queued runs, and an owned stuck cancel. The watcher held new code for the
 five-minute untaken-job rule (13 November 07:02) until a real case is measured; reverse
