@@ -407,18 +407,12 @@ supported recovery path yet. Open:
 Snapshots remain unavailable in the delivered deployment and plan enforcement stays off
 until release qualification. Recheck active migration reservations before new database work.
 
-## Hosted guest menu (A670-CLOUD)
+## Public customer menus (D643)
 
-Qualify Waitron's signed sender and its published menu from a phone on mobile
-data using the [Amazon test Cloud guest address](test-cloud.md#open-the-synthetic-venues-guest-menu).
-The Amazon test proxy returns a retry response when the browser reuses the account
-connection for the guest menu, or the reverse. The proxy fixture checks both
-directions over HTTP/2. After rollout, recheck the two pages and a fresh phone
-visit to the menu immediately after sharing starts.
-Qualify the Connected or Hosted trial and paid-plan gate with the box preview on the
-Amazon test Cloud. Production DNS, certificates and rollout remain open. The
-[remaining work](backlog/guest-menu.md) covers variant publication. Live forwarding
-belongs to Waitron A509 online ordering.
+Build and qualify live, read-only menus from the serving box on test installations. The
+[Cloud plan](superpowers/plans/2026-11-25-d643-public-customer-menu.md) covers the gateway,
+venue block and retirement of the [hosted copy](backlog/guest-menu.md) after the paired test.
+Production DNS, certificates and rollout remain open.
 
 ## Custom domains with one record, and names that follow the venue
 
