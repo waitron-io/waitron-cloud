@@ -1,0 +1,18 @@
+# Paid venue email domain records
+
+In Connected and Hosted test setup, a venue owner can save the address they want to send from, copy the one DNS alias their web administrator must add, and download the same email and remote-access records as a PDF. A tick shows that the alias points to the requested name. Staff email continues to use a Waitron From address. This is the first part of [Cloud slice 2b](2026-11-25-paid-venue-email-cloud.md#2b-show-verified-domain-records) in the [paid venue email design](../specs/2026-11-23-venue-email-paid-design.md).
+
+## Save the address and show the records
+
+- Extend `packages/account-http/src/venue-email.ts`, `app.ts`, `server-cli.ts` and `remote-access.ts`. Reuse the origin, request-forgery, test-owner, active-installation and paid-level checks. Add a registration migration for the sending address and a unique lowercase UUID token on the venue. Reuse it for mailbox edits within the same domain and replace it for domain changes. Form `<token>._domainkey.<venue-domain>` and `<token>.mail.<test-suffix>`. Reject domains in Waitron-managed namespaces. Hide setup unless `CLOUD_VENUE_MAIL_DNS_SUFFIX` is configured for the test portal. For reset and accepted ownership transfer, clear the sending address and token with the reply address in the existing transaction.
+- Preserve `waitron_mail_reply_to` as the explicit reply address. In `packages/registration/src/relay-worker.ts`, use the sending address as the default reply address when no explicit one is saved. **Use standard sender** clears both choices. The existing test level and staff-grant checks still apply.
+- In `apps/portal/src/{remote-screen,venue-email-screen,remote-controller,remote-types,api,locale}.ts`, build one list for the screen, copy buttons and PDF. Include the email alias and each configured remote-access name that differs from its assigned name. Keep the remote setup confirmation. Load `pdf-lib` on download. Use ASCII DNS names and fixed localised text in the PDF.
+
+## Check and test
+
+- Use a rate-limited DNS check action on open and refresh. Use `packages/remote-access/src/dns-lookup.ts` outside the transaction. Recheck owner, active installation and current values before returning. Compare the exact normalised target of each listed alias. `ENOTFOUND`, `ENODATA` and a mismatch mean unverified. A timeout, including the resolver wrapper's deadline, and other resolver failures mean unknown. Show results for the current list only. The tick describes DNS delegation. The screen says sending from the venue domain is pending.
+- Write failing cases first. Use `packages/registration/test/venue-service-relay.test.ts` for access, save and reset, DNS outcomes and stale checks. Extend `owner-transfer.test.ts` for domain reset and keep the venue row comparisons in `schema-compatibility`, `billing-migration`, `fiscal-registry-schema` and `backup-verification-migration` strict with the new nullable fields. Use `apps/portal/test/venue-email-browser.test.ts` for screen, copy and PDF parity. Inspect both languages and themes at 390 and 1280 pixels. Run `deploy/test-cloud/free-services-relay.test.mjs` in Mailpit for Waitron From and explicit, default and cleared replies. Update both venue email backlog entries.
+
+The 25 November Stockholm sandbox verified the alias in one DNS zone and sent no mail. A separate venue zone and delivered signatures still need qualification. The signing plan will cover identities, key publication, cleanup and rotation. It will keep only the public key and selector after handing the private key to Amazon SES. Slice 2c owns sender selection and fallback.
+
+**Estimate** 280–380 product lines and 150–215 test lines, plus the portal manifest and generated lockfile for the PDF dependency.
