@@ -247,6 +247,8 @@ trading. The contract remains unagreed and unimplemented.
 
 ## Public access and A951 (PROPOSED)
 
+**25 November 2026.** Read-only menus on test installations follow the [customer-menu design](https://github.com/clintongormley/waitron/blob/bd5d2dbf1976ede08efc2ebaf0e01b9063aaf884/docs/superpowers/specs/2026-11-24-customer-menu-design.md) and the [joint delivery design](https://github.com/clintongormley/waitron/blob/bd5d2dbf1976ede08efc2ebaf0e01b9063aaf884/docs/superpowers/specs/2026-11-25-customer-menu-public-access.md). The approval gate below applies to the other customer services.
+
 This extends D88 and published #265 for the **Cloud step soon after go-live**, not
 go-live itself. The owner requires `.local` as the default for venue devices and a
 separate public interface for customer menus, bookings, online orders and table-QR
