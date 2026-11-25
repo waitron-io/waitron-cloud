@@ -1153,10 +1153,10 @@ so you can open the encrypted archive later. The manifest gives the capture time
 and SHA-256 checksum of the encrypted file. Later changes may be missing. After
 service ends, Backups reminds you to keep your fiscal records and check your copies
 while the downloads are open. This test download accepts archives up to 16 MiB.
-
-Run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
-first value in the output with `archiveSha256` in the manifest to check the saved file.
 Actual venue exit still needs the rest of the return and deletion process.
+
+On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
+first value in the output with `archiveSha256` in the manifest to check the saved file.
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `44dc45af7a64d399037747499ba633594a63f84d`. This client uses the pairing proof
