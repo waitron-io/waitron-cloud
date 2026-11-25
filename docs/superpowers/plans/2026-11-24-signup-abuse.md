@@ -30,13 +30,4 @@ screens in light and dark at 390 and 1280 pixels before each change lands.
    request, email, completion and rollback checks, Mailpit for the notice, and the
    portal browser tests for the copy and waits. Expect about 220 production lines and
    200 test lines for these three steps.
-4. **Browser check in the following pull request.** Move the reusable puzzle out of
-   the public gateway in `remote-access`. Serve it on the portal origin and require
-   a solution once per sign-up or reset email request. Bind it to the form, origin and
-   connection, including the IPv6 /64 rule. Spend each challenge once using the
-   existing PostgreSQL limiter and keep the spent claim until after expiry. Check the
-   proof before spending the form allowance or looking up an account. Keep the public
-   gateway tests for forged and expired challenges. Cover missing, wrong-form,
-   wrong-connection and reused proofs at account HTTP, then exercise the real browser
-   and Mailpit in the journey. Adapt direct callers. Expect about 220 production and
-   220 test lines in this second change.
+4. **Browser check.** The owner chose [Cloudflare Turnstile](2026-11-25-signup-turnstile.md) on 25 November, superseding this step.

@@ -66,6 +66,7 @@ import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
 import { readSessionCookie, writeSessionCookies, readBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
+import {requireTurnstile, turnstileAction} from './turnstile.ts';
 const paths: Record<string, readonly string[]> = {
   '/signup/request': ['email'], '/signup/complete': ['token', 'password'],
   '/login': ['email', 'password'], '/session/activity': [], '/logout': [],
@@ -103,7 +104,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
   if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
@@ -226,7 +227,11 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
+    const turnstile = config.turnstile;
+    const action = turnstile && turnstileAction(c.req.path);
+    const optional = ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : [];
+    if (action) optional.push('turnstileToken');
+    const body = await readAccountBody(c.req.raw, fields!, optional);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
     const started = performance.now();
@@ -252,6 +257,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         return c.json({accountId: credentials.accountId});
       }
       if (path.endsWith('/request')) {
+        if (turnstile && action) await requireTurnstile({limiter, ip, hostname: origin.hostname, action,
+          token: body.turnstileToken, secret: turnstile.secretKey, fetcher: options.turnstileFetch});
         if (path === '/signup/request') {
           const decision = await limiter.consume([{scope: 'signup-request-hour-ip', subject: ip, limit: config.signupLimits.requestsPerHour, windowSeconds: 3600}]);
           if (!decision.allowed) throw new AccountHttpError(429, 'signup_rate_limited', decision.retryAfterSeconds);

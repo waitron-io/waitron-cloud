@@ -75,3 +75,22 @@ export function captureSetupPairingLink(url: URL): SetupPairingLink | undefined 
   } catch { /* Unavailable or invalid tab storage carries no authority. */ }
   forgetSetupPairingLink();
 }
+
+const pageReturnKey = 'cloud.emailRequestReturn';
+type PageReturn = {path: string; pairingId?: string; recoveryId?: string; locale: Locale};
+
+export function saveEmailRequestReturn(value: PageReturn) {
+  try {sessionStorage.setItem(pageReturnKey, JSON.stringify(value));} catch { /* Storage is optional. */ }
+}
+
+export function takeEmailRequestReturn(path: string): Omit<PageReturn, 'path'> | undefined {
+  try {
+    const raw = sessionStorage.getItem(pageReturnKey);
+    sessionStorage.removeItem(pageReturnKey);
+    if (!raw) return;
+    const value = JSON.parse(raw);
+    if (value?.path !== path || (value.locale !== 'en' && value.locale !== 'es')) return;
+    const id = (candidate: unknown) => typeof candidate === 'string' && pairingId.test(candidate) ? candidate : undefined;
+    return {locale: value.locale, pairingId: id(value.pairingId), recoveryId: id(value.recoveryId)};
+  } catch { /* Unavailable or invalid tab storage carries no context. */ }
+}

@@ -627,8 +627,12 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 ## Cloud signup and business moves
 
-Add the browser check to sign-up and password-reset email requests. Sign-up has email
-confirmation and connection, mailbox and domain limits. High sign-up volume writes
+Qualify and enable Turnstile for public sign-up and password-reset email. The account
+service and both test launchers support opt-in configuration. Deployments continue
+to use the existing email confirmation and connection, mailbox and domain limits
+until keys are set. Qualify the live widget with the portal's content security and
+referrer policies, record supplier and cookie evidence, and wire the keys and outbound
+HTTPS in Kubernetes before enabling it. High sign-up volume writes
 one operator warning to the account log each UTC day. Local tests delivered the
 warning to a configured operator over SMTP, including the Amazon SES delivery path
 with a local relay. The hosted pilot keeps these notices in its local inbox and

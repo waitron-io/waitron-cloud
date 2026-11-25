@@ -103,3 +103,17 @@ test('translation is optional and receives provider settings without exposing th
  const base=JSON.parse(execFileSync('docker',['compose','--env-file','/dev/null','config','--format','json'],{encoding:'utf8',env}));
  assert.equal(base.services['translation-worker'],undefined);
 });
+
+test('Compose passes the Turnstile keys only to the account service in both stacks', () => {
+ const keys = {CLOUD_TURNSTILE_SITE_KEY: 'test-site', CLOUD_TURNSTILE_SECRET_KEY: 'test-secret'};
+ for (const files of [[], ['-f', 'deploy/test-cloud/compose.yaml']]) {
+  const args = ['compose', '--env-file', '/dev/null', '-f', 'compose.yaml', ...files, 'config', '--format', 'json'];
+  const {services} = JSON.parse(execFileSync('docker', args, {encoding: 'utf8', env: {...process.env, ...keys}}));
+  for (const [key, value] of Object.entries(keys)) {
+   assert.equal(services.account.environment[key], value);
+   for (const [name, service] of Object.entries(services)) {
+    if (name !== 'account') assert.equal(service.environment?.[key], undefined, name);
+   }
+  }
+ }
+});

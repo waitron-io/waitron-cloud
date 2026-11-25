@@ -7,6 +7,13 @@ select { font: inherit; color: var(--wt-color-text); background: var(--wt-color-
 h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 1.5rem; }
 h1:focus { outline: none; }
 wt-input { margin: 1rem 0; }
+#form-refusal {
+  margin: 0 0 var(--wt-space-4);
+  padding: var(--wt-space-3);
+  border-inline-start: var(--wt-space-1) solid var(--wt-color-danger);
+  background: var(--wt-color-surface-raised);
+}
+turnstile-widget { display: block; min-height: 65px; }
 .help { color: var(--wt-color-text-muted); font-size: .9rem; }
 nav { display: grid; gap: .8rem; margin-top: 1.25rem; }
 .account-nav { margin-block: 0 1rem; }

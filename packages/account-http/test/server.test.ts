@@ -413,3 +413,31 @@ test('CLI forwards test plan mode to lifecycle and staff certificate boundaries'
   }finally{assert.equal((await running.stop()).code,0);}
  }
 });
+
+test('slow Turnstile requests leave server slots for sign-in', async () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => {resolve = done;});
+  let verifying = 0;
+  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: 0,
+    config: {...config(), turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}},
+    turnstileFetch: async () => {
+      verifying++;
+      await promise;
+      return Response.json({success: false});
+    }});
+  const address = running.server.address(); assert.ok(address && typeof address !== 'string');
+  const sendSignup = (path = '/signup/request') => send(address.port, path, JSON.stringify({email: 'guest@example.test', turnstileToken: 'proof'}));
+  const pending = Array.from({length: 4}, () => sendSignup());
+  try {
+    await until(async () => verifying === 4, 1500);
+    const excess = await sendSignup('/%73ignup/request').result;
+    assert.equal(excess.status, 503);
+    assert.deepEqual(JSON.parse(excess.body), {error: 'browser_check_failed'});
+    assert.equal((await send(address.port, '/login', JSON.stringify({email: 'guest@example.test', password: 'wrong password'})).result).status, 401);
+    assert.equal(verifying, 4);
+  } finally {
+    resolve();
+    await Promise.all(pending.map(item => item.result));
+    await running.close();
+  }
+});

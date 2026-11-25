@@ -101,6 +101,8 @@ services:
       CLOUD_TRANSLATION: ${CLOUD_TRANSLATION:-0}
       CLOUD_FACTOR_POLICY: ${CLOUD_FACTOR_POLICY:-}
       CLOUD_SIGNUP_LIMITS: ${CLOUD_SIGNUP_LIMITS:-}
+      CLOUD_TURNSTILE_SITE_KEY:
+      CLOUD_TURNSTILE_SECRET_KEY:
       CLOUD_OPERATOR_ACCOUNT_ID: ${CLOUD_OPERATOR_ACCOUNT_ID:-}
     command: ["node", "deploy/local-stack/runtime.mjs", "account"]
     depends_on:

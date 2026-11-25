@@ -5,10 +5,26 @@ export const securityHeaders = {
   'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
   'Content-Security-Policy': "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
 };
-export function portalSecurityHeaders(testBillingMethods=false){
-  if(!testBillingMethods)return securityHeaders;
-  return {...securityHeaders,'Content-Security-Policy':"default-src 'none'; script-src 'self' https://gateway.sumup.com; connect-src 'self' https://api.sumup.com https://gateway.sumup.com https://js.sumup.com; frame-src https://gateway.sumup.com https://api.sumup.com https://eu-test.oppwa.com https://test.oppwa.com https://test.ppipe.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://static.sumup.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"};
+export function portalSecurityHeaders(testBillingMethods=false, turnstile=false){
+  const headers = testBillingMethods ? {...securityHeaders,'Content-Security-Policy':"default-src 'none'; script-src 'self' https://gateway.sumup.com; connect-src 'self' https://api.sumup.com https://gateway.sumup.com https://js.sumup.com; frame-src https://gateway.sumup.com https://api.sumup.com https://eu-test.oppwa.com https://test.oppwa.com https://test.ppipe.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://static.sumup.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"} : securityHeaders;
+  if (!turnstile) return headers;
+  const source = 'https://challenges.cloudflare.com';
+  let policy = headers['Content-Security-Policy'].replace(/script-src [^;]+/, directive => `${directive} ${source}`);
+  policy = policy.includes('frame-src ') ? policy.replace(/frame-src [^;]+/, directive => `${directive} ${source}`)
+    : `${policy}; frame-src ${source}`;
+  return {...headers, 'Content-Security-Policy': policy};
 }
+
+export function turnstilePortalAssets(assets: PortalAssets, siteKey: string) {
+  const index = assets.get('/index.html');
+  if (!index) throw new Error('Invalid portal build');
+  const html = Buffer.from(index.body).toString('utf8');
+  if (!/<\/head>/i.test(html)) throw new Error('Invalid portal build');
+  const enabled = '<meta name="turnstile-enabled" content="true">';
+  const document = (tags: string) => ({...index, body: Buffer.from(html.replace(/<\/head>/i, `${tags}</head>`))});
+  return {standard: document(enabled), request: document(`${enabled}<meta name="turnstile-site-key" content="${siteKey}">`)};
+}
+
 export async function loadPortalAssets(directory: string): Promise<PortalAssets> {
   const assets = new Map<string, {body: Uint8Array; contentType: string}>();
   for (const [name, contentType] of [['index.html', 'text/html'], ['app.js', 'text/javascript'], ['app.css', 'text/css']] as const) {
@@ -58,7 +74,7 @@ export function portalErrorResponse(request: Request, status: 400 | 404 | 405 | 
     ...(status === 503 ? {'Retry-After': '1'} : {}),
   }});
 }
-export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false, setupPairing=false): Response {
+export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false, setupPairing=false, turnstile?: ReturnType<typeof turnstilePortalAssets>): Response {
   const url = new URL(request.url);
   const failure = (status: 400 | 404 | 405) => portalErrorResponse(request, status, testBillingMethods);
   const pairingLink = setupPairing && url.pathname === '/login' && url.searchParams.size === 4
@@ -67,13 +83,15 @@ export function portalResponse(request: Request, assets: PortalAssets, testBilli
   if (url.search && !pairingLink && !['/signup', '/reset-password'].includes(url.pathname)) return failure(400);
   if (!['GET', 'HEAD'].includes(request.method)) return failure(405);
   const key = documents.has(url.pathname) ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
-  const asset = assets.get(key);
+  const showTurnstile = !!turnstile && (url.pathname === '/forgot-password' ||
+    url.pathname === '/signup' && !url.searchParams.has('token'));
+  const asset = key === '/index.html' && turnstile ? (showTurnstile ? turnstile.request : turnstile.standard) : assets.get(key);
   if (!asset) return failure(404);
   // Stream shared bytes to avoid materializing a separate body for each connection.
   const body = request.method === 'HEAD' ? null : new ReadableStream<Uint8Array>({
     start(controller) { controller.enqueue(asset.body); controller.close(); },
   });
   return new Response(body, {headers: {
-    ...portalSecurityHeaders(testBillingMethods), 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
+    ...portalSecurityHeaders(testBillingMethods, showTurnstile), 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
   }});
 }

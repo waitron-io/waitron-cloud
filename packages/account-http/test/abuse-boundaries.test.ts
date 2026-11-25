@@ -195,3 +195,43 @@ test('guessed operation IDs do not spend a target budget while five concurrent k
   receipt.operations.pairingCodes = {guessedIds: 5, targetFailuresAfterGuesses: pairingAfterGuesses, knownIdFailures: pairingFailures, correctCodeRefused: true};
   receipt.operations.recoveryCodes = {guessedIds: 5, targetFailuresAfterGuesses: recoveryAfterGuesses, knownIdFailures: recoveryFailures, correctCodeRefused: true};
 });
+
+test('Turnstile refusals leave mail allowances available and a replay across replicas queues only one email', async () => {
+  const settings = {...config(), signupLimits: {requestsPerHour: 1},
+    turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}};
+  const attempts: string[] = [];
+  const turnstileFetch: typeof fetch = async (_, options) => {
+    const proof = (options?.body as URLSearchParams).get('response')!;
+    attempts.push(proof);
+    return Response.json({success: proof !== 'refused', hostname: 'cloud.example.test',
+      action: proof === 'reset-proof' ? 'password_reset' : 'signup'});
+  };
+  const first = createAccountApp({pool: db.pool, outbox: db.outbox, config: settings, turnstileFetch});
+  const second = createAccountApp({pool: db.secondPool, outbox: db.outbox, config: settings, turnstileFetch});
+  const signupPath = '/api/account/signup/request';
+  const resetPath = '/api/account/password-reset/request';
+  const peer = '2001:db8::1';
+  const signup = {email: 'new@example.test'};
+  assert.equal((await request(signupPath, {...signup, turnstileToken: 'proof'}, peer, {}, first)).status, 403);
+  const missing = await request(resetPath, {email: owner.email}, peer, {origin}, first);
+  assert.equal(missing.status, 400);
+  assert.deepEqual(await missing.json(), {error: 'browser_check_failed'});
+  assert.equal((await request(signupPath, {...signup, turnstileToken: 'x'.repeat(2049)}, peer, {origin}, first)).status, 400);
+  assert.deepEqual(attempts, []);
+
+  const refusal = await request(signupPath, {...signup, turnstileToken: 'refused'}, peer, {origin}, first);
+  assert.equal(refusal.status, 400);
+  assert.deepEqual(await refusal.json(), {error: 'browser_check_failed'});
+  assert.equal(refusal.headers.get('Retry-After'), null);
+  assert.equal(Number((await db.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count), 0);
+
+  const results = await Promise.all([
+    request(signupPath, {...signup, turnstileToken: 'same-proof'}, peer, {origin}, first),
+    request(signupPath, {email: 'other@example.test', turnstileToken: 'same-proof'}, '2001:db8:1::2', {origin}, second),
+  ]);
+  assert.deepEqual(results.map(result => result.status).sort(), [202, 400]);
+  assert.equal(attempts.filter(proof => proof === 'same-proof').length, 2);
+  assert.equal(Number((await db.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count), 1);
+  assert.equal((await request(resetPath, {email: owner.email, turnstileToken: 'reset-proof'}, peer, {origin}, first)).status, 202);
+  assert.equal(Number((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind='password_reset'")).rows[0].count), 1);
+});

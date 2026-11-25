@@ -420,6 +420,29 @@ new allowances immediately; coordinate changes across instances and do not treat
 rotation as seamless counter preservation. The CLI deletes up to 1,000 expired
 counters each minute without overlapping cleanup runs.
 
+### Turnstile for account email requests
+
+Set `CLOUD_TURNSTILE_SITE_KEY` and `CLOUD_TURNSTILE_SECRET_KEY` together for the
+account service to require a browser check for sign-up and password-reset emails,
+including resends. Local Stack and Test Cloud pass these settings to the account
+service. With neither set, Cloud keeps its existing limits. One key alone prevents
+startup.
+
+With both keys set, send the browser's proof as `turnstileToken` in the JSON body
+with the email and optional locale. The account service sends only the secret
+and proof to Cloudflare Siteverify. It checks the reply's hostname and form
+action, and claims the proof once across account processes before spending a mail
+allowance. A connection can start up to 20 checks in 15 minutes. Four protected
+requests per account process can be in flight at once so a slow provider leaves
+room for sign-in. A missing, expired or refused proof returns
+`{"error":"browser_check_failed"}`. A busy account process can return the same
+error with HTTP 503. These failures spend no mail allowance or resend wait.
+
+If Cloudflare is down or blocked, sign-up and reset email requests stop until the
+browser check works again. Existing links and sign-in still work. See the
+[Turnstile plan](../../docs/superpowers/plans/2026-11-25-signup-turnstile.md) for
+the widget settings and checks to complete before public enablement.
+
 ## Deploy behind a proxy
 
 Set `NODE_ENV=production`, an HTTPS `CLOUD_PORTAL_ORIGIN`, the database and both key
