@@ -372,7 +372,7 @@ test('the Kind baseline keeps a cached controller image and removes the image it
       if (binary === 'wg') return key;
       if (binary === 'nsenter') resumed.push(args);
       if (binary !== 'docker') return '';
-      if (args[0] === 'inspect') return String(pid);
+      if (args[0] === 'inspect') return args.at(-1) === '2' ? String(pid) : '123';
       if (args[0] === 'exec' && args[1] === '2' && args[3] === '/proc/1/comm') {
         assert.equal(resumed.length, beforeRestart, 'WireGuard must wait for systemd');
         return systemdReads++ === 0 ? 'entrypoint' : 'systemd';
@@ -390,8 +390,8 @@ test('the Kind baseline keeps a cached controller image and removes the image it
   assert.deepEqual(resumed.at(-1), ['-t', '456', '-n', 'wg-quick', 'up', join(directory, 'mesh-node-1', 'wg0.conf')]);
   assert.equal(systemdReads, 2);
   await outside.describeStorePath({id: '2'}, AbortSignal.timeout(5000));
-  assert.deepEqual(resumed.slice(-2).map(args => args.slice(3)),
-    [['iptables', '-t', 'mangle', '-nvL', 'D618-OUTSIDE'], ['ip', 'route', 'get', '10.77.0.4']]);
+  assert.deepEqual(resumed.slice(-2), [['-t', '456', '-n', 'iptables', '-t', 'mangle', '-nvL', 'D618-OUTSIDE'],
+    ['-t', '456', '-n', 'ip', 'route', 'get', '10.77.0.4']]);
   await outside.close();
   assert.deepEqual(actions, [['image', 'owned:source-controller'], ['pull', imageNames.fresh],
     ['image', 'owned:kustomize-controller'], ['image', imageNames.fresh]]);
@@ -409,12 +409,17 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
 });
 
-for (const [target, repairIp] of [['Kind', '172.30.250.3'], ['Amazon', '10.77.0.2']]) {
+for (const [target, describeStorePath, logText] of [
+  ['Kind', async () => 'filter and route captured', /filter and route captured/],
+  ['Kind with failed inspection', () => {throw Error('inspection failed');}, /inspection failed/],
+  ['Amazon'],
+]) {
+  const repairIp = describeStorePath ? '172.30.250.3' : '10.77.0.2';
   test(`${target} returns both peer counts and repairs through ${repairIp}`, async t => {
     const log = t.mock.method(process.stderr, 'write', () => true);
     const events = [], signal = AbortSignal.timeout(5000);
     const nodes = [{name: 'node-a'}, {name: 'node-b', ip: repairIp}];
-    const kindOutside = target === 'Kind' && {ip: '10.77.0.2', describeStorePath() {throw Error('inspection failed');}};
+    const kindOutside = describeStorePath && {ip: '10.77.0.2', describeStorePath};
     const result = await servicesScript.repairReturningStore({name: 'node-b', nodes, kindOutside, signal, repair: signal,
       read: async ip => {
         const peer = events.push(ip) + 1;
@@ -425,7 +430,7 @@ for (const [target, repairIp] of [['Kind', '172.30.250.3'], ['Amazon', '10.77.0.
     });
     assert.deepEqual(result, {drives: 'store-2=6, store-3=6', storeRepairedOn: 'node-b', storeRepairAttempts: 1});
     assert.deepEqual(events, [repairIp, repairIp, 'repair ' + repairIp, ...(kindOutside ? [kindOutside.ip] : [])]);
-    if (kindOutside) assert.match(log.mock.calls.map(call => call.arguments[0]).join(''), /WireGuard.*synthetic timeout\ninspection failed/);
+    if (kindOutside) assert.match(log.mock.calls.map(call => call.arguments[0]).join(''), logText);
   });
 }
 

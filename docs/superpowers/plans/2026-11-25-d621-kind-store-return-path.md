@@ -12,5 +12,5 @@ In the 25 November free run, both Ready pods and their Docker bridge port return
 
 ## Verification
 
-- `scripts/kubernetes-services.test.mjs` checks the systemd wait, the repair paths for Kind and Amazon, and continuation after a refused Kind WireGuard sample. `scripts/kubernetes-storage.test.mjs` checks the request deadline, caller cancellation and TLS certificate addresses. Expected size is about 30–40 implementation and 35–45 test lines.
+- `scripts/kubernetes-services.test.mjs` checks the systemd wait, the repair paths for Kind and Amazon, and continuation after a failed Kind WireGuard sample. `scripts/kubernetes-storage.test.mjs` checks the request deadline, caller cancellation and TLS certificate addresses. Expected size is about 30–40 implementation and 35–45 test lines.
 - Update `docs/backlog.md` and `docs/aws-infrastructure.md`. Run both free Linux rehearsals with signed uploads required and record machine return, repair, application recovery and restart. The rehearsal has a 54-minute limit within the guest's 55-minute limit.
