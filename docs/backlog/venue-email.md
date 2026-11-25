@@ -2,7 +2,8 @@
 
 **Paid venue email is open.** The owner approved the
 [paid venue email design](../superpowers/specs/2026-11-23-venue-email-paid-design.md)
-on 23 November 2026. Build after D621, for release soon after go-live. The
+on 23 November 2026, for release soon after go-live. The Mailpit build can start
+now. Only the domain sandbox check waits for D621’s free diagnostics. The
 [relay contract](../transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
 tracks the free test pilot.
 
