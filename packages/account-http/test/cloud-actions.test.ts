@@ -68,3 +68,21 @@ test('operator proposal and decision routes preserve exact identity and reject c
  assert.equal((await post('/execute',decision)).status,404);
  assert.equal(approved.headers.get('cache-control'),'no-store');
 });
+
+test('the repair API cannot change a venue address lookup stop',async()=>{
+ const {openProofWindow}=await import('../../registration/test/fixtures/action-proof.ts');
+ const operator=randomUUID(),venue=randomUUID(),organisation=randomUUID(),business=randomUUID();
+ await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[operator]);
+ await db.pool.query("INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES ($1,'lookup-operator@example.test','synthetic-hash',clock_timestamp())",[operator]);
+ await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisation]);
+ await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);
+ await db.pool.query("INSERT INTO venues(id,environment,organisation_id,legal_business_id) VALUES($1,'test',$2,$3)",[venue,organisation,business]);
+ const actor=await transaction(db.pool,c=>createSession(c,operator));
+ await openProofWindow(db.pool,actor.token);
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,operatorAccountId:operator,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+ const response=await app.request(origin+'/api/account/operator/actions/address-lookup',{method:'POST',
+  headers:{cookie:`__Host-cloud_session=${actor.token}`,origin,'content-type':'application/json','x-csrf-token':actor.csrfToken},
+  body:JSON.stringify({venueId:venue,stopped:true})},{incoming:{socket:{remoteAddress:'192.0.2.13'}}} as any);
+ assert.equal(response.status,404);
+ assert.equal((await db.pool.query('SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id=$1',[venue])).rowCount,0);
+});

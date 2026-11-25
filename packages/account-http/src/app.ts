@@ -19,7 +19,7 @@ import {validateBillingAccountOptions,type BillingAccountOptions} from './config
 import {BoxErrorReports} from '@waitron-cloud/registration';
 import {boxErrorResponse} from './box-error-reports.ts';
 import {TunnelProvisionMachine,tunnelProvisionResponse,type TunnelProvisionOptions} from './tunnel-provision.ts';
-import {AddressLookupMachine,addressLookupResponse,type AddressLookupOptions} from './address-lookup.ts';
+import {AddressLookupMachine,addressLookupResponse,warnAboutAddressCap,type AddressLookupOptions} from './address-lookup.ts';
 import {createBillingDisplayMachine,billingDisplayResponse,type BillingDisplayOptions} from './billing-display.ts';
 import {validateAllowanceOptions,type AllowanceOptions,type PlanMode} from '@waitron-cloud/registration';
 import {TranslationMachine} from '@waitron-cloud/translation';
@@ -142,7 +142,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const verifyBrowser = config.turnstile && createTurnstileGuard({limiter, hostname: origin.hostname,
     secret: config.turnstile.secretKey, fetcher: options.turnstileFetch});
-  const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
+  const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust,
+   (cap,venueId)=>warnAboutAddressCap(pool,limiter,outbox,options.operatorAccountId,cap,venueId)):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);

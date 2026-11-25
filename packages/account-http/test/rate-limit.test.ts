@@ -89,3 +89,11 @@ test('cleanup skips a locked expired counter while a consumer waits, then preser
   assert.equal(await limiter.prune(), 0);
   assert.equal((await db.pool.query('SELECT attempts FROM account_rate_limits WHERE key = $1', [key])).rows[0].attempts, 1);
 });
+
+test('a monthly warning can claim one 32-day counter',async()=>{
+ const rule={scope:'address-cap',subject:'2026-11',limit:1,windowSeconds:32*86400};
+ const limiter=new AccountRateLimiter(db.pool,db.rateKey);
+ assert.equal((await limiter.consume([rule])).allowed,true);
+ assert.equal((await limiter.consume([rule])).allowed,false);
+ await assert.rejects(limiter.consume([{...rule,windowSeconds:32*86400+1}]),/Invalid rate rule/);
+});

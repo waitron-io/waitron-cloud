@@ -18,11 +18,12 @@ venue does not subscribe to remote access or backups.
   selection alone does not establish durable storage permission. The owner chose
   Google. The [joint address plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-11-24-address-lookup-finish.md)
   uses **Save** to confirm editable fields. The [Mac trial](../address-lookup-trial.md)
-  measured first-choice drafts for 40 addresses. Still open are the billing-category
-  and project quota readback, production limits, operator controls, privacy and
-  old usage cleanup, and the four Waitron forms on a connected box. The signed test service allows
-  parallel searches under per-owner, per-venue and shared limits. Each search
-  counts even when you keep the manually entered address.
+  measured first-choice drafts for 40 addresses. The signed test service allows parallel searches
+  under per-owner, per-venue and shared limits. Each search counts even when you keep the
+  manually entered address. Test operators can stop a venue in the account database, and the LAN
+  action demo captures cap warnings. A stop button on the venue's operator page, billing-category
+  and project quota readback, production limits, configured operator delivery,
+  published privacy wording and the four Waitron forms on a connected box remain open.
 - **Transactional email.** The [test relay](../transactional-email-relay-contract.md)
   covers staff invitations, password resets and email-change codes, plus old-address
   warnings, security changes, role changes, box alerts and certificate reminders.

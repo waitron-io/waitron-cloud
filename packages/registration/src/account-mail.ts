@@ -1,6 +1,12 @@
 import {validServiceAlert,type ServiceAlert} from './service-alert.ts';
-import { validOwnerTransferMail, validSignupVolumeNotice, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+import { validOwnerTransferMail, validAddressCapNotice, validSignupVolumeNotice, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
 export type AccountMailKind = 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
+const addressCapLabels={
+  en:{paid_venue_month:'Monthly cap for a paying venue',free_account_month:'Monthly cap for a free account',
+    cloud_month:'Cloud monthly cap',cloud_day:'Cloud daily cap',free_month:'Shared monthly cap for free accounts',free_day:'Shared daily cap for free accounts'},
+  es:{paid_venue_month:'Límite mensual de un local de pago',free_account_month:'Límite mensual de una cuenta gratuita',
+    cloud_month:'Límite mensual de Cloud',cloud_day:'Límite diario de Cloud',free_month:'Límite mensual compartido de cuentas gratuitas',free_day:'Límite diario compartido de cuentas gratuitas'},
+};
 const copy = {
   en: {
     verification: 'Verify your Waitron Cloud email', password_reset: 'Reset your Waitron Cloud password',
@@ -32,6 +38,12 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
     return {subject,text:[subject,'',detail,new URL('/account',origin).href].join('\n')};
   }
   if(kind==='operator_notice'){
+    if(validAddressCapNotice(message)){
+      const subject=locale==='es'?'Waitron Cloud: límite de búsqueda de direcciones':'Waitron Cloud: address lookup cap';
+      const detail=`${addressCapLabels[locale][message.bucket]} · ${message.period} (${locale==='es'?'hora del Pacífico':'Pacific time'})`;
+      const venue=message.venueId?`\n${locale==='es'?'ID del local':'Venue ID'}: ${message.venueId}`:'';
+      return {subject,text:detail+venue};
+    }
     if (validSignupVolumeNotice(message)) {
       const subject = locale === 'es' ? 'Waitron Cloud: volumen de registros' : 'Waitron Cloud: sign-up volume';
       const detail = locale === 'es' ? `Se crearon más de ${message.threshold} cuentas el ${message.day} (UTC).`

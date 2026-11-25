@@ -1,4 +1,4 @@
-import type {PoolClient} from 'pg';
+import type {Pool,PoolClient} from 'pg';
 import {lockAllowanceInstallation,lockAllowanceScope,requireAllowanceTransaction} from './billing-allowances.ts';
 import {readBillingVenue,readVenueHistory} from './billing-venues.ts';
 import {effectiveVenueLevel} from './venue-service-rules.ts';
@@ -14,10 +14,12 @@ type CallKind='suggest'|'validate';
 type LookupRequest={kind:'available'}|{kind:CallKind;workflowId:string;operationId:string};
 type UsageBucket='own_month'|'cloud_month'|'cloud_day'|'free_month'|'free_day';
 type UsageRow={kind:CallKind}&Record<UsageBucket,string>;
+export type AddressLookupCap={bucket:Exclude<UsageBucket,'own_month'>|'paid_venue_month'|'free_account_month';scope:string;period:string};
 
 export class AddressLookupAdmissionError extends Error {
  readonly code:'forbidden'|'conflict'|'expired'|'limit';
- constructor(code:AddressLookupAdmissionError['code']){super(code);this.code=code;}
+ readonly cap:AddressLookupCap|undefined;
+ constructor(code:AddressLookupAdmissionError['code'],cap?:AddressLookupCap){super(code);this.code=code;this.cap=cap;}
 }
 
 async function counts(client:PoolClient,now:Date,tier:'paid'|'free',box:AddressScope){
@@ -34,25 +36,28 @@ async function counts(client:PoolClient,now:Date,tier:'paid'|'free',box:AddressS
  [now,tier,box.venueId,box.accountId])).rows;
 }
 
-function checkLimits(usage:UsageRow[],tier:'paid'|'free',kind:LookupRequest['kind'],policy:AddressLookupPolicy){
+function checkLimits(usage:UsageRow[],tier:'paid'|'free',kind:LookupRequest['kind'],policy:AddressLookupPolicy,box:AddressScope,day:CivilDate){
+ const month=day.slice(0,7);
  const suggestions=usage.find(row=>row.kind==='suggest'),validations=usage.find(row=>row.kind==='validate');
  // Search and availability must leave room for one validation across every applicable cap.
  const searches=(bucket:UsageBucket)=>BigInt(suggestions?.[bucket]??0)+(kind==='validate'?0n:1n);
  const choices=(bucket:UsageBucket)=>BigInt(validations?.[bucket]??0)+1n;
  const own=tier==='paid'?policy.paidVenueMonth:policy.freeAccountMonth;
- if(choices('own_month')>BigInt(own.validations)||searches('own_month')>BigInt(own.suggestions))throw new AddressLookupAdmissionError('limit');
- const checkSpend=(bucket:UsageBucket,limit:SpendLimit)=>{
+ if(choices('own_month')>BigInt(own.validations)||searches('own_month')>BigInt(own.suggestions)){
+  const cap=tier==='paid'?{bucket:'paid_venue_month',scope:box.venueId} as const:{bucket:'free_account_month',scope:box.accountId} as const;
+  throw new AddressLookupAdmissionError('limit',{...cap,period:month});
+ }
+ const checkSpend=(bucket:Exclude<UsageBucket,'own_month'>,limit:SpendLimit)=>{
   const searchExcess=searches(bucket)-BigInt(limit.freeSuggestions),choiceExcess=choices(bucket)-BigInt(limit.freeValidations);
   const cost=(searchExcess>0n?searchExcess*BigInt(policy.suggestionMicros):0n)
    +(choiceExcess>0n?choiceExcess*BigInt(policy.validationMicros):0n);
-  if(cost>BigInt(limit.limitMicros))throw new AddressLookupAdmissionError('limit');
+  if(cost>BigInt(limit.limitMicros))throw new AddressLookupAdmissionError('limit',
+   {bucket,scope:'*',period:bucket.endsWith('_month')?month:day});
  };
- checkSpend('cloud_day',policy.cloudDay);
  checkSpend('cloud_month',policy.cloudMonth);
- if(tier==='free'){
-  checkSpend('free_day',policy.freeDay);
-  checkSpend('free_month',policy.freeMonth);
- }
+ if(tier==='free')checkSpend('free_month',policy.freeMonth);
+ checkSpend('cloud_day',policy.cloudDay);
+ if(tier==='free')checkSpend('free_day',policy.freeDay);
 }
 
 export async function admitAddressLookup(client:PoolClient,box:AddressScope,request:LookupRequest,policy:AddressLookupPolicy){
@@ -77,7 +82,7 @@ export async function admitAddressLookup(client:PoolClient,box:AddressScope,requ
   }
  }
  if(request.kind==='available'){
-  checkLimits(await counts(client,now,tier,box),tier,request.kind,policy);
+  checkLimits(await counts(client,now,tier,box),tier,request.kind,policy,box,day);
   return null;
  }
  const prior=(await client.query<{account_id:string;venue_id:string;admitted_at:Date}>(`SELECT account_id,venue_id,admitted_at
@@ -89,8 +94,18 @@ export async function admitAddressLookup(client:PoolClient,box:AddressScope,requ
  const replay=await client.query(`SELECT 1 FROM address_lookup_calls WHERE installation_id=$1
   AND (operation_id=$2 OR (workflow_id=$3 AND kind='validate')) LIMIT 1`,[box.installationId,request.operationId,request.workflowId]);
  if(replay.rowCount)throw new AddressLookupAdmissionError('conflict');
- checkLimits(await counts(client,now,tier,box),tier,request.kind,policy);
+ checkLimits(await counts(client,now,tier,box),tier,request.kind,policy,box,day);
  await client.query(`INSERT INTO address_lookup_calls(installation_id,operation_id,workflow_id,venue_id,account_id,class,kind,admitted_at)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[box.installationId,request.operationId,request.workflowId,box.venueId,box.accountId,tier,request.kind,now]);
  return {expiresAt,day};
+}
+
+export async function pruneAddressLookupCalls(pool:Pool,now?:Date){
+ // Keep both the current spend window and any rows that could reopen a partly deleted workflow.
+ const result=await pool.query(`WITH cutoff AS (SELECT COALESCE($1::timestamptz,clock_timestamp()) AS at)
+  DELETE FROM address_lookup_calls WHERE (installation_id,operation_id) IN (
+   SELECT installation_id,operation_id FROM address_lookup_calls CROSS JOIN cutoff
+   WHERE admitted_at<LEAST(date_trunc('month',at,'America/Los_Angeles'),at-interval '30 minutes')
+   ORDER BY admitted_at LIMIT 1000 FOR UPDATE OF address_lookup_calls SKIP LOCKED)`,[now]);
+ return result.rowCount??0;
 }

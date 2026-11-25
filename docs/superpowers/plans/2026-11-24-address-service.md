@@ -13,8 +13,8 @@ readback, and the privacy wording are ready and the owner enables it.
   `deploy/test-cloud/{runtime.mjs,account-worker.mjs,compose.yaml}` use
   `CLOUD_ADDRESS_LOOKUP_SETTINGS` for the environment, limits and prices, and read
   `GOOGLE_MAPS_SERVER_KEY` from the account service secrets. Accept only `test` in this change.
-  Missing or invalid settings or a missing key refuse before charging. Unset settings and restart
-  to stop all lookups. Remove the trial box list, provider markers, key-file launcher, dispatch
+  Missing or invalid settings or a missing key refuse before charging. Remove the settings and
+  [rerun the deployment driver's `up` command](../../test-cloud.md#configure-address-lookup-for-test-boxes) to stop all lookups. Remove the trial box list, provider markers, key-file launcher, dispatch
   lock and delay, and trial workflow, day and month caps. Preserve historical allowance rows and
   let private trial workflows expire before cutover. Remove the unused `sessionToken` argument.
 - `packages/registration/src/address-lookup-admission.ts` and migration `085_address_lookup.sql`
@@ -73,6 +73,8 @@ supplies synthetic prior usage and an injected provider.
 
 ## Second change · operator controls and production readiness
 
+The [cleared operator slice](2026-11-25-address-service-operator.md) records the implementation scope and local evidence expected for this change.
+
 Reuse fresh-session and operator checks in `packages/registration/src/cloud-actions.ts`, its account
 route and `apps/portal/src/cloud-actions-{controller,screen}.ts` to stop or resume a venue by ID.
 Use the existing operator identity setting, queued `operator_notice` email and log line to report
@@ -80,7 +82,7 @@ the first cap event. Verify operator email delivery through OPERATOR-NOTICE-MAIL
 processing-register row, annex lines and one privacy paragraph. Production billing currently lacks
 the test-only trial and payment flows, so plan for venues to count as free until paid status is
 available there. Delete address-call records once they are outside the current Pacific month and
-older than fifteen minutes, so an active workflow can still cross midnight at month end. Permit
+older than 30 minutes, so a partly deleted workflow that crossed midnight cannot regain time. Permit
 opt-in production only after the rollout gates. Update the backlog as each change lands.
 
 ## Checks and size

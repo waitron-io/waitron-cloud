@@ -1,5 +1,5 @@
 import type {Pool, PoolClient} from 'pg';
-import {transaction, type EmailOutbox} from '@waitron-cloud/registration';
+import {transaction, type AccountLocale, type EmailOutbox} from '@waitron-cloud/registration';
 import type {SignupLimits} from './config.ts';
 import {AccountHttpError} from './errors.ts';
 import type {AccountRateLimiter, RateRule} from './rate-limit.ts';
@@ -28,15 +28,19 @@ export async function admitSignup(client: PoolClient, limiter: AccountRateLimite
   if ((await limiter.consume([daily('signup-volume-warning', '*', 1)], client)).allowed) return day;
 }
 
+export async function operatorNoticeRecipient(client:PoolClient,operator:string){
+  return (await client.query<{email:string;locale:AccountLocale|null}>(`SELECT credential.email, preferences.locale FROM cloud_accounts account
+    JOIN cloud_credentials credential ON credential.account_id = account.id
+    LEFT JOIN account_alert_preferences preferences ON preferences.account_id = account.id
+    WHERE account.id = $1 AND account.disabled_at IS NULL AND credential.email_verified_at IS NOT NULL`, [operator])).rows[0];
+}
+
 export async function warnAboutSignupVolume(pool: Pool, outbox: EmailOutbox, operator: string | undefined, day: string, threshold: number) {
   console.warn('Cloud sign-up volume exceeded', day, threshold);
   if (!operator) return;
   try {
     await transaction(pool, async client => {
-      const recipient = (await client.query(`SELECT credential.email, preferences.locale FROM cloud_accounts account
-        JOIN cloud_credentials credential ON credential.account_id = account.id
-        LEFT JOIN account_alert_preferences preferences ON preferences.account_id = account.id
-        WHERE account.id = $1 AND account.disabled_at IS NULL AND credential.email_verified_at IS NOT NULL`, [operator])).rows[0];
+      const recipient = await operatorNoticeRecipient(client,operator);
       if (recipient) await outbox.enqueue(client, 'operator_notice', {
         email: recipient.email, locale: recipient.locale ?? 'en', event: 'signup_volume', accountId: operator, day, threshold,
       });

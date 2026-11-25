@@ -78,6 +78,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.context().addCookies([{name:'__Host-cloud_csrf',value:'synthetic-csrf',url:'https://portal.test',secure:true}]);
   await page.goto('https://portal.test/operator/actions');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   const form=page.locator('#cloud-proposal');await form.waitFor();
+  assert.equal(await page.getByRole('textbox',{name:locale==='en'?'Test venue ID':'ID del local de prueba',exact:true}).count(),0);
   assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
   assert.equal(await page.locator('.cloud-actions > wt-form-actions').evaluate(row=>getComputedStyle(row).position),'static');
   await form.getByRole('button',{name:locale==='en'?'Save proposal':'Guardar propuesta',exact:true}).click();

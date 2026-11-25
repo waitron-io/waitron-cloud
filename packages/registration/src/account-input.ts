@@ -1,3 +1,5 @@
+import type {AddressLookupCap} from './address-lookup-admission.ts';
+
 export type AccountLocale = 'en' | 'es';
 export interface AccountNotification { email: string; locale?: AccountLocale; }
 export interface AccountEmail extends AccountNotification { token: string; expiresAt: string; }
@@ -34,9 +36,42 @@ export interface SignupVolumeNotice extends AccountNotification {
   threshold: number;
 }
 
+const noticeId=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+
 export function validSignupVolumeNotice(message: AccountNotification): message is SignupVolumeNotice {
   return 'event' in message && message.event === 'signup_volume'
-    && 'accountId' in message && typeof message.accountId === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(message.accountId)
+    && 'accountId' in message && typeof message.accountId === 'string' && noticeId.test(message.accountId)
     && 'day' in message && typeof message.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(message.day)
     && 'threshold' in message && typeof message.threshold === 'number' && Number.isSafeInteger(message.threshold) && message.threshold > 0;
+}
+
+export interface AddressCapNotice extends AccountNotification {
+  event:'address_cap';
+  accountId:string;
+  bucket:AddressLookupCap['bucket'];
+  period:string;
+  venueId?:string;
+}
+
+export function validAddressCapNotice(message:AccountNotification):message is AddressCapNotice {
+  if(!('event' in message)||message.event!=='address_cap'
+    ||!('accountId' in message)||typeof message.accountId!=='string'||!noticeId.test(message.accountId)
+    ||!('bucket' in message)||!('period' in message)||typeof message.period!=='string')return false;
+  switch(message.bucket){
+    case 'paid_venue_month':
+    case 'free_account_month':
+      return /^\d{4}-\d{2}$/.test(message.period)&&'venueId' in message&&typeof message.venueId==='string'&&noticeId.test(message.venueId);
+    case 'cloud_month':
+    case 'free_month':
+      return /^\d{4}-\d{2}$/.test(message.period)&&!('venueId' in message);
+    case 'cloud_day':
+    case 'free_day':
+      return /^\d{4}-\d{2}-\d{2}$/.test(message.period)&&!('venueId' in message);
+    default:
+      return false;
+  }
+}
+
+export function validOperatorWarning(message:AccountNotification):message is SignupVolumeNotice|AddressCapNotice {
+  return validSignupVolumeNotice(message)||validAddressCapNotice(message);
 }

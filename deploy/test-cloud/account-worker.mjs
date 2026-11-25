@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
-import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv } from '../../packages/registration/src/index.ts';
+import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv, pruneAddressLookupCalls } from '../../packages/registration/src/index.ts';
 import { accountHttpConfig, billingAccountOptionsFromEnv, passwordScreeningFromEnv, factorConfigFromEnv } from '../../packages/account-http/src/config.ts';
 import { billingMethodsOptionsFromEnv } from '../../packages/account-http/src/billing-methods.ts';
 import { AccountRateLimiter } from '../../packages/account-http/src/rate-limit.ts';
@@ -90,7 +90,12 @@ try {
     cleanup = setInterval(async () => {
       if (pruning || stopRequested) return;
       pruning = true;
-      try {await limiter.prune();} catch {console.error('Account server rate cleanup failed');}
+      try {
+        await Promise.all([
+          limiter.prune().catch(()=>console.error('Account server rate cleanup failed')),
+          pruneAddressLookupCalls(pool).catch(()=>console.error('Address lookup cleanup failed')),
+        ]);
+      }
       finally {pruning = false;}
     }, 60000); cleanup.unref();
     await stopped;

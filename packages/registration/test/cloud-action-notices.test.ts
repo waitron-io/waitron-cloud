@@ -192,3 +192,35 @@ for(const [name,sql] of [
  assert.equal(await worker.runOnce(),true);assert.equal(await worker.runOnce(),false);assert.deepEqual(calls,[]);
  assert.equal((await pool.query('SELECT status FROM email_outbox WHERE id=$1',[row.id])).rows[0].status,'cancelled');
 });
+
+test('an address cap warning sends the venue and month through the local SES relay',async()=>{
+ const venueId=randomUUID(),config=sesConfig(),smtp=await tlsSmtp();
+ try{
+  const message={email:'operator@example.test',locale:'en',event:'address_cap',accountId:operator,
+   bucket:'paid_venue_month',period:'2026-11',venueId} as const;
+  const id=await transaction(pool,client=>outbox.enqueue(client,'operator_notice',message));
+  const mailer=createSmtpAccountMailer({...smtpConfig,port:smtp.port},{ca:smtp.cert},config);
+  const worker=new EmailWorker(pool,outbox,mailer,{ses:{config,recipientKeys}});
+  assert.equal(await worker.runOnce(),true);
+  assert.equal(await worker.runOnce(),false);
+  assert.deepEqual((await pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows,[{status:'sent'}]);
+  assert.equal(smtp.captured.length,1);
+  const [mail]=smtp.captured;
+  assert.equal(mail!.secure,true);assert.deepEqual(mail!.to,[message.email]);
+  assert.match(mail!.raw,/^Subject: Waitron Cloud: address lookup cap\r?$/m);
+  assert.match(mail!.raw,/Monthly cap for a paying venue/);
+  assert.match(mail!.raw,/2026-11/);assert.match(mail!.raw,new RegExp(venueId));assert.ok(!mail!.raw.includes(operator));
+ }finally{await smtp.close();}
+});
+
+test('a shared address cap warning in Spanish stays in the pilot inbox',async()=>{
+ const email=`pilot-${randomUUID()}@example.test`;
+ await pool.query('UPDATE cloud_credentials SET email=$1 WHERE account_id=$2',[email,operator]);
+ const warning={email,locale:'es',event:'address_cap',accountId:operator,bucket:'free_day',period:'2026-11-25'} as const;
+ await transaction(pool,client=>outbox.enqueue(client,'operator_notice',warning));
+ const worker=pilotWorker(email);assert.equal(await worker.runOnce(),true);assert.equal(await worker.runOnce(),false);
+ const mail=await captured(process.env.MAILPIT_TEST_URL!,'Waitron Cloud: límite de búsqueda de direcciones',email);
+ assert.match(mail.Text,/Límite diario compartido de cuentas gratuitas/);
+ assert.match(mail.Text,/2026-11-25/);assert.ok(!mail.Text.includes(operator));
+ assert.equal((await pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+});

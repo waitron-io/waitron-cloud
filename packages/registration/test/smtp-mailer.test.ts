@@ -108,9 +108,12 @@ test('production adapter authenticates over verified TLS and sends all account m
 
 const malformedWarning = {email: 'operator@example.test', event: 'signup_volume',
   accountId: randomUUID(), day: '2026-11-24', threshold: 0};
+const sharedCapWithVenue={email:'operator@example.test',event:'address_cap',
+  accountId:randomUUID(),bucket:'cloud_day',period:'2026-11-25',venueId:randomUUID()};
 for (const [name, notice] of [
   ['a malformed sign-up volume warning', malformedWarning],
   ['a pending-action notice', {email: 'operator@example.test'}],
+  ['an address cap warning with a venue on a shared cap', sharedCapWithVenue],
 ] as const) {
   test(`SMTP refuses ${name} before connecting`, async () => {
     const smtp = await server();

@@ -1,11 +1,12 @@
 import type {Pool,PoolClient} from 'pg';
 import type {Context} from 'hono';
 import {admitAddressLookup,AddressLookupAdmissionError,AllowanceError,InstallationError,InstallationStore,
- createLeaseTrust,readMachineClaims,verifyMachine,verifyLease,type AddressLookupPolicy,type LeaseIssuer,type SignedEnvelope} from '@waitron-cloud/registration';
+ createLeaseTrust,readMachineClaims,transaction,verifyMachine,verifyLease,type AddressLookupCap,type AddressLookupPolicy,type EmailOutbox,type LeaseIssuer,type SignedEnvelope} from '@waitron-cloud/registration';
 import {AddressLookupError,checkInput,createGoogleAddressClient} from './address-lookup-google.ts';
 import {AccountHttpError} from './errors.ts';
 import {AccountRateLimiter,type RateRule} from './rate-limit.ts';
 import {readAccountBody} from './request.ts';
+import {operatorNoticeRecipient} from './signup-limits.ts';
 
 type RegisteredBox={id:string;venue_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;
  environment:string;account_id:string|null;verified:boolean};
@@ -75,10 +76,31 @@ function httpError(error:unknown):never{
  throw new AccountHttpError(429,'rate_limited',60);
 }
 
+export async function warnAboutAddressCap(pool:Pool,limiter:AccountRateLimiter,outbox:EmailOutbox,operator:string|undefined,cap:AddressLookupCap,venueId:string){
+ try{
+  const first=await transaction(pool,async client=>{
+   const claim=await limiter.consume([{scope:'address-lookup-cap-warning',subject:JSON.stringify([cap.bucket,cap.scope,cap.period]),limit:1,windowSeconds:32*86400}],client);
+   if(!claim.allowed)return false;
+   const recipient=operator?await operatorNoticeRecipient(client,operator):undefined;
+   if(operator&&recipient)await outbox.enqueue(client,'operator_notice',{
+    email:recipient.email,locale:recipient.locale??'en',event:'address_cap',accountId:operator,bucket:cap.bucket,period:cap.period,
+    ...(cap.scope==='*'?{}:{venueId}),
+   });
+   return true;
+  });
+  if(first)console.warn('Cloud address lookup cap refused',cap.bucket,cap.period);
+ }catch{
+  console.warn('Cloud address lookup cap warning failed',cap.bucket,cap.period);
+ }
+}
+
 export class AddressLookupMachine{
  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
  readonly #provider:AddressProvider;readonly #limiter:AccountRateLimiter;readonly #policy:AddressLookupPolicy;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,rateKey:string,options:AddressLookupOptions,trusted=createLeaseTrust(issuer)){
+ readonly #warnCap:((cap:AddressLookupCap,venueId:string)=>Promise<void>)|undefined;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,rateKey:string,options:AddressLookupOptions,trusted=createLeaseTrust(issuer),
+  warnCap?:(cap:AddressLookupCap,venueId:string)=>Promise<void>){
+  this.#warnCap=warnCap;
   if(typeof options?.provider?.suggest!=='function'||typeof options?.provider?.validate!=='function'||!validPolicy(options.policy))throw new Error('invalid_address_lookup_configuration');
   this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#provider=options.provider;
   this.#policy=structuredClone(options.policy);this.#limiter=new AccountRateLimiter(pool,rateKey);
@@ -111,9 +133,11 @@ export class AddressLookupMachine{
   const onError=()=>{discard=true;};client.on('error',onError);
   try{
    await client.query('BEGIN');
-   const admission=await admitAddressLookup(client,box,body.kind==='available'?body:{kind:body.kind,workflowId:body.workflowId,operationId},this.#policy);
+   const admission=await admitAddressLookup(client,box,body.kind==='available'?body:{kind:body.kind,workflowId:body.workflowId,operationId},this.#policy)
+    .catch(error=>{if(error instanceof AddressLookupAdmissionError&&error.cap)return error;throw error;});
    const now=await instant(client),confirmed=await this.#authorize(client,envelope,box.installationId,now);
    if(confirmed.accountId!==box.accountId||confirmed.venueId!==box.venueId)throw new InstallationError('permission_denied');
+   if(admission instanceof AddressLookupAdmissionError)throw admission;
    if(admission&&now>=admission.expiresAt)throw new AccountHttpError(410,'expired');
    if(admission&&pacificDate.format(now)!==admission.day)throw new AccountHttpError(503,'temporarily_unavailable');
    if(discard)throw new AddressLookupError('unavailable',false);
@@ -121,7 +145,7 @@ export class AddressLookupMachine{
    return admission;
   }catch(error){
    try{await client.query('ROLLBACK');}catch{discard=true;}
-   httpError(error);
+   throw error;
   }finally{
    client.release(discard);client.removeListener('error',onError);
    if(discard)throw new AddressLookupError('unavailable',false);
@@ -141,7 +165,10 @@ export class AddressLookupMachine{
    }
   }
   const body=parseBody(claims.body);
-  const admission=await this.#admit(envelope,body,box,claims.operationId);
+  const admission=await this.#admit(envelope,body,box,claims.operationId).catch(async error=>{
+   if(error instanceof AddressLookupAdmissionError&&error.cap)await this.#warnCap?.(error.cap,box.venueId);
+   httpError(error);
+  });
   if(!admission)return {available:true};
   if(body.kind==='available')throw new Error('Unexpected address lookup admission');
   const result=body.kind==='suggest'

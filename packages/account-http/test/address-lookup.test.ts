@@ -5,9 +5,9 @@ import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
-import {BillingStore,createLeaseIssuer,type SignedEnvelope} from '@waitron-cloud/registration';
+import {BillingStore,createLeaseIssuer,type AddressLookupCap,type SignedEnvelope} from '@waitron-cloud/registration';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
-import {AddressLookupMachine} from '../src/address-lookup.ts';
+import {AddressLookupMachine,warnAboutAddressCap} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -399,4 +399,111 @@ test('connection loss during admission commits no address usage and sends nothin
   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease)),{code:'unavailable',dispatched:false});
   assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);await assertLookupThrottles(f,1);
  }finally{await f.db.close();}
+});
+
+test('a database stop affects only its test venue and resuming preserves address usage',async()=>{
+ const f=await fixture();try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
+  const stop=`INSERT INTO address_lookup_stopped_venues (venue_id)
+    SELECT id FROM venues WHERE environment='test' AND id=$1 ON CONFLICT DO NOTHING`;
+  const resume=`DELETE FROM address_lookup_stopped_venues
+    WHERE venue_id IN (SELECT id FROM venues WHERE environment='test' AND id=$1)`;
+  const first=suggest();assert.equal((await f.post(first)).status,200);
+  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,1);
+  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,0);
+  assert.equal((await f.post(available)).status,403);
+  assert.equal((await f.post(suggest())).status,403);
+  assert.equal((await f.request(other.proof('address-lookup',suggest(),randomUUID(),other.lease))).status,200);
+  assert.deepEqual(f.sent,['suggest','suggest']);
+  assert.equal((await f.db.pool.query(resume,[f.v.venueId])).rowCount,1);
+  assert.equal((await f.db.pool.query(resume,[f.v.venueId])).rowCount,0);
+  assert.equal((await f.post(validate(first.workflowId))).status,200);
+  assert.deepEqual((await calls(f.db.pool)).map(row=>[row.venue_id,row.kind]),[
+   [f.v.venueId,'suggest'],[other.venueId,'suggest'],[f.v.venueId,'validate'],
+  ]);
+ }finally{await f.db.close();}
+});
+
+test('a failed cap warning retries and concurrent refusals queue only one warning without spending a lookup',async t=>{
+ const f=await fixture();try{
+  const log=t.mock.method(console,'warn',()=>{});
+  const {month:period}=(await f.db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'America/Los_Angeles','YYYY-MM') AS month")).rows[0];
+  const operator=await connectedVenue(f.db,f.issuer,origin);
+  const app=createAccountApp({...f.options,operatorAccountId:operator.accountId,addressLookup:{provider:f.provider,
+   policy:{...policy,freeAccountMonth:{suggestions:1,validations:1}}}});
+  const request=(body:unknown)=>f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
+  const queued=()=>f.db.pool.query("SELECT * FROM email_outbox WHERE kind='operator_notice'").then(result=>result.rows);
+  assert.equal((await request(suggest())).status,200);
+  assert.deepEqual(await queued(),[]);
+  await f.db.pool.query(`ALTER TABLE email_outbox ADD CONSTRAINT test_refuse_operator_notice CHECK (kind<>'operator_notice')`);
+  assert.equal((await request(available)).status,429);
+  assert.deepEqual(await queued(),[]);
+  assert.deepEqual(log.mock.calls.map(call=>call.arguments),[['Cloud address lookup cap warning failed','free_account_month',period]]);
+  await f.db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT test_refuse_operator_notice');
+  const replies=await Promise.all([request(suggest()),request(available),request(suggest())]);
+  assert.deepEqual(replies.map(reply=>reply.status),[429,429,429]);
+  assert.deepEqual(replies.map(reply=>reply.headers.get('retry-after')),['60','60','60']);
+  const notices=await queued();assert.equal(notices.length,1);
+  const message=f.db.outbox.open(notices[0]);
+  const email=(await f.db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[operator.accountId])).rows[0].email;
+  assert.deepEqual(message,{email,locale:'en',event:'address_cap',accountId:operator.accountId,
+   bucket:'free_account_month',period,venueId:f.v.venueId});
+  assert.equal((await calls(f.db.pool)).length,1);
+  assert.deepEqual(f.sent,['suggest']);
+ }finally{await f.db.close();}
+});
+
+test('cap warnings keep separate venue and period claims and omit a venue on shared caps',async t=>{
+ const f=await fixture();try{
+  const log=t.mock.method(console,'warn',()=>{});
+  const {pool,outbox,rateKey}=f.db,limiter=new AccountRateLimiter(pool,rateKey);
+  const first=f.v.venueId,second=randomUUID(),month='2026-11',nextMonth='2026-12';
+  const own=(scope:string,period:string):AddressLookupCap=>({bucket:'paid_venue_month',scope,period});
+  const shared:AddressLookupCap={bucket:'cloud_month',scope:'*',period:month};
+  const warn=(cap:AddressLookupCap,venueId:string)=>warnAboutAddressCap(pool,limiter,outbox,f.v.accountId,cap,venueId);
+  await warn(own(first,month),first);await warn(own(first,month),first);
+  await warn(own(second,month),second);await warn(own(first,nextMonth),first);
+  await warn(shared,first);await warn(shared,second);
+  await warn({...shared,bucket:'free_month'},first);
+  // Simulate the end of a 31-day month before the cleanup of a warning claim.
+  await pool.query("UPDATE account_rate_limits SET expires_at=expires_at-interval '31 days'");
+  await warn(own(first,month),first);
+  const notices=(await pool.query("SELECT * FROM email_outbox WHERE kind='operator_notice'")).rows
+   .map(row=>outbox.open(row)).map(message=>{
+    assert.ok('bucket' in message);
+    return [message.bucket,message.period,message.venueId];
+   });
+  assert.deepEqual(notices.map(value=>JSON.stringify(value)).sort(),[
+   ['paid_venue_month',month,first],['paid_venue_month',month,second],
+   ['paid_venue_month',nextMonth,first],['cloud_month',month,undefined],['free_month',month,undefined],
+  ].map(value=>JSON.stringify(value)).sort());
+  assert.deepEqual(log.mock.calls.map(call=>call.arguments),[
+   ['Cloud address lookup cap refused','paid_venue_month',month],['Cloud address lookup cap refused','paid_venue_month',month],
+   ['Cloud address lookup cap refused','paid_venue_month',nextMonth],['Cloud address lookup cap refused','cloud_month',month],
+   ['Cloud address lookup cap refused','free_month',month],
+  ]);
+ }finally{await f.db.close();}
+});
+
+test('an expired lease cannot queue a cap warning after waiting for the owner lock',async()=>{
+ const f=await fixture(),holder=await f.db.pool.connect();let pending:Promise<Response>|undefined;
+ try{
+  const app=createAccountApp({...f.options,operatorAccountId:f.v.accountId,addressLookup:{provider:f.provider,
+   policy:{...policy,freeAccountMonth:{suggestions:0,validations:0}}}});
+  const queued=()=>f.db.pool.query("SELECT * FROM email_outbox WHERE kind='operator_notice'").then(result=>result.rowCount);
+  await holder.query('BEGIN');
+  await holder.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[f.v.accountId]);
+  const now=Date.now(),expiresAt=now+3000;
+  const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,
+   environment:'test',publicKey:f.v.installationKey,issuedAt:now,expiresAt});
+  const request=(proof:SignedEnvelope)=>f.request(proof,app);
+  pending=request(f.v.proof('address-lookup',available,randomUUID(),lease));
+  await blocked(f.db.pool,f.db.schema);
+  await delay(Math.max(0,expiresAt-Date.now()+20));
+  await holder.query('COMMIT');
+  assert.equal((await pending).status,401);
+  assert.equal(await queued(),0);
+  assert.equal((await request(f.v.proof('address-lookup',available,randomUUID(),f.v.lease))).status,429);
+  assert.equal(await queued(),1);
+ }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });

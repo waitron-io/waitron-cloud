@@ -148,7 +148,8 @@ and 60 per owner. Cloud charges the owner’s counter after the box’s check pa
 | --- | --- |
 | 400 invalid input | Correct the body; no provider attempt occurred. |
 | 401 invalid proof, 403 revoked or permission denied | Restore the box's current authority. |
-| 409 conflict | Use manual entry or a fresh call; closed workflows stay closed. |
+| 403 forbidden after an operator stop | Keep manual entry available until the operator resumes lookup. |
+| 409 conflict | Use manual entry or start a fresh workflow. |
 | 410 expired | Start a new workflow. Earlier calls stay counted. |
 | 429 rate limited | Keep manual entry available and respect Retry-After. |
 | 503 unavailable | Keep manual entry available; do not automatically resend. |
@@ -156,3 +157,55 @@ and 60 per owner. Cloud charges the owner’s counter after the box’s check pa
 Provider errors include `dispatched`. `true` means Cloud attempted the request.
 Google billing is reported separately. Cloud sends nothing when settings or the
 key are missing, the box loses authority, or admission fails.
+
+## Stop or resume a test venue
+
+Connect to the account database for your test Cloud deployment, including the
+LAN action demo. Replace the example ID with the test venue's ID in each
+command. Use this command to stop lookup.
+
+```sql
+INSERT INTO address_lookup_stopped_venues (venue_id)
+SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111'
+ON CONFLICT DO NOTHING;
+```
+
+`INSERT 0 1` means you stopped the venue. `INSERT 0 0` means it was already
+stopped or the ID matched no test venue. Once the venue is stopped, Cloud
+refuses new availability checks and lookups. Calls already admitted can finish.
+Use this command to resume lookup with the venue's usage intact.
+
+```sql
+DELETE FROM address_lookup_stopped_venues
+WHERE venue_id IN (SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111');
+```
+
+`DELETE 1` means you resumed lookup. `DELETE 0` means there was no stop for
+that test venue, or the ID matched no test venue. After either command, check
+the state. `t` means stopped, `f` means resumed, and no row means the ID matched
+no test venue.
+
+```sql
+SELECT EXISTS (SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id = venues.id) AS lookup_stopped
+FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111';
+```
+
+To stop lookup for every test box, remove
+`CLOUD_ADDRESS_LOOKUP_SETTINGS` and rerun the deployment driver's `up` command so
+it recreates the account process. See the [test Cloud settings](test-cloud.md#configure-address-lookup-for-test-boxes).
+
+The first refusal for a cap, scope and period writes the cap and period to the
+account log. It also queues a warning if the operator is configured and verified
+at that time. If a cap for a given scope already refused a call this period,
+setting up the operator later leaves that particular warning until next period.
+Shared caps cover either all lookups or all free accounts.
+An own-cap warning includes the affected venue ID. A venue that stops exactly
+at its limit sends no warning. The LAN action demo captures the email in its
+private inbox. A deployment needs an operator and a qualified relay to send it.
+
+The account worker checks for old call records every minute. It deletes up to
+1,000 per pass once they belong to a previous Pacific calendar month and are
+more than 30 minutes old. The overlap gives a search that crosses midnight time
+to finish and keeps a partly deleted workflow from regaining time. After its
+last row is deleted, a fresh suggestion request can reuse its ID and counts
+as a new call.
