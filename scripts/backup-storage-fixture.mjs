@@ -123,6 +123,7 @@ async function startBackupStorageAttempt(options) {
   if (!/^[a-z0-9.-]+$/.test(tlsHostname)) throw Error("Invalid local storage TLS hostname");
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
   let oidc, child, reaper, log, adminClient, allocatedPorts, readiness;
+  let stopping;
   const managed = new Map();
   const portReservations = [];
   const portClaims = [];
@@ -144,7 +145,15 @@ async function startBackupStorageAttempt(options) {
     try { if (await readlink(path) === root) await unlink(path); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
   }
-  async function stop() {
+  function stop() {
+    // The caller and its teardown hook share the one notification to the reaper.
+    return stopping ??= cleanup().catch(error => {
+      // A failure handler can start another attempt.
+      stopping = undefined;
+      throw error;
+    });
+  }
+  async function cleanup() {
     let claimCleanupFailure;
     await releasePorts();
     adminClient?.destroy();

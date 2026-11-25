@@ -4,7 +4,7 @@ import net, {Server} from 'node:net';
 import {syncBuiltinESMExports} from 'node:module';
 import childProcess from 'node:child_process';
 import https from 'node:https';
-import {readFile} from 'node:fs/promises';
+import {access, readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
@@ -178,4 +178,16 @@ test('identity discovery, provider configuration and tokens use the bound HTTPS 
   await storage.bucket('identity-port-works');
   await storage.stop();
   assert.equal(identity.listening, false, 'stopping the fixture closes its original identity listener');
+});
+
+test('repeated native storage stops share the in-progress and completed cleanup', {timeout:90000}, async () => {
+  const storage = await startBackupStorage();
+  const first = storage.stop();
+  const overlapping = storage.stop();
+  await Promise.all([first, overlapping]);
+  assert.equal(overlapping, first, 'an overlapping stop must wait for the active cleanup');
+  const later = storage.stop();
+  await later;
+  assert.equal(later, first, 'a later stop must receive the completed cleanup promise');
+  await assert.rejects(access(storage.root), {code:'ENOENT'});
 });
