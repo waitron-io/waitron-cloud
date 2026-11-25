@@ -1402,7 +1402,7 @@ shard still needs repair after three attempts.
 
 Kind waits for systemd before restoring WireGuard so the startup script has
 finished restoring packet rules. After each repair, look for the five-second
-`Store WireGuard sample` in the log. A refused sample records the returning
+`Store WireGuard sample` in the log. A failed sample records the returning
 machine's packet filter and route to the host, then the run continues. The
 Stockholm repair still checks both peers and repairs through WireGuard.
 

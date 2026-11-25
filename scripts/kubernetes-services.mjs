@@ -324,8 +324,8 @@ export async function repairReturningStore({name, nodes, kindOutside, store, run
     } catch (error) {
       process.stderr.write(`Store WireGuard sample on ${name} failed: ${error.message}\n`);
       signal.throwIfAborted();
-      const detail = await kindOutside.describeStorePath(node, signal).catch(error => error.message);
-      process.stderr.write(detail + '\n');
+      try {process.stderr.write(await kindOutside.describeStorePath(node, signal) + '\n');}
+      catch (error) {process.stderr.write(error.message + '\n');}
       signal.throwIfAborted();
     }
   }

@@ -908,7 +908,8 @@ implementation or production evidence.
     If a challenge is stranded, the measured observer restarts 60 seconds after the password
     reply, which can miss the 90-second target.
   - In the 25 November free Kind rehearsal the returning store answered on the Docker bridge
-    while its WireGuard metrics request timed out. Repeat all three stops, repairs and the
+    while its WireGuard metrics request timed out. The cause is unproved. Kind now logs that
+    read after bridge repair. Repeat all three stops, repairs and the
     full restart twice with the [Kind return change](superpowers/plans/2026-11-25-d621-kind-store-return-path.md).
   - Unexplained: the venue's HTTP 503 and the manifest restarts of the paid attempt,
     run 11's relay exit, the first run's target read, the earlier stop delays
