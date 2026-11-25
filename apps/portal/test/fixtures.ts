@@ -25,7 +25,7 @@ export async function addVirtualAuthenticator(context: BrowserContext, page: Pag
     await session.detach().catch(() => undefined);
   }};
 }
-export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,translation?:{pageBytes?:number},requireEnrollment=false,guestOrigin?:string,operator?:string|{id:string;venues:true},billingAccount?:BillingAccountOptions,countryCode?:string,setupPairing?:AccountHttpConfig['setupPairing'],turnstileFetch?:typeof fetch) {
+export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,translation?:{pageBytes?:number},requireEnrollment=false,guestOrigin?:string|{live:true},operator?:string|{id:string;venues:true},billingAccount?:BillingAccountOptions,countryCode?:string,setupPairing?:AccountHttpConfig['setupPairing'],turnstileFetch?:typeof fetch) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
@@ -39,7 +39,7 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
   try {
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
     translations=translation?new TranslationFixture(db.pool,issuer,origin,translation.pageBytes):undefined;
-    running = await startAccountServer({operatorAccountId:typeof operator==='string'?operator:operator?.id,operatorVenues:typeof operator==='object'&&operator.venues,billingAccount,planMode:billingAccount||setupPairing?'test-venue-levels':undefined,guestOrigin,translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor:factor??{keys:null,policy:emailLoginPolicy},leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
+    running = await startAccountServer({operatorAccountId:typeof operator==='string'?operator:operator?.id,operatorVenues:typeof operator==='object'&&operator.venues,billingAccount,planMode:billingAccount||setupPairing||typeof guestOrigin==='object'?'test-venue-levels':undefined,guestOrigin:typeof guestOrigin==='string'?guestOrigin:undefined,liveGuestMenu:typeof guestOrigin==='object',translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor:factor??{keys:null,policy:emailLoginPolicy},leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       turnstileFetch, config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: [], requireEnrollment,countryCode,setupPairing,
         ...(turnstileFetch ? {turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}} : {})},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});

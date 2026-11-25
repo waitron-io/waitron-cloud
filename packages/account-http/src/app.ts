@@ -106,12 +106,13 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;liveGuestMenu?:boolean;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
   const operatorVenues=options.operatorVenues===true;
   if(operatorVenues&&config.production)throw Error('operator_venues.unavailable_in_production');
   if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
+  if(options.liveGuestMenu&&(config.production||options.planMode!=='test-venue-levels'))throw Error('live_guest_menu.test_mode_required');
   if(options.guestOrigin){validateGuestOrigin(options.guestOrigin);if(options.guestOrigin===config.portalOrigin)throw Error('guest_origin_invalid');}
   const billingAccount=validateBillingAccountOptions(options.billingAccount,options.planMode??'existing');
   const billingMethods=validateBillingMethodsOptions(options.billingMethods,options.planMode??'existing',billingAccount);
@@ -193,7 +194,7 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
     if(c.req.path.startsWith('/api/account/owner-recovery/')||['/api/installations/owner-recovery-read','/api/installations/owner-recovery-approve','/api/installations/owner-recovery-refuse'].includes(c.req.path))return ownerRecoveryResponse(c,{store:ownerRecovery,origin:config.portalOrigin,secure,ip,consume});
     if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
     if(['/api/installations/guest-menu-publish','/api/installations/guest-menu-status','/api/installations/guest-menu-withdraw'].includes(c.req.path))return guestMenuDeliveryResponse(c,guestMenus);
-    if(c.req.path.startsWith('/api/account/guest-menu/'))return guestMenuResponse(c,{pool,origin:config.portalOrigin,guestOrigin:options.guestOrigin});
+    if(c.req.path.startsWith('/api/account/guest-menu/'))return guestMenuResponse(c,{pool,origin:config.portalOrigin,guestOrigin:options.guestOrigin,liveGuestMenu:options.liveGuestMenu});
     if(c.req.path.startsWith('/api/account/operator/venues/'))return operatorVenuesResponse(c,operatorVenues?
       {pool,operator:operatorAccountId,country:config.countryCode,secure,origin:config.portalOrigin,ip,consume}:undefined);
     if(c.req.path.startsWith('/api/account/operator/'))return cloudActionsResponse(c,cloudActions,{pool,secure,origin:config.portalOrigin,ip,consume},operatorVenues);
@@ -218,7 +219,7 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume,startedAt});
     if(['/api/installations/backup-stream-configure','/api/installations/backup-stream-observe'].includes(c.req.path))return managedStreamResponse(c,{streams,ip,consume});
     if(options.planMode==='test-venue-levels'&&c.req.path==='/api/account/venue-email/save')return venueEmailResponse(c,{pool,origin:config.portalOrigin,secure,ip,consume});
-    if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode,guestOrigin:options.guestOrigin});
+    if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode,guestOrigin:options.guestOrigin,liveGuestMenu:options.liveGuestMenu});
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(['/api/account/billing/method/start','/api/account/billing/method/verify'].includes(c.req.path))return billingMethodsResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methods:billingMethods});
     if(billingAccountPaths.includes(c.req.path))return billingAccountResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methodsEnabled:!!billingMethods});

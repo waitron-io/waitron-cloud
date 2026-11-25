@@ -13,7 +13,7 @@ import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
 export type RemoteResolver=ResolveCname;
-export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;resolve?:RemoteResolver;planMode?:PlanMode;guestOrigin?:string}):Promise<Response>{
+export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;resolve?:RemoteResolver;planMode?:PlanMode;guestOrigin?:string;liveGuestMenu?:boolean}):Promise<Response>{
  const {pool,origin,consume}=options,action=c.req.path.slice('/api/account/remote-access/'.length);
  if(!['status','dns','apply','recheck'].includes(action))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
@@ -44,7 +44,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
  };
  const status=()=>transaction(pool,async client=>{
   await authorize(client);
-  const binding=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+  const binding=(await client.query('SELECT i.venue_id,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1',[id])).rows[0];
   // Policy locks precede installation locks, including when existing-plan mode skips policy reads.
   await client.query('SELECT o.id FROM organisations o JOIN venues v ON v.organisation_id=o.id WHERE v.id=$1 ORDER BY o.id FOR SHARE OF o',[binding.venue_id]);
   const permission=options.planMode==='test-venue-levels'?await readVenuePermissions(client,binding.venue_id,options.planMode):undefined;
@@ -66,7 +66,8 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   await authorize(client);
   const deadline=Math.min(service?.observed_at?.getTime()+300000,service?.received_at?.getTime()+300000,installation.lease_expires_at?.getTime());
   const current=paid&&!installation.revoked_at&&service?.revision===installation.configuration_revision&&deadline>Date.now();
-  return {...(venueEmail?{venueEmail}:{}),...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(includeForward?{publicForward}:{}),...(permission?.level==='registered'?{connectedRequired:true}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
+  const liveMenu=options.liveGuestMenu&&binding.environment==='test';
+  return {...(venueEmail?{venueEmail}:{}),...(options.guestOrigin||liveMenu?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin??null),...(liveMenu?{live:true}:{})}}:{}),...(includeForward?{publicForward}:{}),...(permission?.level==='registered'?{connectedRequired:true}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
  });
  try{
   if(action==='status')return c.json(await status());

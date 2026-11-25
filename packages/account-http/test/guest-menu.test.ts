@@ -41,6 +41,33 @@ test('only the venue owner with exact Origin and CSRF can stop and re-enable gue
  }finally{await f.db.close();}
 });
 
+test('a test owner can block a live menu before any hosted copy exists', async () => {
+ const f=await guestMenuFixture(),origin='https://cloud.example.test';
+ try{
+  const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
+  const options={pool:f.db.pool,outbox:f.db.outbox,planMode:'test-venue-levels' as const,
+   config:{portalOrigin:origin,production:false,rateKey:f.db.rateKey,trustedProxyIps:[]}};
+  const app=createAccountApp({...options,liveGuestMenu:true});
+  const send=(path:string,body:object,csrfToken=session.csrfToken,target=app)=>target.request(origin+'/api/account/'+path,{
+   method:'POST',headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+session.token,'x-csrf-token':csrfToken},
+   body:JSON.stringify(body)
+  },{incoming:{socket:{remoteAddress:'192.0.2.4'}}} as HttpBindings);
+  const takedown='guest-menu/takedown',venue={venueId:f.venueId};
+  assert.equal((await send(takedown,venue,session.csrfToken,createAccountApp(options))).status,503);
+  const status=await send('remote-access/status',{installationId:f.installationId});
+  assert.equal(status.status,200);
+  assert.deepEqual((await status.json()).guestMenu,{version:1,venueId:f.venueId,live:true,url:null,revision:0,state:'off',publication:null});
+  assert.equal((await send(takedown,venue,'wrong')).status,403);
+  assert.equal((await send(takedown,{venueId:randomUUID()})).status,403);
+  const stopped=await send(takedown,venue);
+  assert.equal(stopped.status,200);
+  assert.equal((await stopped.json()).state,'blocked');
+  const enabled=await send('guest-menu/enable',venue);
+  assert.equal(enabled.status,200);
+  assert.equal((await enabled.json()).state,'off');
+ }finally{await f.db.close();}
+});
+
 const cloudOrigin='https://cloud.example.test',menuOrigin='https://menus.example.test';
 async function deliveryFixture(planMode:'existing'|'test-venue-levels'='test-venue-levels'){
  const db=await database();

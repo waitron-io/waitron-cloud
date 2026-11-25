@@ -5,7 +5,7 @@ import {createSession} from '@waitron-cloud/identity';
 import {RegistrationStore,transaction} from '@waitron-cloud/registration';
 import axe from 'axe-core';
 import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
-import {guestMenuFixture} from '../../../packages/remote-access/test/fixtures/guest-menu.ts';
+import {guestMenuFixture,startGuestMenuTrial} from '../../../packages/remote-access/test/fixtures/guest-menu.ts';
 import {translations} from '../src/locale.ts';
 
 for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280])test(`guest sharing ${locale} ${colorScheme} ${width}`,async()=>{
@@ -94,3 +94,38 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   assert.equal(await page.getByLabel(c.billingVenue,{exact:true}).inputValue(),venueId);
  }finally{await portal.close();}
 });
+
+for (const locale of ['en','es'] as const) for (const colorScheme of ['light','dark'] as const) for (const width of [390,1280]) {
+ test(`live guest menu block ${locale} ${colorScheme} ${width}`,async()=>{
+  const portal=await startPortalFixture(undefined,undefined,undefined,undefined,false,{live:true});
+  try{
+   const f=await guestMenuFixture(portal.db);
+   await startGuestMenuTrial(portal.db.pool,{...f.owner,venueId:f.venueId});
+   const page=await portal.browser.newPage({locale,colorScheme,viewport:{width,height:900}});page.setDefaultTimeout(5000);
+   const c=translations[locale];
+   await page.goto(portal.origin+'/login');
+   await page.getByLabel(c.email).fill(f.email);
+   await page.locator('input[name=password]').fill(f.password);
+   await page.getByRole('button',{name:c.login,exact:true}).click();
+   await completeBrowserEmail(portal,page,f.email,locale);
+   await page.getByText(c.accountIntro,{exact:true}).waitFor();
+   await page.goto(portal.origin+'/account/remote-access');
+   await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
+   const menu=page.getByRole('region',{name:c.guestMenuTitle,exact:true});
+   const stop=menu.getByRole('button',{name:c.guestMenuTakedown,exact:true});
+   await menu.getByText(c.guestMenuAllowed,{exact:true}).waitFor();
+   await stop.focus();
+   assert.equal(await menu.getByRole('link',{name:c.guestMenuLink}).count(),0);
+   await stop.press('Enter');
+   const allow=menu.getByRole('button',{name:c.guestMenuEnable,exact:true});
+   await allow.waitFor();
+   await menu.screenshot({path:new URL(`../dist/live-guest-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
+   await allow.click();
+   await stop.waitFor();
+   await menu.getByText(c.guestMenuAllowed,{exact:true}).waitFor();
+   await page.evaluate(axe.source);
+   assert.deepEqual((await page.evaluate(async()=>await window.axe.run(document))).violations,[]);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  }finally{await portal.close();}
+ });
+}

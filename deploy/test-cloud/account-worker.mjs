@@ -14,10 +14,12 @@ import { addressLookupOptionsFromEnv } from '../../packages/account-http/src/add
 import { loadPortalAssets } from '../../packages/account-http/src/portal.ts';
 import { startAccountServer } from '../../packages/account-http/src/server.ts';
 import { startGuestMenuServer } from '../../packages/account-http/src/guest-menu-server.ts';
+import { startGuestMenuAuthority } from '../../packages/remote-access/src/guest-menu.ts';
 let captures;let actionDemo;
 let pool;
 let running;
 let guest;
+let guestAuthority;
 let cleanup;
 let hardDeadline;
 let stopRequested = false;
@@ -47,8 +49,8 @@ try {
   const translation=false;
   const config = accountHttpConfig(process.env);
   const directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack';
-  const guestOrigin=process.env.GUEST_ORIGIN;
-  if(guestOrigin&&(planMode!=='test-venue-levels'||config.production))throw new Error();
+  const guestOrigin=process.env.GUEST_ORIGIN,liveGuestMenu=process.env.TEST_CLOUD_LIVE_GUEST_MENU==='1';
+  if((guestOrigin||liveGuestMenu)&&(planMode!=='test-venue-levels'||config.production))throw new Error();
   const billingMethods=billingMethodsOptionsFromEnv(process.env,planMode,billingAccount,config.portalOrigin);
   const factor = factorConfigFromEnv(process.env);
   const passwordScreening = await passwordScreeningFromEnv(process.env);
@@ -80,8 +82,10 @@ try {
         host:process.env.GUEST_HTTP_HOST??'10.79.0.3',port:Number(process.env.GUEST_HTTP_PORT??3443),
         trustedProxyIps:['10.79.0.2']});
     }
+    if(liveGuestMenu&&!stopRequested)
+      guestAuthority=await startGuestMenuAuthority({connectionString:process.env.DATABASE_URL},'10.79.0.3',3445);
     const addressLookup=addressLookupOptionsFromEnv(process.env);
-    running = await startAccountServer({guestOrigin,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({guestOrigin,liveGuestMenu,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
@@ -109,6 +113,7 @@ try {
   process.exitCode = 1;
 } finally {
   stop();
+  try {await guestAuthority?.close();} catch {process.exitCode = 1;}
   try {await guest?.close();} catch {process.exitCode = 1;}
   try {await actionDemo?.close();await running?.close();} catch {process.exitCode = 1;}
   try {captures?.close();await pool?.end();} catch {process.exitCode = 1;}

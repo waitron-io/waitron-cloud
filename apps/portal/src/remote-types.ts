@@ -4,7 +4,7 @@ import type {RemoteDnsRecord} from '../../../packages/remote-access/src/certific
 export type RemoteKind='staff'|'public';
 export type ForwardCause='upstream_non_200'|'upstream_timeout'|'upstream_response_limit'|'upstream_transport'|'forward_internal';
 export interface PublicForwardView {category:ForwardCause|null;observedAt:string;expiresAt:string}
-export interface GuestMenuView {version:1;venueId:string;url:string;revision:number;state:'off'|'current'|'blocked';publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};}
+export interface GuestMenuView {version:1;venueId:string;live?:true;url:string|null;revision:number;state:'off'|'current'|'blocked';publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};}
 interface RemoteName {assigned:string;current:string;recordMoved?:boolean;}
 export interface VenueEmailSettings {replyTo:string|null}
 export interface RemoteView {venueEmail?:VenueEmailSettings;guestMenu?:GuestMenuView;publicForward?:PublicForwardView|null;connectedRequired?:true;installationId:string;revision:number;revoked:boolean;names:Record<RemoteKind,RemoteName>|null;service:{state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';observedAt:string|null;validUntil:string|null};}
@@ -14,8 +14,11 @@ const id=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9
 export const remoteHostname=(v:unknown):v is string=>typeof v==='string'&&v.length<=237&&v.includes('.')&&v.split('.').every(s=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))&&!/^\d+(\.\d+){3}$/.test(v);
 const iso=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
 export function validGuestMenuView(v:unknown):v is GuestMenuView{
- if(!object(v)||v.version!==1||!id(v.venueId)||typeof v.url!=='string'||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||!['off','current','blocked'].includes(String(v.state)))return false;
- try{const url=new URL(v.url);if(url.protocol!=='https:'||url.href!==url.origin+'/m/'+v.venueId)return false;}catch{return false;}
+ if(!object(v)||v.version!==1||!id(v.venueId)||(v.live!==undefined&&v.live!==true)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||!['off','current','blocked'].includes(String(v.state)))return false;
+ if(v.url!==null){
+  if(typeof v.url!=='string')return false;
+  try{const url=new URL(v.url);if(url.protocol!=='https:'||url.href!==url.origin+'/m/'+v.venueId)return false;}catch{return false;}
+ }else if(v.live!==true)return false;
  if(v.state!=='current')return v.publication===null;
  const p=v.publication;
  return Number(v.revision)>0&&object(p)&&typeof p.bodySha256==='string'&&/^[0-9a-f]{64}$/.test(p.bodySha256)&&isGuestMenuLanguageShape(p.defaultLanguage)&&iso(p.receivedAt);

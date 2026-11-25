@@ -52,6 +52,37 @@ test('stored pages match regional strings and ordered phone preferences with the
  }finally{await f.db.close();}
 });
 
+test('the private menu read admits a connected trial without a hosted copy until blocked',async()=>{
+ const f=await guestMenuFixture();
+ try{
+  assert.equal(typeof guest.startGuestMenuAuthority,'function','private menu listener is missing');
+  const authority=await guest.startGuestMenuAuthority(f.db.pool.options,'127.0.0.1',0);
+  try{
+   const check=(id:string)=>fetch('http://127.0.0.1:'+authority.port+'/guest-menu/'+id);
+   assert.equal((await check(randomUUID())).status,404);
+   assert.equal((await check(f.venueId)).status,404);
+   await startGuestMenuTrial(f.db.pool,{...f.owner,venueId:f.venueId});
+   assert.equal((await check(f.venueId)).status,204);
+   await transaction(f.db.pool,c=>setGuestMenuBlocked(c,f.venueId,true,origin));
+   assert.equal((await check(f.venueId)).status,404);
+   await transaction(f.db.pool,c=>setGuestMenuBlocked(c,f.venueId,false,origin));
+   assert.equal((await check(f.venueId)).status,204);
+  }finally{await authority.close();}
+ }finally{await f.db.close();}
+});
+
+test('the private menu read returns unavailable while a database lock stalls eligibility',async()=>{
+ const f=await guestMenuFixture();
+ const authority=await guest.startGuestMenuAuthority(f.db.pool.options,'127.0.0.1',0);
+ try{
+  await transaction(f.db.pool,async client=>{
+   await client.query('LOCK TABLE guest_menus IN ACCESS EXCLUSIVE MODE');
+   const response=await fetch('http://127.0.0.1:'+authority.port+'/guest-menu/'+f.venueId,{signal:AbortSignal.timeout(1100)});
+   assert.equal(response.status,503);
+  });
+ }finally{await authority.close();await f.db.close();}
+});
+
 const cloud='https://cloud.example.test';
 async function delivery(mode?:'test-venue-levels'){
  const db=await database(),issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
