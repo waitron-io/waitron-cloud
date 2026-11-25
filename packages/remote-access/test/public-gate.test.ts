@@ -481,7 +481,7 @@ for(const [change,status] of [['off',404],['blocked',404],['read failure',503],[
    assert.doesNotMatch(body,/private/);
    if(change!=='off'){
     assert.doesNotMatch(body,/public\/availability/);
-    assert.doesNotMatch(response.headers.get('content-security-policy')??'',/frame-ancestors/);
+    assert.equal(response.headers.get('content-security-policy'),"default-src 'none'; base-uri 'none'");
    }
    assert.equal(f.count(),change.endsWith('headers')?1:0);
   }finally{await f.close();}
@@ -588,10 +588,13 @@ test('public menu releases its slot when a box tries to upgrade the response',as
  }finally{await f.close();}
 });
 
-test('public menu releases a slot on disconnect even when the authority reader stays pending',async()=>{
- let entered!:()=>void;
+for(const heldRead of [1,2])test(`public menu releases the slot if the visitor leaves during authority read ${heldRead}`,async()=>{
+ let entered!:()=>void,reads=0;
  const reading=new Promise<void>(resolve=>{entered=resolve;});
- const f=await fixture(undefined,{authorize:()=>{entered();return new Promise(()=>{});},respond:(_req,res)=>res.end()});
+ const f=await fixture(undefined,{authorize:async()=>{
+  if(++reads!==heldRead)return true;
+  entered();return new Promise(()=>{});
+ },respond:(_req,res)=>res.end('menu')});
  try{
   const req=request({host:'127.0.0.1',port:f.bound.port,path:menuPath,headers:{
    host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,
@@ -601,6 +604,19 @@ test('public menu releases a slot on disconnect even when the authority reader s
   req.destroy();
   for(let i=0;i<50&&f.gate.stats().menu?.active;i++)await new Promise(resolve=>setTimeout(resolve,5));
   assert.equal(f.gate.stats().menu?.active,0);
-  assert.equal(f.count(),0);
+  assert.equal(f.count(),heldRead-1);
+ }finally{await f.close();}
+});
+
+test('public menu returns 503 at its deadline even when the authority reader stays pending',async t=>{
+ const timeout=AbortSignal.timeout;
+ t.mock.method(AbortSignal,'timeout',(ms:number)=>timeout(ms===10000?100:ms));
+ const f=await fixture(undefined,{authorize:()=>new Promise(()=>{}),respond:(_req,res)=>res.end()});
+ try{
+  const response=await Promise.race([f.send(menuPath),new Promise<never>((_resolve,reject)=>{
+   timeout(750).addEventListener('abort',()=>reject(Error('gateway missed the forward deadline')),{once:true});
+  })]);
+  assert.equal(response.status,503);
+  assert.equal(f.gate.stats().menu?.active,0);
  }finally{await f.close();}
 });
