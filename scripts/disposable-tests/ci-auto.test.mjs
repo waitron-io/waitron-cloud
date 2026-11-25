@@ -760,6 +760,33 @@ test('pickup does not reselect a retry while its first worker awaits admission',
  assert.equal(retryWorkers,1);assert.equal(result.served,2);
 });
 
+test('an unused admission retry waits one polling interval while a sibling runs',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(2);
+ const identity=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ const failed=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0,now:()=>Date.now()-60000});
+ const lease=failed.reserveLocal(ciRequest('I',identity)).lease;
+ failed.release(lease,{resourceId:lease.resourceId,absent:true});failed.forgetRunner(failed.inspect().orphanRunners[0]);
+ assert.equal(failed.recordCIRetryFailure({code:125,cleanup:'absent',lease,error:'GitHub GET refused (503)'},'registration-5xx'),true);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ let finishSibling,launches=0;
+ const sibling=new Promise(resolve=>{finishSibling=resolve;}),events=[];
+ const result=await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},
+  wait:async ms=>events.push(ms),runWorker:async ci=>{
+   if(ci.jobId!==901)return sibling;
+   if(++launches===1){events.push('refused');return {code:125,error:'GitHub GET refused (503)'};}
+   events.push('retry');finishSibling({code:0});
+   return withAvailableSlot(config,async({leases})=>{
+    const reserved=leases.reserveLocal(ciRequest('I',ci));assert.equal(reserved.code,0);
+    assert.equal(leases.inspect().turns['I:ci-789-1-901'].registration5xxRetried,true);
+    leases.release(reserved.lease,{resourceId:reserved.lease.resourceId,absent:true});
+    leases.forgetRunner(leases.inspect().orphanRunners[0]);return {code:0};
+   });
+  }});
+ assert.equal(result.served,3);
+ assert.deepEqual(events,['refused',30000,'retry']);
+});
+
 test('automatic pickup refills a completed slot before a slow sibling finishes',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;

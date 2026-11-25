@@ -181,14 +181,17 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   const admission={ci,checkedAt,...(memorySlot===undefined?{}:{slot:memorySlot,pending:priorStarts})};
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
-  let result=await runWorker(ci,admission);
-  const recorded=()=>{
+  let result;
+  try{result=await runWorker(ci,admission);}
+  catch(error){result={code:125,error:error.message};}
+  const shouldPause=()=>{
    const latest=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-   return latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId) ||
-    Object.keys(latest.turns).some(turn=>turn.endsWith(`:ci-${ci.runId}-${ci.attempt}-${ci.jobId}`));
+   if(latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId))return false;
+   const previous=Object.entries(latest.turns).find(([turn])=>turn.endsWith(`:ci-${ci.runId}-${ci.attempt}-${ci.jobId}`))?.[1];
+   return previous?ciRetryReady(previous,latest,ci.jobId):result.code===75;
   };
-  // Refused work without a job admission stays eligible at the normal polling interval.
-  if(result.code===75 && !recorded()){
+  // Keep an unused retry active through the pause so the next scan cannot relaunch it immediately.
+  if(result.code!==0 && shouldPause()){
    try{await wait(30000,undefined,{signal});}
    catch(error){if(signal?.aborted)return {code:143,reason:'cancelled'};throw error;}
    seen.delete(ci.jobId);
