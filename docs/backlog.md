@@ -313,8 +313,8 @@ best guess and ask for confirmation from the specialist later”. The
 [provisional privacy answers](superpowers/specs/2026-11-24-d101-privacy-answers.md)
 record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers a verified backup and key for a synthetic venue. Bring the pending
-[test exit recovery window](superpowers/plans/2026-11-25-d101-exit-recovery-window.md) to the watcher next.
+covers a verified backup and key for a synthetic venue. The watcher cleared the
+[test exit recovery window](superpowers/plans/2026-11-25-d101-exit-recovery-window.md) for a disposable rehearsal.
 Add the [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud) when building full return.
 The roadmap’s [slice 5 country-policy work](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
 remains separate. Bring later plans to the watcher one at a time for clearance.

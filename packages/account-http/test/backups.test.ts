@@ -10,7 +10,7 @@ import type {HttpBindings} from '@hono/node-server';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
-import {createLeaseIssuer,SignupStore,RegistrationStore,type PlanMode} from '@waitron-cloud/registration';
+import {createLeaseIssuer,LifecycleStore,SignupStore,RegistrationStore,type PlanMode} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
 import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
@@ -139,15 +139,15 @@ test('recovered scope: backup HTTP metadata refuses a retained outside membershi
 });
 
 type ExitFixture=Awaited<ReturnType<typeof recoveryFixture>>;
-function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:StageOptions|undefined)=>Promise<ReturnType<typeof bufferObject>>){
- const server=createAccountApp({pool:db.pool,outbox:db.outbox,planMode,
+function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:StageOptions|undefined)=>Promise<ReturnType<typeof bufferObject>>,pool=db.pool){
+ const server=createAccountApp({pool,outbox:db.outbox,planMode,
   config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
   leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),
   captures:{vault:f.vault,objects:()=>({stage:(key,_streamKey,options)=>stage(key,options),
   async putStaged(){throw Error('unexpected write');},async remove(){throw Error('unexpected delete');}}),
   async grant(){throw Error('unexpected grant');}}});
  return (path:string,pointId=f.point.id)=>server.request(origin+'/api/account/backups/'+path,{method:'POST',headers:{origin,'content-type':'application/json',
-  cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken},body:JSON.stringify({venueId:f.installed.venueId,pointId})},bindings);
+  cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken},body:JSON.stringify({venueId:f.installed.venueId,...(path==='list'?{}:{pointId})})},bindings);
 }
 test('exit download returns the verified archive and its matching key while the installation stays active',async()=>{
  const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;
@@ -217,6 +217,47 @@ test('exit download rejects different stored bytes and disposes the staged copy'
  let disposals=0;
  const send=exitDownload(f,'test-free-paid',async()=>({...bufferObject(bytes),async dispose(){disposals++;}}));
  const response=await send('download');
+ assert.equal(response.status,410);
+ assert.equal(disposals,1);
+});
+
+test('exit download lists the fixed dates and refuses both files once the window has ended',async()=>{
+ const f=await recoveryFixture(db),venueId=f.installed.venueId;
+ const send=exitDownload(f,'test-free-paid',async()=>bufferObject(f.objects.get(f.point.objectKey)!));
+ const disabled=exitDownload(f,'existing',async()=>{throw Error('unexpected read');});
+ const effectiveEndAt='2026-01-01T12:00:00.000Z',deadlineAt='2026-04-01T12:00:00.000Z';
+ await new LifecycleStore(db.pool).request({venueId,operationId:randomUUID(),kind:'cancel',expectedRevision:0,
+  fingerprint:'a'.repeat(64),effectiveEndAt});
+ const closed=await (await send('list')).json();
+ assert.deepEqual(closed.exitRecovery,{effectiveEndAt,deadlineAt,expired:true});
+ assert.equal(closed.exitDownloadAvailable,undefined);
+ assert.equal((await (await disabled('list')).json()).exitRecovery,undefined);
+ for(const path of ['download','download-key']){
+  const response=await send(path);
+  assert.equal(response.status,410,path);
+  assert.deepEqual(await response.json(),{error:'unavailable'});
+ }
+});
+
+test('exit download disposes the staged archive if the deadline passes during staging',async t=>{
+ const f=await recoveryFixture(db),venueId=f.installed.venueId;
+ const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema},pg_catalog`});
+ t.after(()=>pool.end());
+ const {rows:[{effective_end_at}]}=await db.pool.query("SELECT clock_timestamp()-interval '2160 hours'+interval '2 minutes' AS effective_end_at");
+ await new LifecycleStore(db.pool).request({venueId,operationId:randomUUID(),kind:'cancel',expectedRevision:0,
+  fingerprint:'a'.repeat(64),effectiveEndAt:effective_end_at.toISOString()});
+ const open=await (await exitDownload(f,'test-free-paid',async()=>{throw Error('unexpected read');})('list')).json();
+ assert.equal(open.exitDownloadAvailable,true);
+ assert.equal(open.exitRecovery?.expired,false);
+ let disposals=0;
+ const send=exitDownload(f,'test-free-paid',async()=>{
+  await db.pool.query("CREATE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT pg_catalog.clock_timestamp()+interval '3 minutes'$$");
+  return {...bufferObject(f.objects.get(f.point.objectKey)!),async dispose(){disposals++;}};
+ },pool);
+ const key=await send('download-key');assert.equal(key.status,200);
+ assert.ok((await key.text()).trim()===f.capture.keys.recoveryKey,'the key is still available before the deadline');
+ const response=await send('download');
+ if(response.ok)await response.arrayBuffer();
  assert.equal(response.status,410);
  assert.equal(disposals,1);
 });

@@ -661,7 +661,11 @@ when its boundary snapshot is subsequently deleted.
 
 The response contains `venueId`, `points`, `nextCursor`, `defaultPointId` and
 `continuousRecovery` (null or the latest recoverable time, time checked and source node ID).
-Test venues with downloads enabled also receive `exitDownloadAvailable:true`. Each point includes only `id`, `capturedAt`,
+Test venues with downloads enabled receive `exitDownloadAvailable:true` while the lifecycle allows downloads.
+Once service has ended, the list also includes `exitRecovery` with `effectiveEndAt` and `deadlineAt`
+in UTC and an `expired` boolean. The deadline is fixed at 90 days after service ended.
+The dates remain visible after expiry. While a venue is being purged or has been purged,
+the response omits both the dates and the download flag. Each point includes only `id`, `capturedAt`,
 `verification`, `retention`, `expiresAt` and `protection`. Protection is `fallback`,
 `recovery` or null; `recovery` takes precedence when both protections apply. It describes retention, separately from current verification.
 The catalogue omits archive locations and keys.
@@ -671,9 +675,10 @@ On test Cloud, POST to `/api/account/backups/download` to save a currently verif
 encrypted snapshot up to 16 MiB. POST to `/api/account/backups/download-key` to save its
 matching recovery key. Both accept `venueId` and `pointId` and require the same browser
 credentials as the list, plus fresh confirmation from an enrolled account owner. The
-server matches the archive to the stored checksum and rechecks authority after reading the
-archive. Both responses are attachments with `Cache-Control: no-store`. Test mode and
-test venue ownership are required on both routes.
+server matches the archive to the stored checksum and rechecks authority and the deadline
+after reading the archive. At the deadline, both routes return HTTP 410 with `{"error":"unavailable"}`.
+An archive transfer the server already approved can finish. Both responses are attachments
+with `Cache-Control: no-store`. Test mode and test venue ownership are required on both routes.
 
 Daily snapshots have 30-day ordinary retention and monthly snapshots have 12 calendar
 months, calculated in UTC for both display and cleanup. The last snapshot that passed verification remains protected even if a later

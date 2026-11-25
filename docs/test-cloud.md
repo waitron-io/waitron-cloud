@@ -1171,8 +1171,13 @@ TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
 
 The test compares the saved archive with the stored checksum and opens it in a
 verifier with networking disabled. It checks the original box is still serving
-with the same installation after the download. The receipt reports the archive
-size and checksum without including the key.
+with the same installation after the download. It then ends service for that
+same synthetic venue and records a fixed cutoff 90 days after the service end.
+The fixture sets the end in the past so the cutoff is about 90 seconds away.
+Both files match the saved copies before the cutoff. After the cutoff, both
+requests return HTTP 410, the dates stay visible and the stored archive still
+matches its verified checksum. The receipt includes both dates and the archive
+size and checksum. Keep the recovery key private.
 
 ## Check real free and paid clients
 

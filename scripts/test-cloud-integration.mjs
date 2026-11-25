@@ -22,6 +22,7 @@ import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integrati
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
 import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
 import {selectIntegrationVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
+import {checkSnapshotGrantRefusal} from '../deploy/test-cloud/test-fixtures/integration-snapshot-exposure.mjs';
 import {servicesOrigin, servicesNamespace, servicesStoreHost} from '../deploy/kubernetes/services.mjs';
 import {createP1Budget} from './p1-observer.mjs';
 import {untilRemote} from './kubernetes-remote.mjs';
@@ -813,6 +814,36 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
               assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
             }});
+            journeyStage = 'exit-recovery-window';
+            const window = parseIntegrationJson(await accountPhase('end-exit-download'));
+            checkSnapshotGrantRefusal(await control(id, 'snapshot-refusal'));
+            const {venueId, pointId} = request;
+            const list = async expired => {
+              const reply = await api('/api/account/backups/list', {venueId}, browser);
+              assert.equal(reply.status, 200);
+              assert.deepEqual(reply.body.exitRecovery, {...window, expired});
+              assert.equal(reply.body.exitDownloadAvailable, expired ? undefined : true);
+            };
+            const files = [['download', 'exit.backup.enc'], ['download-key', 'exit.key']];
+            await list(false);
+            for (const [action, file] of files) {
+              const reply = await api('/api/account/backups/' + action, {venueId, pointId}, browser);
+              assert.equal(reply.status, 200, 'integration.exit_window_' + action);
+              assert.ok(Buffer.isBuffer(reply.body) && reply.body.equals(await readFile(join(directory, file))),
+                'integration.exit_window_saved_' + action);
+            }
+            await delay(Math.max(0, Date.parse(window.deadlineAt) - Date.now()) + 50);
+            await list(true);
+            for (const [action] of files) {
+              const reply = await api('/api/account/backups/' + action, {venueId, pointId}, browser);
+              assert.equal(reply.status, 410, 'integration.exit_expired_' + action);
+              assert.deepEqual(reply.body, {error: 'unavailable'});
+            }
+            const retained = parseIntegrationJson(await accountPhase('inspect-retained-snapshot', {
+              points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
+            }));
+            assert.deepEqual(retained, {retainedSnapshotUnchanged: true});
+            publishedSnapshot.exitRecovery = {...window, ...retained};
           }
           if (measured) {
             const original = publishedSnapshot;

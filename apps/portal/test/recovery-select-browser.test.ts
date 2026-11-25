@@ -43,7 +43,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (handler !== 'missing') installationRead?.();
         await installationGate; return route.fulfill({json: {installations: offeredInstallations}});
       }
-      if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: null, defaultPointId: point, continuousRecovery: null}});
+      if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: null, defaultPointId: point, continuousRecovery: null,
+        exitRecovery: {effectiveEndAt: '2026-01-01T12:00:00.000Z', deadlineAt: '2026-04-01T12:00:00.000Z', expired: true}}});
       if (path.endsWith('/recovery/approve')) approvals.push(route.request().postDataJSON());
       return route.fulfill({status: 503, json: {error: 'unavailable'}});
     });
@@ -94,6 +95,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await venue.inputValue(), second);
       assert.equal(await venue.locator('option:checked').textContent(), 'Second test venue · ' + second);
       assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).inputValue(), point);
+      assert.equal(await page.locator('time[datetime="2026-04-01T12:00:00.000Z"]').count(), 0);
+      assert.equal(await page.getByText(locale==='en'?'Downloads have ended.':'El plazo de descarga ha terminado.',{exact:true}).count(),0);
     });
     await t.test('Venues organisation displays the selected second organisation', async () => {
       await openVenues();

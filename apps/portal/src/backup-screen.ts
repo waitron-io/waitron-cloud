@@ -9,8 +9,12 @@ export function backupScreen(app:PortalApp,venueId:string){
  const selected=b.page?.points.find(p=>p.id===b.selected),continuous=b.page?.continuousRecovery,disabled=app.installations.pending||b.pending||b.downloading||!!b.waiting,recover=app.path==='/recover',showSnapshot=!recover||b.selectedSource==='snapshot';
  const states={pending:c.snapshotPending,verified:c.snapshotVerified,failed:c.snapshotFailed};
  const date=(s:string)=>formatDateTime(s,app.locale);
+ const exit=recover?undefined:b.page?.exitRecovery;
  return html`<section aria-label=${recover?c.recoverySource:c.snapshotHistory}>${recover?html`<h2>${c.recoverySource}</h2>`:html`<h4>${c.snapshotHistory}</h4>`}
   <p>${c.snapshotPurpose}</p>${recover?nothing:html`<p>${c.recoveryUnavailable}</p>`}
+  ${exit?html`<dl><dt>${c.snapshotServiceEnded}</dt><dd><time datetime=${exit.effectiveEndAt}>${formatDateTime(exit.effectiveEndAt,app.locale,'UTC')}</time></dd>
+   <dt>${c.snapshotDownloadDeadline}</dt><dd><time datetime=${exit.deadlineAt}>${formatDateTime(exit.deadlineAt,app.locale,'UTC')}</time></dd></dl>
+   ${exit.expired?html`<p role="status">${c.snapshotDownloadsEnded}</p>`:nothing}`:nothing}
   ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}${permissionActions(app,b.error)}
   ${b.pending||b.downloading?html`<p role="status">${c.wait}</p>`:nothing}
   ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}

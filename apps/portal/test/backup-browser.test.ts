@@ -11,7 +11,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
  const f=await startPortalFixture();try{
   const email='backups@example.test',password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
   const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(f.db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());const v=await r.complete(b);
-  const context=await f.browser.newContext({locale,viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(4000);const c=translations[locale];
+  const context=await f.browser.newContext({locale,timezoneId:'Europe/Madrid',viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(4000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const browse=locale==='en'?'View snapshots':'Ver instantáneas',refresh=locale==='en'?'Latest snapshots':'Últimas instantáneas',older=locale==='en'?'Older snapshots':'Instantáneas anteriores',choose=locale==='en'?'Choose a snapshot':'Elige una instantánea';
@@ -31,8 +31,27 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.getByRole('button',{name:refresh,exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#snapshot-choice option').length===50);
   const saveArchive=page.getByRole('button',{name:locale==='en'?'Download backup':'Descargar copia',exact:true});
   assert.equal(await saveArchive.count(),0);
+  const effectiveEndAt='2026-01-01T12:00:00.000Z',deadlineAt='2026-04-01T12:00:00.000Z';
+  const endedLabel=locale==='en'?'Service ended (UTC)':'Fin del servicio (UTC)',deadlineLabel=locale==='en'?'Download deadline (UTC)':'Fecha límite de descarga (UTC)';
+  const ended=page.getByText(locale==='en'?'Downloads have ended.':'El plazo de descarga ha terminado.',{exact:true});
+  const saveKey=page.getByRole('button',{name:locale==='en'?'Download recovery key':'Descargar clave de recuperación',exact:true});
+  let expired=false;
   const flag=async(route:import('playwright').Route)=>{
-   const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),exitDownloadAvailable:true}});
+   const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),
+    exitRecovery:{effectiveEndAt,deadlineAt,expired},...(expired?{}:{exitDownloadAvailable:true})}});
+  };
+  const checkDates=async()=>{
+   for(const [label,instant] of [[endedLabel,effectiveEndAt],[deadlineLabel,deadlineAt]] as const){
+    await page.getByText(label,{exact:true}).waitFor();
+    assert.match(await page.locator(`time[datetime="${instant}"]`).innerText(),/\b12:00:00\b/);
+   }
+  };
+  const captureWindow=async(state:string)=>{
+   for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
+    await page.emulateMedia({colorScheme});await page.setViewportSize({width,height:900});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await page.screenshot({path:new URL(`../dist/backup-exit-${locale}-${colorScheme}-${width}-${state}.png`,import.meta.url).pathname,fullPage:true});
+   }
   };
   await page.route('**/api/account/backups/list',flag);
   let proof=false;
@@ -51,6 +70,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   }
   await page.getByRole('button',{name:refresh,exact:true}).click();
   await choices.selectOption(verifiedId);
+  await checkDates();assert.equal(await ended.count(),0);
+  await captureWindow('open');
   await saveArchive.click();
   const proofPrompt=page.getByRole('alert').filter({hasText:locale==='en'?'Verify it’s you before downloading.':'Verifica que eres tú antes de descargar.'});
   await proofPrompt.waitFor();
@@ -58,12 +79,16 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
   await page.getByText(c.actionProofReady,{exact:true}).waitFor();
   assert.equal(await proofPrompt.count(),0);
-  for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[page.getByRole('button',{
-   name:locale==='en'?'Download recovery key':'Descargar clave de recuperación',exact:true}),key,'key']] as const){
+  for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[saveKey,key,'key']] as const){
    const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
    assert.equal(download.suggestedFilename(),`waitron-backup-${verifiedId}.${extension}`);
    const file=await download.path();assert.ok(file);assert.equal(await readFile(file,'utf8'),contents);
   }
+  expired=true;
+  await page.getByRole('button',{name:refresh,exact:true}).click();
+  await ended.waitFor();await checkDates();
+  assert.equal(await saveArchive.count(),0);assert.equal(await saveKey.count(),0);
+  await captureWindow('ended');
   await page.unroute('**/api/account/backups/list',flag);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:refresh,exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await choices.count(),0);
  }finally{await f.close();}

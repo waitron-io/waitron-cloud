@@ -46,6 +46,9 @@ interface OperationRow {
  claim_revision:number;claim_lifecycle_revision:number|null;lease_until:Date|null;
 }
 const iso=(value:Date|null)=>value?.toISOString()??null;
+
+type ExitRecoveryWindow={effectiveEndAt:string;deadlineAt:string;expired:boolean};
+
 async function locked(client:PoolClient,ref:LifecycleRef):Promise<Row>{
  if(!ref||!id(ref.venueId)||!revision(ref.revision)||ref.revision<1)fail('invalid_lifecycle_input');
  const row=(await client.query<Row>('SELECT * FROM data_lifecycles WHERE venue_id=$1 FOR UPDATE',[ref.venueId])).rows[0];
@@ -56,6 +59,21 @@ async function locked(client:PoolClient,ref:LifecycleRef):Promise<Row>{
 export class LifecycleStore {
  readonly #pool:Pool;
  constructor(pool:Pool){this.#pool=pool;}
+
+ // Lock the venue even before a lifecycle exists so a first cancellation waits for the download decision.
+ static async readExitRecovery(client:PoolClient,venueId:string):Promise<{allowed:boolean;window?:ExitRecoveryWindow}>{
+  const venue=await client.query('SELECT id FROM venues WHERE id=$1 FOR KEY SHARE',[venueId]);
+  if(!venue.rowCount)return {allowed:false};
+  const {rows:[row]}=await client.query<Pick<Row,'state'>>('SELECT state FROM data_lifecycles WHERE venue_id=$1 FOR SHARE',[venueId]);
+  if(!row)return {allowed:true};
+  if(row.state==='purging'||row.state==='purged')return {allowed:false};
+  // Read the database clock after any lock wait and compare at database precision.
+  const {rows:[window]}=await client.query<{effective_end_at:Date;deadline_at:Date;expired:boolean}>(`SELECT effective_end_at,deadline_at,deadline_at<=clock.now AS expired
+   FROM data_lifecycles CROSS JOIN (SELECT clock_timestamp() AS now) AS clock
+   WHERE venue_id=$1 AND effective_end_at<=clock.now`,[venueId]);
+  if(!window)return {allowed:true};
+  return {allowed:!window.expired,window:{effectiveEndAt:window.effective_end_at.toISOString(),deadlineAt:window.deadline_at.toISOString(),expired:window.expired}};
+ }
 
  async request(input:LifecycleRequest):Promise<LifecycleRef>{
   // Bind the operation before borrowing a connection; callers retain their input object.

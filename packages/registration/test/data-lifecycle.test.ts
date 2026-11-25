@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {LifecycleStore} from '../src/data-lifecycle.ts';
+import {transaction} from '../src/transaction.ts';
 import {lifecycleFixture} from './fixtures/data-lifecycle.ts';
 
 const f=lifecycleFixture('lifecycle'),store=new LifecycleStore(f.pool);
@@ -313,5 +314,40 @@ test('reads acknowledge the lifecycle row lock before observing operations and e
   await held.query('BEGIN');await held.query('SELECT * FROM data_lifecycles WHERE venue_id=$1 FOR UPDATE',[f.venueId]);
   reading=store.read(f.venueId);await waitForLock('SELECT * FROM data_lifecycles WHERE venue_id=',reading);
   await held.query('COMMIT');await reading;
+ }finally{await held.query('ROLLBACK');held.release();await reading?.catch(()=>{});}
+});
+
+test('exit download window opens at service end and closes at the stored deadline',async()=>{
+ const read=()=>transaction(f.pool,client=>LifecycleStore.readExitRecovery(client,f.venueId));
+ const effectiveEndAt='2027-03-28T00:30:00.000Z',deadlineAt='2027-06-26T00:30:00.000Z';
+ assert.deepEqual(await read(),{allowed:true});
+ await store.request(request());
+ for(const [now,expected] of [
+  ['2027-03-28T00:29:59.999999Z',{allowed:true}],
+  [effectiveEndAt,{allowed:true,window:{effectiveEndAt,deadlineAt,expired:false}}],
+  ['2027-06-26T00:29:59.999999Z',{allowed:true,window:{effectiveEndAt,deadlineAt,expired:false}}],
+  [deadlineAt,{allowed:false,window:{effectiveEndAt,deadlineAt,expired:true}}],
+ ] as const){
+  await f.pool.query(`CREATE OR REPLACE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '${now}'::timestamptz$$`);
+  assert.deepEqual(await read(),expected,now);
+ }
+ for(const state of ['purging','purged']){
+  await f.pool.query('UPDATE data_lifecycles SET state=$2,effective_end_at=NULL,deadline_at=NULL WHERE venue_id=$1',[f.venueId,state]);
+  assert.deepEqual(await read(),{allowed:false},state);
+ }
+});
+
+test('exit download window checks database time after waiting for a lifecycle row lock',async()=>{
+ await f.pool.query(`CREATE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '2027-03-28T00:30:00.000Z'::timestamptz$$`);
+ await store.request(request());
+ const held=await f.pool.connect();let reading:Promise<unknown>|undefined;
+ try{
+  await held.query('BEGIN');
+  await held.query('SELECT 1 FROM data_lifecycles WHERE venue_id=$1 FOR UPDATE',[f.venueId]);
+  reading=transaction(f.pool,client=>LifecycleStore.readExitRecovery(client,f.venueId));
+  await waitForLock('SELECT state FROM data_lifecycles WHERE venue_id=',reading);
+  await held.query(`CREATE OR REPLACE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '2027-06-26T00:30:00.000Z'::timestamptz$$`);
+  await held.query('COMMIT');
+  assert.deepEqual(await reading,{allowed:false,window:{effectiveEndAt:'2027-03-28T00:30:00.000Z',deadlineAt:'2027-06-26T00:30:00.000Z',expired:true}});
  }finally{await held.query('ROLLBACK');held.release();await reading?.catch(()=>{});}
 });

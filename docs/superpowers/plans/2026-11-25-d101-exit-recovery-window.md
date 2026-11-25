@@ -13,25 +13,27 @@ full return and its audit, sealing and deletion are later work. The lifecycle ta
 
 ## Server
 
-- [ ] Start in [backups.test.ts](../../../packages/account-http/test/backups.test.ts). Check
-  the fixed dates, both routes before and after expiry, terminal-state refusal even without dates,
-  and disposal when the archive’s deadline passes during staging. Keep existing authority checks.
-- [ ] Add a caller-transaction read in [data-lifecycle.ts](../../../packages/registration/src/data-lifecycle.ts)
-  and export it from [index.ts](../../../packages/registration/src/index.ts). Use `FOR KEY SHARE`
+- [ ] Test the missing row, upcoming and open windows, exact cutoff, terminal states and
+  a lock wait in [data-lifecycle.test.ts](../../../packages/registration/test/data-lifecycle.test.ts).
+  [backups.test.ts](../../../packages/account-http/test/backups.test.ts) checks list fields and
+  availability, both 410 responses and disposal when the deadline passes during staging.
+- [ ] Add a caller-transaction read to the exported `LifecycleStore` in
+  [data-lifecycle.ts](../../../packages/registration/src/data-lifecycle.ts). Use `FOR KEY SHARE`
   on the venue before `FOR SHARE` on its lifecycle row. Compare in SQL against the database
   clock after locking. Refuse `purging` and `purged` first. With no row or before service end,
   use existing behavior. Otherwise allow release only while the clock is strictly before the stored deadline.
 - [ ] Use this read in the test owner’s list and download proof check in [backups.ts](../../../packages/account-http/src/backups.ts).
-  Include optional `exitRecovery` with `effectiveEndAt`, `deadlineAt` and `expired` for ended windows.
-  Omit the dates for terminal rows and omit the download flag when release is refused. Keep HTTP 410
-  for unavailable files. The archive repeats the check after staging. In [catalogue.ts](../../../packages/backups/src/catalogue.ts),
-  repeat it after loading the key. A transfer admitted before expiry can finish.
+  With the download service enabled, include optional `exitRecovery` with `effectiveEndAt`, `deadlineAt`
+  and `expired` for ended windows. Omit dates for terminal rows and the download flag when release
+  is refused. Keep HTTP 410 for unavailable files. The archive repeats the check after staging.
+  A transfer admitted before expiry can finish.
 
 ## Backups
 
 - [ ] [Controller tests](../../../apps/portal/test/backup-controller.test.ts) cover optional
   page parsing in [backup-types.ts](../../../apps/portal/src/backup-types.ts). [Browser tests](../../../apps/portal/test/backup-browser.test.ts)
   check both dates and download actions before and after expiry in English and Spanish with the browser in Europe/Madrid.
+  Check that the date and download status stay on Backups when the snapshot picker also appears on Recover.
 - [ ] In [backup-screen.ts](../../../apps/portal/src/backup-screen.ts), show the dates labelled
   UTC using [dates.ts](../../../apps/portal/src/dates.ts) and [locale.ts](../../../apps/portal/src/locale.ts).
   Show that downloads have ended without suggesting deletion. Keep the ordinary snapshot retention label distinct.
