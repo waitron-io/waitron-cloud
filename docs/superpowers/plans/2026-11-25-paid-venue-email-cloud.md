@@ -1,12 +1,14 @@
 # Paid venue email in Cloud
 
-Follow the [design](../specs/2026-11-23-venue-email-paid-design.md). Build 2a now using Mailpit. Only the sandbox check waits for D621’s free diagnostics. Each pull request stands alone. Plan later slices separately. Paid customer mail needs delivery safeguards, D102 provider qualification and data-processor terms.
+Follow the [design](../specs/2026-11-23-venue-email-paid-design.md). Each pull request stands alone. Plan later slices separately. Paid customer mail needs delivery safeguards, D102 provider qualification and data-processor terms.
 
 ## 1. Test the alias in Stockholm
 
 The owner said “Yes, run the check (Recommended)” in Lane G `questions.md` on 25 November at 10:30. With scoped access after D621’s diagnostics, compare two temporary Stockholm SES identities in Waitron Dev without sending mail. Publish a control TXT, an alias CNAME and its target TXT in the existing test zone. Read [`DkimAttributes.Status`](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_DkimAttributes.html). Allow up to 76 hours for a final result, four beyond SES’s 72-hour search window. Remove both identities and all three records at the result or deadline. Verify removal and log DNS answers and status in Lane J `progress.log`.
 
 Alias `SUCCESS` selects one record. Alias `FAILED` selects three with a successful control and correctly resolving alias. A failed control or a nonfinal result at the deadline goes to the watcher. Cross-zone DNS and delivered signatures still need qualification. No product or test code.
+
+On 25 November, both sandbox identities reached `SUCCESS` in one DNS zone. The one-alias path goes forward for test setup. Both identities and all trial records were removed, and no mail was sent.
 
 ## 2a. Choose the Waitron sender
 
@@ -16,7 +18,9 @@ Reuse the existing staff grant and allowance. At send, apply the saved Reply-To 
 
 ## 2b. Show verified domain records
 
-Add SES identity creation, status and removal. For one record, give SES the signing key and publish its TXT. Plan private key custody and rotation. For three records, read them from SES. Keep `route53-dns.ts` certificate name rules when adding a DNS operation scoped to mail. Bind proof to the owning organisation and current choice. Beside `remote-screen.ts`, list the remote and email records with copy buttons and verification marks. Generate a downloadable PDF with `pdf-lib` from the same list. Test fake SES and DNS, cross-venue claims and record/PDF parity. About 300–450 product and 170–230 test lines.
+First [build the test setup and read-only DNS checks](2026-11-25-paid-venue-email-domain-records.md). An owner saves the sending address and can copy or download the DNS records and check the aliases. The tick confirms DNS delegation.
+
+Plan SES identity creation, status and cleanup after the separate-zone qualification. Keep the private signing key in memory for creation. Retain the public key and selector for DNS. The plan needs to cover retry, rotation, and two venues asking to use the same domain in one SES account. Keep the certificate DNS rules when adding a mail-specific operation. Bind signing proof to the current choice and its organisation.
 
 ## 2c. Send from the verified domain
 
