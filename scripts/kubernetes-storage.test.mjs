@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
+import {X509Certificate} from 'node:crypto';
+import dns from 'node:dns';
 import {mkdir, mkdtemp, rm, unlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {promisify} from 'node:util';
-import {stockholmStoreResources} from './kubernetes-storage.mjs';
+import {installStockholmStore, stockholmStoreResources} from './kubernetes-storage.mjs';
 
 test('store reserves six private volumes, two from each machine, for specific peers', async () => {
   const nodes = ['stockholm-a', 'stockholm-b', 'stockholm-c'];
@@ -51,6 +53,36 @@ test('store reserves six private volumes, two from each machine, for specific pe
   assert.deepEqual(placements, ['stockholm-a', 'stockholm-a', 'stockholm-b', 'stockholm-b', 'stockholm-c', 'stockholm-c']);
   assert.deepEqual(paths, ['/var/local/d621-store/0', '/var/local/d621-store/1',
     '/var/local/d621-store/0', '/var/local/d621-store/1', '/var/local/d621-store/0', '/var/local/d621-store/1']);
+});
+
+test('Kind store certificates name both network paths and ordinary certificates keep just their private addresses', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'store-addresses-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const nodes = ['a', 'b', 'c'], addresses = ['10.77.0.1', '10.77.0.2', '10.77.0.3'];
+  const bridges = ['172.30.250.2', '172.30.250.3', '172.30.250.4'];
+  const items = Array.from({length: 6}, (_, i) => ({metadata: {name: 'store-' + i},
+    spec: {nodeName: nodes[Math.floor(i / 2)]}, status: {conditions: [{type: 'Ready', status: 'True'}]}}));
+  for (const storeBridgeAddresses of [bridges, undefined]) {
+    const {ca} = await installStockholmStore({nodes, addresses, storeBridgeAddresses, image: 'local:store', directory,
+      run: promisify(execFile), kube: async () => JSON.stringify({items}), signal: AbortSignal.timeout(5000)});
+    const cert = new X509Certificate(ca);
+    for (const ip of addresses) assert.equal(cert.checkIP(ip), ip);
+    for (const ip of bridges) assert.equal(cert.checkIP(ip), storeBridgeAddresses ? ip : undefined);
+  }
+});
+
+test('store metrics time out even when DNS never returns and preserve caller cancellation', {timeout: 8000}, async t => {
+  const {storeMetrics} = await import('./kubernetes-storage-proof.mjs');
+  t.mock.method(dns, 'lookup', () => {});
+  const store = {credentials: {accessKeyId: 'fixture', secretAccessKey: 'synthetic-password'}};
+  const stopped = new AbortController(), reason = Error('Caller stopped');
+  const fallback = new AbortController();
+  const timer = setTimeout(() => fallback.abort(Error('Request exceeded five seconds')), 6500);
+  t.after(() => clearTimeout(timer));
+  const check = assert.rejects(storeMetrics('store.test', store, fallback.signal), {code: 'ETIMEDOUT'});
+  const cancelled = assert.rejects(storeMetrics('store.test', store, stopped.signal), {name: 'AbortError', cause: reason});
+  stopped.abort(reason);
+  await Promise.all([check, cancelled]);
 });
 
 test('multipart upload refuses a part response without the requested encryption', async () => {

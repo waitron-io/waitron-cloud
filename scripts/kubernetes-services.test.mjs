@@ -363,16 +363,24 @@ test('the Kind baseline keeps a cached controller image and removes the image it
   t.after(() => rm(directory, {recursive: true, force: true}));
   const key = 'A'.repeat(43) + '=';
   const imageNames = {kept: 'ghcr.io/fluxcd/source-controller', fresh: 'ghcr.io/fluxcd/kustomize-controller'};
-  const actions = [], resumed = [];
+  const actions = [], resumed = [], returnOrder = [];
   let pid = 123;
   const outside = await prepareKindOutsideBaseline({directory, cluster: 'owned',
     nodes: [1, 2, 3].map(n => ({name: 'node-' + n, ip: '192.0.2.' + n, id: String(n)})),
     prepareBundle: async () => join(directory, 'synthetic-flux.json'),
     run: async (binary, args) => {
       if (binary === 'wg') return key;
-      if (binary === 'nsenter') resumed.push(args);
+      if (binary === 'nsenter') {
+        resumed.push(args);
+        if (pid === 456) returnOrder.push('WireGuard');
+      }
       if (binary !== 'docker') return '';
       if (args[0] === 'inspect') return String(pid);
+      if (args[0] === 'exec' && args[1] === '2' && args[3] === '/proc/1/comm') {
+        const process = returnOrder.length ? 'systemd' : 'entrypoint';
+        returnOrder.push(process);
+        return process;
+      }
       const image = args.at(-1).split('@')[0];
       if (args[0] === 'image' && args[1] === 'inspect' && image === imageNames.fresh) throw Error('No such image: ' + args.at(-1));
       if (args[0] === 'pull' || args[1] === 'rm') actions.push([args[0], image]);
@@ -384,6 +392,7 @@ test('the Kind baseline keeps a cached controller image and removes the image it
   await outside.restoreNode('node-2');
   assert.equal(resumed.length, beforeRestart + 1);
   assert.deepEqual(resumed.at(-1), ['-t', '456', '-n', 'wg-quick', 'up', join(directory, 'mesh-node-1', 'wg0.conf')]);
+  assert.deepEqual(returnOrder, ['entrypoint', 'systemd', 'WireGuard']);
   await outside.close();
   assert.deepEqual(actions, [['image', 'owned:source-controller'], ['pull', imageNames.fresh],
     ['image', 'owned:kustomize-controller'], ['image', imageNames.fresh]]);
@@ -400,6 +409,26 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
     }}), error => error === failure);
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
 });
+
+for (const [target, repairIp] of [['Kind', '172.30.250.3'], ['Amazon', '10.77.0.2']]) {
+  test(`${target} returns both peer counts and repairs through ${repairIp}`, async t => {
+    const log = t.mock.method(process.stderr, 'write', () => true);
+    const events = [], signal = AbortSignal.timeout(5000);
+    const nodes = [{name: 'node-a'}, {name: 'node-b', ip: repairIp}];
+    const kindOutside = target === 'Kind' && {ip: '10.77.0.2', describeStorePath: async () => 'filter and route captured'};
+    const result = await servicesScript.repairReturningStore({name: 'node-b', nodes, kindOutside, signal, repair: signal,
+      read: async ip => {
+        const peer = events.push(ip) + 1;
+        if (kindOutside && ip === kindOutside.ip) throw Error('synthetic timeout');
+        return `minio_cluster_health_erasure_set_online_drives{pool="0",server="store-${peer}.store-peers.d621-store.svc.cluster.local:9000",set="0"} 6`;
+      },
+      heal: async ({node}) => {events.push('repair ' + node.ip); return 1;},
+    });
+    assert.deepEqual(result, {drives: 'store-2=6, store-3=6', storeRepairedOn: 'node-b', storeRepairAttempts: 1});
+    assert.deepEqual(events, [repairIp, repairIp, 'repair ' + repairIp, ...(kindOutside ? [kindOutside.ip] : [])]);
+    if (kindOutside) assert.match(log.mock.calls.map(call => call.arguments[0]).join(''), /WireGuard.*synthetic timeout\nfilter and route captured/);
+  });
+}
 
 test('the outside rehearsal routes internal storage requests to the local store copies', async () => {
   assert.equal(typeof servicesScript.configureServices, 'function');

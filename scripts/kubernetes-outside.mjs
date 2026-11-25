@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir, rm, writeFile} from 'node:fs/promises';
 import {isIPv4} from 'node:net';
 import {join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 import {closePublishedContainer, installPublishedPeerFilter, fluxImages, installFlux, prepareFluxBundle, startOutsideFluxMirror} from './kubernetes-git.mjs';
 import {mailpitImage, mailpitArguments, outsideMailHost} from '../deploy/kubernetes/services.mjs';
@@ -140,6 +141,7 @@ export function outsidePublication({cluster, directory, signal, waitronImage, ru
   return {
     get revision() {return flux?.revision;},
     restoreNode: mesh.restoreNode,
+    describeStorePath: mesh.describeStorePath,
     async startInbox(files) {
       inbox = await startOutsideInbox({name: cluster, directory, interfaceName: mesh.interfaceName,
         run, files, pullIfAbsent: !amazon});
@@ -168,14 +170,14 @@ export async function startKindOutsideMesh({directory, nodes, run, signal}, {res
   const execute = (binary, args, input, cleanup) => run(binary, args, {input, signal: cleanup ? null : signal, timeout: 180_000});
   const bootstrap = fileURLToPath(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url));
   const peers = [];
-  const nodePid = async node => {
-    const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id]);
+  const nodePid = async (node, options) => {
+    const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id], options);
     assert.match(pid, /^[1-9][0-9]*$/);
     return pid;
   };
   const configPath = index => join(directory, 'mesh-node-' + index, 'wg0.conf');
   const connectNode = async (index, options) =>
-    run('nsenter', ['-t', await nodePid(nodes[index]), '-n', 'wg-quick', 'up', configPath(index)], options);
+    run('nsenter', ['-t', await nodePid(nodes[index], options), '-n', 'wg-quick', 'up', configPath(index)], options);
   for (const node of nodes) {
     const privateKey = await run('wg', ['genkey']);
     const publicKey = await execute('wg', ['pubkey'], privateKey + '\n');
@@ -190,10 +192,24 @@ export async function startKindOutsideMesh({directory, nodes, run, signal}, {res
       await connectNode(index);
     }
   }});
-  return {...mesh, restoreNode(name, options) {
+  async function describeStorePath(node, limit) {
+    const options = {signal: AbortSignal.any([limit, AbortSignal.timeout(5000)])};
+    const enter = ['-t', await nodePid(node, options), '-n'];
+    const results = await Promise.allSettled([
+      run('nsenter', [...enter, 'iptables', '-t', 'mangle', '-nvL', 'D618-OUTSIDE'], options),
+      run('nsenter', [...enter, 'ip', 'route', 'get', rehearsalAddress], options),
+    ]);
+    return results.map(result => result.status === 'fulfilled' ? result.value : result.reason.message).join('\n');
+  }
+  return {...mesh, describeStorePath, async restoreNode(name, options = {}) {
     const index = nodes.findIndex(node => node.name === name);
     assert.ok(index >= 0, 'outside.unknown_node');
-    return connectNode(index, options);
+    const request = {...options, signal: options.signal ?? signal ?? AbortSignal.timeout(180_000)};
+    // Kind's entrypoint restores iptables before it replaces itself with systemd.
+    while (await run('docker', ['exec', nodes[index].id, 'cat', '/proc/1/comm'], request) !== 'systemd') {
+      await delay(250, undefined, request);
+    }
+    return connectNode(index, request);
   }};
 }
 

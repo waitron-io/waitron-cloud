@@ -100,14 +100,16 @@ export async function waitForStore({nodes, kube, signal}) {
   signal.throwIfAborted();
 }
 
-export async function installStockholmStore({nodes, addresses, image, directory, run, kube, signal, openId}) {
+export async function installStockholmStore({nodes, addresses, storeBridgeAddresses = [], image, directory, run, kube, signal, openId}) {
   const items = stockholmStoreResources(nodes, image, openId);
   assert.ok(addresses.length === 3 && addresses.every(isIPv4), 'stockholm.store_addresses');
+  assert.ok(storeBridgeAddresses.length === 0 || (storeBridgeAddresses.length === 3 && storeBridgeAddresses.every(isIPv4)),
+    'stockholm.store_bridge_addresses');
   const credentials = {accessKeyId: randomBytes(16).toString('hex'), secretAccessKey: randomBytes(24).toString('hex')};
   const certPath = join(directory, 'store.crt'), keyPath = join(directory, 'store.key');
   const names = [dns(apiName), ...peers.map(peerDns)].map(name => 'DNS:' + name);
   await run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=' + dns(apiName),
-    '-addext', 'subjectAltName=' + [...names, ...addresses.map(ip => 'IP:' + ip)].join(','),
+    '-addext', 'subjectAltName=' + [...names, ...[...addresses, ...storeBridgeAddresses].map(ip => 'IP:' + ip)].join(','),
     '-addext', 'basicConstraints=critical,CA:TRUE', '-out', certPath, '-keyout', keyPath], {signal});
   const [ca, key] = await Promise.all([readFile(certPath, 'utf8'), readFile(keyPath, 'utf8')]);
   const manifest = items => ({signal, timeout: 30_000, input: JSON.stringify({apiVersion: 'v1', kind: 'List', items})});
