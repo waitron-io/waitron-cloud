@@ -1,10 +1,11 @@
 import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
+import {readVenuePermissions} from './venue-service-permissions.ts';
 import {createHmac,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {normaliseEmail} from './account-input.ts';
 import {RelayError,RelayGrantStore,type RelayConfig} from './relay-grants.ts';
 import {RelayKeys,messageError,type RelayKeyConfig,type RelayPayloadBinding} from './relay-payload.ts';
-import {localRelaySmtp,relayTemplate,type RelayContent,type RelayDelivery} from './relay-smtp.ts';
+import {localRelaySmtp,relayTemplate,type RelayContent,type RelayDelivery,type RelaySender} from './relay-smtp.ts';
 import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
 import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
@@ -29,12 +30,12 @@ const suppressionLock="SELECT pg_advisory_xact_lock(hashtextextended(current_sch
 export class RelayWorker {
  readonly #pool:Pool;readonly #grants:RelayGrantStore|undefined;readonly #payload:RelayKeys|undefined;
  readonly #suppression=new Map<string,Buffer>();readonly #active:string|undefined;
- readonly #send:((content:RelayContent,signal:AbortSignal,admission?:HandoffAdmission)=>Promise<RelaySesResult>)|undefined;readonly #timeout:number;
- readonly #ses:SesHandoffConfig|undefined;
+ readonly #send:((content:RelayContent,signal:AbortSignal,admission?:HandoffAdmission,sender?:RelaySender)=>Promise<RelaySesResult>)|undefined;readonly #timeout:number;
+ readonly #ses:SesHandoffConfig|undefined;readonly #planMode:PlanMode;
  constructor(pool:Pool,config?:RelayWorkerConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){
   allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);
-  this.#pool=pool;this.#timeout=config?.sendTimeoutMs??20000;
+  this.#pool=pool;this.#planMode=planMode;this.#timeout=config?.sendTimeoutMs??20000;
   if(!config)return;
   this.#ses=config.ses&&{config:config.ses.config,recipientKeys:{activeKeyId:config.ses.recipientKeys.activeKeyId,keys:{...config.ses.recipientKeys.keys}}};
   if(config.mode!=='local-proof'||!Number.isInteger(this.#timeout)||this.#timeout<1||this.#timeout>20000)messageError('relay_unavailable');
@@ -46,10 +47,10 @@ export class RelayWorker {
    if(!this.#ses||!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email'))messageError('relay_unavailable');
    try{
     const send=createSesRelaySender(this.#ses.config,config.sesSmtp.smtp,config.sesSmtp.trust);
-    this.#send=(content,signal,admission)=>send(content,admission!,signal);
+    this.#send=(content,signal,admission,sender)=>send(content,admission!,signal,sender);
    }catch{messageError('relay_unavailable');}
   }else{
-   const send=localRelaySmtp(config.smtpPort);this.#send=async(content,signal)=>({outcome:await send(content,signal)});
+   const send=localRelaySmtp(config.smtpPort);this.#send=async(content,signal,_admission,sender)=>({outcome:await send(content,signal,sender)});
   }
  }
  #digest(id:string,recipient:string){return createHmac('sha256',this.#suppression.get(id)!).update(JSON.stringify(['relay-suppression-v1',recipient])).digest('hex');}
@@ -109,12 +110,12 @@ export class RelayWorker {
   if(claimed===undefined)return false;if(claimed===null)return true;
   const handoff=await this.#handoff(claimed);
   if(!handoff)return true;
-  const {content,admission}=handoff;
+  const {content,admission,sender}=handoff;
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
   let result:RelaySesResult;
   try{
    const timeout=new Promise<RelaySesResult>(resolve=>{timer=setTimeout(()=>{controller.abort();resolve({outcome:'uncertain'});},this.#timeout);});
-   result=await Promise.race([this.#send(content,controller.signal,admission),timeout]);
+   result=await Promise.race([this.#send(content,controller.signal,admission,sender),timeout]);
   }catch{result={outcome:'uncertain'};}
   finally{clearTimeout(timer);controller.abort();}
   // Database failure leaves durable sending for conservative recovery; never retry SMTP here.
@@ -125,7 +126,7 @@ export class RelayWorker {
   await c.query(`UPDATE relay_messages SET state=$3,reason=$4,payload=NULL,claim_id=NULL,lease_until=NULL,status_revision=status_revision+1
    WHERE installation_id=$1 AND message_id=$2`,[...key(row),state,reason]);
  }
- async #handoff(claim:Row):Promise<{content:RelayContent;admission?:HandoffAdmission}|undefined>{
+ async #handoff(claim:Row):Promise<{content:RelayContent;admission?:HandoffAdmission;sender?:RelaySender}|undefined>{
   return transaction(this.#pool,async c=>{
    const control=await new RelayControl(this.#pool).lock(c);
    await lockMessage(c,claim);
@@ -169,6 +170,18 @@ export class RelayWorker {
    for(const id of this.#suppression.keys()){
     if((await c.query('SELECT 1 FROM relay_suppressions WHERE key_id=$1 AND digest=$2',[id,this.#digest(id,content.recipient)])).rowCount){await this.#terminal(c,row,'failed','refused');return;}
    }
+   let sender:RelaySender|undefined;
+   if(this.#planMode==='test-venue-levels'){
+    const saved=(await c.query<{id:string;name:string|null;reply_to:string}>(`SELECT v.id,
+     COALESCE(v.display_name,b.name,o.name) AS name,v.waitron_mail_reply_to AS reply_to
+     FROM installations i JOIN venues v ON v.id=i.venue_id JOIN legal_businesses b ON b.id=v.legal_business_id
+     JOIN organisations o ON o.id=v.organisation_id WHERE i.id=$1 AND v.waitron_mail_reply_to IS NOT NULL`,[row.installation_id])).rows[0];
+    if(saved){
+     // Grant reservation already holds venue policy through handoff.
+     const {level}=await readVenuePermissions(c,saved.id,this.#planMode);
+     if(level==='connected'||level==='hosted')sender={name:saved.name??undefined,replyTo:saved.reply_to};
+    }
+   }
    // This commit is the handoff boundary. Later revoke/cancel cannot recall SMTP.
    await c.query('SAVEPOINT relay_mail_admission');
    const changed=await c.query(`UPDATE relay_messages SET state='sending',attempts=attempts+1,status_revision=status_revision+1
@@ -187,7 +200,7 @@ export class RelayWorker {
      AND i.lease_expires_at>clock_timestamp()`,[row.grant_id])).rowCount;
     if(!stillLive){await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'cancelled','cancelled');return;}
    }
-   return {content,admission};
+   return {content,admission,sender};
   });
  }
  async #settle(claim:Row,result:RelayDelivery){

@@ -101,3 +101,38 @@ test('venue relay new mode preserves its account allowance at registered level',
  assert.equal((await f.pool.query('SELECT count(*) FROM relay_messages')).rows[0].count,'1');
  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
 });
+
+function venueEmailSettings(f:Awaited<ReturnType<typeof setup>>) {
+ const origin='http://localhost';
+ const app=createAccountApp({pool:f.pool,outbox:{} as any,config:{portalOrigin:origin,production:false,rateKey:'ab'.repeat(32),trustedProxyIps:[]},planMode:mode});
+ return (action:'status'|'save',session:typeof f.v.session,body:Record<string,string>)=>app.request(origin+(action==='save'?'/api/account/venue-email/save':'/api/account/remote-access/status'),{
+  method:'POST',headers:{origin,'content-type':'application/json',cookie:`cloud_session=${session.token}`,'x-csrf-token':session.csrfToken},body:JSON.stringify(body),
+ },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as any);
+}
+test('a Connected venue owner can save the Waitron reply address',async t=>{
+ const f=await setup(t);await f.set('connected');
+ const request=venueEmailSettings(f),installationId=f.v.installation;
+ const before=await request('status',f.v.session,{installationId});
+ assert.equal(before.status,200);assert.deepEqual((await before.json()).venueEmail,{available:true,replyTo:null});
+ const saved=await request('save',f.v.session,{installationId,replyTo:'office@example.test'});
+ assert.equal(saved.status,200);assert.deepEqual(await saved.json(),{available:true,replyTo:'office@example.test'});
+ const read=await request('status',f.v.session,{installationId});
+ assert.equal(read.status,200);assert.deepEqual((await read.json()).venueEmail,{available:true,replyTo:'office@example.test'});
+});
+test('only the venue owner can read or change its Waitron reply address',async t=>{
+ const f=await setup(t);await f.set('hosted');
+ const other=await f.venue(),request=venueEmailSettings(f),installationId=f.v.installation;
+ const saved=await request('save',f.v.session,{installationId,replyTo:'office@example.test'});
+ assert.equal(saved.status,200);
+ assert.equal((await request('status',other.session,{installationId})).status,403);
+ assert.equal((await request('save',other.session,{installationId,replyTo:'other@example.test'})).status,403);
+ await f.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.v.account]);
+ assert.equal((await request('save',f.v.session,{installationId,replyTo:'other@example.test'})).status,403);
+});
+test('Registered venues cannot save the Waitron reply address',async t=>{
+ const f=await setup(t);await f.set('registered');
+ const request=venueEmailSettings(f),installationId=f.v.installation;
+ const before=await request('status',f.v.session,{installationId});
+ assert.equal(before.status,200);assert.equal((await before.json()).venueEmail,undefined);
+ assert.equal((await request('save',f.v.session,{installationId,replyTo:'office@example.test'})).status,403);
+});

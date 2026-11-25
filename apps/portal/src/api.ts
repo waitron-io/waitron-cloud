@@ -4,7 +4,7 @@ import {validOwnerTransfer,validOwnerTransferList} from './owner-transfer-types.
 import {translations} from './locale.ts';
 import {validPasswordLogin,validFactorStatus,validFactorEnrolment,validFactorChange} from './authenticator-types.ts';
 import {validRecoveryDate,validRecoveryView} from './recovery-types.ts';
-import {validRemoteView,validRemoteDns,validGuestMenuView} from './remote-types.ts';
+import {validRemoteView,validRemoteDns,validGuestMenuView,validVenueEmail} from './remote-types.ts';
 import {validBackupPage} from './backup-types.ts';
 import {validSentReportDetail, validSentReportsPage} from './sent-reports-types.ts';
 import {validInstallation} from './installation-types.ts';
@@ -68,6 +68,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path.startsWith('/recovery/'))return validRecoveryView(value);
   if(path==='/remote-access/status'||path==='/remote-access/apply'||path==='/remote-access/recheck')return validRemoteView(value);
   if(path==='/remote-access/dns')return validRemoteDns(value);
+  if(path==='/venue-email/save')return status===200&&validVenueEmail(value)&&value.replyTo!==null;
   if(path==='/guest-menu/takedown'||path==='/guest-menu/enable')return status===200&&validGuestMenuView(value);
   if(path==='/translation-consent')return status===200&&validTranslationConsents(value);
   if(path==='/alerts')return typeof data.enabled==='boolean'&&typeof data.locale==='string'&&['en','es'].includes(data.locale);

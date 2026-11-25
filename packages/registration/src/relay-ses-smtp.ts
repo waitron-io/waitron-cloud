@@ -2,7 +2,7 @@ import type {HandoffAdmission} from './mail-attempts.ts';
 import type {SesFeedbackConfig} from './ses-feedback-config.ts';
 import type {SesProviderReceipt} from './ses-smtp-metadata.ts';
 import {createSmtpDelivery,type SmtpAccountMailConfig} from './smtp-mailer.ts';
-import {relayTemplate,type RelayContent,type RelayDelivery} from './relay-smtp.ts';
+import {relayTemplate,type RelayContent,type RelayDelivery,type RelaySender} from './relay-smtp.ts';
 import type {Pool} from 'pg';
 import {bindSesProviderReceipt} from './ses-smtp-receipt.ts';
 
@@ -27,10 +27,10 @@ function failure(error:unknown):Error{
 /** Internal adapter only. Production relay grant and startup composition remain separately gated. */
 export function createSesRelaySender(config:SesFeedbackConfig,smtp:SmtpAccountMailConfig,trust:{ca?:string|Buffer}={}){
  const deliver=createSmtpDelivery(smtp,trust,config,'venue-email',failure),domain=smtp.from.split('@')[1]!;
- return async(content:RelayContent,admission:HandoffAdmission,signal:AbortSignal):Promise<RelaySesResult>=>{
+ return async(content:RelayContent,admission:HandoffAdmission,signal:AbortSignal,sender?:RelaySender):Promise<RelaySesResult>=>{
   const rendered=relayTemplate(content);
   try{
-   const result=await deliver(content.recipient,()=>rendered,`<${content.messageId}@${domain}>`,{deliveryId:content.messageId,signal,ses:admission});
+   const result=await deliver(content.recipient,()=>rendered,`<${content.messageId}@${domain}>`,{deliveryId:content.messageId,signal,ses:admission},sender);
    return {outcome:'accepted',...(result.providerReceipt?{providerReceipt:result.providerReceipt}:{})};
   }catch(error){if(error instanceof RelaySmtpFailure)return {outcome:error.outcome};throw error;}
  };

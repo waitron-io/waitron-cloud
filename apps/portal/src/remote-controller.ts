@@ -1,9 +1,10 @@
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
-import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind} from './remote-types.ts';
+import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:[]|RemoteDns['records']}|undefined;
+ venueEmailResult:'saved'|'invalid'|'failed'|undefined;
  error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
@@ -18,12 +19,29 @@ export class RemoteController {
   else{this.view=undefined;this.error='unavailable';}
   this.#changed();
  }
+ async saveVenueEmail(replyTo:string){
+  const id=this.installationId,view=this.view;
+  if(!this.#account||!id||!view?.venueEmail||this.pending||this.waiting)return;
+  const generation=this.#generation;
+  this.pending=true;this.venueEmailResult=undefined;this.#changed();
+  const result=await this.#request<VenueEmailSettings>('/venue-email/save',{installationId:id,replyTo});
+  if(generation!==this.#generation)return;
+  this.pending=false;
+  if(result.ok){
+   this.view={...view,venueEmail:result.value};
+   this.venueEmailResult='saved';
+  }else{
+   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+   this.venueEmailResult=result.status===400?'invalid':'failed';
+  }
+  this.#changed();
+ }
  get hostnameChanged(){return !!this.view?.names&&this.hostname.trim().toLowerCase().replace(/\.$/,'')!==this.view.names[this.kind].current;}
  // Relative server waits keep their deadline across wall-clock corrections and account changes.
  #retryUntil=0;
  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
- close(){this.#generation++;this.installationId=undefined;this.view=undefined;this.hostname='';this.confirmation=undefined;this.pending=false;this.error=undefined;this.notice=undefined;}
+ close(){this.#generation++;this.installationId=undefined;this.view=undefined;this.hostname='';this.confirmation=undefined;this.pending=false;this.error=undefined;this.notice=undefined;this.venueEmailResult=undefined;}
  async open(id:string){if(!this.#account)return;this.close();this.installationId=id;this.kind='staff';await this.load();this.#changed();}
  choose(kind:RemoteKind){if(this.pending)return;this.kind=kind;this.edit(this.view?.names?.[kind].current??'');}
  edit(value:string){this.hostname=value;this.confirmation=undefined;this.error=undefined;this.notice=undefined;this.#changed();}

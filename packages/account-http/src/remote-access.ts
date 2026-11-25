@@ -50,6 +50,8 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const permission=options.planMode==='test-venue-levels'?await readVenuePermissions(client,binding.venue_id,options.planMode):undefined;
   const paid=permission?permission.level==='connected'||permission.level==='hosted':await readVenuePlan(client,binding.venue_id,options.planMode??'existing')==='paid';
   const installation=(await client.query('SELECT configuration_revision,revoked_at,lease_expires_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];
+  const venueEmail=permission&&paid&&!installation.revoked_at?{available:true,
+   replyTo:(await client.query<{waitron_mail_reply_to:string|null}>('SELECT waitron_mail_reply_to FROM venues WHERE id=$1',[binding.venue_id])).rows[0]!.waitron_mail_reply_to}:undefined;
   const names=(await client.query(`SELECT h.kind,h.assigned_hostname,h.hostname,h.record_moved_at
    FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id
    WHERE p.installation_id=$1`,[id])).rows;
@@ -64,7 +66,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   await authorize(client);
   const deadline=Math.min(service?.observed_at?.getTime()+300000,service?.received_at?.getTime()+300000,installation.lease_expires_at?.getTime());
   const current=paid&&!installation.revoked_at&&service?.revision===installation.configuration_revision&&deadline>Date.now();
-  return {...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(includeForward?{publicForward}:{}),...(permission?.level==='registered'?{connectedRequired:true}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
+  return {...(venueEmail?{venueEmail}:{}),...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(includeForward?{publicForward}:{}),...(permission?.level==='registered'?{connectedRequired:true}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
  });
  try{
   if(action==='status')return c.json(await status());

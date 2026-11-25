@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {test} from 'node:test';
 import {createAccountApp} from '../../packages/account-http/src/app.ts';
 import {createSession, endSession} from '../../packages/identity/src/index.ts';
-import {createLeaseIssuer, encodeMachine, OrganisationPlanStore, SetupPairingStore, SignupStore, transaction} from '../../packages/registration/src/index.ts';
+import {BillingStore, createLeaseIssuer, encodeMachine, OrganisationPlanStore, SetupPairingStore, SignupStore, transaction} from '../../packages/registration/src/index.ts';
 import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
 import {RelayMessages} from '../../packages/registration/src/relay-messages.ts';
 import {RelayWorker} from '../../packages/registration/src/relay-worker.ts';
@@ -19,6 +19,8 @@ import {createTestAccountWorker,runTestEmailQueues} from './email-worker.mjs';
 import {createTestCaptureMailer} from './capture-mailer.mjs';
 import {config as sesConfig,keys as recipientKeys} from '../../packages/registration/test/fixtures/mail-attempt.ts';
 import {testRelaySettings} from './relay-settings.mjs';
+import {captured as capturedMail} from '../../packages/registration/test/fixtures/captured-mail.ts';
+import {fixture as relayFixture} from '../../packages/registration/test/fixtures/relay-worker.ts';
 
 // Paid status must create neither consent nor a grant; revocation must win before SMTP.
 test('both plans need fixture-bound TLS origin evidence and explicit relay consent at handoff', async () => {
@@ -189,3 +191,43 @@ test(automatic ? 'setup box and Cloud staff mail reach Mailpit with the Stockhol
   } finally { await rm(directory, {recursive: true, force: true}); await db.close(); }
 });
 }
+
+test('Mailpit gets the venue sender and reply address until downgrade', async t => {
+  const f = await relayFixture();
+  t.after(() => f.close());
+  const venue = await f.venue(), mode = 'test-venue-levels', origin = 'http://localhost';
+  const {id: venueId, legal_business_id: legalBusinessId} = (await f.pool.query(`SELECT v.id,v.legal_business_id
+    FROM venues v JOIN installations i ON i.venue_id=v.id WHERE i.id=$1`, [venue.installation])).rows[0];
+  await f.pool.query('UPDATE venues SET display_name=$2 WHERE id=$1', [venueId, 'Café del Sol']);
+  const billing = new BillingStore(f.pool), scope = {organisationId: venue.organisation, legalBusinessId};
+  const event = () => ({key: randomUUID(), occurredAt: new Date().toISOString(), source: {kind: 'internal'}});
+  await billing.execute(scope, event(), {type: 'ensure_business'});
+  const level = async level => {
+    const {revision} = await billing.venue(scope, venueId);
+    await billing.transition(scope, event(), {type: 'set_venue', venueId, expectedRevision: revision,
+      value: {level, connectedFrom: null, lapsedOn: null, scheduledLevel: null, scheduledOn: null}});
+  };
+  await level('connected');
+  const app = createAccountApp({pool: f.pool, outbox: {}, planMode: mode,
+    config: {portalOrigin: origin, production: false, rateKey: 'ab'.repeat(32), trustedProxyIps: []}});
+  const save = await app.request(origin + '/api/account/venue-email/save', {
+    method: 'POST', headers: {origin, 'content-type': 'application/json', cookie: `cloud_session=${venue.session.token}`,
+      'x-csrf-token': venue.session.csrfToken},
+    body: JSON.stringify({installationId: venue.installation, replyTo: 'office@example.test'}),
+  }, {incoming: {socket: {remoteAddress: '192.0.2.20'}}});
+  assert.equal(save.status, 200);
+  const worker = new RelayWorker(f.pool, f.config, mode);
+  async function deliver(message) {
+    assert.equal(await worker.runOnce(), true);
+    assert.equal((await f.row(message.messageId)).state, 'accepted');
+    return capturedMail(process.env.MAILPIT_TEST_URL, 'Reset your Waitron password', message.recipient);
+  }
+  const paid = await deliver(await venue.submit({locale: 'en'}));
+  assert.deepEqual([paid.From.Name, paid.From.Address], ['Café del Sol', 'relay@example.test']);
+  assert.deepEqual(paid.ReplyTo.map(address => address.Address), ['office@example.test']);
+  const queued = await venue.submit({locale: 'en'});
+  await level('registered');
+  const free = await deliver(queued);
+  assert.deepEqual([free.From.Name, free.From.Address], ['Waitron', 'relay@example.test']);
+  assert.equal(free.ReplyTo?.length ?? 0, 0);
+});
