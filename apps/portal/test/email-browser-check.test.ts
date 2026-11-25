@@ -78,6 +78,12 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
         }
       };
       await screen('blocked');
+      if (locale === 'en' && colorScheme === 'light' && width === 390 && signUp) {
+        await retry.press('Enter');
+        await alert.waitFor();
+        assert.equal(await alert.evaluate(element => element === document.activeElement), true,
+          'a check that fails again returns focus to its message');
+      }
       if (locale === 'es' && colorScheme === 'dark' && width === 390 && !signUp) {
         await page.evaluate(() => {document.documentElement.style.fontSize = '200%';});
         assert.equal(await alert.evaluate(element => element.scrollWidth <= element.clientWidth), true,
@@ -116,7 +122,7 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       await retry.press('Enter');
       if (locale === 'en' && colorScheme === 'light' && width === 390 && signUp) {
         await widget.waitFor();
-        assert.equal(await page.evaluate(() => document.activeElement !== document.body), true,
+        assert.equal(await page.getByRole('group', {name: 'Browser check'}).evaluate(element => element === document.activeElement), true,
           'retry keeps focus at the check');
         await page.keyboard.press('Tab');
         assert.equal(await widget.evaluate(element => element === document.activeElement), true);

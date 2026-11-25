@@ -291,6 +291,8 @@ export class PortalApp {
     return this.requiresTurnstile && !this.waiting && !this.pending && !this.#pageHidden;
   }
   checkResult(token: string | null) {
+    const focusWasInCheck = token === null
+      && this.root.querySelector('turnstile-widget')?.contains(document.activeElement);
     this.readFields();
     this.turnstileToken = token ?? '';
     if (token === null) {
@@ -298,6 +300,7 @@ export class PortalApp {
       this.error = 'browserCheckFailed';
     }
     this.draw();
+    if (focusWasInCheck) this.root.querySelector<HTMLElement>('#form-refusal')?.focus();
   }
   retryTurnstile() {
     if (!this.turnstileSiteKey) {

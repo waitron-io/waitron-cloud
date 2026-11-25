@@ -90,8 +90,9 @@ for the browser check. We use Cloudflare Turnstile to protect sign-up and
 password-reset email requests from automated abuse. Our legal basis is our
 legitimate interest in protecting these services. Turnstile receives browser signals
 including your IP address, a fingerprint of how your browser sets up an encrypted
-connection (TLS), your browser's user-agent header, and which Waitron Cloud form
-is being checked (sign-up or password reset).
+connection (TLS), and your browser's user-agent header. The check includes a code
+identifying this site, its web address, the widget language and whether you are
+signing up or resetting your password.
 Waitron Cloud does not send the information you enter in the form to Turnstile.
 Waitron Cloud keeps records derived from your IP address and the check proof
 to limit repeat requests and prevent reuse of the same proof.
@@ -103,7 +104,7 @@ them as a separate controller to improve its ability to detect bots. Read more i
 [Confirm which cookies the check sets, their purpose and duration, and whether
 `cf_clearance` is set with pre-clearance switched off.] [Confirm where data is
 transferred, what safeguards apply and how to obtain them.] [Confirm how long
-Waitron Cloud keeps its check records and Cloudflare keeps the signals.]
+Cloudflare keeps these signals.] [Confirm how long Waitron Cloud keeps its records.]
 
 You can ask to access, correct or delete your data, restrict its use or object
 to its use. Contact Waitron Cloud at [privacy contact to confirm]. You can
@@ -114,10 +115,11 @@ comprobación del navegador. Usamos Cloudflare Turnstile para proteger las solic
 de correo de registro y de restablecimiento de contraseña frente a abusos automatizados.
 La base jurídica es nuestro interés legítimo en proteger estos servicios.
 Turnstile recibe señales del navegador, como tu dirección IP, una huella de cómo
-tu navegador establece una conexión cifrada (TLS), la cabecera de agente de usuario
-del navegador y qué formulario de Waitron Cloud se está comprobando (registro o
-restablecimiento de contraseña). Waitron Cloud no envía a Turnstile los datos que
-introduces en el formulario.
+tu navegador establece una conexión cifrada (TLS) y la cabecera de agente de usuario
+del navegador. La comprobación incluye un código que identifica este sitio, su
+dirección web, el idioma del control y si te estás registrando o restableciendo
+tu contraseña. Waitron Cloud no envía a Turnstile los datos que introduces en
+el formulario.
 Waitron Cloud conserva registros derivados de tu dirección IP y de la prueba de
 comprobación para limitar las solicitudes repetidas e impedir que se reutilice la
 misma prueba.
@@ -129,16 +131,17 @@ detección de bots. Consulta el [aviso de privacidad de Cloudflare](https://www.
 [Confirmar qué cookies instala la comprobación, su finalidad y su duración,
 y si se instala `cf_clearance` con la autorización previa desactivada.]
 [Confirmar adónde se transfieren los datos, qué garantías se aplican y cómo
-obtenerlas.] [Confirmar cuánto tiempo conservan Waitron Cloud sus registros
-y Cloudflare las señales.]
+obtenerlas.] [Confirmar cuánto tiempo conserva Cloudflare las señales.]
+[Confirmar cuánto tiempo conserva Waitron Cloud sus registros.]
 
 Puedes solicitar el acceso, la rectificación o la supresión de tus datos,
 la limitación de su tratamiento u oponerte a él. Contacta con Waitron Cloud
 en [contacto de privacidad pendiente de confirmar]. También puedes presentar una
 reclamación ante tu autoridad de protección de datos.
 
-Complete the cookie, transfer and retention details once
-`ev-cloudflare-turnstile-v1` is qualified.
+**Drafting note.** Complete the supplier's cookie, transfer and retention details
+once `ev-cloudflare-turnstile-v1` is qualified. Confirm Waitron Cloud's own
+contact and retention separately.
 
 | Account surface | Supplier evidence | Open qualification |
 | --- | --- | --- |

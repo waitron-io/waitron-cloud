@@ -57,7 +57,8 @@ export function screen(app: PortalApp) {
       ${retryBrowserCheck()}
     </div>`;
     else if (!app.turnstileSiteKey) control = retryBrowserCheck();
-    else control = html`${keyed(app.locale, html`<turnstile-widget tabindex="-1" .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
+    else control = html`${keyed(app.locale, html`<turnstile-widget tabindex="-1" role="group" aria-label=${c.browserCheckLabel}
+        .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
         .action=${app.path === '/signup' ? 'signup' : 'password_reset'}
         @check-result=${(event: CustomEvent<string | null>) => app.checkResult(event.detail)}></turnstile-widget>`)}
       ${app.turnstileToken ? nothing : html`<p class="help" role="status">${c.browserChecking}</p>`}`;
