@@ -99,21 +99,26 @@ test('the measured session failure survives in stderr after recovery', {concurre
   })));
 });
 
-test('measured activity renews the original session and leaves subsequent reads passive', async () => {
+test('measured activity renews the original session and leaves subsequent reads passive', async t => {
   const {createMeasuredSessionProbe} = await load();
   const browser = {cookie: 'original-cookie', 'x-csrf-token': 'original-csrf'};
   const requests = [], expiresAt = '2026-11-25T22:30:00.000Z';
+  const stderr = t.mock.method(process.stderr, 'write', () => true);
   const session = createMeasuredSessionProbe(async (path, body, credentials) => {
     requests.push({path, body, credentials});
-    return {status: 200, body: {expiresAt, accountId: 'fixture-account'}};
+    return {status: 200, body: {expiresAt: requests.length < 3 ? expiresAt : 'fixture-deadline-private', accountId: 'fixture-account'}};
   }, browser);
   assert.equal(typeof session.activity, 'function');
-  assert.deepEqual(await session.activity(), {status: 200, expiresAt, code: null});
-  assert.deepEqual(await session(undefined, true), {status: 200, expiresAt, code: null});
+  assert.deepEqual(await session.activity(), {status: 200, expiresAt});
+  assert.deepEqual(await session(undefined, true), {status: 200, expiresAt});
   assert.deepEqual(requests, [
     {path: '/api/account/session/activity', body: {}, credentials: browser},
     {path: '/api/account/session', body: undefined, credentials: browser},
   ]);
+  await assert.rejects(session.activity(), /p1.session_deadline/);
+  const trace = stderr.mock.calls[0].arguments[0];
+  assert.match(trace, /"expiresAt":"2026-11-25T22:30:00.000Z"/);
+  assert.doesNotMatch(trace, /fixture-deadline-private/);
 });
 
 test('client proof refuses mutable image references before creating resources', async () => {

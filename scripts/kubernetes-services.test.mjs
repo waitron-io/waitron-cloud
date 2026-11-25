@@ -101,7 +101,7 @@ test('measured stops cover all three machines and the live roles before returnin
   await t.test('a single session activity request precedes each stop and its reply reaches the receipt', async () => {
     changes.length = 0;
     const stages = [], expiresAt = '2026-11-25T22:30:00.000Z';
-    const reply = {status: 200, expiresAt, code: null};
+    const reply = {status: 200, expiresAt};
     const legs = await run('b', publication, {stages, context: {probes: {async sessionActivity() {
       stages.push('activity');
       return reply;
@@ -155,7 +155,7 @@ test('measured stops cover all three machines and the live roles before returnin
 });
 
 const coldRoles = {primary: 'b', gateway: 'a', operator: 'c', fluxSource: 'b', fluxApply: 'a'};
-const coldSession = {status: 200, expiresAt: '2026-11-25T22:30:00.000Z', code: null};
+const coldSession = {status: 200, expiresAt: '2026-11-25T22:30:00.000Z'};
 const lookupCommandError = fields => Object.assign(Error('synthetic command output'), fields);
 const kindLookupError = fields => Error('inventory command failed', {cause: lookupCommandError(fields)});
 for (const [name, routeStillResponding, placement, reason] of [
@@ -550,6 +550,8 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
       if (leg.roles.primary === leg.stopped) assert.ok(leg.reconciliation.publication.worker.uid);
     }
     assert.deepEqual(Object.keys(services.coldRestart.outage).sort(), ['account', 'public', 'staff', 'store']);
+    assert.equal(services.coldRestart.sessionBeforeStop?.status, 200);
+    assert.ok(Number.isFinite(Date.parse(services.coldRestart.sessionBeforeStop.expiresAt)));
     assert.deepEqual(services.coldRestart.sessionAfterRestart, services.coldRestart.sessionBeforeStop);
     assert.match(services.coldRestart.primary, /^cloud-db-\d+$/);
     assert.equal(services.coldRestart.mailRetained, true);

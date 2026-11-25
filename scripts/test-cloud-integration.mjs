@@ -85,8 +85,11 @@ export function createMeasuredSessionProbe(api, browser) {
       if (publicSessionCodes.has(reply.body?.error)) publicCode = reply.body.error;
       assert.equal(status, 200, activity ? 'p1.session_activity' : 'p1.session');
       const deadline = reply.body?.expiresAt;
-      if (typeof deadline === 'string' && Number.isFinite(Date.parse(deadline))) expiresAt = new Date(deadline).toISOString();
-      return {status, expiresAt, code: publicCode};
+      const timestamp = typeof deadline === 'string' ? Date.parse(deadline) : NaN;
+      const reported = Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+      if (activity) assert.ok(reported, 'p1.session_deadline');
+      expiresAt = reported ?? expiresAt;
+      return {status, expiresAt: reported};
     } catch (error) {
       const code = error?.code;
       const elapsedMs = Math.round(performance.now() - started);
