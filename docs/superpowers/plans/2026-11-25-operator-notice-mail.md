@@ -1,49 +1,40 @@
 # Deliver the Cloud sign-up volume warning
 
-Lane J’s `OPERATOR-NOTICE-MAIL` records “Warning to us / Above 10 a day”. Build from
-`main`, per the watcher’s 04:45 note on 25 November. #1401 (`9d9f1037d`) already
-queues the warning. Delivery is independent of #1403’s browser check.
+The owner asked for “Warning to us Above 10 a day” at 21:24 on 24 November.
+The watcher chose email and cleared this plan at 05:00 on 25 November after
+Claude's plan review and the watcher's smaller cut. Build from main. #1401
+already queues the warning, independently of #1403's browser check.
 
-A configured, verified operator can receive the existing daily warning through a
-configured TLS mail relay. This slice proves the Amazon SES variant with a local
-relay and synthetic settings. Production SES still requires country-policy and
-provider qualification. The hosted single-recipient SES pilot keeps operator notices
-in its local inbox. Test Cloud supplies the operator ID in action-demo mode.
+A Cloud configured with a verified operator and a mail relay can deliver the
+daily sign-up warning. Prove plain SMTP and Amazon SES SMTP with a local TLS relay
+and synthetic settings. The hosted single-recipient SES pilot keeps operator
+notices in its local inbox and supplies the operator ID in action-demo mode.
+Shipping the code enables delivery in a configured environment. Spain still needs
+an approved mail route, live SES qualification and Kubernetes operator account
+configuration before a deployment sends it.
 
-1. **Start red.** In `packages/registration/test/cloud-action-notices.test.ts`, add
-   `a sign-up volume notice reaches the verified operator through SES SMTP`. Queue
-   the existing `signup_volume` payload for the verified test operator on `2026-11-24`
-   with threshold `10`. Run the PostgreSQL worker using `createSmtpAccountMailer`
-   and the existing `test/fixtures/ses-smtp.ts` TLS relay on loopback. Assert the
-   delivery below. Run this case alone with `--test-name-pattern='through SES SMTP'`.
-   Today the worker sets `delivery_configuration` before creating an SES attempt.
-2. **Make it green.** In `packages/registration/src/email-outbox.ts`, select the
-   optional `sendOperatorWarning` for `operator_notice` only when
-   `validSignupVolumeNotice` accepts the payload. SES requires this sender before
-   admission. Only a send without SES can fall back to `sendOperatorNotice`.
-   Add the narrow sender to `smtp-mailer.ts`. It rejects an invalid warning with
-   `delivery_rejected` before connecting. Reuse the current sign-up producer,
-   English and Spanish templates, verified-address recheck, TLS and stable message
-   ID. Keep SES suppression, committed admission and provider receipt binding.
-3. **Check the handoff and refusals.** Assert one TLS delivery to
-   `operator@example.test` with the existing subject and date and threshold in the
-   body. Save the committed attempt in the relay’s recipient callback and match its
-   queue ID, configuration set and tag after the worker returns. Check `sent`, cleared
-   payload, stable message ID and the bound SES receipt. Exercise generic SMTP over
-   TLS with zero SES attempts. In the same test file, preserve existing assertions
-   and cover pending actions with a real SMTP adapter in both modes, an SES warning
-   with only a capture callback, and a warning to the pilot mailbox with separate
-   capture and primary adapters. Refusals must leave zero provider attempts and
-   sends. Add the new sender to the existing changed-address cancellation check.
-   `smtp-mailer.test.ts` checks that malformed warnings refuse before connecting.
+- In `packages/registration/test/cloud-action-notices.test.ts`, first show the worker
+  fails to send the existing `signup_volume` notice through TLS with SES and with
+  generic SMTP. Use the existing TLS relay fixture and check the recipient, subject,
+  date, threshold and sent state. Check one bound provider message ID with SES and
+  zero provider attempts with generic SMTP. Keep the existing pending-action SES
+  refusal and changed-address cancellation checks. Give the pilot case a separate
+  primary sender that throws, so it proves capture.
+- In `packages/registration/src/smtp-mailer.ts`, implement the existing
+  `sendOperatorNotice` method for payloads that pass `validSignupVolumeNotice`.
+  Reject malformed warnings and pending-action notices before connecting. Cover
+  both refusals in `test/smtp-mailer.test.ts`.
+- In `packages/registration/src/email-outbox.ts`, allow a valid warning with a
+  configured sender through existing SES admission. Reuse the recipient recheck,
+  suppression, provider receipt binding, stable message ID and both language
+  templates. The pilot routing stays as it is.
+- Update `packages/account-http/README.md` and `docs/backlog.md`. Schema,
+  deployment settings, live provider calls and the address lookup warning stay
+  outside this change.
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-concurrency=1 test/cloud-action-notices.test.ts test/smtp-mailer.test.ts test/ses-smtp-settlement.test.ts
 pnpm typecheck
 ```
 
-Update the transport sentence in `packages/account-http/README.md` and the warning
-paragraph in `docs/backlog.md`. Record local proof in the PR and keep production
-qualification open. ADDRESS-SERVICE can reuse the sender once its own slice defines
-its warning. Schema, deployment settings and live provider calls are outside this
-slice. Estimate 20–35 production lines and 85–110 test lines.
+Estimate 10–15 production lines and 50–65 test lines.
