@@ -63,6 +63,12 @@ for each Places API method. Record the project’s actual Autocomplete quota and
 and confirm that the key is restricted to Cloud’s IP and the two APIs.
 [Google pricing](https://developers.google.com/maps/billing-and-pricing/pricing) · [Places quotas](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing#usage-limits) · [Validation quotas](https://developers.google.com/maps/documentation/address-validation/usage-and-billing) · [Pacific usage dates](https://docs.cloud.google.com/billing/docs/how-to/reports)
 
+The PostgreSQL listener test starts with 499 searches for one paired paying venue and 439 across
+five paired free owners. At the illustrative rates it accepts search 500 for the paying venue and
+440 for the free group, then refuses both next searches. The paying venue can still validate.
+Those 440 free searches consume EUR 0.333091 of the configured free group day budget. The test
+supplies synthetic prior usage and an injected provider.
+
 ## Second change · operator controls and production readiness
 
 Reuse fresh-session and operator checks in `packages/registration/src/cloud-actions.ts`, its account

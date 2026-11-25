@@ -75,6 +75,8 @@ services:
       CLOUD_ACTION_DEMO: ${CLOUD_ACTION_DEMO:-0}
       CLOUD_OPERATOR_ACCOUNT_ID: ${CLOUD_OPERATOR_ACCOUNT_ID:-}
       CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+      CLOUD_ADDRESS_LOOKUP_SETTINGS: ${CLOUD_ADDRESS_LOOKUP_SETTINGS:-}
+      GOOGLE_MAPS_SERVER_KEY: ${GOOGLE_MAPS_SERVER_KEY:-}
     ports: !reset []
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--header", "Host: waitron.local:3000", "http://localhost:3000/api/health/ready"]

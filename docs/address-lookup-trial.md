@@ -73,25 +73,18 @@ and [El Rinconcillo](https://www.elrinconcillo.es/contacto/).
 
 ## Test the signed route
 
-For a local rehearsal, inject a fake provider with `addressLookup: {provider, allowAllTestBoxes: true}`.
-Mark it with `[syntheticAddressProvider]: true` from `packages/account-http/src/address-lookup.ts`
-and publish a test allowance. Cloud counts against the verified current owner of the
-registered test box. After an ownership transfer, start a fresh workflow.
+Run the signed test route against PostgreSQL and a simulated provider:
 
 ```sh
 node scripts/test-postgres.mjs exec node --test packages/account-http/test/address-lookup.test.ts
 ```
 
-The normal server and shared test Cloud keep lookup disabled. This Mac trial
-made its calls directly through the client. The signed route and Waitron form
-integration are separate checks.
-
-A private launcher can inject `createTestBoxAddressLookup` with one approved
-`{accountId, venueId, installationId}` in `addressLookup.allowedBoxes`. It reads
-`GOOGLE_MAPS_SERVER_KEY` per call from a regular, server-owned mode-0600 file.
-Removing the file prevents further sends. Admission still counts a workflow when
-the key is missing, and validation still closes it. The [key-file tests](../packages/account-http/test/test-box-address-lookup.test.ts)
-cover removal, replacement and refusal with synthetic replies.
+Eligible test boxes can look up addresses at the same time. Cloud gets the owner
+from the registered box. Start a fresh workflow after an ownership transfer.
+Lookup is off by default. The configured service is available only to registered
+test boxes. The [test Cloud settings](test-cloud.md#configure-address-lookup-for-test-boxes)
+explain how to enable it for an approved rehearsal. The Mac trial above called
+the provider directly. The four Waitron forms still need their connected-box check.
 
 ## Sign each request through the box's existing connection
 
@@ -100,6 +93,11 @@ POST `/api/installations/address-lookup` with the existing machine-v1
 `operationId` and a live matching installation lease. Use no browser Origin
 header, URL query, account selector or provider key. The normal installation
 proof format is described in the [integration contract](waitron-integration-contract.md#existing-staff-v1-compatibility-facts).
+
+When the form opens, send the signed body `{"version":1,"kind":"available"}`.
+Show search when Cloud returns HTTP 200 with `{"available":true}`. This request uses
+the ordinary installation request limits. It uses no address allowance and sends
+nothing to Google. Keep manual entry available on any other reply.
 
 Generate one lowercase UUID `workflowId` for the address you are looking up.
 Sign a JSON.stringify body such as:
@@ -111,10 +109,9 @@ Sign a JSON.stringify body such as:
 A successful reply contains that `workflowId`, an ISO `expiresAt`,
 `provider: "google"` and `candidates: [{"text":"…"}]`. Only `es` and `en` are
 accepted; suggestions are restricted to Spain. If the first reply is lost, keep
-its workflow ID and send a fresh operation ID. That reuses the same allowance
-hold, but another suggestion attempt still counts. Cloud refuses a repeated
-operation ID while its five-minute record is held. Each admitted request makes
-at most one provider attempt.
+its workflow ID and send a fresh operation ID. Each admitted suggestion counts,
+including one you abandon. Cloud refuses a repeated operation ID and sends at
+most one provider request per admitted call.
 
 When you choose a suggestion, sign:
 
@@ -132,23 +129,27 @@ Keep manual text editable and show Google Maps attribution. Choosing a suggestio
 starts validation. Keep every field visible and editable so **Save** confirms the
 address the person sees. Cloud stores counts and discards queries and drafts.
 
-## Keep the trial bounded
+## How the limits work
 
-A Cloud account gets ten counted workflows per UTC month, eight suggestion attempts
-per workflow and twenty per UTC day. A workflow expires after fifteen minutes or at
-the UTC month boundary. Abandoning it still counts. Validation closes it before the
-provider call, so an uncertain validation cannot be resent. The stack shares one
-dispatch lock with a 500 ms gap. A concurrent request gets 409 without using quota. A crash can shorten the gap.
+A workflow lasts fifteen minutes from its first admitted suggestion. It allows
+one validation. Cloud charges a call before sending it, so a failed or uncertain
+provider reply still counts. A suggestion needs room for one validation as well.
+Another workflow can use that room first.
+
+Alongside the configured venue or owner allowance, the test service applies daily
+and monthly spend caps for all requests and a separate share for free accounts.
+Daily and monthly periods start at midnight in Pacific time. Provider calls also
+have their own per-minute limits of 30 per box, 60 per network and 60 per owner.
 
 | Refusal | What you do |
 | --- | --- |
 | 400 invalid input | Correct the body; no provider attempt occurred. |
 | 401 invalid proof, 403 revoked or permission denied | Restore the box's current authority. |
 | 409 conflict | Use manual entry or a fresh call; closed workflows stay closed. |
-| 410 expired | Start a new workflow; the old hold remains counted. |
+| 410 expired | Start a new workflow. Earlier calls stay counted. |
 | 429 rate limited | Keep manual entry available and respect Retry-After. |
 | 503 unavailable | Keep manual entry available; do not automatically resend. |
 
-Provider errors include `dispatched`. True means a request was attempted, not
-that Google is known to have billed it. Missing allowance configuration, disabled
-injection, lost authority and failed admission do not enable a provider call.
+Provider errors include `dispatched`. `true` means Cloud attempted the request.
+Google billing is reported separately. Cloud sends nothing when settings or the
+key are missing, the box loses authority, or admission fails.

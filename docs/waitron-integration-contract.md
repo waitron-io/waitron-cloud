@@ -169,6 +169,17 @@ reports `registration_conflict`, continue manually.
 Ask the pilot operator to configure a replacement public key before trying Cloud
 sign-in with that key.
 
+### Signed availability for test address lookup
+
+When an address form opens, POST the signed machine-v1 body
+`{"version":1,"kind":"available"}` to `/api/installations/address-lookup` with the
+`address-lookup` action, a fresh operation ID and a current lease. Show search
+when the reply is HTTP 200 with `{"available":true}`. Keep manual entry available
+on any other response. Availability uses the ordinary installation request limits
+and leaves address usage and the provider untouched. The same endpoint handles
+suggestion and validation, with a fresh operation ID per call. See the
+[address lookup request and refusal contract](address-lookup-trial.md#sign-each-request-through-the-boxs-existing-connection).
+
 ### Pairing version 3 and managed-stream version 2
 
 Use the shared `@waitron-io/contract` pairing encoder and verifier. A new request signs
@@ -519,6 +530,7 @@ UUID and the current predecessor request ID. Compare installation, request,
 hostname, configuration revision and SHA-256 of CSR PEM bytes before installation.
 If you lose the request ID, use [status discovery](#staff-certificate-exchange-version-1)
 with `requestId:null` to recover that predecessor, including stale requests.
+
 There is no historical request-ID ledger or new `failed` wire state. Pending
 includes work parked after eight issuer failures; operator status distinguishes it.
 

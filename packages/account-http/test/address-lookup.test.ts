@@ -1,341 +1,314 @@
 import assert from 'node:assert/strict';
 import {createHmac,generateKeyPairSync,randomUUID} from 'node:crypto';
+import {request as httpRequest} from 'node:http';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
-import {AllowanceConfigStore,BillingStore,createLeaseIssuer,reserveAllowance,transaction} from '@waitron-cloud/registration';
+import {BillingStore,createLeaseIssuer,type SignedEnvelope} from '@waitron-cloud/registration';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
-import {AddressLookupMachine,syntheticAddressProvider,type AddressLookupOptions} from '../src/address-lookup.ts';
+import {AddressLookupMachine} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
-import {request as httpRequest} from 'node:http';
 import {createGoogleAddressClient} from '../src/address-lookup-google.ts';
-import {createTestBoxAddressLookup} from '../src/test-box-address-lookup.ts';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 
-const origin='https://cloud.example.test';
-async function ensureBusiness(pool:Pool,{organisationId,legalBusinessId}:{organisationId:string;legalBusinessId:string}){
- await new BillingStore(pool).execute({organisationId,legalBusinessId},
-  {key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
+const origin='https://cloud.example.test',ip='203.0.113.1';
+const policy={suggestionMicros:10,validationMicros:20,
+ paidVenueMonth:{suggestions:500,validations:100},freeAccountMonth:{suggestions:100,validations:20},
+ cloudDay:{freeSuggestions:5000,freeValidations:500,limitMicros:100},
+ cloudMonth:{freeSuggestions:50000,freeValidations:5000,limitMicros:1000},
+ freeDay:{freeSuggestions:1500,freeValidations:150,limitMicros:30},
+ freeMonth:{freeSuggestions:15000,freeValidations:1500,limitMicros:300}};
+const suggest=(workflowId=randomUUID())=>({version:1,kind:'suggest',workflowId,query:'PRIVATE-QUERY',language:'es'});
+const validate=(workflowId:string)=>({version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY selected'});
+const available={version:1,kind:'available'};
+const calls=(pool:Pool)=>pool.query('SELECT * FROM address_lookup_calls ORDER BY admitted_at').then(result=>result.rows);
+const counters=(pool:Pool)=>pool.query('SELECT key,attempts,expires_at FROM account_rate_limits ORDER BY key').then(result=>result.rows);
+function rateKey(secret:string,scope:string,subject:string){
+ return createHmac('sha256',Buffer.from(secret,'hex')).update(JSON.stringify([scope,subject])).digest('hex');
 }
-async function fixture(configured=true){
+async function fixture(){
  const db=await database();
  try{
   const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
-  const v=await connectedVenue(db,issuer,origin);
-  await ensureBusiness(db.pool,v);
-  const limit={transactional_email:'0',address_lookup:'100',sms:'0',content_translation:'0',rota_solver:'0'};
-  if(configured)await new AllowanceConfigStore(db.pool).publish({revision:1,effectiveFrom:'2020-01-01',limits:{registered:limit,connected:limit,hosted:limit},unpaidTrial:{content_translation:'0',rota_solver:'0'}});
-  const calls:string[]=[],providerTokens:string[]=[];
+  const v=await connectedVenue(db,issuer,origin),sent:string[]=[];
   let failed=false;
-  const google=createGoogleAddressClient({apiKey:'synthetic-key',fetcher:async url=>{
+  const provider=createGoogleAddressClient({apiKey:'synthetic-key',fetcher:async url=>{
    const kind=String(url).includes('autocomplete')?'suggest':'validate';
-   calls.push(kind);if(failed)return new Response('PRIVATE-REPLY',{status:503});
+   sent.push(kind);if(failed)return new Response('PRIVATE-REPLY',{status:503});
    return Response.json(kind==='suggest'?{suggestions:[{placePrediction:{text:{text:'Calle de Prueba 12, Madrid'}}}]}:
     {result:{address:{postalAddress:{regionCode:'ES',postalCode:'28013',locality:'Madrid'},addressComponents:[
      {componentType:'route',componentName:{text:'Calle de Prueba'}},{componentType:'street_number',componentName:{text:'12'}},
      {componentType:'administrative_area_level_2',componentName:{text:'Madrid'}},{componentType:'country',componentName:{text:'España'}},
     ]}}});
   }});
-  const provider={...google,
-   suggest(input:Parameters<typeof google.suggest>[0],signal?:AbortSignal){
-    providerTokens.push(input.sessionToken);return google.suggest(input,signal);
-   },
-   validate(input:Parameters<typeof google.validate>[0],signal?:AbortSignal){
-    providerTokens.push(input.sessionToken);return google.validate(input,signal);
-   },
-  };
   const options={pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
-   addressLookup:{accountId:v.accountId,venueId:v.venueId,installationId:v.installationId,provider}};
+   addressLookup:{provider,policy}};
   const app=createAccountApp(options);
-  const request=async(envelope:unknown,target=app,headers:Record<string,string>={})=>target.request(origin+'/api/installations/address-lookup',{
+  const request=async(envelope:SignedEnvelope,target=app,headers:Record<string,string>={})=>target.request(origin+'/api/installations/address-lookup',{
    method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(envelope),
-  },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as HttpBindings);
+  },{incoming:{socket:{remoteAddress:ip}}} as HttpBindings);
   const post=(body:unknown,operationId=randomUUID())=>request(v.proof('address-lookup',body,operationId,v.lease));
-  const fakeProvider={[syntheticAddressProvider]:true,suggest:provider.suggest,validate:provider.validate};
-  return {db,v,issuer,calls,providerTokens,provider,fakeProvider,app,options,post,request,setFailure:()=>{failed=true;}};
+  return {db,v,issuer,sent,provider,app,options,post,request,setFailure:()=>{failed=true;}};
  }catch(error){await db.close();throw error;}
 }
-test('the signed trial reuses one counted hold and token, validates once and stores no address content',async()=>{
+
+test('the signed route counts abandoned searches and stores no address content',async()=>{
  const f=await fixture();try{
   const operations=(await f.db.pool.query('SELECT * FROM installation_operations WHERE installation_id=$1',[f.v.installationId])).rows;
-  const workflowId=randomUUID(),body={version:1,kind:'suggest',workflowId,query:'PRIVATE-QUERY',language:'es'};
-  const first=await f.post(body);assert.equal(first.status,200,await first.clone().text());
-  const probe=await f.db.secondPool.connect();let acquired=false;
-  try{
-   acquired=(await probe.query("SELECT pg_try_advisory_lock(hashtext(current_schema()),hashtext('address-lookup:google')) AS locked")).rows[0].locked;
-   assert.equal(acquired,true);
-  }finally{if(acquired)await probe.query("SELECT pg_advisory_unlock(hashtext(current_schema()),hashtext('address-lookup:google'))");probe.release();}
+  const body=suggest(),first=await f.post(body);
+  assert.equal(first.status,200,await first.clone().text());
   const reply=await first.json();assert.equal(first.headers.get('cache-control'),'no-store');
-  assert.deepEqual(reply,{workflowId,expiresAt:reply.expiresAt,provider:'google',candidates:[{text:'Calle de Prueba 12, Madrid'}]});
+  assert.deepEqual(reply,{workflowId:body.workflowId,expiresAt:reply.expiresAt,provider:'google',candidates:[{text:'Calle de Prueba 12, Madrid'}]});
   assert.ok(Date.parse(reply.expiresAt)>Date.now());assert.ok(Date.parse(reply.expiresAt)<=Date.now()+900000);
-  assert.equal((await f.post({...body,query:'PRIVATE-QUERY next'})).status,200);
-  const done=await f.post({version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY selected'});assert.equal(done.status,200,await done.clone().text());
+  const second=await f.post(suggest());assert.equal(second.status,200);
+  const done=await f.post(validate(body.workflowId));assert.equal(done.status,200,await done.clone().text());
   assert.equal((await done.json()).fields.addressLine1,'Calle de Prueba 12');
   assert.equal((await f.post(body)).status,409);
-  const rows=(await f.db.pool.query("SELECT * FROM billing_allowance_reservations WHERE service='address_lookup'")).rows;
-  assert.equal(rows.length,1);assert.equal(rows[0].units,'1');assert.equal(rows[0].state,'spent');assert.equal(rows[0].operation_id,workflowId);
-  assert.deepEqual(f.calls,['suggest','suggest','validate']);assert.deepEqual(f.providerTokens,[rows[0].id,rows[0].id,rows[0].id]);
-  assert.equal(JSON.stringify(rows).includes('PRIVATE-QUERY'),false);
+  const saved=await calls(f.db.pool);
+  assert.deepEqual(saved.map(row=>[row.kind,row.class,row.workflow_id]),[
+   ['suggest','free',body.workflowId],['suggest','free',(await second.json()).workflowId],['validate','free',body.workflowId],
+  ]);
+  assert.deepEqual(f.sent,['suggest','suggest','validate']);
+  assert.equal(JSON.stringify(saved).includes('PRIVATE-QUERY'),false);
   assert.deepEqual((await f.db.pool.query('SELECT * FROM installation_operations WHERE installation_id=$1',[f.v.installationId])).rows,operations);
  }finally{await f.db.close();}
 });
 
-const suggestion=(workflowId=randomUUID())=>({version:1,kind:'suggest',workflowId,query:'PRIVATE-QUERY',language:'es'});
-test('registered boxes get separate holds and cannot validate another box workflow',async()=>{
+test('signed availability returns a JSON object without a provider call or address debit',async()=>{
  const f=await fixture();try{
-  const other=await connectedVenue(f.db,f.issuer,origin);
-  await ensureBusiness(f.db.pool,other);
-  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
-  const post=(box:typeof f.v,body:unknown)=>f.request(box.proof('address-lookup',body,randomUUID(),box.lease),app);
-  const workflowId=randomUUID();
-  assert.equal((await post(f.v,suggestion(workflowId))).status,200);
-  assert.equal((await post(other,{version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY'})).status,409);
-  assert.equal((await post(other,suggestion(workflowId))).status,200);
-  assert.deepEqual((await f.db.pool.query(`SELECT account_id,venue_id,installation_id FROM billing_allowance_reservations
-   WHERE operation_id=$1 ORDER BY installation_id`,[workflowId])).rows,
-  [f.v,other].sort((a,b)=>a.installationId.localeCompare(b.installationId)).map(box=>({
-   account_id:box.accountId,venue_id:box.venueId,installation_id:box.installationId,
-  })));
-  assert.equal(new Set(f.providerTokens).size,2);
+  const response=await f.post(available);
+  assert.equal(response.status,200,await response.clone().text());
+  assert.deepEqual(await response.json(),{available:true});
+  await f.db.pool.query('INSERT INTO address_lookup_stopped_venues(venue_id) VALUES($1)',[f.v.venueId]);
+  assert.equal((await f.post(available)).status,403);
+  assert.equal((await f.post(suggest())).status,403);
+  assert.deepEqual(f.sent,[]);
+  assert.deepEqual(await calls(f.db.pool),[]);
  }finally{await f.db.close();}
 });
-test('a second registered box shares the current owner monthly cap',async()=>{
+
+test('lookups spend their own minute counters and availability uses ordinary installation limits',async()=>{
  const f=await fixture();try{
-  const other=await connectedVenue(f.db,f.issuer,origin);
-  await ensureBusiness(f.db.pool,other);
-  await f.db.pool.query('UPDATE organisation_memberships SET account_id=$1 WHERE organisation_id=$2',[f.v.accountId,other.organisationId]);
-  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
-  for(let i=0;i<9;i++)assert.equal((await f.post(suggestion())).status,200);
-  const post=()=>f.request(other.proof('address-lookup',suggestion(),randomUUID(),other.lease),app);
-  assert.equal((await post()).status,200);
-  assert.equal((await post()).status,429);
-  assert.equal(f.calls.length,10);
-  assert.deepEqual((await f.db.pool.query('SELECT DISTINCT account_id FROM billing_allowance_reservations')).rows,[{account_id:f.v.accountId}]);
+  const limiter=new AccountRateLimiter(f.db.pool,f.db.rateKey),installation=f.v.installationId;
+  await limiter.consume([{scope:'installation-key',subject:installation,limit:30,windowSeconds:60}]);
+  await f.db.pool.query('UPDATE account_rate_limits SET attempts=30 WHERE key=$1',[rateKey(f.db.rateKey,'installation-key',installation)]);
+  const call=await f.post(suggest());assert.equal(call.status,200,await call.clone().text());
+  assert.equal((await f.post(available)).status,429);
+  const lookupKey=rateKey(f.db.rateKey,'address-lookup-box',installation);
+  assert.equal((await f.db.pool.query('SELECT attempts FROM account_rate_limits WHERE key=$1',[lookupKey])).rows[0].attempts,1);
+  await f.db.pool.query('UPDATE account_rate_limits SET attempts=30 WHERE key=$1',[lookupKey]);
+  assert.equal((await f.post(suggest())).status,429);
+  assert.equal((await calls(f.db.pool)).length,1);assert.deepEqual(f.sent,['suggest']);
  }finally{await f.db.close();}
 });
-test('current ownership controls access after a transfer and history cleanup',async()=>{
+
+test('a second box cannot validate another box’s workflow',async()=>{
  const f=await fixture();try{
   const other=await connectedVenue(f.db,f.issuer,origin);
-  const app=createAccountApp({...f.options,addressLookup:{provider:f.fakeProvider,allowAllTestBoxes:true}});
-  const post=(body:unknown)=>f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
+  const post=(body:unknown)=>f.request(other.proof('address-lookup',body,randomUUID(),other.lease));
+  const body=suggest();assert.equal((await f.post(body)).status,200);
+  assert.equal((await post(validate(body.workflowId))).status,409);
+  assert.equal((await post(body)).status,200);
+  const saved=await calls(f.db.pool);
+  assert.deepEqual(saved.map(row=>[row.installation_id,row.account_id,row.workflow_id]),[
+   [f.v.installationId,f.v.accountId,body.workflowId],[other.installationId,other.accountId,body.workflowId],
+  ]);
+ }finally{await f.db.close();}
+});
+
+test('the current owner controls access after a transfer and pairing history cleanup',async()=>{
+ const f=await fixture();try{
+  const other=await connectedVenue(f.db,f.issuer,origin);
   await f.db.pool.query('DELETE FROM connection_requests WHERE installation_key=$1',[f.v.installationKey]);
-  const previous=suggestion();
-  assert.equal((await post(previous)).status,200);
+  const previous=suggest();assert.equal((await f.post(previous)).status,200);
   await f.db.pool.query('UPDATE organisation_memberships SET account_id=$1 WHERE account_id=$2 AND organisation_id=$3',
    [other.accountId,f.v.accountId,f.v.organisationId]);
-  assert.equal((await post(previous)).status,409);
-  assert.equal((await f.post(suggestion())).status,403);
-  const current=suggestion();
-  assert.equal((await post(current)).status,200);
-  assert.equal(f.calls.length,2);
-  for(const [body,accountId] of [[previous,f.v.accountId],[current,other.accountId]] as const){
-   assert.deepEqual((await f.db.pool.query('SELECT account_id FROM billing_allowance_reservations WHERE operation_id=$1',[body.workflowId])).rows,[{account_id:accountId}]);
-  }
+  assert.equal((await f.post(previous)).status,409);
+  const current=suggest();assert.equal((await f.post(current)).status,200);
+  assert.deepEqual((await calls(f.db.pool)).map(row=>[row.workflow_id,row.account_id]),[
+   [previous.workflowId,f.v.accountId],[current.workflowId,other.accountId],
+  ]);
+  assert.equal(f.sent.length,2);
  }finally{await f.db.close();}
 });
-test('the key-file provider requires exactly one explicitly scoped box',async()=>{
- const f=await fixture(),directory=await mkdtemp(join(tmpdir(),'scoped-address-key-'));
- try{
-  const other=await connectedVenue(f.db,f.issuer,origin);
-  const provider=createTestBoxAddressLookup({keyFile:join(directory,'google.env'),fetcher:async()=>assert.fail('unapproved dispatch')});
-  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider} as unknown as AddressLookupOptions}),/invalid_address_lookup_configuration/);
-  assert.throws(()=>createAccountApp({...f.options,addressLookup:{provider,allowedBoxes:[f.v,other]}}),/invalid_address_lookup_configuration/);
-  const app=createAccountApp({...f.options,addressLookup:{provider,allowedBoxes:[f.v]}});
-  assert.equal((await f.request(other.proof('address-lookup',suggestion(),randomUUID(),other.lease),app)).status,403);
-  assert.deepEqual((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows,[{n:0}]);
- }finally{await f.db.close();await rm(directory,{recursive:true,force:true});}
-});
-test('trial absence, unpublished allowance and invalid authority never reach Google',async()=>{
- const f=await fixture(false);try{
-  const body=suggestion(),signed=f.v.proof('address-lookup',body,randomUUID(),f.v.lease);
-  const options={...f.options,addressLookup:undefined};
-  assert.equal((await f.request(signed,createAccountApp(options))).status,503);
-  assert.equal((await f.post(body)).status,503);
+
+test('disabled lookup, browser origin and invalid installation proofs send nothing',async()=>{
+ const f=await fixture();try{
+  const body=suggest(),signed=f.v.proof('address-lookup',body,randomUUID(),f.v.lease);
+  assert.equal((await f.request(signed,createAccountApp({...f.options,addressLookup:undefined}))).status,503);
   assert.equal((await f.request(signed,f.app,{origin})).status,403);
   assert.equal((await f.request({...signed,signature:'a'.repeat(86)})).status,401);
   assert.equal((await f.request(f.v.proof('configuration',body,randomUUID(),f.v.lease))).status,401);
   assert.equal((await f.request(f.v.proof('address-lookup',body))).status,401);
-  assert.equal(f.calls.length,0);assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);
  }finally{await f.db.close();}
 });
-test('incomplete or unscoped provider configuration fails closed',async()=>{
+
+test('unknown workflows and malformed input cannot debit usage',async()=>{
  const f=await fixture();try{
-  const keyFile=createTestBoxAddressLookup({keyFile:'/unused/synthetic-key',fetcher:async()=>assert.fail('unexpected dispatch')});
-  const provider={suggest:keyFile.suggest,validate:keyFile.validate};
-  const {accountId,venueId,installationId}=f.v;
-  const box={accountId,venueId,installationId};
-  for(const addressLookup of [
-   {provider},
-   {provider,accountId,venueId},
-   {provider,allowAllTestBoxes:true},
-   {provider:f.provider,allowAllTestBoxes:true},
-   {provider:keyFile,allowAllTestBoxes:true},
-   {provider,...box,allowedBoxes:[box]},
-   {provider:f.fakeProvider,allowAllTestBoxes:true,allowedBoxes:[box]},
-   {provider:f.fakeProvider,allowAllTestBoxes:true,...box},
-  ] as const){
-   assert.throws(()=>createAccountApp({...f.options,addressLookup:addressLookup as AddressLookupOptions}),
-    /invalid_address_lookup_configuration/,Object.keys(addressLookup).join(', '));
-  }
+  assert.equal((await f.post(validate(randomUUID()))).status,409);
+  for(const body of [{...suggest(),query:'x'.repeat(513)},{...suggest(),language:'fr'},{...suggest(),language:['es']},{...suggest(),language:['en']},
+   {...suggest(),accountId:f.v.accountId},{...suggest(),workflowId:'not-an-id'},
+   {...validate(randomUUID()),selectedText:'x'.repeat(279)},{...available,workflowId:randomUUID()}])assert.equal((await f.post(body)).status,400);
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);
  }finally{await f.db.close();}
 });
-test('a box without a verified owner is refused before it can take the shared dispatch lock',async()=>{
- const f=await fixture(),client=await f.db.pool.connect();try{
-  await client.query('UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1',[f.v.accountId]);
-  await client.query("SELECT pg_advisory_lock(hashtext(current_schema()),hashtext('address-lookup:google'))");
-  assert.equal((await f.post(suggestion())).status,403);
-  assert.equal(f.calls.length,0);
- }finally{
-  await client.query('SELECT pg_advisory_unlock_all()');
-  client.release();await f.db.close();
- }
-});
-test('a missing trial key stops dispatch while counted admission and validation remain spent',async()=>{
- const f=await fixture(),directory=await mkdtemp(join(tmpdir(),'missing-address-key-'));let sends=0;
- try{
-  const provider=createTestBoxAddressLookup({keyFile:join(directory,'google.env'),fetcher:async()=>{sends++;return Response.json({});}});
-  const app=createAccountApp({...f.options,addressLookup:{...f.options.addressLookup,provider}}),workflowId=randomUUID();
-  for(const body of [suggestion(workflowId),{version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY'}]){
-   const reply=await f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
-   assert.equal(reply.status,503);assert.deepEqual(await reply.json(),{error:'unavailable',dispatched:false});
-   const rows=(await f.db.pool.query("SELECT state,units FROM billing_allowance_reservations WHERE service='address_lookup'")).rows;
-   assert.deepEqual(rows,[{state:body.kind==='suggest'?'held':'spent',units:'1'}]);
-  }
-  assert.equal(sends,0);
- }finally{await f.db.close();await rm(directory,{recursive:true,force:true});}
-});
-test('unknown validation and malformed input cannot open a hold',async()=>{
+
+test('production and revoked installations cannot use the test service',async()=>{
  const f=await fixture();try{
-  assert.equal((await f.post({version:1,kind:'validate',workflowId:randomUUID(),selectedText:'PRIVATE-QUERY'})).status,409);
-  for(const body of [{...suggestion(),query:'x'.repeat(513)},{...suggestion(),language:'fr'},{...suggestion(),language:['es']},{...suggestion(),language:['en']},{...suggestion(),accountId:f.v.accountId},
-   {version:1,kind:'suggest',workflowId:'not-an-id',query:'x',language:'es'},{version:1,kind:'validate',workflowId:randomUUID(),selectedText:'x'.repeat(279)}]){
-   assert.equal((await f.post(body)).status,400);
-  }
-  assert.equal(f.calls.length,0);assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
- }finally{await f.db.close();}
-});
-test('a second test box, production and revocation cannot borrow this trial',async()=>{
- const f=await fixture();try{
-  const body=suggestion(),other=await connectedVenue(f.db,f.issuer,origin);
-  assert.equal((await f.request(other.proof('address-lookup',body,randomUUID(),other.lease))).status,403);
   await f.db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[f.v.venueId]);
   const now=Date.now(),lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'production',publicKey:f.v.installationKey,issuedAt:now,expiresAt:now+3600000});
-  assert.equal((await f.request(f.v.proof('address-lookup',body,randomUUID(),lease))).status,403);
+  assert.equal((await f.request(f.v.proof('address-lookup',suggest(),randomUUID(),lease))).status,403);
   await f.db.pool.query("UPDATE venues SET environment='test' WHERE id=$1",[f.v.venueId]);
   await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.v.installationId]);
-  assert.equal((await f.post(body)).status,403);assert.equal(f.calls.length,0);
+  assert.equal((await f.post(suggest())).status,403);assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);
  }finally{await f.db.close();}
 });
-test('busy and replay refusals spend no extra hold or provider attempt',async()=>{
- const f=await fixture(),client=await f.db.pool.connect();try{
-  await client.query("SELECT pg_advisory_lock(hashtext(current_schema()),hashtext('address-lookup:google'))");
-  const body=suggestion();assert.equal((await f.post(body)).status,409);
-  assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
-  await client.query("SELECT pg_advisory_unlock(hashtext(current_schema()),hashtext('address-lookup:google'))");
-  const id=randomUUID();assert.equal((await f.post(body,id)).status,200);assert.equal((await f.post(body,id)).status,409);
-  assert.equal((await f.post(body)).status,200);assert.equal(f.calls.length,2);
-  assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,1);
- }finally{client.release();await f.db.close();}
-});
-test('eight suggestions close the workflow suggestion budget and uncertain validation remains spent',async()=>{
+
+test('replayed operation IDs and uncertain validation cannot cause another provider call',async()=>{
  const f=await fixture();try{
-  const body=suggestion();for(let i=0;i<8;i++)assert.equal((await f.post(body)).status,200);
-  const row=(await f.db.pool.query('SELECT id FROM billing_allowance_reservations')).rows[0];
-  const key=createHmac('sha256',Buffer.from(f.db.rateKey,'hex')).update(JSON.stringify(['address-lookup-workflow',row.id])).digest('hex');
-  await f.db.pool.query("UPDATE account_rate_limits SET expires_at=clock_timestamp()+interval '120 seconds' WHERE key=$1",[key]);
-  assert.equal((await f.post(body)).status,429);assert.equal(f.calls.length,8);
-  f.setFailure();const validate={version:1,kind:'validate',workflowId:body.workflowId,selectedText:'PRIVATE-QUERY'};
-  const failure=await f.post(validate);assert.equal(failure.status,503);assert.deepEqual(await failure.json(),{error:'unavailable',dispatched:true});
-  assert.equal((await f.post(validate)).status,409);assert.equal(f.calls.length,9);
-  assert.equal((await f.db.pool.query('SELECT state FROM billing_allowance_reservations')).rows[0].state,'spent');
+  const body=suggest(),id=randomUUID();
+  assert.equal((await f.post(body,id)).status,200);
+  assert.equal((await f.post(suggest(),id)).status,409);
+  assert.equal((await f.post(body)).status,200);
+  f.setFailure();
+  const rejected=await f.post(validate(body.workflowId));
+  assert.equal(rejected.status,503);assert.deepEqual(await rejected.json(),{error:'unavailable',dispatched:true});
+  assert.equal((await f.post(validate(body.workflowId))).status,409);
+  assert.deepEqual(f.sent,['suggest','suggest','validate']);assert.equal((await calls(f.db.pool)).length,3);
  }finally{await f.db.close();}
 });
-test('twenty suggestions per UTC date refuse the next request without consuming another workflow',async()=>{
- const f=await fixture();try{
-  const ids=[randomUUID(),randomUUID(),randomUUID()];
-  for(let i=0;i<20;i++)assert.equal((await f.post(suggestion(ids[Math.floor(i/8)]!))).status,200);
-  const denied=await f.post(suggestion());assert.equal(denied.status,429);assert.ok(Number(denied.headers.get('retry-after'))>0);
-  assert.equal(f.calls.length,20);assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,3);
- }finally{await f.db.close();}
-});
-test('ten counted workflows cap the account even when the published tier permits a hundred',async()=>{
- const f=await fixture();try{
-  for(let i=0;i<9;i++)assert.equal((await f.post(suggestion())).status,200);
-  const pair=await Promise.all([f.post(suggestion()),f.post(suggestion())]);assert.deepEqual(pair.map(r=>r.status).sort(),[200,409]);
-  assert.equal((await f.post(suggestion())).status,429);assert.equal(f.calls.length,10);
-  assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,10);
- }finally{await f.db.close();}
-});
+
 async function blocked(pool:Pool,schema:string){
  const end=Date.now()+10000;
  while(Date.now()<end){
   if((await pool.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[schema])).rows[0].n>0)return;
   await delay(10);
  }
- assert.fail('the trial never reached its controlled database lock');
+ assert.fail('the lookup never reached its controlled database lock');
 }
-test('losing verified-account authority during a lock wait rolls back the new hold',async()=>{
+
+test('losing verified-account authority during a lock wait rolls back the debit',async()=>{
  const f=await fixture(),holder=await f.db.pool.connect();let pending:Promise<Response>|undefined;
  try{
   await holder.query('BEGIN');await holder.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 FOR UPDATE',[f.v.accountId]);
-  pending=f.post(suggestion());await blocked(f.db.pool,f.db.schema);
+  pending=f.post(suggest());await blocked(f.db.pool,f.db.schema);
   await holder.query('UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1',[f.v.accountId]);await holder.query('COMMIT');
-  assert.equal((await pending).status,403);assert.equal(f.calls.length,0);
-  assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
+  assert.equal((await pending).status,403);assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });
+
 test('a lease expiring during counter contention cannot authorize a provider call',async()=>{
  const f=await fixture(),holder=await f.db.pool.connect();let pending:Promise<Response>|undefined;
  try{
-  const body=suggestion();assert.equal((await f.post(body)).status,200);
-  const saved=(await f.db.pool.query('SELECT id FROM billing_allowance_reservations')).rows[0];
-  const key=createHmac('sha256',Buffer.from(f.db.rateKey,'hex')).update(JSON.stringify(['address-lookup-workflow',saved.id])).digest('hex');
+  const body=suggest();assert.equal((await f.post(body)).status,200);
+  const key=rateKey(f.db.rateKey,'address-lookup-box',f.v.installationId);
   await holder.query('BEGIN');await holder.query('SELECT key FROM account_rate_limits WHERE key=$1 FOR UPDATE',[key]);
-  const now=Date.now(),expiresAt=now+5000;
+  const now=Date.now(),expiresAt=now+3000;
   const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'test',publicKey:f.v.installationKey,issuedAt:now,expiresAt});
   pending=f.request(f.v.proof('address-lookup',body,randomUUID(),lease));await blocked(f.db.pool,f.db.schema);
   await delay(Math.max(0,expiresAt-Date.now()+20));await holder.query('COMMIT');
-  assert.equal((await pending).status,401);assert.equal(f.calls.length,1);
+  assert.equal((await pending).status,401);assert.equal(f.sent.length,1);
   assert.equal((await f.db.pool.query('SELECT attempts FROM account_rate_limits WHERE key=$1',[key])).rows[0].attempts,1);
+  assert.equal((await calls(f.db.pool)).length,1);
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });
-test('expired workflow bindings stay counted and cannot reopen after counter pruning',async()=>{
+
+async function seedSearch(pool:Pool,box:{installationId:string;venueId:string;accountId:string},workflowId:string,at:Date){
+ await pool.query(`INSERT INTO address_lookup_calls(installation_id,operation_id,workflow_id,venue_id,account_id,class,kind,admitted_at)
+  VALUES($1,$2,$3,$4,$5,'free','suggest',$6)`,[box.installationId,randomUUID(),workflowId,box.venueId,box.accountId,at]);
+}
+
+test('expired workflows stay counted and cannot reopen after counter pruning',async()=>{
  const f=await fixture();try{
-  const now=(await f.db.pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime(),workflowId=randomUUID();
-  await transaction(f.db.pool,client=>reserveAllowance(client,{accountId:f.v.accountId,venueId:f.v.venueId,installationId:f.v.installationId,
-   service:'address_lookup',operationId:workflowId,units:1n,binding:JSON.stringify({version:1,createdAt:new Date(now-800000).toISOString(),expiresAt:new Date(now-1).toISOString()})}));
-  const limiter=new AccountRateLimiter(f.db.pool,f.db.rateKey);await limiter.consume([{scope:'address-lookup-call',subject:'expired-proof',limit:1,windowSeconds:1}]);
+  const workflowId=randomUUID();await seedSearch(f.db.pool,f.v,workflowId,new Date(Date.now()-901000));
+  const limiter=new AccountRateLimiter(f.db.pool,f.db.rateKey);await limiter.consume([{scope:'address-lookup-box',subject:f.v.installationId,limit:30,windowSeconds:60}]);
   await f.db.pool.query("UPDATE account_rate_limits SET expires_at=clock_timestamp()-interval '1 second'");assert.ok(await limiter.prune()>0);
-  assert.equal((await f.post(suggestion(workflowId))).status,410);assert.equal(f.calls.length,0);
-  const rows=(await f.db.pool.query('SELECT state,units FROM billing_allowance_reservations')).rows;assert.deepEqual(rows,[{state:'held',units:'1'}]);
+  assert.equal((await f.post(suggest(workflowId))).status,410);assert.deepEqual(f.sent,[]);
+  assert.equal((await calls(f.db.pool)).length,1);
  }finally{await f.db.close();}
 });
-test('the real account listener receives the injected trial through its existing signed connection',async()=>{
+
+function postToListener(port:number,proof:SignedEnvelope){
+ return new Promise<{status:number;body:string}>((resolve,reject)=>{
+  const req=httpRequest({hostname:'127.0.0.1',port,path:'/api/installations/address-lookup',method:'POST',timeout:8000,
+   headers:{host:'cloud.example.test','content-type':'application/json'}},res=>{
+   let body='';res.on('data',part=>{body+=part;});res.once('error',reject);res.once('end',()=>resolve({status:res.statusCode!,body}));
+  });req.once('error',reject);req.once('timeout',()=>req.destroy(new Error('address lookup listener timed out')));req.end(JSON.stringify(proof));
+ });
+}
+
+test('two boxes including two tills on one box reach the provider before any lookup finishes',async()=>{
+ const f=await fixture();
+ let release!:()=>void,allArrived!:()=>void;
+ const finished=new Promise<void>(resolve=>{release=resolve;}),entered=new Promise<void>(resolve=>{allArrived=resolve;});
+ const responses:ReturnType<typeof postToListener>[]=[];
+ let running:Awaited<ReturnType<typeof startAccountServer>>|undefined;
+ try{
+  const other=await connectedVenue(f.db,f.issuer,origin);let arrived=0;
+  const provider={...f.provider,async suggest(...args:Parameters<typeof f.provider.suggest>){
+   if(++arrived===3)allArrived();
+   await finished;
+   return f.provider.suggest(...args);
+  }};
+  running=await startAccountServer({...f.options,addressLookup:{provider,policy},host:'127.0.0.1',port:0});
+  const bound=running.server.address();assert.ok(bound&&typeof bound!=='string');
+  for(const box of [f.v,f.v,other])responses.push(postToListener(bound.port,box.proof('address-lookup',suggest(),randomUUID(),box.lease)));
+  assert.equal(await Promise.race([entered.then(()=> 'all reached provider'),...responses]),'all reached provider');
+  release();
+  for(const response of await Promise.all(responses)){
+   assert.equal(response.status,200,response.body);
+   assert.deepEqual(JSON.parse(response.body).candidates,[{text:'Calle de Prueba 12, Madrid'}]);
+  }
+ }finally{release();await Promise.allSettled(responses);await running?.close();await f.db.close();}
+});
+
+test('at the illustrative test prices, one paid venue stops at 500 searches and all free owners share 440',async()=>{
  const f=await fixture();let running:Awaited<ReturnType<typeof startAccountServer>>|undefined;
  try{
-  running=await startAccountServer({...f.options,host:'127.0.0.1',port:0});const bound=running.server.address();assert.ok(bound&&typeof bound!=='string');
-  const proof=f.v.proof('address-lookup',suggestion(),randomUUID(),f.v.lease);
-  const response=await new Promise<{status:number;body:string}>((resolve,reject)=>{
-   const req=httpRequest({hostname:'127.0.0.1',port:bound.port,path:'/api/installations/address-lookup',method:'POST',timeout:5000,
-    headers:{host:'cloud.example.test','content-type':'application/json'}},res=>{
-    let body='';res.on('data',part=>{body+=part;});res.once('error',reject);res.once('end',()=>resolve({status:res.statusCode!,body}));
-   });req.once('error',reject);req.once('timeout',()=>req.destroy(new Error('trial listener timeout')));req.end(JSON.stringify(proof));
-  });
-  assert.equal(response.status,200,response.body);assert.deepEqual(JSON.parse(response.body).candidates,[{text:'Calle de Prueba 12, Madrid'}]);assert.equal(f.calls.length,1);
+  const paid=await connectedVenue(f.db,f.issuer,origin),billing=new BillingStore(f.db.pool);
+  const identity={organisationId:paid.organisationId,legalBusinessId:paid.legalBusinessId};
+  const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+  await billing.execute(identity,event(),{type:'ensure_business'});
+  await billing.execute(identity,event(),{type:'set_venue',venueId:paid.venueId,expectedRevision:0,
+   value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+  async function populate(box:typeof paid,tier:'free'|'paid',count:number){
+   await f.db.pool.query(`INSERT INTO address_lookup_calls(installation_id,operation_id,workflow_id,venue_id,account_id,class,kind,admitted_at)
+    SELECT $1,gen_random_uuid(),gen_random_uuid(),$2,$3,$4,'suggest',clock_timestamp() FROM generate_series(1,$5)`,
+    [box.installationId,box.venueId,box.accountId,tier,count]);
+  }
+  await populate(paid,'paid',499);
+  await populate(f.v,'free',39);
+  for(let i=0;i<4;i++)await populate(await connectedVenue(f.db,f.issuer,origin),'free',100);
+  const priced={...policy,suggestionMicros:3113,validationMicros:18700,
+   cloudDay:{freeSuggestions:1000,freeValidations:500,limitMicros:1000000},
+   cloudMonth:{freeSuggestions:10000,freeValidations:5000,limitMicros:10000000},
+   freeDay:{freeSuggestions:333,freeValidations:166,limitMicros:333333},
+   freeMonth:{freeSuggestions:3333,freeValidations:1666,limitMicros:3333333}};
+  running=await startAccountServer({...f.options,addressLookup:{provider:f.provider,policy:priced},host:'127.0.0.1',port:0});
+  const bound=running.server.address();assert.ok(bound&&typeof bound!=='string');
+  const post=(box:typeof paid,body:unknown)=>postToListener(bound.port,box.proof('address-lookup',body,randomUUID(),box.lease));
+  assert.equal((await post(f.v,suggest())).status,200);
+  assert.equal((await post(f.v,suggest())).status,429);
+  assert.equal((await post(f.v,available)).status,429);
+  const lastPaid=suggest();
+  assert.equal((await post(paid,lastPaid)).status,200);
+  assert.equal((await post(paid,suggest())).status,429);
+  assert.equal((await post(paid,validate(lastPaid.workflowId))).status,200);
+  assert.deepEqual(f.sent,['suggest','suggest','validate']);
+  const counts=await f.db.pool.query("SELECT class,count(*)::int AS searches FROM address_lookup_calls WHERE kind='suggest' GROUP BY class ORDER BY class");
+  assert.deepEqual(counts.rows,[{class:'free',searches:440},{class:'paid',searches:500}]);
  }finally{await running?.close();await f.db.close();}
 });
 
-function admissionMachine(f:Awaited<ReturnType<typeof fixture>>,control:(sql:string,client:PoolClient)=>Date|void){
+function admissionMachine(f:Awaited<ReturnType<typeof fixture>>,control:(sql:string,client:PoolClient)=>Date|{now:Date;day:string}|void){
  const pool={connect:async()=>{
   const client=await f.db.pool.connect();
   return new Proxy(client,{get(target,key){
    if(key==='query')return (sql:string,...args:unknown[])=>{
-    const now=control(sql,target);if(now)return Promise.resolve({rows:[{now}]});
+    const clock=control(sql,target);if(clock)return Promise.resolve({rows:[clock instanceof Date?{now:clock}:clock]});
     return Reflect.apply(target.query,target,[sql,...args]);
    };
    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
@@ -343,37 +316,39 @@ function admissionMachine(f:Awaited<ReturnType<typeof fixture>>,control:(sql:str
  }} as Pool;
  return new AddressLookupMachine(pool,f.issuer,origin,f.db.rateKey,f.options.addressLookup);
 }
-const addressRows=(pool:Pool)=>pool.query("SELECT state,attempted_at FROM billing_allowance_reservations WHERE service='address_lookup'").then(r=>r.rows);
-const counters=(pool:Pool)=>pool.query('SELECT key,attempts,expires_at FROM account_rate_limits ORDER BY key').then(r=>r.rows);
-test('workflow expiry during admission rolls back suggestions and validation spending',async()=>{
+
+test('workflow expiry during admission rolls back suggestions and validations',async()=>{
  const f=await fixture();try{
   for(const kind of ['suggest','validate'] as const){
-   const workflowId=randomUUID(),t=Date.now();
-   await transaction(f.db.pool,client=>reserveAllowance(client,{accountId:f.v.accountId,venueId:f.v.venueId,installationId:f.v.installationId,
-    service:'address_lookup',operationId:workflowId,units:1n,binding:JSON.stringify({version:1,createdAt:new Date(t-100000).toISOString(),expiresAt:new Date(t+100).toISOString()})}));
-   const before=await counters(f.db.pool);let reads=0;
-   const machine=admissionMachine(f,sql=>{if(sql==='SELECT clock_timestamp() AS now')return new Date(++reads===(kind==='suggest'?3:4)?t+200:t);});
-   const body=kind==='suggest'?suggestion(workflowId):{version:1,kind,workflowId,selectedText:'PRIVATE-QUERY'};
-   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',body,randomUUID(),f.v.lease)),{status:410});
-   assert.equal(f.calls.length,0);assert.deepEqual(await counters(f.db.pool),before);
-   assert.ok((await addressRows(f.db.pool)).every(row=>row.state==='held'&&row.attempted_at===null));
+   const workflowId=randomUUID(),now=Date.now();await seedSearch(f.db.pool,f.v,workflowId,new Date(now-895000));
+   const before=await counters(f.db.pool),saved=await calls(f.db.pool);let reads=0;
+   const machine=admissionMachine(f,sql=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===2)return new Date(now+10000);});
+   const body=kind==='suggest'?suggest(workflowId):validate(workflowId);
+   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),ip),{status:410});
+   assert.deepEqual(f.sent,[]);assert.deepEqual(await counters(f.db.pool),before);assert.deepEqual(await calls(f.db.pool),saved);
   }
  }finally{await f.db.close();}
 });
-test('crossing the UTC date during admission rolls back the hold and counters',async()=>{
+
+test('crossing a Pacific date before dispatch rolls back the earlier date’s debit',async()=>{
  const f=await fixture();try{
-  const before=await counters(f.db.pool),today=new Date();today.setUTCHours(23,59,59,900);const t=today.getTime();let reads=0;
-  const machine=admissionMachine(f,sql=>{if(sql==='SELECT clock_timestamp() AS now')return new Date(++reads===3?t+200:t);});
-  const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'test',publicKey:f.v.installationKey,issuedAt:t,expiresAt:t+3600000});
-  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggestion(),randomUUID(),lease,undefined,t)),{status:503});
-  assert.equal(f.calls.length,0);assert.deepEqual(await addressRows(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
+  const before=await counters(f.db.pool),now=new Date('2026-01-02T07:59:59.900Z'),after=new Date('2026-01-02T08:00:00.100Z');
+  let reads=0;
+  const machine=admissionMachine(f,sql=>{
+   if(sql==='SELECT clock_timestamp() AS now')return ++reads===1?now:after;
+   if(sql.startsWith('SELECT now,(now AT TIME ZONE'))return {now,day:'2026-01-01'};
+  });
+  const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'test',publicKey:f.v.installationKey,issuedAt:+now,expiresAt:+now+3600000});
+  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),lease,undefined,+now),ip),{status:503});
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
  }finally{await f.db.close();}
 });
-test('connection loss during admission commits no hold or counters and sends nothing',async()=>{
+
+test('connection loss during admission commits no usage or counters and sends nothing',async()=>{
  const f=await fixture();try{
   const before=await counters(f.db.pool);let reads=0;
-  const machine=admissionMachine(f,(sql,client)=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===3)client.emit('error',new Error('controlled connection loss'));});
-  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggestion(),randomUUID(),f.v.lease)),{code:'unavailable',dispatched:false});
-  assert.equal(f.calls.length,0);assert.deepEqual(await addressRows(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
+  const machine=admissionMachine(f,(sql,client)=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===2)client.emit('error',new Error('controlled connection loss'));});
+  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease),ip),{code:'unavailable',dispatched:false});
+  assert.deepEqual(f.sent,[]);assert.deepEqual(await calls(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
  }finally{await f.db.close();}
 });
