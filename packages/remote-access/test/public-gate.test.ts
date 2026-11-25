@@ -226,7 +226,7 @@ test('public challenge gates actual HTTPS forwarding and strips staff credential
 test('malformed Host ports are refused before issuing challenges',async()=>{
  const f=await fixture();try{for(const value of [host+':junk',host+':443:80',host+':0',host+':65536'])assert.equal((await f.send('/_cloud/challenge',{host:value})).status,421,value);assert.equal(f.count(),0);}finally{await f.close();}
 });
-test('a gateway refuses unsolved challenges and challenges signed by a different gateway',async t=>{
+test('a gateway checks the solution and the exact signature encoding',async t=>{
  const gateway=await fixture();t.after(()=>gateway.close());
  const other=await fixture();t.after(()=>other.close());
  const own=await (await gateway.send('/_cloud/challenge')).json() as {challenge:string;difficulty:number};
@@ -235,6 +235,8 @@ test('a gateway refuses unsolved challenges and challenges signed by a different
  while(createHash('sha256').update(`${own.challenge}:${wrong}`).digest().readUInt32BE(0)<2**(32-own.difficulty))wrong++;
  assert.equal((await gateway.send('/_cloud/solve',{},'POST',JSON.stringify({challenge:own.challenge,nonce:wrong}))).status,403);
  assert.equal((await gateway.send('/_cloud/solve',{},'POST',JSON.stringify({challenge:foreign.challenge,nonce:solve(foreign.challenge,foreign.difficulty)}))).status,403);
+ const padded=own.challenge+'=';
+ assert.equal((await gateway.send('/_cloud/solve',{},'POST',JSON.stringify({challenge:padded,nonce:solve(padded,own.difficulty)}))).status,403);
 });
 test('expired proof and access, request quotas and unavailable venues stay bounded',async()=>{
  const f=await fixture();try{

@@ -1310,7 +1310,8 @@ See [the native recovery boundaries](backlog/backup-recovery-http.md#recovery-de
 
 Qualify the browser check on public venue pages and the sign-up and password-reset
 email forms across supported browsers and production networks. Verify those paths
-before public exposure, including on slower phones.
+before public exposure, including on slower phones. Deployment qualification needs
+evidence beyond the local HTTP, script and Chromium checks.
 
 ## Public gateway deployment qualification (D191)
 

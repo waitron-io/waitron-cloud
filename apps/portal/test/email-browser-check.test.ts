@@ -77,7 +77,10 @@ test('the email forms allow a fresh browser check after a worker fails', async t
   }
 });
 
-test('a server refusal requires a fresh challenge before retrying the email form', async t => {
+for (const {path, form, button} of [
+  {path: '/signup', form: '/signup/request', button: 'Continue'},
+  {path: '/forgot-password', form: '/password-reset/request', button: 'Send reset link'},
+]) test(`a server refusal requires a fresh challenge before retrying ${form}`, async t => {
   const browser = await chromium.launch();
   t.after(() => browser.close());
   const page = await browser.newPage({locale: 'en'});
@@ -87,15 +90,15 @@ test('a server refusal requires a fresh challenge before retrying the email form
   const proofs: string[] = [];
   await page.route('**/api/account/browser-check', route => route.fulfill({json: {challenge: `synthetic.${++challenges}`, difficulty: 8}}));
   await page.route('**/api/account/browser-check.js', route => route.fulfill({contentType: 'text/javascript', body: browserCheckWorker}));
-  await page.route('**/api/account/signup/request', route => {
+  await page.route(`**/api/account${form}`, route => {
     proofs.push(JSON.parse(route.request().headers()['x-waitron-browser-proof'] ?? '{}').challenge);
     return route.fulfill(proofs.length === 1 ? {status: 403, json: {error: 'browser_check_required'}}
       : {status: 202, json: {status: 'accepted'}});
   });
-  await page.goto('https://portal.test/signup');
+  await page.goto(`https://portal.test${path}`);
   const email = page.getByLabel('Email');
   await email.fill('venue@example.test');
-  const submit = page.getByRole('button', {name: 'Continue', exact: true});
+  const submit = page.getByRole('button', {name: button, exact: true});
   await submit.click();
   const alert = page.getByRole('alert').getByText('The browser check failed. Try again or use another browser.');
   await alert.waitFor();
