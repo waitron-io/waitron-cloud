@@ -77,8 +77,9 @@ Use the existing operator identity setting, queued `operator_notice` email and l
 the first cap event. Verify operator email delivery through OPERATOR-NOTICE-MAIL. Add Google’s
 processing-register row, annex lines and one privacy paragraph. Production billing currently lacks
 the test-only trial and payment flows, so plan for venues to count as free until paid status is
-available there. Permit opt-in production only after the rollout gates. Update the backlog as each
-change lands.
+available there. Delete address-call records once they are outside the current Pacific month and
+older than fifteen minutes, so an active workflow can still cross midnight at month end. Permit
+opt-in production only after the rollout gates. Update the backlog as each change lands.
 
 ## Checks and size
 

@@ -657,7 +657,8 @@ covered the Waitron setup screen and one staff password reset delivered to priva
 Mailpit with the local mail server blank. The [Mac address trial](address-lookup-trial.md#what-the-mac-trial-measured)
 measured first-choice drafts for 40 public addresses. Confirm Google’s billing
 category and project quotas, check the four forms on a connected box, and add
-operator controls, warning email and privacy wording before enabling production.
+operator controls, warning email, old usage cleanup and privacy wording before
+enabling production.
 Qualify providers, storage rights, account allowances and abuse limits against
 the [requirements and open work](backlog/free-services.md).
 Evaluate mobile notifications separately.

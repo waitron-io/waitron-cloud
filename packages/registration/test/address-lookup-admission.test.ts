@@ -102,3 +102,25 @@ test('a free owner stops at its configured monthly search allowance across venue
   assert.equal((await f.pool.query('SELECT count(*)::int AS calls FROM address_lookup_calls')).rows[0].calls,1);
  }finally{await f.close();}
 });
+
+test('the daily and monthly spend caps leave room for a validation at the configured limit',async t=>{
+ const f=await venueServiceFixture();
+ try{
+  const free=await ownerScope(f,f.scope.organisationId,f.venues[0]!);
+  const paidVenue=f.venues[1]!;
+  const installationId=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[paidVenue])).rows[0].id;
+  const paid={...free,venueId:paidVenue,installationId};
+  await set(f,'connected',paidVenue);
+  for(const bucket of ['cloudDay','cloudMonth','freeMonth'] as const)await t.test(bucket,async()=>{
+   await f.pool.query('TRUNCATE address_lookup_calls');
+   const limits={...policy,[bucket]:{freeSuggestions:0,freeValidations:0,limitMicros:30}};
+   const first=bucket==='freeMonth'?free:paid,call=request();
+   await registration.transaction(f.pool,client=>registration.admitAddressLookup(client,first,call,limits));
+   await assert.rejects(registration.transaction(f.pool,client=>registration.admitAddressLookup(client,free,request(),limits)),{code:'limit'});
+   await registration.transaction(f.pool,client=>registration.admitAddressLookup(client,first,
+    {...call,kind:'validate',operationId:randomUUID()},limits));
+   assert.deepEqual((await f.pool.query('SELECT kind FROM address_lookup_calls ORDER BY kind')).rows,
+    [{kind:'suggest'},{kind:'validate'}]);
+  });
+ }finally{await f.close();}
+});

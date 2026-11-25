@@ -19,8 +19,8 @@ venue does not subscribe to remote access or backups.
   Google. The [joint address plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-11-24-address-lookup-finish.md)
   uses **Save** to confirm editable fields. The [Mac trial](../address-lookup-trial.md)
   measured first-choice drafts for 40 addresses. Still open are the billing-category
-  and project quota readback, production limits, operator controls, privacy wording
-  and the four Waitron forms on a connected box. The signed test service allows
+  and project quota readback, production limits, operator controls, privacy and
+  old usage cleanup, and the four Waitron forms on a connected box. The signed test service allows
   parallel searches under per-owner, per-venue and shared limits. Each search
   counts even when you keep the manually entered address.
 - **Transactional email.** The [test relay](../transactional-email-relay-contract.md)

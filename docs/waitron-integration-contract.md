@@ -530,7 +530,6 @@ UUID and the current predecessor request ID. Compare installation, request,
 hostname, configuration revision and SHA-256 of CSR PEM bytes before installation.
 If you lose the request ID, use [status discovery](#staff-certificate-exchange-version-1)
 with `requestId:null` to recover that predecessor, including stale requests.
-
 There is no historical request-ID ledger or new `failed` wire state. Pending
 includes work parked after eight issuer failures; operator status distinguishes it.
 
