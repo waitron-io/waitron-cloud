@@ -155,7 +155,8 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   const proofRoute='**/api/account/action-proof';
   await page.route(proofRoute,async route=>{
    const response=await route.fetch();
-   proofShownWhileChecking=await proof.isVisible();
+   const promptVisible=await proof.isVisible();
+   proofShownWhileChecking=proofShownWhileChecking||promptVisible;
    await route.fulfill({response});
   });
   await allowButton.click();

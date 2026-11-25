@@ -72,8 +72,14 @@ Chromium started the verification read, which never arrived at Cloud before the
 deadline. The fixture turned interception off while the next request was starting.
 Keeping the route until the Allow button appears removes that overlap. Its role
 in the CI failure is inferred. At a failure rate of one in twelve, twelve clean
-cases have about a 35% chance. The later proof route stays in place until the
-Stop button appears. No failure was observed at that step.
+cases have about a 35% chance. A review probe on the Mac used the real portal
+and a stand-in Cloud server. In 48 parallel-load runs with one-shot routes,
+29 timed out after the stop and two timed out after the proof check. Each of
+those requests started while Chromium was turning interception off and never
+reached the stand-in server. Both routes stayed active through the follow-up in
+the retained version, which passed all 48 runs. The Linux runs had no proof-step
+timeout. The probe leaves Chromium's internal cause and the historical CI cause
+open.
 
 ## Usage rate-limit wait (D530)
 
