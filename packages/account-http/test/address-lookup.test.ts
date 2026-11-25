@@ -5,9 +5,7 @@ import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
-import {BillingStore,createLeaseIssuer,transaction,type AddressLookupCap,type SignedEnvelope} from '@waitron-cloud/registration';
-import {createSession} from '@waitron-cloud/identity';
-import {openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
+import {BillingStore,createLeaseIssuer,type AddressLookupCap,type SignedEnvelope} from '@waitron-cloud/registration';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
 import {AddressLookupMachine,warnAboutAddressCap} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
@@ -403,22 +401,22 @@ test('connection loss during admission commits no address usage and sends nothin
  }finally{await f.db.close();}
 });
 
-test('the operator can stop one venue and resume it with its address usage intact',async()=>{
+test('a database stop affects only its test venue and resuming preserves address usage',async()=>{
  const f=await fixture();try{
   const other=await connectedVenue(f.db,f.issuer,origin);
-  const operator=await transaction(f.db.pool,client=>createSession(client,other.accountId));
-  await openProofWindow(f.db.pool,operator.token);
-  const app=createAccountApp({...f.options,operatorAccountId:other.accountId});
-  const save=(stopped:boolean)=>app.request(origin+'/api/account/operator/actions/address-lookup',{method:'POST',
-   headers:{cookie:`__Host-cloud_session=${operator.token}`,origin,'content-type':'application/json','x-csrf-token':operator.csrfToken},
-   body:JSON.stringify({venueId:f.v.venueId,stopped})},{incoming:{socket:{remoteAddress:ip}}} as HttpBindings);
+  const stop=`INSERT INTO address_lookup_stopped_venues (venue_id)
+    SELECT id FROM venues WHERE environment='test' AND id=$1 ON CONFLICT DO NOTHING`;
+  const resume=`DELETE FROM address_lookup_stopped_venues
+    WHERE venue_id IN (SELECT id FROM venues WHERE environment='test' AND id=$1)`;
   const first=suggest();assert.equal((await f.post(first)).status,200);
-  assert.equal((await save(true)).status,200);
+  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,1);
+  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,0);
   assert.equal((await f.post(available)).status,403);
   assert.equal((await f.post(suggest())).status,403);
   assert.equal((await f.request(other.proof('address-lookup',suggest(),randomUUID(),other.lease))).status,200);
   assert.deepEqual(f.sent,['suggest','suggest']);
-  assert.equal((await save(false)).status,200);
+  assert.equal((await f.db.pool.query(resume,[f.v.venueId])).rowCount,1);
+  assert.equal((await f.db.pool.query(resume,[f.v.venueId])).rowCount,0);
   assert.equal((await f.post(validate(first.workflowId))).status,200);
   assert.deepEqual((await calls(f.db.pool)).map(row=>[row.venue_id,row.kind]),[
    [f.v.venueId,'suggest'],[other.venueId,'suggest'],[f.v.venueId,'validate'],

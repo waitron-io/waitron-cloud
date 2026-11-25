@@ -45,8 +45,6 @@ const enBase = {
   transferUnavailable:"This handover is unavailable. Refresh to check its state.",
   transferUncertain:"The result is unknown. Refresh handovers before trying again.",
 
-  cloudLookupTitle:'Address lookup',cloudLookupVenue:'Test venue ID',cloudLookupStop:'Stop lookup',cloudLookupResume:'Resume lookup',
-  cloudLookupStopped:'Lookup stopped.',cloudLookupResumed:'Lookup resumed.',cloudLookupInvalid:'Enter a valid venue ID.',cloudLookupMissing:'Test venue not found.',
   cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All pending proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
   cloudActionsOccurrence:'Incident ID',cloudActionsCell:'Cell',cloudActionsTarget:'Target',cloudActionsProposal:'Proposed repair',cloudActionsEvidence:'Evidence',
   cloudActionsNew:'Propose a repair',cloudActionsNoExecution:'Save a synthetic proposal. Real repairs are unavailable. Use a new incident ID for a new attempt.',cloudActionsAction:'Action',cloudActionsSave:'Save proposal',
@@ -408,8 +406,6 @@ const esBase: typeof enBase = {
   transferUnavailable:"Este traspaso no está disponible. Actualiza para ver su estado.",
   transferUncertain:"El resultado es desconocido. Actualiza los traspasos antes de repetir.",
 
-  cloudLookupTitle:'Búsqueda de direcciones',cloudLookupVenue:'ID del local de prueba',cloudLookupStop:'Pausar búsqueda',cloudLookupResume:'Reanudar búsqueda',
-  cloudLookupStopped:'Búsqueda pausada.',cloudLookupResumed:'Búsqueda reanudada.',cloudLookupInvalid:'Introduce un ID de local válido.',cloudLookupMissing:'No se encontró el local de prueba.',
   cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas pendientes y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
   cloudActionsOccurrence:'ID del incidente',cloudActionsCell:'Celda',cloudActionsTarget:'Destino',cloudActionsProposal:'Reparación propuesta',cloudActionsEvidence:'Pruebas',
   cloudActionsNew:'Proponer una reparación',cloudActionsNoExecution:'Guarda una propuesta de prueba. Las reparaciones reales no están disponibles. Usa otro ID de incidente para un nuevo intento.',cloudActionsAction:'Acción',cloudActionsSave:'Guardar propuesta',

@@ -56,22 +56,13 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
   const proposed=proposalFixture;
-  const venueId='33333333-3333-4333-8333-333333333333';
-  let requests:(typeof proposed)[]=[],decisions=0,proposalWrites=0,lookupWrites=0;
+  let requests:(typeof proposed)[]=[],decisions=0;
   await page.route('https://portal.test/operator/actions',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cloud</title><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',r=>{
    const path=new URL(r.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return r.fulfill({json:session});
    if(path.endsWith('/action-proof'))return r.fulfill({json:{methods:['email'],freshUntil:'2099-01-01T00:00:00Z'}});
-   if(path.endsWith('/operator/actions/address-lookup')){
-    lookupWrites++;const body=r.request().postDataJSON();
-    if(body.venueId==='bad-id')return r.fulfill({status:400,json:{error:'invalid_input'}});
-    if(body.venueId!==venueId)return r.fulfill({status:404,json:{error:'not_found'}});
-    assert.deepEqual(body,{venueId,stopped:lookupWrites===3});
-    return r.fulfill({json:body});
-   }
    if(path.endsWith('/operator/actions/requests')){
-    proposalWrites++;
     if(!r.request().postDataJSON().occurrence)return r.fulfill({status:400,json:{error:'invalid_input'}});
     assert.deepEqual(r.request().postDataJSON(),{occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',actionId:'machine_drain',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure'});
     assert.equal(r.request().headers()['x-csrf-token'],'synthetic-csrf');requests=[proposed];return r.fulfill({status:201,json:proposed});
@@ -87,21 +78,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.context().addCookies([{name:'__Host-cloud_csrf',value:'synthetic-csrf',url:'https://portal.test',secure:true}]);
   await page.goto('https://portal.test/operator/actions');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   const form=page.locator('#cloud-proposal');await form.waitFor();
-  const lookup=page.locator('#address-lookup-control'),venue=lookup.locator('wt-input input');
-  await lookup.getByRole('heading',{name:locale==='en'?'Address lookup':'Búsqueda de direcciones'}).waitFor();
-  const stop=lookup.getByRole('button',{name:locale==='en'?'Stop lookup':'Pausar búsqueda',exact:true});
-  await venue.fill('bad-id');await stop.click();
-  await lookup.getByRole('alert').getByText(locale==='en'?'Enter a valid venue ID.':'Introduce un ID de local válido.',{exact:true}).waitFor();
-  await venue.fill('44444444-4444-4444-8444-444444444444');await venue.press('Enter');
-  await stop.click();
-  await lookup.getByRole('alert').getByText(locale==='en'?'Test venue not found.':'No se encontró el local de prueba.',{exact:true}).waitFor();
-  await venue.fill(venueId);await stop.click();
-  await lookup.getByRole('status').getByText(locale==='en'?'Lookup stopped.':'Búsqueda pausada.',{exact:true}).waitFor();
-  assert.match(await lookup.getByRole('status').innerText(),new RegExp(venueId));
-  if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await lookup.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/lookup-${locale}-${theme}-${width}.png`});}
-  await lookup.getByRole('button',{name:locale==='en'?'Resume lookup':'Reanudar búsqueda',exact:true}).click();
-  await lookup.getByRole('status').getByText(locale==='en'?'Lookup resumed.':'Búsqueda reanudada.',{exact:true}).waitFor();
-  assert.equal(lookupWrites,4);assert.equal(proposalWrites,0,'Enter in the venue field must not submit a proposal');
+  assert.equal(await page.getByRole('textbox',{name:locale==='en'?'Test venue ID':'ID del local de prueba',exact:true}).count(),0);
   assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
   assert.equal(await page.locator('.cloud-actions > wt-form-actions').evaluate(row=>getComputedStyle(row).position),'static');
   await form.getByRole('button',{name:locale==='en'?'Save proposal':'Guardar propuesta',exact:true}).click();

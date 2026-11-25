@@ -4,8 +4,8 @@ import type {PoolClient} from 'pg';
 export type CloudActionProposal={occurrence:string;actionId:string;cell:string;target:string;proposal:string;evidence:string};
 export type CloudActionDecision={requestId:string;version:number;decision:'approved'|'rejected'};
 export class CloudActionError extends Error{
- readonly code:'invalid_input'|'conflict'|'not_found';
- constructor(code:CloudActionError['code']){super(code);this.code=code;}
+ readonly code:'invalid_input'|'conflict';
+ constructor(code:'invalid_input'|'conflict'){super(code);this.code=code;}
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const binding=['occurrence','actionId','cell','target','proposal','evidence'] as const;

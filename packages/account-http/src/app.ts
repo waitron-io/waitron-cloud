@@ -79,7 +79,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
   if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
   if(error instanceof OwnerTransferError)return new AccountHttpError(error.code==='transfer_unavailable'?404:error.code==='invalid_input'?400:409,error.code);
-  if(error instanceof CloudActionError)return new AccountHttpError(error.code==='not_found'?404:error.code==='conflict'?409:400,error.code);
+  if(error instanceof CloudActionError)return new AccountHttpError(error.code==='conflict'?409:400,error.code);
   if(error instanceof AccountActionProofError)return new AccountHttpError(403,'proof_required');
   if(error instanceof AccountSecurityError)return new AccountHttpError(400,'link_unavailable');
   if (error instanceof IdentityError) {

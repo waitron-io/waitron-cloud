@@ -5,10 +5,9 @@ export type CloudActionView={actions:{id:string;policy:'ask-first'|'act-and-repo
 const emptyDraft=()=>({occurrence:'',actionId:'machine_drain',cell:'',target:'',proposal:'',evidence:''});
 export class CloudActionsController{
  view:CloudActionView|undefined;pending=false;loadAttempted=false;error:keyof Copy|undefined;draft=emptyDraft();
- lookupVenue='';lookupSaved:{venueId:string;stopped:boolean}|undefined;lookupError:'cloudLookupInvalid'|'cloudLookupMissing'|undefined;
  #account:string|undefined;#generation=0;#retryUntil=0;readonly #changed:()=>void;
  constructor(changed:()=>void){this.#changed=changed;}
- account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.view=undefined;this.pending=false;this.loadAttempted=false;this.error=undefined;this.draft=emptyDraft();this.lookupVenue='';this.lookupSaved=undefined;this.lookupError=undefined;}}
+ account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.view=undefined;this.pending=false;this.loadAttempted=false;this.error=undefined;this.draft=emptyDraft();}}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
@@ -32,23 +31,6 @@ export class CloudActionsController{
    await this.load();if(generation!==this.#generation)return;
    if(!result.ok&&result.status===409)this.error='cloudActionsConflict';
   }else this.#failure(result);
-  this.#changed();
- }
- setLookupVenue(value:string){
-  this.lookupVenue=value;this.lookupSaved=undefined;this.lookupError=undefined;this.#changed();
- }
- async setLookupStop(venueId:string,stopped:boolean){
-  if(!this.#account||!this.view||this.pending||this.waiting)return;
-  const generation=this.#generation;this.pending=true;this.error=undefined;this.lookupError=undefined;this.lookupSaved=undefined;this.#changed();
-  const result=await accountRequest<{venueId:string;stopped:boolean}>('/operator/actions/address-lookup',{venueId,stopped});
-  if(generation!==this.#generation)return;
-  this.pending=false;
-  if(result.ok){
-   if(result.value.venueId===venueId&&result.value.stopped===stopped)this.lookupSaved=result.value;
-   else this.error='unavailable';
-  }else if(result.status===400)this.lookupError='cloudLookupInvalid';
-  else if(result.status===404)this.lookupError='cloudLookupMissing';
-  else this.#failure(result);
   this.#changed();
  }
  async propose(){await this.#write('/operator/actions/requests',{...this.draft});}

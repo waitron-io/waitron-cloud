@@ -663,10 +663,6 @@ export class PortalApp {
     await this.session.check();
     if (route === this.#route && this.session.state.kind !== 'authenticated') this.draw();
   }
-  async setAddressLookupStop(stopped:boolean){
-    const venueId=this.cloudActions.lookupVenue.trim().toLowerCase();
-    if(await this.#requireActionProof())await this.cloudActions.setLookupStop(venueId,stopped);
-  }
   async proposeCloudAction(){if(await this.#requireActionProof())await this.cloudActions.propose();}
   async decideCloudAction(request:CloudActionRequest,decision:'approved'|'rejected'){if(await this.#requireActionProof())await this.cloudActions.decide(request,decision);}
   #sameAccountRoute(route: number, accountId: string | undefined) {

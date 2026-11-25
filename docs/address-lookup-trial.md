@@ -160,20 +160,24 @@ key are missing, the box loses authority, or admission fails.
 
 ## Stop or resume a test venue
 
-In the LAN action demo, sign in as the configured operator and open
-`/operator/actions`. Under **Address lookup**, enter the test venue ID, then
-choose **Stop lookup** or **Resume lookup**. A fresh verification is required.
-Once you stop the venue, new availability checks and lookups are refused. Calls
-already admitted can finish. Resuming preserves the venue's usage.
-
-The Amazon test Cloud has no operator screen for this. To stop a venue there,
-run this in the account database, replacing the example ID with the test venue's ID.
+Use the test Cloud account database to stop or resume a test venue. Replace the
+example ID with the test venue's ID. To stop it, run:
 
 ```sql
-INSERT INTO address_lookup_stopped_venues (venue_id) SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111' ON CONFLICT DO NOTHING;
+INSERT INTO address_lookup_stopped_venues (venue_id)
+SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111'
+ON CONFLICT DO NOTHING;
 ```
 
-Delete that venue's row to resume. To stop lookup for every test box, remove
+New availability checks and lookups are refused. Calls already admitted can
+finish. To resume lookup with the venue's usage intact, run:
+
+```sql
+DELETE FROM address_lookup_stopped_venues
+WHERE venue_id IN (SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111');
+```
+
+To stop lookup for every test box, remove
 `CLOUD_ADDRESS_LOOKUP_SETTINGS` and rerun the deployment driver's `up` command so
 it recreates the account process. See the [test Cloud settings](test-cloud.md#configure-address-lookup-for-test-boxes).
 

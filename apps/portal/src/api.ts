@@ -23,11 +23,6 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/owner-transfers/create')return status===202&&!!value&&typeof value==='object'&&(value as {status?:unknown}).status==='accepted';
   if(path==='/owner-transfers/accept'||path==='/owner-transfers/cancel')return status===200&&validOwnerTransfer(value);
   if(path==='/operator/actions/requests'||path==='/operator/actions/decide')return [200,201].includes(status)&&validCloudActionRequest(value);
-  if(path==='/operator/actions/address-lookup'){
-    const saved=value as {venueId?:unknown;stopped?:unknown}|null;
-    return status===200&&typeof saved?.venueId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(saved.venueId)
-      &&typeof saved.stopped==='boolean';
-  }
   if(path==='/operator/actions'){
     const actions=(value as {actions?:unknown}|null)?.actions;
     return status===200&&Array.isArray((value as any).requests)&&(value as any).requests.every(validCloudActionRequest)&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>

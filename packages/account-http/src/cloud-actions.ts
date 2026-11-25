@@ -13,13 +13,12 @@ export async function cloudActionsResponse(c:Context,actions:CloudActions,o:{poo
   if(c.req.method!=='GET')throw new AccountHttpError(405,'method_not_allowed');
   return c.json(await actions.read(token));
  }
- if(!c.req.path.startsWith('/api/account/operator/actions/')||!['/requests','/decide','/address-lookup'].includes(path))throw new AccountHttpError(404,'not_found');
+ if(!c.req.path.startsWith('/api/account/operator/actions/')||!['/requests','/decide'].includes(path))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(c.req.header('origin')!==o.origin)throw new AccountHttpError(403,'forbidden');
  const body=await readBoundedJsonObject(c.req.raw),csrf=c.req.header('x-csrf-token')??'';
  const session=await transaction(o.pool,client=>resolveSession(client,token,{csrfToken:csrf,touch:false}));
  await o.consume([{scope:'cloud-action-ip',subject:o.ip,limit:20,windowSeconds:60},{scope:'cloud-action-account',subject:session.accountId,limit:30,windowSeconds:300}]);
- if(path==='/address-lookup')return c.json(await actions.setAddressLookupStop(token,csrf,body));
  if(path==='/requests')return c.json(await actions.propose(token,csrf,body as CloudActionProposal),201);
  return c.json(await actions.decide(token,csrf,body as CloudActionDecision));
 }
