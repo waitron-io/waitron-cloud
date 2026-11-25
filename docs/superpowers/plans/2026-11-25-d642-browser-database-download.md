@@ -14,9 +14,7 @@ Estimate 310–390 production and 150–210 test lines, plus the lockfile and gu
 
 ## Part 2 · Save SQLite and the encrypted backup up to 512 MiB
 
-Start after browser memory stops growing between the two probe sizes. Set a literal 512 MiB exit ceiling in `packages/backups/src/catalogue.ts`. Keep pre-send checks, allow one staged exit archive at a time until disposal and qualify stage disk. Adjust the 10-second server, 15-second proxy and 30-second browser deadlines separately from local opening time. Update `deploy/test-cloud/proxy.cfg` and the bounded stage configuration as needed. [Stage](../../../packages/backups/src/catalogue.ts) · [Proxy](../../../deploy/test-cloud/proxy.cfg)
-
-Stream the larger encrypted save too. Any remaining Blob path checks Content-Length before buffering and returns `download_too_large` on oversize. `backups.test.ts` owns authority, limit and disposal. Portal transport and browser tests own early refusal and both saves. Rehearse with a verified copy over 16 MiB through test HTTPS. Estimate 140–210 production and 100–150 test lines, plus guides. Year-sized publication, download audit and production exit remain open. [Year-sized work](../../backlog/data-lifecycle.md#open) · [Exit work](2026-11-24-cloud-exit.md#later-retention-and-deletion)
+Follow the [ranged-download plan](2026-11-25-d642-ranged-download.md). The matched browser memory probe and 512 MiB backup checker qualify the work before the server route, disk wiring and browser changes can proceed. Year-sized publication, download audit and production exit remain open. [Year-sized work](../../backlog/data-lifecycle.md#open) · [Exit work](2026-11-24-cloud-exit.md#later-retention-and-deletion)
 
 ## Loopback probe
 
