@@ -68,7 +68,8 @@ docker compose --env-file deploy/local-stack/local.env up -d --no-deps --force-r
 ```
 
 Visit `/operator/actions`; if you are signed out, sign in to return to this page. Only the
-configured signed-in account can inspect, propose and decide repairs.
+configured signed-in account can inspect, propose and decide repairs. It can also
+[stop or resume address lookup for a test venue](address-lookup-trial.md#stop-or-resume-a-test-venue).
 An absent or empty setting denies every account; an uppercase or invalid UUID refuses account
 server startup. Customer ownership, support permissions and worldwide admin
 sign-in grant no country operator access. Choosing a real production operator

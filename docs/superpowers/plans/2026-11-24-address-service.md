@@ -73,6 +73,8 @@ supplies synthetic prior usage and an injected provider.
 
 ## Second change · operator controls and production readiness
 
+The [cleared operator slice](2026-11-25-address-service-operator.md) records the implementation scope and local evidence expected for this change.
+
 Reuse fresh-session and operator checks in `packages/registration/src/cloud-actions.ts`, its account
 route and `apps/portal/src/cloud-actions-{controller,screen}.ts` to stop or resume a venue by ID.
 Use the existing operator identity setting, queued `operator_notice` email and log line to report
@@ -80,7 +82,7 @@ the first cap event. Verify operator email delivery through OPERATOR-NOTICE-MAIL
 processing-register row, annex lines and one privacy paragraph. Production billing currently lacks
 the test-only trial and payment flows, so plan for venues to count as free until paid status is
 available there. Delete address-call records once they are outside the current Pacific month and
-older than fifteen minutes, so an active workflow can still cross midnight at month end. Permit
+older than 30 minutes, so a partly deleted workflow that crossed midnight cannot regain time. Permit
 opt-in production only after the rollout gates. Update the backlog as each change lands.
 
 ## Checks and size

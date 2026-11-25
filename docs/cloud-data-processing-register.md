@@ -73,8 +73,8 @@ These `supplierId` values are stable inventory names, not legal entity names:
 `aws-infrastructure`, `amazon-ses`, `openai-api`, `anthropic-candidate` and
 `google-candidate`, `google-maps-platform`, `sumup-payments`, `stripe-payments` and
 `cloudflare-turnstile`. AWS infrastructure and EU SES are owner-selected. OpenAI is
-the actual translation adapter. Anthropic and Google AI remain candidates. Google Maps
-Platform is the separate provider selected for address lookup.
+the actual translation adapter. Anthropic and Google AI remain candidates only.
+Google Maps Platform is the separate provider selected for address lookup.
 Selection does not qualify an account or service. Local Mailpit, SeaweedFS and
 fake model endpoints supply local tests, not production supplier evidence.
 

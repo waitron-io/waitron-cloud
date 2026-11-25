@@ -77,7 +77,7 @@ For each selected `serviceId`, complete the register evidence with exact supplie
 service/account, contracting/processing entities, storage/memory/log/telemetry/key
 surfaces, human access countries, onward chain, applicable agreement/transfer
 evidence, immutable version and review date. Every record is currently unqualified.
-AWS and EU SES selection, the actual OpenAI adapter, and candidate Anthropic and Google AI status remain distinct.
+AWS and EU SES selection, the actual OpenAI adapter, and candidate Anthropic and Google AI status remain distinct. No automatic supplier fallback follows.
 
 **Draft address lookup privacy notice.** When you use address suggestions, Waitron Cloud sends the text you enter to Google Maps Platform's Places Autocomplete service. Choosing a suggestion sends that text to Google's Address Validation service. You can enter the address yourself. Cloud keeps the venue, account, box, search and request identifiers, allowance class, call kind and time to enforce limits. Cloud does not store the address text in those records. Deletion of call records starts after the Pacific calendar month ends, once each record is at least 30 minutes old.
 

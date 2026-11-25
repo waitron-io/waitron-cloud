@@ -65,8 +65,9 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/action-proof'))return r.fulfill({json:{methods:['email'],freshUntil:'2099-01-01T00:00:00Z'}});
    if(path.endsWith('/operator/actions/address-lookup')){
     lookupWrites++;const body=r.request().postDataJSON();
-    if(body.venueId!=='33333333-3333-4333-8333-333333333333')return r.fulfill({status:404,json:{error:'not_found'}});
-    assert.deepEqual(body,{venueId,stopped:lookupWrites===2});
+    if(body.venueId==='bad-id')return r.fulfill({status:400,json:{error:'invalid_input'}});
+    if(body.venueId!==venueId)return r.fulfill({status:404,json:{error:'not_found'}});
+    assert.deepEqual(body,{venueId,stopped:lookupWrites===3});
     return r.fulfill({json:body});
    }
    if(path.endsWith('/operator/actions/requests')){
@@ -88,8 +89,10 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const form=page.locator('#cloud-proposal');await form.waitFor();
   const lookup=page.locator('#address-lookup-control'),venue=lookup.locator('wt-input input');
   await lookup.getByRole('heading',{name:locale==='en'?'Address lookup':'Búsqueda de direcciones'}).waitFor();
-  await venue.fill('44444444-4444-4444-8444-444444444444');await venue.press('Enter');
   const stop=lookup.getByRole('button',{name:locale==='en'?'Stop lookup':'Pausar búsqueda',exact:true});
+  await venue.fill('bad-id');await stop.click();
+  await lookup.getByRole('alert').getByText(locale==='en'?'Enter a valid venue ID.':'Introduce un ID de local válido.',{exact:true}).waitFor();
+  await venue.fill('44444444-4444-4444-8444-444444444444');await venue.press('Enter');
   await stop.click();
   await lookup.getByRole('alert').getByText(locale==='en'?'Test venue not found.':'No se encontró el local de prueba.',{exact:true}).waitFor();
   await venue.fill(venueId);await stop.click();
@@ -98,7 +101,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await lookup.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/lookup-${locale}-${theme}-${width}.png`});}
   await lookup.getByRole('button',{name:locale==='en'?'Resume lookup':'Reanudar búsqueda',exact:true}).click();
   await lookup.getByRole('status').getByText(locale==='en'?'Lookup resumed.':'Búsqueda reanudada.',{exact:true}).waitFor();
-  assert.equal(lookupWrites,3);assert.equal(proposalWrites,0,'Enter in the venue field must not submit a proposal');
+  assert.equal(lookupWrites,4);assert.equal(proposalWrites,0,'Enter in the venue field must not submit a proposal');
   assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
   assert.equal(await page.locator('.cloud-actions > wt-form-actions').evaluate(row=>getComputedStyle(row).position),'static');
   await form.getByRole('button',{name:locale==='en'?'Save proposal':'Guardar propuesta',exact:true}).click();

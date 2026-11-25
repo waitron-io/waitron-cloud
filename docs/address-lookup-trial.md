@@ -148,7 +148,8 @@ and 60 per owner. Cloud charges the owner’s counter after the box’s check pa
 | --- | --- |
 | 400 invalid input | Correct the body; no provider attempt occurred. |
 | 401 invalid proof, 403 revoked or permission denied | Restore the box's current authority. |
-| 409 conflict | Use manual entry or a fresh call; closed workflows stay closed. |
+| 403 forbidden after an operator stop | Keep manual entry available until the operator resumes lookup. |
+| 409 conflict | Use manual entry or start a fresh workflow. |
 | 410 expired | Start a new workflow. Earlier calls stay counted. |
 | 429 rate limited | Keep manual entry available and respect Retry-After. |
 | 503 unavailable | Keep manual entry available; do not automatically resend. |
@@ -159,7 +160,7 @@ key are missing, the box loses authority, or admission fails.
 
 ## Stop or resume a test venue
 
-In the LAN action demo, sign in as the configured operator and open
+In the configured local stack or the LAN action demo, sign in as the operator and open
 `/operator/actions`. Under **Address lookup**, enter the test venue ID, then
 choose **Stop lookup** or **Resume lookup**. A fresh verification is required.
 Once you stop the venue, new availability checks and lookups are refused. Calls
@@ -172,17 +173,21 @@ run this in the account database, replacing the example ID with the test venue's
 INSERT INTO address_lookup_stopped_venues (venue_id) SELECT id FROM venues WHERE environment = 'test' AND id = '11111111-1111-4111-8111-111111111111' ON CONFLICT DO NOTHING;
 ```
 
-Delete that venue's row to resume. To stop lookup for every test box, unset
-`CLOUD_ADDRESS_LOOKUP_SETTINGS` and restart the account worker.
+Delete that venue's row to resume. To stop lookup for every test box, remove
+`CLOUD_ADDRESS_LOOKUP_SETTINGS` and rerun the deployment driver's `up` command so
+it recreates the account process. See the [test Cloud settings](test-cloud.md#configure-address-lookup-for-test-boxes).
 
-The first refusal for a cap and period writes the cap and period to the account
-log. When a verified operator is configured, it also queues one warning for the
-same cap and scope. Shared caps cover either all lookups or all free accounts.
+The first refusal for a cap, scope and period writes the cap and period to the
+account log. It also queues a warning if the operator is configured and verified
+at that time. Setting up the operator later takes effect for the next period.
+Shared caps cover either all lookups or all free accounts.
 An own-cap warning includes the affected venue ID. A venue that stops exactly
 at its limit sends no warning. The LAN action demo captures the email in its
 private inbox. A deployment needs an operator and a qualified relay to send it.
 
 The account worker checks for old call records every minute. It deletes up to
 1,000 per pass once they belong to a previous Pacific calendar month and are
-more than 30 minutes old. That short overlap lets near-midnight lookups finish
-without reopening an expired search.
+more than 30 minutes old. The overlap gives a search that crosses midnight time
+to finish and keeps a partly deleted workflow from regaining time. After its
+last row is deleted, a fresh suggestion request can reuse its ID and counts
+as a new call.
