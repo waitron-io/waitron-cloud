@@ -49,9 +49,11 @@ export function storeMetrics(ip, {ca, credentials}, signal) {
     encode({iss: 'prometheus', sub: accessKeyId, exp: Math.floor(Date.now() / 1000) + 300});
   const token = payload + '.' + createHmac('sha512', secretAccessKey).update(payload).digest('base64url');
   const endpoint = 'https://' + ip + ':' + storeNodePort + '/minio/v2/metrics/cluster';
+  const deadline = AbortSignal.timeout(5000);
+  const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
   return new Promise((resolve, reject) => {
     // A fresh connection can reach either of the two peers on this machine.
-    const request = get(endpoint, {ca, agent: false, signal, headers: {Authorization: 'Bearer ' + token}}, response => {
+    const request = get(endpoint, {ca, agent: false, signal: requestSignal, headers: {Authorization: 'Bearer ' + token}}, response => {
       if (response.statusCode !== 200) {
         response.resume();
         reject(Error('storage_loss.peer_metrics HTTP ' + response.statusCode));
@@ -63,8 +65,11 @@ export function storeMetrics(ip, {ca, credentials}, signal) {
       response.once('end', () => resolve(body));
       response.once('error', reject);
     });
-    request.setTimeout(5000, () => request.destroy(Object.assign(Error('storage_loss.peer_metrics_timeout'), {code: 'ETIMEDOUT'})));
     request.once('error', reject);
+  }).catch(error => {
+    if (deadline.aborted && !signal?.aborted)
+      throw Object.assign(Error('storage_loss.peer_metrics_timeout', {cause: error}), {code: 'ETIMEDOUT'});
+    throw error;
   });
 }
 
@@ -228,7 +233,7 @@ export async function requireRepairedPieces(run, node, keys, signal, multipart) 
   if (result !== 'repaired') throw Error('storage_loss.missing_shards ' + result);
 }
 
-export async function withStockholmStore({nodes, cluster, directory, run, kube, signal}, verify, openId) {
+export async function withStockholmStore({nodes, storeBridgeAddresses, cluster, directory, run, kube, signal}, verify, openId) {
   const image = cluster + ':store';
   const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
   let failure;
@@ -242,7 +247,7 @@ export async function withStockholmStore({nodes, cluster, directory, run, kube, 
     }
     process.stderr.write('Waiting for all six store peers\n');
     const account = await installStockholmStore({nodes: nodes.map(node => node.name),
-      addresses: nodes.map(node => node.ip), image, directory, run, kube, signal, openId});
+      addresses: nodes.map(node => node.ip), storeBridgeAddresses, image, directory, run, kube, signal, openId});
     return await verify(account);
   } catch (error) {
     failure = error;

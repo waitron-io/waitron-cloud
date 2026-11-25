@@ -1393,12 +1393,18 @@ the publication worker completes new work and backup verification finishes.
 The publication check starts after Git finishes
 rolling that worker, and its time is measured from the start of the stop.
 Before the next stop, the run checks for one writable PostgreSQL primary and
-six online drives through both returning store peers. Each peer must also
-read all six drives through the same path that bucket repair uses. The
-rehearsal checks this on a small synthetic object within the existing
-180-second rejoin deadline. It logs how many repair attempts each rejoin
-takes and fails if any reported object shard still needs repair after three
-attempts.
+six online drives through both returning store peers. On Kind, the metrics
+reads and bucket repair use the returning machine's private Docker bridge
+address. The rehearsal certificate covers that address as well as the WireGuard
+address. Each peer must also read all six drives for a small synthetic object
+within the 180-second rejoin deadline. The run fails if any reported object
+shard still needs repair after three attempts.
+
+Kind waits for systemd before restoring WireGuard so the startup script has
+finished restoring packet rules. After each repair, look for the five-second
+`Store WireGuard sample` in the log. A failed sample records the returning
+machine's packet filter and route to the host, then the run continues. The
+Stockholm repair still checks both peers and repairs through WireGuard.
 
 When the Waitron image supports signed backup uploads, set
 `TEST_CLOUD_INTEGRATION_REQUIRE_SIGNED_UPLOAD=1` with the machine-stop check.

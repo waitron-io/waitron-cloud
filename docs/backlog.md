@@ -907,8 +907,12 @@ implementation or production evidence.
     the worker now [reconnects](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md).
     If a challenge is stranded, the measured observer restarts 60 seconds after the password
     reply, which can miss the 90-second target.
-  - Unexplained: the returning-store timeout, the venue's HTTP 503 and the manifest restarts of
-    the paid attempt, run 11's relay exit, the first run's target read, the earlier stop delays
+  - In the 25 November free Kind rehearsal the returning store answered on the Docker bridge
+    while its WireGuard metrics request timed out. Kind now logs one sample after bridge repair
+    and records the filter and route if it fails. Repeat all three stops, repairs and the
+    full restart twice with the [Kind return change](superpowers/plans/2026-11-25-d621-kind-store-return-path.md).
+  - Unexplained: the Kind WireGuard metrics timeout, the venue's HTTP 503 and the manifest restarts of the paid attempt,
+    run 11's relay exit, the first run's target read, the earlier stop delays
     and two temporary-grant renewals that reached the ten-second deadline.
   - To reproduce the older pairing failure, start with the first in-cluster journey on
     disposable Debian 13 x86-64 using paid revision `f19c12c7` and its pinned Waitron image;

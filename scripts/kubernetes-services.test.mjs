@@ -364,7 +364,7 @@ test('the Kind baseline keeps a cached controller image and removes the image it
   const key = 'A'.repeat(43) + '=';
   const imageNames = {kept: 'ghcr.io/fluxcd/source-controller', fresh: 'ghcr.io/fluxcd/kustomize-controller'};
   const actions = [], resumed = [];
-  let pid = 123;
+  let pid = 123, beforeRestart, systemdReads = 0;
   const outside = await prepareKindOutsideBaseline({directory, cluster: 'owned',
     nodes: [1, 2, 3].map(n => ({name: 'node-' + n, ip: '192.0.2.' + n, id: String(n)})),
     prepareBundle: async () => join(directory, 'synthetic-flux.json'),
@@ -372,18 +372,26 @@ test('the Kind baseline keeps a cached controller image and removes the image it
       if (binary === 'wg') return key;
       if (binary === 'nsenter') resumed.push(args);
       if (binary !== 'docker') return '';
-      if (args[0] === 'inspect') return String(pid);
+      if (args[0] === 'inspect') return args.at(-1) === '2' ? String(pid) : '123';
+      if (args[0] === 'exec' && args[1] === '2' && args[3] === '/proc/1/comm') {
+        assert.equal(resumed.length, beforeRestart, 'WireGuard must wait for systemd');
+        return systemdReads++ === 0 ? 'entrypoint' : 'systemd';
+      }
       const image = args.at(-1).split('@')[0];
       if (args[0] === 'image' && args[1] === 'inspect' && image === imageNames.fresh) throw Error('No such image: ' + args.at(-1));
       if (args[0] === 'pull' || args[1] === 'rm') actions.push([args[0], image]);
       return '';
     }});
-  const beforeRestart = resumed.length;
+  beforeRestart = resumed.length;
   assert.equal(typeof outside.restoreNode, 'function');
   pid = 456;
   await outside.restoreNode('node-2');
   assert.equal(resumed.length, beforeRestart + 1);
   assert.deepEqual(resumed.at(-1), ['-t', '456', '-n', 'wg-quick', 'up', join(directory, 'mesh-node-1', 'wg0.conf')]);
+  assert.equal(systemdReads, 2);
+  await outside.describeStorePath({id: '2'}, AbortSignal.timeout(5000));
+  assert.deepEqual(resumed.slice(-2), [['-t', '456', '-n', 'iptables', '-t', 'mangle', '-nvL', 'D618-OUTSIDE'],
+    ['-t', '456', '-n', 'ip', 'route', 'get', '10.77.0.4']]);
   await outside.close();
   assert.deepEqual(actions, [['image', 'owned:source-controller'], ['pull', imageNames.fresh],
     ['image', 'owned:kustomize-controller'], ['image', imageNames.fresh]]);
@@ -400,6 +408,31 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
     }}), error => error === failure);
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
 });
+
+for (const [target, describeStorePath, logText] of [
+  ['Kind', async () => 'filter and route captured', /filter and route captured/],
+  ['Kind with failed inspection', () => {throw Error('inspection failed');}, /inspection failed/],
+  ['Amazon'],
+]) {
+  const repairIp = describeStorePath ? '172.30.250.3' : '10.77.0.2';
+  test(`${target} returns both peer counts and repairs through ${repairIp}`, async t => {
+    const log = t.mock.method(process.stderr, 'write', () => true);
+    const events = [], signal = AbortSignal.timeout(5000);
+    const nodes = [{name: 'node-a'}, {name: 'node-b', ip: repairIp}];
+    const kindOutside = describeStorePath && {ip: '10.77.0.2', describeStorePath};
+    const result = await servicesScript.repairReturningStore({name: 'node-b', nodes, kindOutside, signal, repair: signal,
+      read: async ip => {
+        const peer = events.push(ip) + 1;
+        if (kindOutside && ip === kindOutside.ip) throw Error('synthetic timeout');
+        return `minio_cluster_health_erasure_set_online_drives{pool="0",server="store-${peer}.store-peers.d621-store.svc.cluster.local:9000",set="0"} 6`;
+      },
+      heal: async ({node}) => {events.push('repair ' + node.ip); return 1;},
+    });
+    assert.deepEqual(result, {drives: 'store-2=6, store-3=6', storeRepairedOn: 'node-b', storeRepairAttempts: 1});
+    assert.deepEqual(events, [repairIp, repairIp, 'repair ' + repairIp, ...(kindOutside ? [kindOutside.ip] : [])]);
+    if (kindOutside) assert.match(log.mock.calls.map(call => call.arguments[0]).join(''), logText);
+  });
+}
 
 test('the outside rehearsal routes internal storage requests to the local store copies', async () => {
   assert.equal(typeof servicesScript.configureServices, 'function');

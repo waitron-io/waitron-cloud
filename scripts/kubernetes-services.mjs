@@ -310,6 +310,28 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
   return {...api, ...data, roles, backup, ...(mailRetained && {mailRetained}), clientRecoveryMs: Math.round(performance.now() - started)};
 }
 
+export async function repairReturningStore({name, nodes, kindOutside, store, run, repair, signal,
+  read = storeMetrics, heal = healRejoinedStore}) {
+  const index = nodes.findIndex(node => node.name === name), node = nodes[index], ordinal = index * 2;
+  const drives = await waitForStoreDrives(limit => read(node.ip, store, limit),
+    ['store-' + ordinal, 'store-' + (ordinal + 1)], repair);
+  const storeRepairAttempts = await heal({node, account: store, run, signal: repair});
+  if (kindOutside) {
+    try {
+      const sample = await read(kindOutside.ip, store, signal);
+      const count = sample.split('\n').find(line => line.startsWith('minio_cluster_health_erasure_set_online_drives{'));
+      process.stderr.write(`Store WireGuard sample on ${name}: ${count ?? 'no drive count'}\n`);
+    } catch (error) {
+      process.stderr.write(`Store WireGuard sample on ${name} failed: ${error.message}\n`);
+      signal.throwIfAborted();
+      try {process.stderr.write(await kindOutside.describeStorePath(node, signal) + '\n');}
+      catch (error) {process.stderr.write(error.message + '\n');}
+      signal.throwIfAborted();
+    }
+  }
+  return {drives, storeRepairedOn: name, storeRepairAttempts};
+}
+
 export async function runKubernetesServices(context) {
   const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, kubeTarget, signal,
     remote, stopGatewayNode, stopServiceNodes, stopNode, stopSignal = signal, restartAll, prepareOutside, baseline, amazon, importVerifierImage,
@@ -327,7 +349,8 @@ export async function runKubernetesServices(context) {
     if (!amazon) await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
     if (baseline) {
       outside = await prepareOutside(context, tag);
-      context = {...context, nodes: nodes.map((node, index) => ({...node, ip: meshNodeAddress(index)}))};
+      context = {...context, nodes: nodes.map((node, index) => ({...node, ip: meshNodeAddress(index)})),
+        ...(!amazon && {storeBridgeAddresses: nodes.map(node => node.ip)})};
     }
     process.stderr.write('Preparing the three PostgreSQL copies and Cloud schema\n');
     await installServicesDatabase(context, tag);
@@ -487,11 +510,9 @@ export async function runKubernetesServices(context) {
             const [primary] = await Promise.all([writablePrimary(names, repair),
               waitForStore({nodes: names, kube: context.kube, signal: repair}),
               untilRemote(async limit => (await readyServices(limit)).length === names.length, 180_000, repair, 'services_rejoined')]);
-            const ordinal = names.indexOf(name) * 2, node = context.nodes.find(row => row.name === name);
-            const drives = await waitForStoreDrives(limit => storeMetrics(node.ip, store, limit),
-              ['store-' + ordinal, 'store-' + (ordinal + 1)], repair);
-            const storeRepairAttempts = await healRejoinedStore({node, account: store, run, signal: repair});
-            return {primary, drives, storeRepairedOn: name, storeRepairAttempts};
+            const kindOutside = !amazon && {ip: context.nodes.find(node => node.name === name).ip,
+              describeStorePath: outside.describeStorePath};
+            return {primary, ...await repairReturningStore({name, nodes, kindOutside, store, run, repair, signal})};
           },
           reconcile: (node, roles, survivors, fault) => measureServiceRecovery({
             node, roles, survivors, fault, writablePrimary, proveGit: outside.proveSurviving, publication: probes.publication,
