@@ -49,7 +49,7 @@ const rejectionText:Record<number,[string,string]>={
  421:['This venue link is unavailable. Check the original venue link and open it again.','Este enlace del local no está disponible. Comprueba el enlace original del local y ábrelo de nuevo.'],
  429:['Too many requests. Wait a minute, then try the venue’s public page again.','Demasiadas solicitudes. Espera un minuto y vuelve a abrir la página pública del local.'],
  413:['This request is too large or uses an unsupported connection. Open the venue’s public page.','Esta solicitud es demasiado grande o usa una conexión no admitida. Abre la página pública del local.'],
- 404:['This page was not found.','Esta página no existe.'],
+ 404:['This page was not found. Open the venue’s public page.','Esta página no existe. Abre la página pública del local.'],
  405:['This request is not supported. Open the venue’s public page.','Esta solicitud no está admitida. Abre la página pública del local.'],
  400:['This request could not be completed. Check the venue link and try again.','Esta solicitud no se pudo completar. Comprueba el enlace del local e inténtalo de nuevo.'],
  403:['The browser check was not accepted. Open the venue’s public page to start again.','No se aceptó la comprobación del navegador. Abre la página pública del local para empezar de nuevo.'],
@@ -101,15 +101,26 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
   res.once('close',close);
   const signal=AbortSignal.any([visitor.signal,AbortSignal.timeout(10000)]);
   const current=()=>options.routes().some(candidate=>isDeepStrictEqual(candidate,route));
+  async function authorized(){
+   signal.throwIfAborted();
+   let abort!:()=>void;
+   const cancelled=new Promise<never>((_resolve,reject)=>{
+    abort=()=>reject(signal.reason);
+    signal.addEventListener('abort',abort,{once:true});
+   });
+   // This gate owns the slot even if its authority reader fails to settle on cancellation.
+   try{return await Promise.race([menu.authorize(route,signal),cancelled]);}
+   finally{signal.removeEventListener('abort',abort);}
+  }
   let reserved=false,upstream:IncomingMessage|undefined;
   try{
-   const deadline=performance.now()+250;
+   const deadline=performance.now()+1000;
    while(menuActive>=16||(menuByHost.get(host)??0)>=4){
     if(performance.now()>=deadline){refuse(429);return;}
     await wait(20,undefined,{signal});
    }
    menuActive++;menuByHost.set(host,(menuByHost.get(host)??0)+1);reserved=true;
-   if(!current()||!await menu.authorize(route,signal)||!current()){refuse(404);return;}
+   if(!current()||!await authorized()||!current()){refuse(404);return;}
    menuCounters.forwarded++;
    upstream=await new Promise<IncomingMessage>((resolve,reject)=>{
     const headers:Record<string,string>={host:route.staffHostname};
@@ -121,9 +132,12 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
       response.on('error',()=>{});resolve(response);
      });
     outbound.once('timeout',()=>outbound.destroy(new Error('menu_upstream_timeout')));
-    outbound.once('error',reject);outbound.end();
+    outbound.once('error',reject);
+    // A TLS peer can end the HTTP exchange with an upgrade and never produce a response event.
+    outbound.once('close',()=>reject(new Error('menu_upstream_closed')));
+    outbound.end();
    });
-   if(!await menu.authorize(route,signal)||!current()){refuse(404);return;}
+   if(!await authorized()||!current()){refuse(404);return;}
    if(upstream.statusCode===404||upstream.statusCode===429){refuse(upstream.statusCode);return;}
    if(upstream.destroyed||upstream.statusCode!==200||Number(upstream.headers['content-length']??0)>menuBytes){refuse(503);return;}
    signal.throwIfAborted();
@@ -161,10 +175,12 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
    const text=(menu?menuRefusals[status]:undefined)??rejectionText[status];
    if(!body&&navigation&&text){
     const [en,es]=text;
-    body=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Unable to open page / No se pudo abrir la página</title></head><body><main><h1>Unable to open page / <span lang="es">No se pudo abrir la página</span></h1><p>${en}</p><p><span lang="es">${es}</span></p>${menu||status===421||status===404?'':'<a href="/public/availability">Open public page / <span lang="es">Abrir página pública</span></a>'}</main></body></html>`;
+    body=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Unable to open page / No se pudo abrir la página</title></head><body><main><h1>Unable to open page / <span lang="es">No se pudo abrir la página</span></h1><p>${en}</p><p><span lang="es">${es}</span></p>${menu||status===421?'':'<a href="/public/availability">Open public page / <span lang="es">Abrir página pública</span></a>'}</main></body></html>`;
     type='text/html; charset=utf-8';
    }
-   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",...headers});res.end(body);
+   const policy=menu?"default-src 'none'; base-uri 'none'":
+    "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':policy,...headers});res.end(body);
   };
   try{
    const ip=req.headers['x-waitron-client-ip'],sni=req.headers['x-waitron-sni'],host=req.headers.host?.split(':')[0];

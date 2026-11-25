@@ -478,7 +478,11 @@ for(const [change,status] of [['off',404],['blocked',404],['read failure',503],[
    assert.equal(response.headers.get('cache-control'),'no-store');
    const body=await response.text();
    assert.match(body,/<h1>/);
-   assert.doesNotMatch(body,/public\/availability|private/);
+   assert.doesNotMatch(body,/private/);
+   if(change!=='off'){
+    assert.doesNotMatch(body,/public\/availability/);
+    assert.doesNotMatch(response.headers.get('content-security-policy')??'',/frame-ancestors/);
+   }
    assert.equal(f.count(),change.endsWith('headers')?1:0);
   }finally{await f.close();}
  });
@@ -489,12 +493,12 @@ test('public menu keeps forward slots while bodies stream and waits briefly for 
   if(held.length===4){res.end('next');return;}
   held.push(res);res.write('part');
  }});
+ const first=Array.from({length:4},()=>f.send(menuPath));
  try{
-  const first=Array.from({length:4},()=>f.send(menuPath));
   for(let i=0;i<100&&held.length<4;i++)await new Promise(resolve=>setTimeout(resolve,5));
   assert.equal(held.length,4);
   const next=f.send(menuPath);
-  await new Promise(resolve=>setTimeout(resolve,40));
+  await new Promise(resolve=>setTimeout(resolve,350));
   assert.equal(f.count(),4);
   held[0]!.end(' done');
   assert.equal(await (await first[0]!).text(),'part done');
@@ -503,7 +507,11 @@ test('public menu keeps forward slots while bodies stream and waits briefly for 
   assert.equal(await response.text(),'next');
   for(const res of held.slice(1))res.end();
   await Promise.all(first);
- }finally{await f.close();}
+ }finally{
+  const settled=Promise.allSettled(first);
+  await f.close();
+  await settled;
+ }
 });
 
 test('public menu replaces an oversized response declared at headers with a readable 503',async()=>{
@@ -563,5 +571,36 @@ test('public menu stops an oversized stream after delivering its first bytes',as
   }),/aborted/);
   assert.ok(body.startsWith('first'));
   assert.ok(Buffer.byteLength(body)<=2*1024*1024);
+ }finally{await f.close();}
+});
+
+test('public menu releases its slot when a box tries to upgrade the response',async()=>{
+ const f=await fixture(undefined,{respond:(_req,res)=>{
+  res.writeHead(101,{Connection:'Upgrade',Upgrade:'synthetic'});res.end();
+ }});
+ try{
+  const deadline=AbortSignal.timeout(750);
+  const response=await Promise.race([f.send(menuPath,menuAccept),new Promise<never>((_resolve,reject)=>{
+   deadline.addEventListener('abort',()=>reject(Error('gateway gave no reply after upgrade')),{once:true});
+  })]);
+  assert.equal(response.status,503);
+  assert.equal(f.gate.stats().menu?.active,0);
+ }finally{await f.close();}
+});
+
+test('public menu releases a slot on disconnect even when the authority reader stays pending',async()=>{
+ let entered!:()=>void;
+ const reading=new Promise<void>(resolve=>{entered=resolve;});
+ const f=await fixture(undefined,{authorize:()=>{entered();return new Promise(()=>{});},respond:(_req,res)=>res.end()});
+ try{
+  const req=request({host:'127.0.0.1',port:f.bound.port,path:menuPath,headers:{
+   host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,
+  }});
+  req.on('error',()=>{});req.end();
+  await reading;
+  req.destroy();
+  for(let i=0;i<50&&f.gate.stats().menu?.active;i++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(f.gate.stats().menu?.active,0);
+  assert.equal(f.count(),0);
  }finally{await f.close();}
 });
