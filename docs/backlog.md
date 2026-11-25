@@ -313,8 +313,11 @@ best guess and ask for confirmation from the specialist later”. The
 [provisional privacy answers](superpowers/specs/2026-11-24-d101-privacy-answers.md)
 record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers a verified backup and key through the fixed 90-day deadline in a disposable rehearsal.
-Real venue exit still needs a service-end action and full return with a
+covers a verified backup, key and checksum manifest through the fixed 90-day deadline in a
+disposable owner-only rehearsal. Real venue exit still needs the
+[support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
+and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).
+The remaining return work includes a service-end action and a
 [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Read-only use, restore limits, resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).

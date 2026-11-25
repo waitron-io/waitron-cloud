@@ -204,8 +204,10 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   const {venueId, pointId, archive, backupKey} = request;
   const body = {venueId, pointId};
   const archivePath = join(directory, 'exit.backup.enc'), keyPath = join(directory, 'exit.key');
+  const manifestPath = join(directory, 'exit.manifest.json');
   for (const [path, saveTo, type] of [
     ['download', archivePath, 'application/octet-stream'], ['download-key', keyPath, 'text/plain; charset=utf-8'],
+    ['download-manifest', manifestPath, 'application/json'],
   ]) {
     const response = await api('/api/account/backups/' + path, body, browser);
     assert.equal(response.status, 200, 'integration.exit_' + path);
@@ -217,6 +219,9 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   const sha256 = createHash('sha256').update(saved).digest('hex');
   assert.equal(sha256, archive.sha256, 'integration.exit_stored_digest');
   assert.equal(saved.length, archive.bytes);
+  assert.deepEqual(parseIntegrationJson(await readFile(manifestPath, 'utf8')), {
+    archiveManifestVersion: archive.manifestVersion, capturedAt: request.capturedAt, archiveSha256: sha256, laterChanges: 'unknown',
+  });
   assert.ok(/^[A-Za-z0-9_-]{43}$/.test(secret), 'integration.exit_saved_key');
   const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage,
     expectedRevision: request.target.runtime.revision, scratchVolume});
@@ -558,7 +563,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path === '/api/account/signup/request') budget?.attempt('signup-request', body.email);
       if (path === '/api/account/signup/complete') budget?.attempt('signup-complete');
-      const download = paidExitDownload && /^\/api\/account\/backups\/download(?:-key)?$/.test(path);
+      const download = paidExitDownload && /^\/api\/account\/backups\/download(?:-key|-manifest)?$/.test(path);
       return new Promise((resolve, reject) => {
       const req = request({hostname: stockholmBaseline ? kubernetes.proxyIp : '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
         ...(fresh && {agent: false}), headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
@@ -824,7 +829,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               assert.deepEqual(reply.body.exitRecovery, {...window, expired});
               assert.equal(reply.body.exitDownloadAvailable, expired ? undefined : true);
             };
-            const files = [['download', 'exit.backup.enc'], ['download-key', 'exit.key']];
+            const files = [['download', 'exit.backup.enc'], ['download-key', 'exit.key'], ['download-manifest', 'exit.manifest.json']];
             await list(false);
             for (const [action, file] of files) {
               const reply = await api('/api/account/backups/' + action, {venueId, pointId}, browser);

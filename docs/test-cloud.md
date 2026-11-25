@@ -1147,10 +1147,16 @@ implementation, complete integration proof and release gates pass.
 
 Sign in as the owner of a synthetic test venue. Open **View snapshots** and
 choose a verified snapshot. Select **Download backup**. If asked, confirm your
-sign-in and select **Download backup** again. Select **Download recovery key**
-for the same snapshot. Keep the matching key private so you can open the
-encrypted archive later. This test download accepts archives up to 16 MiB.
+sign-in and select **Download backup** again. Select **Download recovery key** and
+**Download backup manifest** for the same snapshot. Keep the matching key private
+so you can open the encrypted archive later. The manifest gives the capture time
+and SHA-256 checksum of the encrypted file. Later changes may be missing. After
+service ends, Backups reminds you to keep your fiscal records and check your copies
+while the downloads are open. This test download accepts archives up to 16 MiB.
 Actual venue exit still needs the rest of the return and deletion process.
+
+On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
+first value in the output with `archiveSha256` in the manifest to check the saved file.
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `44dc45af7a64d399037747499ba633594a63f84d`. This client uses the pairing proof
@@ -1171,12 +1177,12 @@ TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
   node --test scripts/test-cloud-exit-download.test.mjs
 ```
 
-The test compares the saved archive with the stored checksum and opens it in a
+The test compares the saved archive with the stored and downloaded checksums and opens it in a
 verifier with networking disabled. It checks the original box is still serving
 with the same installation after the download. It then ends service for that
 same synthetic venue and records a fixed cutoff 90 days after the service end.
 The fixture sets the end in the past so the cutoff is about 90 seconds away.
-Both files match the saved copies before the cutoff. After the cutoff, both
+All three files match the saved copies before the cutoff. After the cutoff, all three
 requests return HTTP 410, the dates stay visible and the stored archive still
 matches its verified checksum. The receipt includes both dates and the archive
 size and checksum. Keep the recovery key private.

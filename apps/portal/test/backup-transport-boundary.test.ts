@@ -16,7 +16,7 @@ const page: BackupPage = {
 };
 const olderPage: BackupPage = {...page, points: [{...page.points[0]!, id: olderPointId}],
   nextCursor: null, defaultPointId: olderPointId};
-type Reply = {body?: unknown; status?: number; raw?: string; retry?: string; brokenBody?: boolean} | 'network';
+type Reply = {body?: unknown; status?: number; raw?: string; retry?: string; brokenBody?: boolean; contentType?: string} | 'network';
 
 function fixture(t: TestContext) {
   for (const [name, value] of [
@@ -39,7 +39,10 @@ function fixture(t: TestContext) {
     const reply = replies.shift()!;
     if (reply === 'network') throw new TypeError('private connection detail');
     const response = new Response(reply.status === 204 ? null : reply.raw ?? JSON.stringify(reply.body), {
-      status: reply.status ?? 200, headers: reply.retry ? {'Retry-After': reply.retry} : {},
+      status: reply.status ?? 200, headers: {
+        ...(reply.retry ? {'Retry-After': reply.retry} : {}),
+        ...(reply.contentType ? {'Content-Type': reply.contentType} : {}),
+      },
     });
     if (reply.brokenBody) Object.defineProperty(response, 'json', {value: async () => {throw new Error('private body detail');}});
     return response;
@@ -49,6 +52,23 @@ function fixture(t: TestContext) {
   return {controller, replies, requests, changes: () => changes};
 }
 
+test('manifest transport requires the expected media type and a nonempty bounded body',async t=>{
+  const f=fixture(t),body={archiveManifestVersion:1,capturedAt:stamp,archiveSha256:'a'.repeat(64),laterChanges:'unknown'};
+  const request=()=>accountRequest<Blob>('/backups/download-manifest',{venueId,pointId});
+  f.replies.push({body,contentType:'application/json'});
+  const result=await request();
+  assert.ok(result.ok);
+  assert.deepEqual(JSON.parse(await result.value.text()),body);
+  assert.equal(f.requests[0]?.init.redirect,'error');
+  assert.equal(f.requests[0]?.init.cache,'no-store');
+  for(const reply of [{body,contentType:'text/plain'}, {raw:'',contentType:'application/json'}, {raw:'x'.repeat(1025),contentType:'application/json'}]){
+    f.replies.push(reply);
+    const rejected=await request();
+    assert.ok(!rejected.ok);
+    assert.equal(rejected.code,'unexpected_response');
+  }
+});
+
 test('backup download preserves the account enrollment event and distinguishes CSRF from loss of ownership',async t=>{
   const f=fixture(t);
   const downloadable={...page,exitDownloadAvailable:true};
@@ -57,15 +77,15 @@ test('backup download preserves the account enrollment event and distinguishes C
   let enrollment=0;
   document.addEventListener(enrollmentRequiredEvent,()=>{enrollment++;});
   f.replies.push({status:403,body:{error:'enrollment_required'}});
-  await f.controller.download(false);
+  await f.controller.download('download');
   assert.equal(enrollment,1);
   assert.equal(f.controller.error,'pairEnrollment');
   assert.equal(f.controller.downloadProof,true);
   f.replies.push({status:403,body:{error:'forbidden'}});
-  await f.controller.download(false);
+  await f.controller.download('download');
   assert.equal(f.controller.error,'forbidden');
   f.replies.push({status:403,body:{error:'permission_denied'}});
-  await f.controller.download(false);
+  await f.controller.download('download');
   assert.equal(f.controller.error,'permissionBusiness');
   assert.equal(f.controller.page,undefined);
   assert.equal(f.controller.selected,undefined);
@@ -76,7 +96,7 @@ test('changing snapshot clears a download refusal and keeps a catalogue refusal 
   f.replies.push({body:{...page,exitDownloadAvailable:true,points:[page.points[0],olderPage.points[0]]}});
   await f.controller.open(venueId);
   f.replies.push({status:403,body:{error:'proof_required'}});
-  await f.controller.download(true);
+  await f.controller.download('download-key');
   assert.equal(f.controller.error,'snapshotDownloadProof');
   f.controller.select(olderPointId);
   assert.equal(f.controller.error,undefined);

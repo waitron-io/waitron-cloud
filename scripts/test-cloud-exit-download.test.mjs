@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {runTestCloudClients} from './test-cloud-integration.mjs';
 
-test('a test venue owner saves a verified backup offline and both downloads close at the recovery deadline', {
+test('a test venue owner opens the saved backup offline and all three downloads close at the recovery deadline', {
   skip: !process.env.TEST_CLOUD_INTEGRATION_IMAGE || !process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
   timeout: 300_000,
 }, async () => {

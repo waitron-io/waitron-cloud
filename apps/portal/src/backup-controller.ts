@@ -1,7 +1,8 @@
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest} from './api.ts';
 import type {Copy} from './locale.ts';
-import type {BackupPage} from './backup-types.ts';
+import type {BackupDownload,BackupPage} from './backup-types.ts';
+const downloadExtension = {'download':'backup.enc','download-key':'key','download-manifest':'manifest.json'};
 export class BackupController {
  venueId:string|undefined;page:BackupPage|undefined;selected:string|undefined;selectedSource:'continuous'|'snapshot'|undefined;pending=false;
  downloadProof=false;downloadError:keyof Copy|undefined;
@@ -27,16 +28,16 @@ export class BackupController {
   if(this.selected!==id)this.cancelDownload();
   this.selected=id;this.selectedSource='snapshot';this.#changed();
  }}
- async download(key:boolean){
+ async download(action:BackupDownload){
   const venueId=this.venueId,pointId=this.selected;
   if(!this.#account||!venueId||!pointId||!this.downloadable||this.pending||this.#download||this.waiting)return;
   const transfer=new AbortController();this.#download=transfer;this.downloadError=undefined;this.#listError=undefined;this.#changed();
   try{
-   const result=await this.#request<Blob>(key?'/backups/download-key':'/backups/download',{venueId,pointId},transfer.signal);
+   const result=await this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal);
    if(transfer.signal.aborted)return;
    if(result.ok){
     const url=URL.createObjectURL(result.value),link=document.createElement('a');
-    try{link.href=url;link.download=`waitron-backup-${pointId}.${key?'key':'backup.enc'}`;link.click();}finally{URL.revokeObjectURL(url);}
+    try{link.href=url;link.download=`waitron-backup-${pointId}.${downloadExtension[action]}`;link.click();}finally{URL.revokeObjectURL(url);}
    }else{
     this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
     if(result.status===401||result.code==='permission_denied'){this.page=undefined;this.selected=undefined;this.selectedSource=undefined;}

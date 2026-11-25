@@ -2,7 +2,7 @@
 
 The [venue lifecycle journal](../data-lifecycle-journal.md) records fixed cancellation
 deadlines, worker claims and uncertain effects. When test Backups offers downloads,
-it reads the journal's deadline for the verified archive and key. The disposable
+it reads the journal's deadline for the verified archive, key and manifest. The disposable
 rehearsal records when service ends. Full exit, resubscription and all-copy purge
 stay open. Local capture, retention, verification, recovery, key rotation
 and history cleanup are implemented ([proof](../local-backups.md),
