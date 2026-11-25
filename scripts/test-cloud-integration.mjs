@@ -281,7 +281,7 @@ async function saveExitDatabase({origin, port, session, pointId}) {
   } finally { await browser.close(); }
 }
 
-// Replay the archive accepted by the offline verifier with Node's crypto and SQLite-independent bytes.
+// Open the archive accepted by the offline verifier without using the browser code.
 function offlineExitDatabaseDigest(archive, secret) {
   const key = scryptSync(secret, archive.subarray(5, 21), 32, {N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 ** 2});
   const decipher = createDecipheriv('aes-256-gcm', key, archive.subarray(21, 33));

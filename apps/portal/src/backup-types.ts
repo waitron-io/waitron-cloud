@@ -23,5 +23,5 @@ export async function removeDatabaseDownload(root: FileSystemDirectoryHandle) {
  catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }
 }
 export function isDatabaseStorageRefusal(error: unknown) {
- return error instanceof DOMException && ['QuotaExceededError','NotSupportedError','UnknownError','SecurityError','NotAllowedError'].includes(error.name);
+ return error instanceof DOMException && ['QuotaExceededError','NotSupportedError','UnknownError','SecurityError','NotAllowedError','NoModificationAllowedError'].includes(error.name);
 }

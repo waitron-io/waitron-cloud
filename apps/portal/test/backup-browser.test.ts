@@ -157,6 +157,5 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await captureWindow('ended');
   await page.unroute('**/api/account/backups/list',flag);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:refresh,exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await choices.count(),0);
-
  }finally{await f.close();}
 });

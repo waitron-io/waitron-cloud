@@ -36,7 +36,7 @@ function writer(handle: SyncFile) {
   return (chunk: Uint8Array) => {
     while (chunk.length) {
       const count = handle.write(chunk, {at: offset});
-      if (!count) throw new Error('Storage made no progress');
+      if (!count) throw new DOMException('Storage made no progress', 'QuotaExceededError');
       offset += count;
       chunk = chunk.subarray(count);
     }
@@ -86,9 +86,15 @@ async function extractDatabase(handle: SyncFile, cipher: ReturnType<typeof forge
     return {done: count === 0, bytes: Uint8Array.from(binary.decode(cipher.output.getBytes()))};
   }
   const first = nextPlaintext();
+  let yieldAt = performance.now() + 50;
   const raw = new ReadableStream<Uint8Array<ArrayBuffer>>({
     start(controller) {controller.enqueue(first.bytes);},
-    pull(controller) {
+    async pull(controller) {
+      if (performance.now() >= yieldAt) {
+        // Leave the worker event loop a turn to process termination during local reads.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        yieldAt = performance.now() + 50;
+      }
       const next = nextPlaintext();
       if (next.bytes.length) controller.enqueue(next.bytes);
       if (next.done) controller.close();

@@ -5,7 +5,7 @@ const refused = (code = 'database_open_failed'): ApiResult<never> => ({ok: false
 let revokeSavedFile: (() => void) | undefined;
 
 async function removeWhenUnlocked(root: FileSystemDirectoryHandle) {
-  const deadline = AbortSignal.timeout(2000);
+  const deadline = AbortSignal.timeout(10_000);
   for (;;) {
     try { await removeDatabaseDownload(root); return; }
     catch (error) {
