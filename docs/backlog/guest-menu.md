@@ -1,5 +1,7 @@
 # Guest-menu delivery and online ordering
 
+On 24 November 2026 the [customer-menu design](https://github.com/clintongormley/waitron/blob/bd5d2dbf1976ede08efc2ebaf0e01b9063aaf884/docs/superpowers/specs/2026-11-24-customer-menu-design.md#7-cloud-in-waitron-cloud-its-own-plan) chose live delivery from the serving box with HTTP caching. This replaces the offline-copy decision below for customer menus. Follow the [Cloud build plan](../superpowers/plans/2026-11-25-d643-public-customer-menu.md) for the live gate and hosted-copy retirement.
+
 ## Hosted menu (A670-CLOUD)
 
 Qualify Waitron's signed sender against the
