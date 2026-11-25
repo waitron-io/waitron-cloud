@@ -140,5 +140,13 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   await stopButton.waitFor();
   const {rows}=await fixture.db.pool.query("SELECT event_type FROM security_audit_events WHERE subject_id=$1 AND event_type<>'venue.viewed' ORDER BY occurred_at",[venueId]);
   assert.deepEqual(rows.map(row=>row.event_type),['venue.address_lookup_stopped','venue.address_lookup_allowed']);
+  if(locale==='en'){
+   await page.getByRole('combobox',{name:'Language'}).selectOption('es');
+   await page.goBack();
+   const spanish=page.getByRole('heading',{name:'Buscar un local',exact:true,level:1});
+   await spanish.waitFor();
+   await page.reload();
+   await spanish.waitFor();
+  }
  }finally{await fixture.close();}
 });

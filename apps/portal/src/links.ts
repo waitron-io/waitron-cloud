@@ -1,6 +1,6 @@
 import type { Locale } from './locale.ts';
 export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; pairingCode?: string; recoveryId?: string; operatorVenueId?:string; locale?: Locale; invalid: boolean};
-export function captureLink(url: URL, replace: (url: string) => void, historyState?: {pairingRequestId?: unknown;operatorVenueId?:unknown;operatorVenueLocale?:unknown}): CapturedLink {
+export function captureLink(url: URL, replace: (url: string) => void, historyState?: {pairingRequestId?: unknown;operatorVenueId?:unknown}): CapturedLink {
   const params = [url.searchParams, new URLSearchParams(url.hash.slice(1))];
   const tokens = params.flatMap(p => p.getAll('token'));
   const languages = params.flatMap(p => p.getAll('lang'));
@@ -43,8 +43,6 @@ export function captureLink(url: URL, replace: (url: string) => void, historySta
     }else if(!url.hash&&typeof historyState?.operatorVenueId==='string'&&pairingId.test(historyState.operatorVenueId)){
       result.operatorVenueId=historyState.operatorVenueId;
     }
-    const saved=historyState?.operatorVenueLocale;
-    if(!result.locale&&(saved==='en'||saved==='es'))result.locale=saved;
   }
   return result;
 }

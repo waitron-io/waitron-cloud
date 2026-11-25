@@ -95,7 +95,8 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     const preferred = returned?.forwarded ? returned.locale : saved ?? returned?.locale ?? null;
-    this.locale = this.link.locale ?? chooseLocale(preferred, navigator.languages);
+    const entryLocale=this.path===operatorVenuesPath?history.state?.operatorVenueLocale:undefined;
+    this.locale = this.link.locale ?? chooseLocale(preferred??(entryLocale==='en'||entryLocale==='es'?entryLocale:null), navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.billing?.error==='pairEnrollment')this.billing.error=undefined;
@@ -409,11 +410,12 @@ export class PortalApp {
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
     if(!this.translationConsent.pending&&!this.translationConsent.loaded)this.translationConsent.loadAttempted=false;
-    if (push) history.pushState(path===operatorVenuesPath?{operatorVenueId:venueId,operatorVenueLocale:this.locale}:null, '', path);
+    if (push) history.pushState(path===operatorVenuesPath?{operatorVenueId:venueId}:null, '', path);
     this.link = this.#capture();
     this.ownerRecovery.open(path==='/reset-password'&&!this.link.invalid?this.link.token:undefined);
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
     this.locale = this.link.locale ?? this.locale;
+    if(path===operatorVenuesPath)history.replaceState({...history.state,operatorVenueLocale:this.locale},'');
     this.fields = {email: '', password: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
     this.pending = false; this.reveal = false;
