@@ -5,7 +5,7 @@ import {retentionExpirySql} from '@waitron-cloud/backups/retention';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {requireConnectionProof,transaction} from '@waitron-cloud/registration';
+import {LifecycleStore,requireConnectionProof,transaction} from '@waitron-cloud/registration';
 import {readSessionCookie} from './cookies.ts';
 import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
@@ -46,6 +46,7 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
   const fence=async(client:PoolClient)=>{
    const proof=await requireConnectionProof(client,token,csrfToken);
    if(await ownerVenue(client,venueId,proof.accountId)!=='test')throw new AccountHttpError(403,'permission_denied');
+   if(!(await LifecycleStore.readExitRecovery(client,venueId)).allowed)throw new AccountHttpError(410,'unavailable');
   };
   try{
    if(action==='download-key'){
@@ -91,8 +92,10 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
    WHERE s.venue_id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND s.generation IS NOT NULL
    AND s.observed_at>clock_timestamp()-interval '5 minutes'`,[venueId])).rows[0];
   const points=result.rows.slice(0,50).map(p=>({id:p.id as string,capturedAt:p.captured_at.toISOString() as string,verification:p.verification as string,retention:p.retention as string,expiresAt:p.expires_at.toISOString() as string,protection:p.protection as string|null}));
+  const exit=exitDownloads&&environment==='test'?await LifecycleStore.readExitRecovery(client,venueId):undefined;
   await resolveSession(client,token,{csrfToken,touch:false});
-  return {venueId,points,...(exitDownloads&&environment==='test'?{exitDownloadAvailable:true}:{}),nextCursor:result.rows.length>50?Buffer.from(JSON.stringify([venueId,points.at(-1)!.id])).toString('base64url'):null,defaultPointId:defaultPoint?.id??null,
+  return {venueId,points,...(exit?.allowed?{exitDownloadAvailable:true}:{}),...(exit?.window?{exitRecovery:exit.window}:{}),
+   nextCursor:result.rows.length>50?Buffer.from(JSON.stringify([venueId,points.at(-1)!.id])).toString('base64url'):null,defaultPointId:defaultPoint?.id??null,
    continuousRecovery:stream?{recoverableAt:stream.recoverable_at.toISOString(),checkedAt:stream.observed_at.toISOString(),sourceNodeId:stream.source_node_id}:null};
  }));
 }

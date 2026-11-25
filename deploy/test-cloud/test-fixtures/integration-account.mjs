@@ -1,6 +1,6 @@
 import {prepareConnectionProof} from '../../../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -15,6 +15,8 @@ import {BackupKeyVault} from '../../../packages/backups/src/keys.ts';
 import {workerObjects} from '../../../packages/backups/src/worker-config.ts';
 import {BackupCatalogue} from '../../../packages/backups/src/catalogue.ts';
 import {setVerificationPolicy} from '../../../packages/backups/src/verification-admission.ts';
+import {LifecycleStore} from '../../../packages/registration/src/data-lifecycle.ts';
+import {OrganisationPlanStore} from '../../../packages/registration/src/organisation-plans.ts';
 import {transaction} from '../../../packages/registration/src/transaction.ts';
 import {inspectIntegrationVerification} from './integration-verification-evidence.mjs';
 import {inspectIntegrationRecovery} from './integration-recovery-evidence.mjs';
@@ -53,6 +55,16 @@ try {
     if (['paid-remote-provision', 'paid-remote-inspect', 'paid-remote-downgrade', 'stockholm-remote-renew', 'stockholm-remote-publication'].includes(phase)) {
       const {paidRemoteAccount} = await import('./integration-paid-remote-account.mjs');
       console.log(JSON.stringify(await paidRemoteAccount({pool, config, ...JSON.parse(input)})));
+    } else if (phase === 'end-exit-download') {
+      assert.ok(!services);
+      assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
+      assert.equal((await new OrganisationPlanStore(pool).set(organisationId, 'free')).changed, true);
+      const venueId = rows[0].venue_id, lifecycle = new LifecycleStore(pool);
+      const {rows: [{ended}]} = await pool.query("SELECT clock_timestamp()-interval '2160 hours'+interval '90 seconds' AS ended");
+      await lifecycle.request({venueId, kind: 'cancel', expectedRevision: 0, operationId: randomUUID(),
+        fingerprint: createHash('sha256').update('test exit ' + venueId).digest('hex'), effectiveEndAt: ended.toISOString()});
+      const {effectiveEndAt, deadlineAt} = await lifecycle.read(venueId);
+      console.log(JSON.stringify({effectiveEndAt, deadlineAt}));
     } else if (phase === 'inspect-storage-withdrawal') {
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
       const saved = JSON.parse(await readFile('/run/local-stack/integration-storage-' + installationId + '.json', 'utf8'));

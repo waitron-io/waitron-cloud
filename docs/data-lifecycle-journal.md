@@ -1,8 +1,9 @@
 # Venue lifecycle journal
 
 When a service ends, a retry must not move its recovery deadline or repeat an
-outside call whose reply was lost. The internal `LifecycleStore` records those
-decisions in PostgreSQL. It has no HTTP route, provider adapter or running worker.
+outside call whose reply was lost. `LifecycleStore` records those decisions in
+PostgreSQL. A disposable test fixture records service end so the test Backups
+routes can read the cutoff.
 Recording a request grants no permission to stop, export, restore or delete data.
 
 Use the current venue revision when you record a new request. An identical
@@ -14,9 +15,11 @@ separately from request receipt and fixes recovery end at 2,160 hours later.
 An omitted service end uses the database clock. Retries and later cancellations
 retain that deadline, including across leap days and daylight-saving changes.
 Service end and the full recovery interval must fit within years 0001 through 9999.
-Views and time comparisons use milliseconds. Storage preserves finer existing
-timestamps; qualify matching comparison precision before another producer writes
-finer deadlines.
+Views and other journal operations use milliseconds. Storage preserves finer
+existing timestamps. The test Backups routes check the deadline at database
+precision after locking the venue and its lifecycle row. The download closes at
+the stored deadline. Service termination, resubscription and restore authority
+still need their own transitions and checks.
 
 The journal recognizes `active`, `exit preparing`, `read-only until deadline`,
 `purging` and `purged`. A cancellation or deletion request can enter

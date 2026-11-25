@@ -14,6 +14,15 @@ test('catalogue validates bounded public metadata and refuses malformed success 
  assert.equal(validBackupPage({...page,continuousRecovery:null}),true);
  assert.equal(validBackupPage({...page,readerCredentials:{accessKeyId:'secret'}}),false);
 });
+test('catalogue accepts an optional exit recovery window with canonical dates',()=>{
+ const exitRecovery={effectiveEndAt:'2026-01-01T12:00:00.000Z',deadlineAt:'2026-04-01T12:00:00.000Z',expired:false};
+ assert.equal(validBackupPage({...page,exitDownloadAvailable:true,exitRecovery}),true);
+ assert.equal(validBackupPage({...page,exitRecovery:{...exitRecovery,expired:true}}),true);
+ assert.equal(validBackupPage({...page,exitRecovery:null}),false);
+ assert.equal(validBackupPage({...page,exitRecovery:[]}),false);
+ for(const patch of [{effectiveEndAt:'2026-01-01'},{deadlineAt:'bad'},{expired:'false'},{objectKey:'private'}])
+  assert.equal(validBackupPage({...page,exitRecovery:{...exitRecovery,...patch}}),false);
+});
 test('changing account or venue fences delayed catalogue replies and clears private data',async()=>{
  let finish!:(result:ApiResult<unknown>)=>void;
  const c=new BackupController(()=>{},<T>()=>new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;}));c.account('owner');const loading=c.open(venue);c.close();finish({ok:true,value:page});await loading;assert.equal(c.page,undefined);
