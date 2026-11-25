@@ -1459,9 +1459,9 @@ look for `D621 session probe` near the failure in stderr. Each line gives the
 time, elapsed milliseconds, any HTTP status and the error code or class.
 The account proxy names its Kubernetes node when it sends response headers.
 The node is reported as unknown if no valid header arrives. An early
-`AbortError` can occur when the observer cancels the session request after
-another check fails. Read the observer's final error to see which check
-ended the stop.
+`AbortError` can occur when the observer ends the stop for another reason
+or the rehearsal is cancelled. The observer can also abort the request
+at its five-second deadline. Read its final error alongside the trace.
 The launcher refreshes the outside peer’s route after each
 restart and reports how long control plane selection took. It then restarts
 the same three Stockholm instances, checks their boot IDs, volumes and
