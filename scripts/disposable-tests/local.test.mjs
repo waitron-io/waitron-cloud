@@ -94,14 +94,15 @@ test('preparation cannot outlive the lease deadline', async t => {
   // Advance the clock only in preparation so ledger I/O cannot spend the lease.
   t.mock.timers.enable({apis: ['Date', 'setTimeout']});
   const durationMs = 150;
-  let abortedEarly;
+  const preparationAborts = [];
   const f = await fixture(t, {prepare: async (_lease, {signal}) => {
     t.mock.timers.tick(durationMs - 1);
-    abortedEarly = signal.aborted;
+    preparationAborts.push(signal.aborted);
     t.mock.timers.tick(1);
+    preparationAborts.push(signal.aborted);
   }});
   const result = await f.runLocal({...f, durationMs});
-  assert.equal(abortedEarly, false);
+  assert.deepEqual(preparationAborts, [false, true]);
   assert.equal(result.code, 124);
   assert.equal(result.cleanup, 'absent');
 });
