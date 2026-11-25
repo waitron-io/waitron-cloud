@@ -82,15 +82,17 @@ try {
         host:process.env.GUEST_HTTP_HOST??'10.79.0.3',port:Number(process.env.GUEST_HTTP_PORT??3443),
         trustedProxyIps:['10.79.0.2']});
     }
-    if(liveGuestMenu&&!stopRequested)
-      guestAuthority=await startGuestMenuAuthority({connectionString:process.env.DATABASE_URL},'10.79.0.3',3445);
+    if(liveGuestMenu&&!stopRequested){
+      const ephemeral=Number(portText)===0;
+      guestAuthority=await startGuestMenuAuthority({connectionString:process.env.DATABASE_URL},ephemeral?'127.0.0.1':'10.79.0.3',ephemeral?0:3445);
+    }
     const addressLookup=addressLookupOptionsFromEnv(process.env);
     running = await startAccountServer({guestOrigin,liveGuestMenu,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     const guestAddress=guest?.server.address();
-    console.log(JSON.stringify({status:'listening',port:address.port,...(guestAddress&&typeof guestAddress!=='string'?{guestPort:guestAddress.port}:{})}));
+    console.log(JSON.stringify({status:'listening',port:address.port,...(guestAuthority?{guestAuthorityPort:guestAuthority.port}:{}),...(guestAddress&&typeof guestAddress!=='string'?{guestPort:guestAddress.port}:{})}));
     const limiter = new AccountRateLimiter(pool, config.rateKey); let pruning = false;
     cleanup = setInterval(async () => {
       if (pruning || stopRequested) return;

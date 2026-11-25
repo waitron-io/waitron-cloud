@@ -47,7 +47,7 @@ test('a test owner can block a live menu before any hosted copy exists', async (
   const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
   const options={pool:f.db.pool,outbox:f.db.outbox,planMode:'test-venue-levels' as const,
    config:{portalOrigin:origin,production:false,rateKey:f.db.rateKey,trustedProxyIps:[]}};
-  const app=createAccountApp({...options,liveGuestMenu:true});
+  const app=createAccountApp({...options,liveGuestMenu:true,guestOrigin:''});
   const send=(path:string,body:object,csrfToken=session.csrfToken,target=app)=>target.request(origin+'/api/account/'+path,{
    method:'POST',headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+session.token,'x-csrf-token':csrfToken},
    body:JSON.stringify(body)
@@ -61,10 +61,12 @@ test('a test owner can block a live menu before any hosted copy exists', async (
   assert.equal((await send(takedown,{venueId:randomUUID()})).status,403);
   const stopped=await send(takedown,venue);
   assert.equal(stopped.status,200);
-  assert.equal((await stopped.json()).state,'blocked');
+  const blocked=await stopped.json();assert.equal(blocked.state,'blocked');assert.equal(blocked.url,null);
   const enabled=await send('guest-menu/enable',venue);
   assert.equal(enabled.status,200);
   assert.equal((await enabled.json()).state,'off');
+  await f.db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[f.venueId]);
+  assert.equal((await send(takedown,venue)).status,403);
  }finally{await f.db.close();}
 });
 

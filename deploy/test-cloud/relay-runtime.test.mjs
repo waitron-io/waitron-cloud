@@ -50,9 +50,9 @@ async function startAccount(db,context,environment={}){
   try{return await exited;}finally{clearTimeout(deadline);}
  };
  try{
-  const {port,guestPort}=await Promise.race([new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('\n'))resolve(JSON.parse(stdout.split('\n')[0]));})),
+  const {port,guestPort,guestAuthorityPort}=await Promise.race([new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('\n'))resolve(JSON.parse(stdout.split('\n')[0]));})),
    exited.then(code=>{throw Error(`account exited ${code}: ${stderr}`);}),new Promise((_,reject)=>setTimeout(()=>reject(Error('account startup deadline')),15000).unref())]);
-  return {server:{address:()=>({port})},guestPort,close,get stderr(){return stderr;}};
+  return {server:{address:()=>({port})},guestPort,guestAuthorityPort,close,get stderr(){return stderr;}};
  }catch(error){await close();throw error;}
 }
 function accountRequest(running,path,body,headers={}){
@@ -62,6 +62,21 @@ function accountRequest(running,path,body,headers={}){
   });req.once('error',reject);req.end(body&&JSON.stringify(body));
  });
 }
+
+test('the test account worker serves menu authority on a private listener when enabled',async t=>{
+ const {db,context}=await setup(t);
+ await prepareAccount(t,context);
+ for(const enabled of ['0','1']){
+  const running=await startAccount(db,context,{TEST_CLOUD_LIVE_GUEST_MENU:enabled});
+  try{
+   if(enabled==='0'){assert.equal(running.guestAuthorityPort,undefined);continue;}
+   assert.ok(running.guestAuthorityPort);
+   assert.notEqual(running.guestAuthorityPort,running.server.address().port);
+   const response=await fetch('http://127.0.0.1:'+running.guestAuthorityPort+'/guest-menu/'+randomUUID());
+   assert.equal(response.status,404);
+  }finally{await running.close();}
+ }
+});
 
 test('only the test Cloud action demo opens the venue console API',async t=>{
  const {db,context}=await setup(t),box=await connectedVenue(db,context.issuer,origin);

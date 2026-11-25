@@ -42,13 +42,16 @@ node --env-file=/private/test-cloud.env deploy/test-cloud/service-controls.mjs \
 ```
 
 The guest command returns the menu state and revision. Disabling blocks sharing
-for the venue, even before it has a saved menu. Enabling returns `off` and lets the
-box publish again. Production venues refuse the command.
+for the venue and removes its hosted copy. Enabling after disabling returns `off`.
+The box needs a fresh publication to serve another hosted copy. A live menu can
+pass the eligibility check as soon as you remove the block. Production venues
+refuse the command.
 
-On a venue-level test Cloud, set `TEST_CLOUD_LIVE_GUEST_MENU=1` when you start the
-account service to show the block control in the owner's portal even when there is
-no hosted copy. The same setting starts the eligibility check on the private
-Compose network. A public menu still needs the separate gateway and box setup.
+On the Amazon test layout, set `TEST_CLOUD_LIVE_GUEST_MENU=1` when you start the
+account service to show the block control in the owner’s portal even before the
+venue has a hosted copy. The same setting starts the eligibility check on the
+private Compose network. A public menu still needs the separate gateway and box
+setup.
 
 For the Amazon target, first qualify the [public HTTPS layout](test-cloud.md#configure-a-separate-https-test-name),
 including venue certificates and UDP 51820. Its service switch uses the same

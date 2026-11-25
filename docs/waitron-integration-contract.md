@@ -2913,8 +2913,9 @@ scripts, external assets, forms and framing, while allowing inline styles.
 
 Owner/CSRF POSTs to `/api/account/guest-menu/takedown` and `/enable` take `{venueId}`.
 They return `{venueId,version,url,revision,state,publication}` using the planned
-version-1 confirmation shape. Takedown commits `blocked` and removes the pages;
-Enable changes a blocked row to `off`. Both are idempotent. The reader rechecks the
+version-1 confirmation shape. The test live-menu control also returns `live:true`.
+It returns `url:null` when the hosted reader is off. Takedown commits `blocked` and
+removes the pages. Enable changes a blocked row to `off`. Both are idempotent. The reader rechecks the
 stored revision before releasing buffered HTML; bytes already sent cannot be
 recalled. It admits at most eight active requests and shares the existing bounded
 account connection pool. Database work may wait for that pool. The existing

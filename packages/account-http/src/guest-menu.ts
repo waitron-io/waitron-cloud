@@ -23,7 +23,7 @@ export async function guestMenuResponse(c:Context,options:{pool:Pool;origin:stri
    WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner AND ($3 OR v.environment='test') AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF m`,[body.venueId,session.accountId,!!options.guestOrigin]);
   if(!owner.rowCount)throw new AccountHttpError(403,'permission_denied');
   await writeGuestMenuBlocked(client,body.venueId!,action==='takedown');
-  const value=await guestMenuStatus(client,body.venueId!,options.guestOrigin??null);
+  const value=await guestMenuStatus(client,body.venueId!,options.guestOrigin||null);
   await resolveSession(client,token,{csrfToken,touch:false});
   return {venueId:body.venueId,...value,...(options.liveGuestMenu&&owner.rows[0].environment==='test'?{live:true}:{})};
  }));

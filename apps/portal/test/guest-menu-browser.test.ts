@@ -96,8 +96,10 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
 });
 
 for (const locale of ['en','es'] as const) for (const colorScheme of ['light','dark'] as const) for (const width of [390,1280]) {
- test(`live guest menu block ${locale} ${colorScheme} ${width}`,async()=>{
-  const portal=await startPortalFixture(undefined,undefined,undefined,undefined,false,{live:true});
+ const hostedOrigins=locale==='en'&&colorScheme==='light'&&width===390
+  ?[undefined,'https://menus.example.test']:[undefined];
+ for(const hostedOrigin of hostedOrigins) test(`live guest menu block ${locale} ${colorScheme} ${width}${hostedOrigin?' with the hosted reader':''}`,async()=>{
+  const portal=await startPortalFixture(undefined,undefined,undefined,undefined,false,{live:true,hostedOrigin});
   try{
    const f=await guestMenuFixture(portal.db);
    await startGuestMenuTrial(portal.db.pool,{...f.owner,venueId:f.venueId});
@@ -112,14 +114,15 @@ for (const locale of ['en','es'] as const) for (const colorScheme of ['light','d
    await page.goto(portal.origin+'/account/remote-access');
    await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
    const menu=page.getByRole('region',{name:c.guestMenuTitle,exact:true});
-   const stop=menu.getByRole('button',{name:c.guestMenuTakedown,exact:true});
+   const stop=menu.getByRole('button',{name:locale==='en'?'Block sharing':'Bloquear el menú',exact:true});
    await menu.getByText(c.guestMenuAllowed,{exact:true}).waitFor();
-   await stop.focus();
    assert.equal(await menu.getByRole('link',{name:c.guestMenuLink}).count(),0);
+   await stop.focus();
    await stop.press('Enter');
    const allow=menu.getByRole('button',{name:c.guestMenuEnable,exact:true});
    await allow.waitFor();
-   await menu.screenshot({path:new URL(`../dist/live-guest-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
+   assert.equal(await menu.getByText(c.guestMenuHelp,{exact:true}).count(),0);
+   await menu.screenshot({path:new URL(`../dist/live-guest-${locale}-${colorScheme}-${width}${hostedOrigin?'-hosted':''}.png`,import.meta.url).pathname});
    await allow.click();
    await stop.waitFor();
    await menu.getByText(c.guestMenuAllowed,{exact:true}).waitFor();
