@@ -35,10 +35,10 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${v?html`<p role="status">${v.revoked?c.remoteRevoked:v.connectedRequired?c.remoteConnectedRequired:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
   ${menu?html`<section aria-label=${c.guestMenuTitle}><h5>${c.guestMenuTitle}</h5>
-   <p role="status" tabindex="-1" id=${menuStatusId}>${menu.state==='blocked'?c.guestMenuBlocked:menuPlanRequired?c.guestMenuPlanRequired:menu.state==='current'?c.guestMenuCurrent:menu.live?c.guestMenuAllowed:c.guestMenuOff}</p>
+   <p role="status" tabindex="-1" id=${menuStatusId}>${menu.state==='blocked'?c.guestMenuBlocked:menuPlanRequired?c.guestMenuPlanRequired:menu.state==='current'&&menu.url?c.guestMenuCurrent:menu.live?c.guestMenuAllowed:c.guestMenuOff}</p>
    ${menuPlanRequired?html`${menu.state==='blocked'?html`<p>${c.guestMenuPlanRequired}</p>`:nothing}${canStart?trial:billingLink}`
     :menu.url&&(!menu.live||menu.state==='current')?html`<p><a href=${menu.url} target="_blank" rel="noopener noreferrer">${c.guestMenuLink}</a></p>`:nothing}
-   ${menu.publication&&!menuPlanRequired?html`<p><time datetime=${menu.publication.receivedAt}>${new Date(menu.publication.receivedAt).toLocaleString(app.locale)}</time></p>`:nothing}
+   ${menu.url&&menu.publication&&!menuPlanRequired?html`<p><time datetime=${menu.publication.receivedAt}>${new Date(menu.publication.receivedAt).toLocaleString(app.locale)}</time></p>`:nothing}
    ${menu.state==='off'&&!menu.live?nothing:html`<wt-button .disabled=${disabled} @click=${async()=>{
      const block=menu.state!=='blocked';
      await r.setGuestMenuBlocked(block);

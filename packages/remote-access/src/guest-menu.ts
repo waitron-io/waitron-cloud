@@ -70,13 +70,10 @@ export async function startGuestMenuAuthority(database:PoolConfig,host:string,po
   let status=404;
   if(req.method==='GET'&&path.startsWith('/guest-menu/')&&isUuid(id)){
    // The dedicated pool bounds the number of queries and the time spent waiting for a connection.
-   status=503;
-   if(pool.waitingCount<16){
-    try{
-     const current=await readGuestMenuRelease(pool,id,'test-venue-levels');
-     status=current?.eligible&&current.state!=='blocked'?204:404;
-    }catch{}
-   }
+   try{
+    const current=await readGuestMenuRelease(pool,id,'test-venue-levels');
+    status=current?.eligible&&current.state!=='blocked'?204:404;
+   }catch{status=503;}
   }
   if(!res.destroyed)res.writeHead(status,{'cache-control':'no-store'}).end();
  });

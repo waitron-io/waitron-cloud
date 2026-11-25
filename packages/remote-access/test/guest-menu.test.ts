@@ -62,7 +62,13 @@ test('the private menu read admits a connected trial without a hosted copy until
    assert.equal((await check(randomUUID())).status,404);
    assert.equal((await check(f.venueId)).status,404);
    await startGuestMenuTrial(f.db.pool,{...f.owner,venueId:f.venueId});
-   assert.equal((await check(f.venueId)).status,204);
+   let phones:Promise<Response>[]=[];
+   await transaction(f.db.pool,async client=>{
+    await client.query('LOCK TABLE guest_menus IN ACCESS EXCLUSIVE MODE');
+    phones=Array.from({length:24},()=>check(f.venueId));
+    await delay(100);
+   });
+   assert.deepEqual((await Promise.all(phones)).map(response=>response.status),Array(24).fill(204));
    await transaction(f.db.pool,c=>setGuestMenuBlocked(c,f.venueId,true,origin));
    assert.equal((await check(f.venueId)).status,404);
    await transaction(f.db.pool,c=>setGuestMenuBlocked(c,f.venueId,false,origin));

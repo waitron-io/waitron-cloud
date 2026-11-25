@@ -98,10 +98,12 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
 for (const locale of ['en','es'] as const) for (const colorScheme of ['light','dark'] as const) for (const width of [390,1280]) {
  const hostedOrigins=locale==='en'&&colorScheme==='light'&&width===390
   ?[undefined,'https://menus.example.test']:[undefined];
- for(const hostedOrigin of hostedOrigins) test(`live guest menu block ${locale} ${colorScheme} ${width}${hostedOrigin?' with the hosted reader':''}`,async()=>{
+ const unservedCopy=locale==='es'&&colorScheme==='light'&&width===390;
+ for(const hostedOrigin of hostedOrigins) test(`live guest menu block ${locale} ${colorScheme} ${width}${hostedOrigin?' with the hosted reader':unservedCopy?' with an unserved copy':''}`,async()=>{
   const portal=await startPortalFixture(undefined,undefined,undefined,undefined,false,{live:true,hostedOrigin});
   try{
    const f=await guestMenuFixture(portal.db);
+   if(unservedCopy)await f.seed();
    await startGuestMenuTrial(portal.db.pool,{...f.owner,venueId:f.venueId});
    const page=await portal.browser.newPage({locale,colorScheme,viewport:{width,height:900}});page.setDefaultTimeout(5000);
    const c=translations[locale];
