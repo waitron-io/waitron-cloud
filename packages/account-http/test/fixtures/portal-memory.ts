@@ -16,7 +16,9 @@ try {
   await writeFile(join(directory, 'index.html'), '<title>Cloud</title>');
   await writeFile(join(directory, 'app.css'), 'body{}');
   await writeFile(join(directory, 'app.js'), Buffer.alloc(size, 97));
+  await writeFile(join(directory, 'backup-download-worker.js'), '/* database worker */');
   const assets = await loadPortalAssets(directory);
+  const worker = portalResponse(new Request('http://localhost/backup-download-worker.js'), assets, true);
   global.gc!(); const before = process.memoryUsage().arrayBuffers;
   const responses = Array.from({length: 24}, () => portalResponse(new Request('http://localhost/app.js'), assets));
   global.gc!(); const allocated = process.memoryUsage().arrayBuffers - before;
@@ -34,6 +36,7 @@ try {
   const lengths=await Promise.all(readers.map(res=>new Promise<number>((resolve,reject)=>{
     let length=0;res.on('data',chunk=>{length+=chunk.length;});res.on('end',()=>resolve(length));res.on('error',reject);res.resume();
   })));
-  console.log(JSON.stringify({allocated,networkAllocated,lengths,size:bytes.byteLength,first:new Uint8Array(bytes)[0],statuses}));
+  console.log(JSON.stringify({allocated,networkAllocated,lengths,size:bytes.byteLength,first:new Uint8Array(bytes)[0],statuses,
+    worker: {status:worker.status, body:await worker.text(), policy:worker.headers.get('Content-Security-Policy'), cache:worker.headers.get('Cache-Control')}}));
   await Promise.all(responses.slice(1).map(r => r.body?.cancel()));
 } finally { requests.forEach(req=>req.destroy()); await running?.close(); await pool.end(); await rm(directory, {recursive: true, force: true}); }

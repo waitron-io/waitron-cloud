@@ -30,6 +30,7 @@ export function backupScreen(app:PortalApp,venueId:string){
     ${selected.protection?html`<p>${selected.protection==='recovery'?c.snapshotRecoveryHold:c.snapshotFallback}</p>`:nothing}`:nothing}
   <p class="help">${c.snapshotRetentionHelp}</p>
   ${!recover&&b.downloadable?html`<p>${c.snapshotLaterChanges}</p><div class="snapshot-actions">
+   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-database');}}>${c.snapshotDownloadDatabase}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download');}}>${c.snapshotDownload}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-key');}}>${c.snapshotDownloadKey}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>

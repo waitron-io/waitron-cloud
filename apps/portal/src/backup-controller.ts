@@ -1,5 +1,6 @@
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest} from './api.ts';
+import {downloadDatabase} from './backup-database-download.ts';
 import type {Copy} from './locale.ts';
 import type {BackupDownload,BackupPage} from './backup-types.ts';
 const downloadExtension = {'download':'backup.enc','download-key':'key','download-manifest':'manifest.json'};
@@ -33,9 +34,11 @@ export class BackupController {
   if(!this.#account||!venueId||!pointId||!this.downloadable||this.pending||this.#download||this.waiting)return;
   const transfer=new AbortController();this.#download=transfer;this.downloadError=undefined;this.#listError=undefined;this.#changed();
   try{
-   const result=await this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal);
+   const result=await (action==='download-database'?downloadDatabase(venueId,pointId,transfer.signal)
+    :this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal));
    if(transfer.signal.aborted)return;
    if(result.ok){
+    if(action==='download-database'||!result.value)return;
     const url=URL.createObjectURL(result.value),link=document.createElement('a');
     try{link.href=url;link.download=`waitron-backup-${pointId}.${downloadExtension[action]}`;link.click();}finally{URL.revokeObjectURL(url);}
    }else{
@@ -43,7 +46,8 @@ export class BackupController {
     if(result.status===401||result.code==='permission_denied'){this.page=undefined;this.selected=undefined;this.selectedSource=undefined;}
     this.downloadError=result.code==='proof_required'?'snapshotDownloadProof':result.code==='enrollment_required'?'pairEnrollment':
      result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):
-     result.code==='download_too_large'?'snapshotDownloadTooLarge':'snapshotDownloadUnavailable';
+     result.code==='download_too_large'?'snapshotDownloadTooLarge':
+     action==='download-database'?'snapshotDatabaseOpenFailed':'snapshotDownloadUnavailable';
     this.downloadProof=result.code==='proof_required'||result.code==='enrollment_required';
    }
   }finally{if(this.#download===transfer){this.#download=undefined;this.#changed();}}

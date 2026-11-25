@@ -27,7 +27,7 @@ export function turnstilePortalAssets(assets: PortalAssets, siteKey: string) {
 
 export async function loadPortalAssets(directory: string): Promise<PortalAssets> {
   const assets = new Map<string, {body: Uint8Array; contentType: string}>();
-  for (const [name, contentType] of [['index.html', 'text/html'], ['app.js', 'text/javascript'], ['app.css', 'text/css']] as const) {
+  for (const [name, contentType] of [['index.html', 'text/html'], ['app.js', 'text/javascript'], ['app.css', 'text/css'], ['backup-download-worker.js', 'text/javascript']] as const) {
     const body = await readFile(join(directory, name));
     if (!body.length || body.length > 4 * 1024 * 1024) throw new Error('Invalid portal build');
     assets.set(`/${name}`, {body, contentType: `${contentType}; charset=utf-8`});
@@ -83,7 +83,8 @@ export function portalResponse(request: Request, assets: PortalAssets, testBilli
   if (url.search && !pairingLink && !['/signup', '/reset-password'].includes(url.pathname)) return failure(400);
   if (!['GET', 'HEAD'].includes(request.method)) return failure(405);
   const document=documents.has(url.pathname)||operatorVenues&&url.pathname==='/operator/venues';
-  const key = document ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
+  const worker = url.pathname === '/backup-download-worker.js';
+  const key = document ? '/index.html' : worker || ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
   const showTurnstile = !!turnstile && (url.pathname === '/forgot-password' ||
     url.pathname === '/signup' && !url.searchParams.has('token'));
   const asset = key === '/index.html' && turnstile ? (showTurnstile ? turnstile.request : turnstile.standard) : assets.get(key);
@@ -93,6 +94,7 @@ export function portalResponse(request: Request, assets: PortalAssets, testBilli
     start(controller) { controller.enqueue(asset.body); controller.close(); },
   });
   return new Response(body, {headers: {
-    ...portalSecurityHeaders(testBillingMethods, showTurnstile), 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
+    ...(worker ? {...securityHeaders, 'Content-Security-Policy': "default-src 'none'; script-src 'self'; connect-src 'self'"}
+      : portalSecurityHeaders(testBillingMethods, showTurnstile)), 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
   }});
 }

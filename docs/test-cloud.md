@@ -1146,10 +1146,15 @@ implementation, complete integration proof and release gates pass.
 ### Save a verified backup while the test box stays online
 
 Sign in as the owner of a synthetic test venue. Open **View snapshots** and
-choose a verified snapshot. Select **Download backup**. If asked, confirm your
-sign-in and select **Download backup** again. Select **Download recovery key** and
-**Download backup manifest** for the same snapshot. Keep the matching key private
-so you can open the encrypted archive later. The manifest gives the capture time
+choose a verified snapshot. Select **Download database** to save the venue’s
+SQLite database. If asked, confirm your sign-in and select **Download database**
+again. Your browser checks and opens the encrypted copy on your computer. Keep the
+saved database private because it can contain staff and customer records.
+
+Select **Download backup**, **Download recovery key** and **Download backup
+manifest** to keep an encrypted copy of the same snapshot with its box state.
+Keep the matching key private so you can open the encrypted archive later. The
+manifest gives the capture time
 and SHA-256 checksum of the encrypted file. Later changes may be missing. After
 service ends, Backups reminds you to keep your fiscal records and check your copies
 while the downloads are open. This test download accepts archives up to 16 MiB.
@@ -1166,7 +1171,8 @@ using the [Amazon scratch settings](#rehearse-backup-on-the-amazon-test-cloud).
 Use a unique volume name and a separate empty directory for the worker to stage
 the encrypted archive. The worker and the saved-file check use the volume in turn.
 Load `postgres:18-alpine` and `axllent/mailpit:v1.31.1` in Docker first because
-the rehearsal starts with image pulls disabled.
+the rehearsal starts with image pulls disabled. Install Chromium for the browser step
+with `pnpm --dir apps/portal exec playwright install --with-deps chromium`.
 
 ```sh
 TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
@@ -1178,9 +1184,10 @@ TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
 ```
 
 The test compares the saved archive with the stored and downloaded checksums and opens it in a
-verifier with networking disabled. It checks the original box is still serving
-with the same installation after the download. It then ends service for that
-same synthetic venue and records a fixed cutoff 90 days after the service end.
+verifier with networking disabled. It also saves the selected SQLite database
+in Chromium and opens it to check its integrity. It checks the original box is
+still serving with the same installation after both downloads. It then ends
+service for that same synthetic venue and records a fixed cutoff 90 days later.
 The fixture sets the end in the past so the cutoff is about 90 seconds away.
 All three files match the saved copies before the cutoff. After the cutoff, all three
 requests return HTTP 410, the dates stay visible and the stored archive still
