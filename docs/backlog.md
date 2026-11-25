@@ -543,6 +543,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    bugs and status, country features with votes and comments, GitHub links, the operator
    console and common country routes, grant integration and customer-visible staff history. Joining country lists waits for a second country and an
    owner decision. Privacy, retention and qualified country support authority remain open.
+   Pending-action operator notices still need a production mail route.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 

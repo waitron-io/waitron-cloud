@@ -95,8 +95,10 @@ observed send/decryption failures; a crash can increase attempts without increas
 failures. Counters cover retained rows, not lifetime totals. `last_error` on a row is
 a fixed code; it may remain after a successful retry. `delivery_failed` records an
 unclassified transport error; `delivery_timeout` records a deadline/cancellation,
-`delivery_deferred` a temporary SMTP response, `delivery_rejected` a permanent
-rejection and `delivery_configuration` an authentication or TLS configuration failure.
+`delivery_deferred` a temporary SMTP response and `delivery_rejected` a permanent
+rejection. The worker also records `delivery_rejected` when the generic SMTP
+adapter refuses a pending-action operator notice before connecting.
+`delivery_configuration` covers authentication or TLS configuration failures.
 Configuration failures use the bounded retry policy while you repair the settings; `payload_unavailable` records a missing key or failed
 payload validation. `attempts_exhausted` is used when reclaiming an abandoned eighth
 attempt. After a normal eighth failure, `last_error` retains the observed failure
