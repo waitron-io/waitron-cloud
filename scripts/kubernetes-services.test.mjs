@@ -98,6 +98,19 @@ test('measured stops cover all three machines and the live roles before returnin
       changes.slice(0, 4), changes.slice(0, 5)]);
   });
 
+  await t.test('a single session activity request precedes each stop and its reply reaches the receipt', async () => {
+    changes.length = 0;
+    const stages = [], expiresAt = '2026-11-25T22:30:00.000Z';
+    const reply = {status: 200, expiresAt};
+    const legs = await run('b', publication, {stages, context: {probes: {async sessionActivity() {
+      stages.push('activity');
+      return reply;
+    }}}});
+    assert.deepEqual(stages, ['inventory', 'activity', 'observe', 'healthy:b', 'inventory', 'activity', 'observe', 'healthy:c',
+      'inventory', 'activity', 'observe', 'healthy:a']);
+    assert.deepEqual(legs.map(leg => leg.sessionBeforeStop), [reply, reply, reply]);
+  });
+
   await t.test('signed reservation evidence brackets only the database primary stop', async () => {
     changes.length = 0;
     const windows = [];
@@ -142,6 +155,7 @@ test('measured stops cover all three machines and the live roles before returnin
 });
 
 const coldRoles = {primary: 'b', gateway: 'a', operator: 'c', fluxSource: 'b', fluxApply: 'a'};
+const coldSession = {status: 200, expiresAt: '2026-11-25T22:30:00.000Z'};
 const lookupCommandError = fields => Object.assign(Error('synthetic command output'), fields);
 const kindLookupError = fields => Error('inventory command failed', {cause: lookupCommandError(fields)});
 for (const [name, routeStillResponding, placement, reason] of [
@@ -183,7 +197,8 @@ for (const [name, routeStillResponding, placement, reason] of [
         return ++inspectionChecks === 2;
       },
       probes: {
-        session: async () => {seen.push('account');}, remote: async () => {seen.push('routes');},
+        sessionActivity: async () => {seen.push('activity'); return coldSession;},
+        session: async () => {seen.push('account'); return coldSession;}, remote: async () => {seen.push('routes');},
         async inboxWitness() {
           seen.push('saved mail');
           return async () => {seen.push('read retained mail'); return true;};
@@ -217,11 +232,13 @@ for (const [name, routeStillResponding, placement, reason] of [
     } else {
       const result = await run;
       assert.deepEqual(result.outage, {account: 'ECONNREFUSED', staff: 'ECONNREFUSED', public: 'ECONNREFUSED', store: 'ECONNREFUSED'});
-      assert.deepEqual(seen, ['account', 'routes', 'store', 'saved mail', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
+      assert.deepEqual(seen, ['account', 'routes', 'store', 'saved mail', 'activity', 'stopped', 'confirmed', 'account outage', 'staff', 'public',
         'store outage', 'confirmed', 'restarted', 'data restored', 'retained row and new write', 'read retained mail', 'account', 'routes', 'store',
         'inspect', 'inspect', 'backup']);
       assert.equal(result.primary, 'original-copy');
       assert.equal(result.backup.pointId, 'new');
+      assert.deepEqual(result.sessionBeforeStop, coldSession);
+      assert.deepEqual(result.sessionAfterRestart, coldSession);
       assert.deepEqual(result.roles, placement ? undefined : coldRoles);
     }
   });
@@ -515,6 +532,9 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
     assert.equal(services.remote.sameTunnel, true);
     for (const leg of legs) {
       assert.ok(leg.offMs >= 360_000);
+      assert.equal(leg.sessionBeforeStop.status, 200);
+      assert.ok(Number.isFinite(Date.parse(leg.sessionBeforeStop.expiresAt)));
+      assert.deepEqual(leg.recovery.session.result, leg.sessionBeforeStop);
       for (const probe of ['session', 'remote', 'login', 'signup', 'backup']) {
         assert.ok(leg.recovery[probe].withinMs <= (probe === 'backup' ? 300_000 : 90_000));
         assert.ok(Number.isFinite(leg.recovery[probe].longestGapMs));
@@ -530,6 +550,9 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
       if (leg.roles.primary === leg.stopped) assert.ok(leg.reconciliation.publication.worker.uid);
     }
     assert.deepEqual(Object.keys(services.coldRestart.outage).sort(), ['account', 'public', 'staff', 'store']);
+    assert.equal(services.coldRestart.sessionBeforeStop?.status, 200);
+    assert.ok(Number.isFinite(Date.parse(services.coldRestart.sessionBeforeStop.expiresAt)));
+    assert.deepEqual(services.coldRestart.sessionAfterRestart, services.coldRestart.sessionBeforeStop);
     assert.match(services.coldRestart.primary, /^cloud-db-\d+$/);
     assert.equal(services.coldRestart.mailRetained, true);
     const {retainedPointId, pointId, status, childAbsent} = services.coldRestart.backup;

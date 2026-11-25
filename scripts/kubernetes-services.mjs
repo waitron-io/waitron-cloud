@@ -201,6 +201,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     let stopping, fault;
     const leg = new AbortController();
     const limit = AbortSignal.any([leg.signal, ...[signal].filter(Boolean)]);
+    const sessionBeforeStop = await probes?.sessionActivity?.(limit);
     const observation = observe({probes, holdMs, signal: limit, stopped: () => stopped.promise, replacement: () => stopped.promise,
       async reconcile() {
         const [result, mailRetained] = await Promise.all([
@@ -238,7 +239,7 @@ export async function measureServiceStops({nodes, inventory, stopNode, restore, 
     for (const role of uncovered) if (roles[role] === node) uncovered.delete(role);
     const rejoin = await healthy(node, signal);
     await checkReservations?.();
-    legs.push({...receipt, roles, rejoin});
+    legs.push({...receipt, roles, rejoin, ...(sessionBeforeStop && {sessionBeforeStop})});
     if (remaining.length && spaceSignup) {
       await spaceSignup(signal);
       signal?.throwIfAborted();
@@ -289,6 +290,7 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
   process.stderr.write('D621 all-machine stop inventory ' +
     JSON.stringify(roles ? {roles} : {unavailable: 'remote.stop_role_inventory', reason}) + '\n');
   const checkInbox = await probes.inboxWitness?.(signal);
+  const sessionBeforeStop = await probes.sessionActivity?.(signal);
   const api = await restartAll(async ({signal, confirmStopped}) => {
     await confirmStopped(signal);
     const endpoints = Object.entries({...probes.outage, store: storeOutage});
@@ -314,10 +316,12 @@ export async function measureServiceRestart({restartAll, inventory, probes, chec
   const mailRetained = await checkInbox?.(signal);
   const clientDeadline = AbortSignal.any([signal, AbortSignal.timeout(300_000)]);
   const started = performance.now();
-  await untilRemote(async limit => {await healthy(limit); return true;}, 300_000, clientDeadline, 'cold_services_after');
+  const [sessionAfterRestart] = await untilRemote(healthy, 300_000, clientDeadline, 'cold_services_after');
   await untilRemote(inspectionReady, 300_000, clientDeadline, 'cold_inspection_ready');
   const backup = await probes.backupAfterRestart(clientDeadline);
-  return {...api, ...data, roles, backup, ...(mailRetained && {mailRetained}), clientRecoveryMs: Math.round(performance.now() - started)};
+  return {...api, ...data, roles, backup, ...(mailRetained && {mailRetained}),
+    ...(sessionBeforeStop && {sessionBeforeStop}), ...(sessionAfterRestart && {sessionAfterRestart}),
+    clientRecoveryMs: Math.round(performance.now() - started)};
 }
 
 export async function repairReturningStore({name, nodes, kindOutside, store, run, repair, signal,

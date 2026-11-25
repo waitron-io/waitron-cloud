@@ -1454,9 +1454,12 @@ All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
 holds. Its 20-request sign-up allowance covers all three stops within one
 hour. The next stop can begin after the returning machine passes its health
-checks. If the existing account session fails during an individual stop,
-look for `D621 session probe` near the failure in stderr. Each line gives the
-time, elapsed milliseconds, any HTTP status and the error code or class.
+checks. Before each stop, including the full restart, the rehearsal sends one
+activity request on the original account session and records the deadline in
+the receipt. Recovery checks read that same session without renewing it.
+If a check fails, look for `D621 session probe` near the failure in stderr.
+Each line gives the time, elapsed milliseconds, last known session deadline,
+HTTP status when available, and any recognized public error code or transport error.
 The account proxy names its Kubernetes node when it sends response headers.
 The node is reported as unknown if no valid header arrives. An early
 `AbortError` can occur when the observer ends the stop for another reason
