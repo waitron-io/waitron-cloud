@@ -1,6 +1,9 @@
 # Customer security audit history
 
-Waitron Cloud records the customer security decisions that change a venue's connection or recovery authority. The event and the protected action share one PostgreSQL transaction: both commit, or neither does.
+Waitron Cloud records customer decisions about connection and recovery authority,
+and the operator's venue views and address suggestion changes in the LAN action
+demo. A protected action and its event share a PostgreSQL transaction, so they
+commit together.
 
 This operational trail covers the events below. Assess compliance and retention
 requirements separately.
@@ -32,7 +35,14 @@ text stay out of the history. `venue.address_lookup_stopped` and
 `venue.address_lookup_allowed` record changes. Setting a venue to its current
 state records a view for the venue name in the reply.
 
-The schema has no arbitrary details or payload field. Matching codes, session tokens, public keys, leases, storage credentials, recovery keys and raw errors therefore have nowhere to be copied. PostgreSQL rejects row updates and row deletes. Repeating a successful action returns the original event; reusing its source identity with different event fields fails closed. Credential-renewal sources combine the installation and its installation-scoped operation ID, so another installation may use the same operation UUID safely.
+The schema has no arbitrary details or payload field. Matching codes, session
+tokens, public keys, leases, storage credentials, recovery keys and raw errors
+therefore have nowhere to be copied. PostgreSQL rejects row updates and row
+deletes. Repeating an action with the same source identity and event fields
+returns the original event. If the fields differ, Cloud refuses it. Each venue
+event gets a fresh source identity. Credential-renewal sources combine the
+installation and its installation-scoped operation ID, so another installation
+may use the same operation UUID safely.
 
 ## Read or export a page
 

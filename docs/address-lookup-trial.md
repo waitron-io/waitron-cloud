@@ -175,9 +175,20 @@ you distinguish venues with the same name.
 Use this fallback outside the LAN demo or when more than ten venues share
 the exact name. A cap email in the LAN demo can also open the affected venue directly.
 
-Connect to your test Cloud account database. These commands leave no entry in
-the operator history. Replace the example ID with the test venue's ID in each
-command. Use the first command to stop lookup.
+Connect to your test Cloud account database. If you need the venue ID, replace
+`Café Lunar` with the name as saved and look it up. Compare the country and
+organisation ID when several venues share the name.
+
+```sql
+SELECT v.id, v.display_name, b.country_code, v.organisation_id
+FROM venues v
+LEFT JOIN legal_businesses b ON b.id = v.legal_business_id AND b.organisation_id = v.organisation_id
+WHERE v.environment = 'test' AND lower(v.display_name) = lower('Café Lunar')
+ORDER BY b.country_code, v.organisation_id, v.id;
+```
+
+These commands leave no entry in the operator history. Replace the example ID
+with the test venue's ID in each command. Use the first command to stop lookup.
 
 ```sql
 INSERT INTO address_lookup_stopped_venues (venue_id)

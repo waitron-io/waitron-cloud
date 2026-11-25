@@ -23,7 +23,7 @@ export function operatorVenuesScreen(app:PortalApp){
     <p role="status">${venue.stopped?c.operatorSuggestionsStopped:c.operatorSuggestionsAllowed}</p>
     <wt-button id="operator-venue-switch" .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.setOperatorVenue(venue);}}>
      ${venue.stopped?c.operatorAllowSuggestions:c.operatorStopSuggestions}</wt-button>
-    ${(app.actionProof.loaded||app.actionProof.pending)&&!app.actionProof.status?.freshUntil?accountActionProofScreen(app,2):nothing}`:
+    ${app.actionProof.loaded&&!app.actionProof.status?.freshUntil?accountActionProofScreen(app,2):nothing}`:
    controller.pending||!error?html`<wt-spinner .label=${c.checking}></wt-spinner>`:
     html`<wt-button .disabled=${disabled} @click=${()=>{void controller.read(id);}}>${c.retry}</wt-button>`}
    <nav>${find}</nav>`;
