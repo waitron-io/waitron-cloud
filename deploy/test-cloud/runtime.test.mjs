@@ -268,6 +268,7 @@ test('demoModeOffByDefault: only an explicit LAN demo passes the operator to the
  assert.match(testRuntimeEnvironment('action-demo',config,enabled).DATABASE_URL,/postgres:5432/);
  assert.equal(testRuntimeEnvironment('action-demo',config,enabled).CLOUD_ACTION_DEMO,'1');
  assert.equal(testRuntimeEnvironment('account',config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,operator);
+ assert.equal(testRuntimeEnvironment('account',config,{...enabled,TEST_CLOUD_AMAZON:'1'}).TEST_CLOUD_AMAZON,'1');
  for(const role of ['email','monitor','storage'])assert.equal(testRuntimeEnvironment(role,config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
  assert.throws(()=>testRuntimeEnvironment('account',config,{...enabled,NODE_ENV:'production'}),/demo/);
 });

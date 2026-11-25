@@ -1,7 +1,7 @@
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 export type CloudActionRequest={outcome?:{status:'confirmed'}|null;dispatchStartedAt?:string|null;id:string;version:number;occurrence:string;actionId:string;policy:'ask-first'|'act-and-report';cell:string;target:string;proposal:string;evidence:string;state:'pending'|'approved'|'rejected'|'superseded';effectId:string;available:false;createdAt:string;decidedAt:string|null;approvalExpiresAt:string|null;events:{kind:string;at:string;noticeStatus?:'pending'|'processing'|'sent'|'expired'|'cancelled'|'failed'|'unknown'}[]};
-export type CloudActionView={actions:{id:string;policy:'ask-first'|'act-and-report';available:false}[];requests:CloudActionRequest[]};
+export type CloudActionView={actions:{id:string;policy:'ask-first'|'act-and-report';available:false}[];requests:CloudActionRequest[];operatorVenues?:true};
 const emptyDraft=()=>({occurrence:'',actionId:'machine_drain',cell:'',target:'',proposal:'',evidence:''});
 export class CloudActionsController{
  view:CloudActionView|undefined;pending=false;loadAttempted=false;error:keyof Copy|undefined;draft=emptyDraft();

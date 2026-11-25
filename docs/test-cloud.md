@@ -546,7 +546,9 @@ The numbers here are the illustrative test settings from the
 ```
 
 One million millionths make one euro. Prices are per provider call. The day
-and month limits start at Pacific midnight. To stop lookups, remove the settings
+and month limits start at Pacific midnight. To [stop lookups for one venue](address-lookup-trial.md#stop-or-resume-a-test-venue),
+use its page in the LAN action demo or the database commands in other test
+deployments. To stop lookups for every venue, remove the settings
 and rerun the deployment driver’s `up` command so it recreates the account process.
 Use `config --quiet` when checking the Compose configuration with the key set.
 

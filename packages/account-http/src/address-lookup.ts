@@ -76,7 +76,7 @@ function httpError(error:unknown):never{
  throw new AccountHttpError(429,'rate_limited',60);
 }
 
-export async function warnAboutAddressCap(pool:Pool,limiter:AccountRateLimiter,outbox:EmailOutbox,operator:string|undefined,cap:AddressLookupCap,venueId:string){
+export async function warnAboutAddressCap(pool:Pool,limiter:AccountRateLimiter,outbox:EmailOutbox,operator:string|undefined,cap:AddressLookupCap,venueId:string,operatorVenues=false){
  try{
   const first=await transaction(pool,async client=>{
    const claim=await limiter.consume([{scope:'address-lookup-cap-warning',subject:JSON.stringify([cap.bucket,cap.scope,cap.period]),limit:1,windowSeconds:32*86400}],client);
@@ -84,7 +84,7 @@ export async function warnAboutAddressCap(pool:Pool,limiter:AccountRateLimiter,o
    const recipient=operator?await operatorNoticeRecipient(client,operator):undefined;
    if(operator&&recipient)await outbox.enqueue(client,'operator_notice',{
     email:recipient.email,locale:recipient.locale??'en',event:'address_cap',accountId:operator,bucket:cap.bucket,period:cap.period,
-    ...(cap.scope==='*'?{}:{venueId}),
+    ...(cap.scope==='*'?{}:{venueId,...(operatorVenues?{operatorVenueLink:true}:{})}),
    });
    return true;
   });

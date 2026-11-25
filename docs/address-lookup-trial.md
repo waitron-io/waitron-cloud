@@ -160,9 +160,17 @@ key are missing, the box loses authority, or admission fails.
 
 ## Stop or resume a test venue
 
-Connect to the account database for your test Cloud deployment, including the
-LAN action demo. Replace the example ID with the test venue's ID in each
-command. Use this command to stop lookup.
+In the LAN action demo, sign in as the configured operator and open
+**Cloud actions → Find a venue**. Search by name, choose the venue, and select
+**Stop address suggestions** or **Allow address suggestions**. Verify your
+sign-in when prompted. The page records which venues you view and each change
+you make. Allowing suggestions keeps the provider settings and usage limits in force.
+
+### Database fallback outside the LAN demo
+
+Connect to your test Cloud account database. These commands leave no entry in
+the operator history. Replace the example ID with the test venue's ID in each
+command. Use the first command to stop lookup.
 
 ```sql
 INSERT INTO address_lookup_stopped_venues (venue_id)
@@ -199,9 +207,11 @@ account log. It also queues a warning if the operator is configured and verified
 at that time. If a cap for a given scope already refused a call this period,
 setting up the operator later leaves that particular warning until next period.
 Shared caps cover either all lookups or all free accounts.
-An own-cap warning includes the affected venue ID. A venue that stops exactly
-at its limit sends no warning. The LAN action demo captures the email in its
-private inbox. A deployment needs an operator and a qualified relay to send it.
+In the LAN action demo, a cap warning for an individual venue links to that
+venue's page. Outside the demo it includes the venue ID for the database
+fallback. A venue that stops exactly at its limit sends no warning. The demo
+captures the email in its private inbox. A deployment needs an operator and a
+qualified relay to send it.
 
 The account worker checks for old call records every minute. It deletes up to
 1,000 per pass once they belong to a previous Pacific calendar month and are

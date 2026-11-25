@@ -85,7 +85,7 @@ export class EmailOutbox {
         content = message.event==='signup_volume'
           ? {email, accountId, event:message.event, day:message.day, threshold:message.threshold}
           : {email, accountId, event:message.event, bucket:message.bucket, period:message.period,
-            ...(message.venueId?{venueId:message.venueId}:{})};
+            ...(message.venueId?{venueId:message.venueId}:{}),...(message.operatorVenueLink?{operatorVenueLink:true}:{})};
       }
       expiresAt = (await client.query("SELECT clock_timestamp() + interval '7 days' AS expiry")).rows[0].expiry;
     } else {

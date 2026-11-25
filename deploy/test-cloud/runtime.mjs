@@ -21,6 +21,7 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(allowances&&['account','translation'].includes(role)){result.CLOUD_TEST_ALLOWANCES='1';result.CLOUD_ALLOWANCE_CALENDAR=allowances.calendar;}
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';
  if(['account','action-demo'].includes(role)&&demo){result.CLOUD_ACTION_DEMO='1';result.CLOUD_ACTION_DEMO_DIR=environment.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo';}
+ if(role==='account'&&demo&&environment.TEST_CLOUD_AMAZON==='1')result.TEST_CLOUD_AMAZON='1';
  if(role==='account'){delete result.CLOUD_LOCAL_REQUEST_METRICS;result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
  if(role==='account'&&environment.NODE_ENV!=='production'&&environment.CLOUD_ADDRESS_LOOKUP_SETTINGS&&environment.GOOGLE_MAPS_SERVER_KEY){
   result.CLOUD_ADDRESS_LOOKUP_SETTINGS=environment.CLOUD_ADDRESS_LOOKUP_SETTINGS;

@@ -51,12 +51,14 @@ export interface AddressCapNotice extends AccountNotification {
   bucket:AddressLookupCap['bucket'];
   period:string;
   venueId?:string;
+  operatorVenueLink?:true;
 }
 
 export function validAddressCapNotice(message:AccountNotification):message is AddressCapNotice {
   if(!('event' in message)||message.event!=='address_cap'
     ||!('accountId' in message)||typeof message.accountId!=='string'||!noticeId.test(message.accountId)
-    ||!('bucket' in message)||!('period' in message)||typeof message.period!=='string')return false;
+    ||!('bucket' in message)||!('period' in message)||typeof message.period!=='string'
+    ||'operatorVenueLink' in message&&(message.operatorVenueLink!==true||!('venueId' in message)))return false;
   switch(message.bucket){
     case 'paid_venue_month':
     case 'free_account_month':

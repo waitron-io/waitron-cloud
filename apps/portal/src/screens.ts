@@ -4,6 +4,7 @@ import {accountBusinessesScreen} from './account-businesses-screen.ts';
 import {ownerRecoveryScreen} from './owner-recovery-screen.ts';
 import {ownerTransferScreen} from './owner-transfer-screen.ts';
 import {cloudActionsScreen} from './cloud-actions-screen.ts';
+import {operatorVenuesScreen} from './operator-venues-screen.ts';
 import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {billingScreen} from './billing-screen.ts';
 import {authenticatorAccountScreen,authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
@@ -85,6 +86,7 @@ export function screen(app: PortalApp) {
     <wt-form-actions>${hasSetupMethod ? link('/login', c.login) : nothing}<wt-button .disabled=${app.logoutDisabled}
       @click=${() => {void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
   else if(app.path==='/operator/actions')content=cloudActionsScreen(app);
+  else if(app.path==='/operator/venues')content=operatorVenuesScreen(app);
   else if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
   else if (app.path === '/login' && app.factorCodes.length) content = authenticatorCodesScreen(app);
@@ -129,7 +131,7 @@ export function screen(app: PortalApp) {
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>
-    ${accountNav}<main><wt-card><h1 tabindex="-1">${app.title()}</h1>
+    ${accountNav}<main><wt-card><h1 class=${app.path==='/operator/venues'?'venue-id':nothing} tabindex="-1">${app.title()}</h1>
       ${receiveBusiness ? html`<p>${c.receiveBusinessScope}</p>
         ${state.kind === 'authenticated' ? html`<nav>${link('/account', c.accountLink)}</nav>`
           : html`<p>${c.receiveBusinessSignup}</p>

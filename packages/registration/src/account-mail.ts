@@ -41,6 +41,11 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
     if(validAddressCapNotice(message)){
       const subject=locale==='es'?'Waitron Cloud: límite de búsqueda de direcciones':'Waitron Cloud: address lookup cap';
       const detail=`${addressCapLabels[locale][message.bucket]} · ${message.period} (${locale==='es'?'hora del Pacífico':'Pacific time'})`;
+      if(message.operatorVenueLink&&message.venueId){
+        const link=new URL('/operator/venues',origin);
+        link.hash=new URLSearchParams({venue:message.venueId,lang:locale}).toString();
+        return {subject,text:`${detail}\n${locale==='es'?'Abrir el local':'Open the venue'}\n${link.href}`};
+      }
       const venue=message.venueId?`\n${locale==='es'?'ID del local':'Venue ID'}: ${message.venueId}`:'';
       return {subject,text:detail+venue};
     }
