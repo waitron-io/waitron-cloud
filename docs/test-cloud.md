@@ -1150,9 +1150,12 @@ choose a verified snapshot. Select **Download backup**. If asked, confirm your
 sign-in and select **Download backup** again. Select **Download recovery key** and
 **Download backup manifest** for the same snapshot. Keep the matching key private
 so you can open the encrypted archive later. The manifest gives the capture time
-and SHA-256 checksum of the encrypted file. Later changes may be missing. Download
-and check your copies so you can keep your fiscal records. This test download
-accepts archives up to 16 MiB.
+and SHA-256 checksum of the encrypted file. Later changes may be missing. After
+service ends, Backups reminds you to keep your fiscal records and check your copies
+while the downloads are open. This test download accepts archives up to 16 MiB.
+
+Run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
+first value in the output with `archiveSha256` in the manifest to check the saved file.
 Actual venue exit still needs the rest of the return and deletion process.
 
 Use the disposable Cloud image and a verifier built from Waitron revision

@@ -39,10 +39,11 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   const saveManifest=page.getByRole('button',{name:locale==='en'?'Download backup manifest':'Descargar manifiesto de la copia',exact:true});
   const warning=page.getByText(locale==='en'?'You are now responsible for keeping your fiscal records. Download and check your copies.':'Ahora debes conservar tus registros fiscales. Descarga y comprueba tus copias.',{exact:true});
   assert.equal(await saveManifest.count(),0);
+  let serviceEnded=false;
   let expired=false;
   const flag=async(route:import('playwright').Route)=>{
    const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),
-    exitRecovery:{effectiveEndAt,deadlineAt,expired},...(expired?{}:{exitDownloadAvailable:true})}});
+    ...(serviceEnded?{exitRecovery:{effectiveEndAt,deadlineAt,expired}}:{}),...(expired?{}:{exitDownloadAvailable:true})}});
   };
   const checkDates=async()=>{
    for(const [label,instant] of [[endedLabel,effectiveEndAt],[deadlineLabel,deadlineAt]] as const){
@@ -76,9 +77,15 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    });
   }
   await page.getByRole('button',{name:refresh,exact:true}).click();
-  await choices.selectOption(verifiedId);
+  await saveManifest.waitFor();
+  assert.equal(await warning.count(),0);
+  serviceEnded=true;
+  await page.getByRole('button',{name:refresh,exact:true}).click();
   await checkDates();assert.equal(await ended.count(),0);
+  await choices.selectOption({index:0});
+  assert.equal(await saveManifest.count(),0);
   await warning.waitFor();
+  await choices.selectOption(verifiedId);
   await page.getByText(locale==='en'?'Later changes may be missing.':'Puede que falten cambios posteriores.',{exact:true}).waitFor();
   await captureWindow('open');
   assert.deepEqual(page.viewportSize(),viewport);
@@ -99,6 +106,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await ended.waitFor();await checkDates();
   assert.equal(await saveArchive.count(),0);assert.equal(await saveKey.count(),0);
   assert.equal(await saveManifest.count(),0);
+  assert.equal(await warning.count(),0);
   await captureWindow('ended');
   await page.unroute('**/api/account/backups/list',flag);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:refresh,exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await choices.count(),0);

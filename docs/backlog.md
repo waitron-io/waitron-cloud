@@ -314,8 +314,9 @@ best guess and ask for confirmation from the specialist later”. The
 record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
 covers a verified backup, key and checksum manifest through the fixed 90-day deadline in a
-disposable owner-only rehearsal. The support and machine-key work in slices 6–7 still gates
-real venue exit.
+disposable owner-only rehearsal. Real venue exit still needs the
+[support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
+and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).
 Real venue exit still needs a service-end action and full return with a
 [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Read-only use, restore limits, resubscription, sealing and deletion remain part of the

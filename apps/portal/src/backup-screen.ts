@@ -14,7 +14,7 @@ export function backupScreen(app:PortalApp,venueId:string){
   <p>${c.snapshotPurpose}</p>${recover?nothing:html`<p>${c.recoveryUnavailable}</p>`}
   ${exit?html`<dl><dt>${c.snapshotServiceEnded}</dt><dd><time datetime=${exit.effectiveEndAt}>${formatDateTime(exit.effectiveEndAt,app.locale,'UTC')}</time></dd>
    <dt>${c.snapshotDownloadDeadline}</dt><dd><time datetime=${exit.deadlineAt}>${formatDateTime(exit.deadlineAt,app.locale,'UTC')}</time></dd></dl>
-   ${exit.expired?html`<p role="status">${c.snapshotDownloadsEnded}</p>`:nothing}`:nothing}
+   ${exit.expired?html`<p role="status">${c.snapshotDownloadsEnded}</p>`:html`<p>${c.snapshotFiscalWarning}</p>`}`:nothing}
   ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}${permissionActions(app,b.error)}
   ${b.pending||b.downloading?html`<p role="status">${c.wait}</p>`:nothing}
   ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}
@@ -29,7 +29,7 @@ export function backupScreen(app:PortalApp,venueId:string){
     <p>${selected.verification==='verified'?c.snapshotDataChecked:selected.verification==='failed'?c.snapshotIntegrityFailed:c.snapshotCheckUnavailable}</p>
     ${selected.protection?html`<p>${selected.protection==='recovery'?c.snapshotRecoveryHold:c.snapshotFallback}</p>`:nothing}`:nothing}
   <p class="help">${c.snapshotRetentionHelp}</p>
-  ${!recover&&b.downloadable?html`<p>${c.snapshotLaterChanges}</p><p>${c.snapshotFiscalWarning}</p><div class="snapshot-actions">
+  ${!recover&&b.downloadable?html`<p>${c.snapshotLaterChanges}</p><div class="snapshot-actions">
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download');}}>${c.snapshotDownload}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-key');}}>${c.snapshotDownloadKey}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>

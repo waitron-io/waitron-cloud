@@ -52,7 +52,7 @@ function fixture(t: TestContext) {
   return {controller, replies, requests, changes: () => changes};
 }
 
-test('manifest transport accepts a small JSON attachment and refuses other replies',async t=>{
+test('manifest transport requires the expected media type and a nonempty bounded body',async t=>{
   const f=fixture(t),body={archiveManifestVersion:1,capturedAt:stamp,archiveSha256:'a'.repeat(64),laterChanges:'unknown'};
   const request=()=>accountRequest<Blob>('/backups/download-manifest',{venueId,pointId});
   f.replies.push({body,contentType:'application/json'});
