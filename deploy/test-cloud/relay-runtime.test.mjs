@@ -63,6 +63,27 @@ function accountRequest(running,path,body,headers={}){
  });
 }
 
+test('the test Cloud account worker serves signed address availability only with settings and key',async t=>{
+ const {db,context}=await setup(t),box=await connectedVenue(db,context.issuer,origin);
+ await prepareAccount(t,context);
+ const cap={freeSuggestions:500,freeValidations:100,limitMicros:1000000};
+ const CLOUD_ADDRESS_LOOKUP_SETTINGS=JSON.stringify({environment:'test',suggestionMicros:3113,validationMicros:18700,
+  paidVenueMonth:{suggestions:500,validations:100},freeAccountMonth:{suggestions:100,validations:20},
+  cloudDay:cap,cloudMonth:cap,freeDay:cap,freeMonth:cap});
+ const GOOGLE_MAPS_SERVER_KEY='synthetic-google-key';
+ for(const [settings,expected] of [[{CLOUD_ADDRESS_LOOKUP_SETTINGS},503],[{GOOGLE_MAPS_SERVER_KEY},503],
+  [{CLOUD_ADDRESS_LOOKUP_SETTINGS,GOOGLE_MAPS_SERVER_KEY},200]]){
+  const running=await startAccount(db,context,settings);
+  try{
+   const proof=box.proof('address-lookup',{version:1,kind:'available'},randomUUID(),box.lease);
+   const reply=await accountRequest(running,'/api/installations/address-lookup',proof);
+   assert.equal(reply.status,expected,JSON.stringify(reply.body));
+   assert.deepEqual(reply.body,expected===200?{available:true}:{error:'temporarily_unavailable'});
+  }finally{await running.close();}
+ }
+ assert.equal((await db.pool.query('SELECT count(*)::int AS calls FROM address_lookup_calls')).rows[0].calls,0);
+});
+
 test('the test Cloud account worker lets an allowlisted owner start Connected before automatic setup',async t=>{
  const {db,context}=await setup(t);
  const box=await connectedVenue(db,context.issuer,origin),session=await transaction(db.pool,c=>createSession(c,box.accountId));

@@ -1,7 +1,7 @@
 import {validateHeaderValue} from 'node:http';
 
-type SuggestInput={query:string;language:'es'|'en';sessionToken:string};
-type ValidationInput={selectedText:string;sessionToken:string};
+type SuggestInput={query:string;language:'es'|'en'};
+type ValidationInput={selectedText:string};
 type ErrorCode='invalid_input'|'timeout'|'cancelled'|'rate_limited'|'refused'|'unavailable'|'malformed';
 export class AddressLookupError extends Error{
  readonly code:ErrorCode;readonly dispatched:boolean;
@@ -17,10 +17,9 @@ function text(value:unknown):string{
  if(typeof value!=='string')fail('malformed',true);
  return value;
 }
-export function checkInput(value:unknown,token:unknown,validation=false){
+export function checkInput(value:unknown,validation=false){
  if(typeof value!=='string'||!value.trim()||Buffer.byteLength(value,'utf8')>512
-  ||(validation&&Array.from(value).length+2>280)
-  ||typeof token!=='string'||!/^[-_A-Za-z0-9]{1,36}$/.test(token))fail('invalid_input');
+  ||(validation&&Array.from(value).length+2>280))fail('invalid_input');
 }
 function draft(value:unknown){
  const address=record(record(record(value).result).address),postal=record(address.postalAddress);
@@ -49,9 +48,6 @@ function draft(value:unknown){
   province:components.get('administrative_area_level_2')||text(postal.administrativeArea),countryCode:'ES' as const,
  }};
 }
-
-// This module has no startup or package-index wiring: admission must reserve before calling it.
-export const googleAddressProvider=Symbol('google-address-provider');
 
 export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof fetch}){
  if(!options||typeof options.apiKey!=='string'||!options.apiKey.trim()||typeof options.fetcher!=='function')fail('invalid_input');
@@ -89,9 +85,8 @@ export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof 
   }
  }
  return {
-  [googleAddressProvider]:true as const,
   async suggest(input:SuggestInput,signal?:AbortSignal){
-   checkInput(input?.query,input?.sessionToken);
+   checkInput(input?.query);
    if(!['es','en'].includes(input.language))fail('invalid_input');
    const reply=record(await request('https://places.googleapis.com/v1/places:autocomplete',{
     input:input.query,includedRegionCodes:['es'],languageCode:input.language,
@@ -106,7 +101,7 @@ export function createGoogleAddressClient(options:{apiKey:string;fetcher:typeof 
    return {provider:'google' as const,candidates};
   },
   async validate(input:ValidationInput,signal?:AbortSignal){
-   checkInput(input?.selectedText,input?.sessionToken,true);
+   checkInput(input?.selectedText,true);
    return draft(await request('https://addressvalidation.googleapis.com/v1:validateAddress',{
     address:{regionCode:'ES',addressLines:[input.selectedText]},
    },signal));

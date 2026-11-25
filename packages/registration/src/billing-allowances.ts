@@ -43,7 +43,7 @@ export class AllowanceConfigStore{
  }
  async effective(month:CivilDate):Promise<AllowanceVersion>{return transaction(this.pool,client=>readAllowanceVersion(client,month));}
 }
-async function requireTransaction(client:PoolClient):Promise<void>{
+export async function requireAllowanceTransaction(client:PoolClient):Promise<void>{
  try{await client.query('SAVEPOINT billing_allowance_transaction');}catch(error){if((error as {code?:string}).code==='25P01')fail('invalid_allowance_input');throw error;}
  await client.query('RELEASE SAVEPOINT billing_allowance_transaction');
 }
@@ -57,24 +57,32 @@ async function lock(client:PoolClient,key:string):Promise<void>{await client.que
 async function day(client:PoolClient):Promise<CivilDate>{return (await client.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0].day;}
 
 // The caller keeps these locks through the service write; no allowance is customer authority.
-export async function reserveAllowance(client:PoolClient,input:Input):Promise<AllowanceReservation>{
- validateInput(input);await requireTransaction(client);
+export async function lockAllowanceScope(client:PoolClient,input:Pick<Input,'accountId'|'venueId'>,options?:{allowMissingBusiness:true}){
  if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[input.accountId])).rowCount)fail('allowance_scope_not_found');
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[input.accountId])).rowCount)fail('allowance_scope_not_found');
- const candidate=(await client.query('SELECT organisation_id,legal_business_id FROM venues WHERE id=$1',[input.venueId])).rows[0];
+ const candidate=(await client.query<{organisation_id:string;legal_business_id:string}>('SELECT organisation_id,legal_business_id FROM venues WHERE id=$1',[input.venueId])).rows[0];
  if(!candidate)fail('allowance_scope_not_found');
  const args=[candidate.organisation_id,candidate.legal_business_id];
  if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[input.accountId,args[0]])).rowCount)fail('allowance_scope_not_found');
  await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[args[0]]);
  if(!(await client.query('SELECT id FROM legal_businesses WHERE organisation_id=$1 AND id=$2 FOR SHARE',args)).rowCount)fail('allowance_scope_not_found');
- const business=(await client.query('SELECT current_method_id FROM billing_businesses WHERE organisation_id=$1 AND legal_business_id=$2 FOR SHARE',args)).rows[0];
- if(!business)fail('allowance_scope_not_found');
+ const business=(await client.query<{current_method_id:string|null}>('SELECT current_method_id FROM billing_businesses WHERE organisation_id=$1 AND legal_business_id=$2 FOR SHARE',args)).rows[0];
+ if(!business&&!options?.allowMissingBusiness)fail('allowance_scope_not_found');
  const venue=(await client.query("SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND legal_business_id=$3 AND environment='test' FOR NO KEY UPDATE",[input.venueId,...args])).rows[0];
  if(!venue)fail('allowance_scope_not_found');
  await client.query('SELECT venue_id FROM billing_service_authority WHERE venue_id=$1 FOR SHARE',[input.venueId]);
+ return {scope:{organisationId:candidate.organisation_id,legalBusinessId:candidate.legal_business_id},business};
+}
+export async function lockAllowanceInstallation(client:PoolClient,input:Pick<Input,'installationId'|'venueId'>){
+ if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND venue_id=$2 AND revoked_at IS NULL FOR SHARE',[input.installationId,input.venueId])).rowCount)fail('allowance_scope_not_found');
+}
+
+export async function reserveAllowance(client:PoolClient,input:Input):Promise<AllowanceReservation>{
+ validateInput(input);await requireAllowanceTransaction(client);
+ const {scope,business}=await lockAllowanceScope(client,input);
  const original=(await client.query('SELECT venue_id FROM billing_allowance_reservations WHERE service=$1 AND installation_id=$2 AND operation_id=$3',[input.service,input.installationId,input.operationId])).rows[0];
  if(original&&original.venue_id!==input.venueId)fail('allowance_conflict');
- if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND venue_id=$2 AND revoked_at IS NULL FOR SHARE',[input.installationId,input.venueId])).rowCount)fail('allowance_scope_not_found');
+ await lockAllowanceInstallation(client,input);
  await lock(client,'allowance-operation:'+input.service+':'+input.installationId+':'+input.operationId);
  const saved=(await client.query<Saved>(reservationSelect+' WHERE service=$1 AND installation_id=$2 AND operation_id=$3 FOR UPDATE',[input.service,input.installationId,input.operationId])).rows[0];
  if(saved){
@@ -82,7 +90,7 @@ export async function reserveAllowance(client:PoolClient,input:Input):Promise<Al
   return receipt(saved);
  }
  if(input.service==='transactional_email'&&input.units!==1n)fail('invalid_allowance_input');
- const scope={organisationId:args[0],legalBusinessId:args[1]},context={client,scope};
+ const context={client,scope};
  const base=(await readBillingVenue(context,input.venueId)).level,trials=(await readVenueHistory(context,input.venueId)).trials;
  let today=await day(client),month=allowanceMonth(today).from;
  // Re-read time after bucket waits so crossing midnight cannot spend an earlier month's pot.
@@ -92,17 +100,17 @@ export async function reserveAllowance(client:PoolClient,input:Input):Promise<Al
   today=await day(client);const current=allowanceMonth(today).from;if(current===month)break;month=current;
  }
  const version=await readAllowanceVersion(client,month);
- const limit=allowanceLimit(version,{base,trials,day:today,hasPaymentMethod:business.current_method_id!==null,service:input.service});
+ const limit=allowanceLimit(version,{base,trials,day:today,hasPaymentMethod:business?.current_method_id!=null,service:input.service});
  const accountScope=effectiveVenueLevel(base,trials,today)==='registered'&&['transactional_email','sms','address_lookup'].includes(input.service);
  const used=BigInt((await client.query(`SELECT coalesce(sum(units),0)::text AS used FROM billing_allowance_reservations WHERE service=$1 AND month=$2::date AND state IN ('held','spent') AND ${accountScope?'account_id':'venue_id'}=$3`,[input.service,month,accountScope?input.accountId:input.venueId])).rows[0].used);
  if(used+input.units>limit)throw new AllowanceError('allowance_exhausted',limit>used?limit-used:0n);
  const row=(await client.query<AllowanceReservation>(`INSERT INTO billing_allowance_reservations(id,account_id,organisation_id,legal_business_id,venue_id,installation_id,service,operation_id,binding,units,month,revision,state)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'held') RETURNING id,month::text,revision,units,state`,[randomUUID(),input.accountId,...args,input.venueId,input.installationId,input.service,input.operationId,input.binding,input.units.toString(),month,version.revision])).rows[0]!;
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'held') RETURNING id,month::text,revision,units,state`,[randomUUID(),input.accountId,scope.organisationId,scope.legalBusinessId,input.venueId,input.installationId,input.service,input.operationId,input.binding,input.units.toString(),month,version.revision])).rows[0]!;
  return receipt(row);
 }
 
 async function savedReservation(client:PoolClient,id:string):Promise<Saved>{
- if(!uuid(id))fail('invalid_allowance_input');await requireTransaction(client);
+ if(!uuid(id))fail('invalid_allowance_input');await requireAllowanceTransaction(client);
  const row=(await client.query<Saved>(reservationSelect+' WHERE id=$1 FOR UPDATE',[id])).rows[0];
  if(!row)fail('allowance_scope_not_found');return row;
 }
@@ -117,7 +125,7 @@ export async function recordAllowanceAttempt(client:PoolClient,id:string,attempt
  await client.query('UPDATE billing_allowance_reservations SET attempted_at=coalesce(attempted_at,$2::timestamptz) WHERE id=$1',[id,attemptStartedAt]);
 }
 export async function releaseUnstartedAllowance(client:PoolClient,id:string):Promise<AllowanceReservation>{
- if(!uuid(id))fail('invalid_allowance_input');await requireTransaction(client);
+ if(!uuid(id))fail('invalid_allowance_input');await requireAllowanceTransaction(client);
  const candidate=(await client.query<Saved>(reservationSelect+' WHERE id=$1',[id])).rows[0];
  if(!candidate)fail('allowance_scope_not_found');
  // Workers hold the job before the reservation; release must use the same order.

@@ -643,8 +643,9 @@ remain open.
 
 **Open; production enablement is not approved.** Offer address lookup and transactional
 email to open-source Waitron users with a Cloud login, without a paid subscription.
-The [local address trial](address-lookup-trial.md) accepts registered test boxes
-with a single verified owner when a fake provider is injected. The
+The [signed address service](address-lookup-trial.md#test-the-signed-route) lets
+registered test boxes with a single verified owner search simultaneously under
+their own and shared limits. The
 [test setup contract](waitron-integration-contract.md#test-box-sign-in-before-the-venue-form)
 lets a configured box register during sign-in for a new account or an account with one empty business.
 Cloud browser checks cover verified signup and a return to the same tab after enrolment
@@ -654,8 +655,10 @@ covers Cloud's signed staff-email choice. The Mailpit rehearsal in
 The [joint Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
 covered the Waitron setup screen and one staff password reset delivered to private
 Mailpit with the local mail server blank. The [Mac address trial](address-lookup-trial.md#what-the-mac-trial-measured)
-measured first-choice drafts for 40 public addresses. Billing and the connected-box
-check remain open.
+measured first-choice drafts for 40 public addresses. Confirm Google’s billing
+category and project quotas, check the four forms on a connected box, and add
+operator controls, warning email, old usage cleanup and privacy wording before
+enabling production.
 Qualify providers, storage rights, account allowances and abuse limits against
 the [requirements and open work](backlog/free-services.md).
 Evaluate mobile notifications separately.

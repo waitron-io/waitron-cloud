@@ -29,6 +29,41 @@ test('Test Cloud passes an explicit sign-up limit only to the account process', 
  assert.equal(testRuntimeEnvironment('email', config, settings).CLOUD_SIGNUP_LIMITS, undefined);
 });
 
+test('only the test account process gets enabled address lookup settings and its provider key',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const address=await import('../../packages/account-http/src/address-lookup.ts');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-address-settings-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir);
+ const month={freeSuggestions:10000,freeValidations:5000,limitMicros:10000000};
+ const day={freeSuggestions:1000,freeValidations:500,limitMicros:1000000};
+ const budget={environment:'test',suggestionMicros:3113,validationMicros:18700,
+  paidVenueMonth:{suggestions:500,validations:100},freeAccountMonth:{suggestions:100,validations:20},
+  cloudMonth:month,cloudDay:day,freeMonth:{freeSuggestions:3333,freeValidations:1666,limitMicros:3333333},
+  freeDay:{freeSuggestions:333,freeValidations:166,limitMicros:333333}};
+ const enabled={CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify(budget),GOOGLE_MAPS_SERVER_KEY:'synthetic-google-key'};
+ const account=testRuntimeEnvironment('account',config,enabled);
+ assert.equal(account.CLOUD_ADDRESS_LOOKUP_SETTINGS,enabled.CLOUD_ADDRESS_LOOKUP_SETTINGS);
+ assert.equal(account.GOOGLE_MAPS_SERVER_KEY,enabled.GOOGLE_MAPS_SERVER_KEY);
+ for(const role of ['email','migrate','translation','backup','gateway','storage','manifest','reconcile','monitor','usage','probe']){
+  const child=testRuntimeEnvironment(role,config,enabled);
+  assert.equal(child.GOOGLE_MAPS_SERVER_KEY,undefined,role);
+  assert.equal(child.CLOUD_ADDRESS_LOOKUP_SETTINGS,undefined,role);
+ }
+ assert.equal(typeof address.addressLookupOptionsFromEnv,'function');
+ assert.equal(typeof address.addressLookupOptionsFromEnv(account)?.provider.suggest,'function');
+ for(const env of [{},{CLOUD_ADDRESS_LOOKUP_SETTINGS:enabled.CLOUD_ADDRESS_LOOKUP_SETTINGS},
+  {...enabled,GOOGLE_MAPS_SERVER_KEY:' '},{...enabled,NODE_ENV:'production'},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,environment:'production'})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudMonth:{...month,limitMicros:-1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,suggestionMicros:0})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudDay:{...day,limitMicros:month.limitMicros+1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeMonth:{...budget.freeMonth,limitMicros:month.limitMicros+1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeMonth:{...budget.freeMonth,limitMicros:budget.freeDay.limitMicros-1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeDay:{...budget.freeDay,freeSuggestions:day.freeSuggestions+1}})}])
+  assert.equal(address.addressLookupOptionsFromEnv(env),undefined);
+ assert.equal(testRuntimeEnvironment('account',config,{GOOGLE_MAPS_SERVER_KEY:'ambient-key'}).GOOGLE_MAPS_SERVER_KEY,undefined);
+});
+
 test('base runtime accepts only the explicit canonical origin while retaining loopback default',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'cloud-origin-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
  assert.equal(runtimeEnvironment('account',config,{},'https://waitron.local:3000').CLOUD_PORTAL_ORIGIN,'https://waitron.local:3000');

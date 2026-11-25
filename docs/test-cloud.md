@@ -521,6 +521,35 @@ The [owner’s Amazon access steps](test-cloud-amazon-access.md) are still requi
 There is no dedicated launch profile yet. Do not substitute the staging or D618
 profile, create the paid DNS zone or request production sending access.
 
+## Configure address lookup for test boxes
+
+Address lookup starts disabled. For an approved rehearsal, wait fifteen minutes
+after the final private-trial search, then put `GOOGLE_MAPS_SERVER_KEY` and
+`CLOUD_ADDRESS_LOOKUP_SETTINGS` in the host’s private `deploy/test-cloud/test.env`.
+Only the account process uses them. Set `CLOUD_ADDRESS_LOOKUP_SETTINGS` to the
+JSON below on one line, with the agreed provider prices and spending limits.
+The numbers here are the illustrative test settings from the
+[address-service plan](superpowers/plans/2026-11-24-address-service.md).
+
+```json
+{
+  "environment": "test",
+  "suggestionMicros": 3113,
+  "validationMicros": 18700,
+  "paidVenueMonth": {"suggestions": 500, "validations": 100},
+  "freeAccountMonth": {"suggestions": 100, "validations": 20},
+  "cloudDay": {"freeSuggestions": 1000, "freeValidations": 500, "limitMicros": 1000000},
+  "cloudMonth": {"freeSuggestions": 10000, "freeValidations": 5000, "limitMicros": 10000000},
+  "freeDay": {"freeSuggestions": 333, "freeValidations": 166, "limitMicros": 333333},
+  "freeMonth": {"freeSuggestions": 3333, "freeValidations": 1666, "limitMicros": 3333333}
+}
+```
+
+One million millionths make one euro. Prices are per provider call. The day
+and month limits start at Pacific midnight. To stop lookups, remove the settings
+and rerun the deployment driver’s `up` command so it recreates the account process.
+Use `config --quiet` when checking the Compose configuration with the key set.
+
 ## Send account mail to the approved test mailbox
 
 The Amazon test Cloud captures mail in Mailpit by default. The Stockholm Amazon
