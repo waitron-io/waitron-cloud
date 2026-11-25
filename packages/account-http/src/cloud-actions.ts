@@ -7,11 +7,12 @@ import {readSessionCookie} from './cookies.ts';
 import {readBoundedJsonObject} from './request.ts';
 import type {RateRule} from './rate-limit.ts';
 
-export async function cloudActionsResponse(c:Context,actions:CloudActions,o:{pool:Pool;secure:boolean;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>}){
+export async function cloudActionsResponse(c:Context,actions:CloudActions,o:{pool:Pool;secure:boolean;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>},operatorVenues=false){
  const path=c.req.path.slice('/api/account/operator/actions'.length),token=readSessionCookie(c,o.secure)??'';
  if(c.req.path==='/api/account/operator/actions'){
   if(c.req.method!=='GET')throw new AccountHttpError(405,'method_not_allowed');
-  return c.json(await actions.read(token));
+  const view=await actions.read(token);
+  return c.json(operatorVenues?{...view,operatorVenues:true}:view);
  }
  if(!c.req.path.startsWith('/api/account/operator/actions/')||!['/requests','/decide'].includes(path))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');

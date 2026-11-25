@@ -4,9 +4,10 @@ import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
-export type SecurityAuditEventType='pairing.cloud_approved'|'pairing.local_approved'|'installation.credentials_renewed'|'installation.revoked'|'recovery.approved'|'replacement.approved'|'support.granted'|'support.revoked'|'support.accessed';
+export type SecurityAuditEventType='pairing.cloud_approved'|'pairing.local_approved'|'installation.credentials_renewed'|'installation.revoked'|'recovery.approved'|'replacement.approved'|'support.granted'|'support.revoked'|'support.accessed'
+ |'venue.viewed'|'venue.address_lookup_stopped'|'venue.address_lookup_allowed';
 export type SecurityAuditActorKind='account'|'installation'|'local_authority'|'platform_account';
-export type SecurityAuditSubjectKind='pairing_request'|'installation'|'recovery'|'replacement'|'support_grant';
+export type SecurityAuditSubjectKind='pairing_request'|'installation'|'recovery'|'replacement'|'support_grant'|'venue';
 export interface SecurityAuditInput {
  organisationId:string;venueId:string|null;type:SecurityAuditEventType;actorKind:SecurityAuditActorKind;actorId:string;
  subjectKind:SecurityAuditSubjectKind;subjectId:string;sourceId:string;
@@ -28,6 +29,9 @@ const shapes:Record<SecurityAuditEventType,{actors:SecurityAuditActorKind[];subj
  'support.granted':{actors:['account'],subject:'support_grant',venue:'optional'},
  'support.revoked':{actors:['account'],subject:'support_grant',venue:'optional'},
  'support.accessed':{actors:['platform_account'],subject:'support_grant',venue:'optional'},
+ 'venue.viewed':{actors:['platform_account'],subject:'venue',venue:'required'},
+ 'venue.address_lookup_stopped':{actors:['platform_account'],subject:'venue',venue:'required'},
+ 'venue.address_lookup_allowed':{actors:['platform_account'],subject:'venue',venue:'required'},
 };
 function invalid():never{throw new SecurityAuditError('invalid_input');}
 export function securityAuditSourceId(type:SecurityAuditEventType,...ids:string[]):string{

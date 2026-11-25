@@ -63,6 +63,22 @@ function accountRequest(running,path,body,headers={}){
  });
 }
 
+test('only the test Cloud action demo opens the venue console API',async t=>{
+ const {db,context}=await setup(t),box=await connectedVenue(db,context.issuer,origin);
+ const session=await transaction(db.pool,c=>createSession(c,box.accountId));
+ await prepareAccount(t,context);
+ for(const [enabled,amazon,expected] of [['0',undefined,404],['1',undefined,200],['1','1',404]]){
+  const running=await startAccount(db,context,{CLOUD_ACTION_DEMO:enabled,TEST_CLOUD_AMAZON:amazon,CLOUD_OPERATOR_ACCOUNT_ID:box.accountId,
+   CLOUD_ACTION_DEMO_DIR:join(context.directory,'operator-demo')});
+  try{
+   const reply=await accountRequest(running,'/api/account/operator/venues/read',{venueId:box.venueId},
+    {origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken});
+   assert.equal(reply.status,expected,JSON.stringify(reply.body));
+   if(expected===200)assert.deepEqual(reply.body,{venues:[{id:box.venueId,name:null,stopped:false}]});
+  }finally{await running.close();}
+ }
+});
+
 test('the test Cloud account worker serves signed address availability only with settings and key',async t=>{
  const {db,context}=await setup(t),box=await connectedVenue(db,context.issuer,origin);
  await prepareAccount(t,context);

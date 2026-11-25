@@ -160,9 +160,35 @@ key are missing, the box loses authority, or admission fails.
 
 ## Stop or resume a test venue
 
-Connect to the account database for your test Cloud deployment, including the
-LAN action demo. Replace the example ID with the test venue's ID in each
-command. Use this command to stop lookup.
+In the LAN action demo, sign in as the configured operator and open
+**Cloud actions → Find a venue**. Search by name, choose the venue, and select
+**Stop address suggestions** or **Allow address suggestions**. Verify your
+sign-in when prompted. The page records which venues you view and each change
+you make. Allowing suggestions keeps the provider settings and usage limits in force.
+
+Search for a full name of any length or enter at least three characters for
+a partial match. Exact names come first. The venue page shows its ID to help
+you distinguish venues with the same name.
+
+### Database fallback
+
+Use this fallback outside the LAN demo or when more than ten venues share
+the exact name. A cap email in the LAN demo can also open the affected venue directly.
+
+Connect to your test Cloud account database. If you need the venue ID, replace
+`Café Lunar` with the name as saved and look it up. Compare the country and
+organisation ID when several venues share the name.
+
+```sql
+SELECT v.id, v.display_name, b.country_code, v.organisation_id
+FROM venues v
+LEFT JOIN legal_businesses b ON b.id = v.legal_business_id AND b.organisation_id = v.organisation_id
+WHERE v.environment = 'test' AND lower(v.display_name) = lower('Café Lunar')
+ORDER BY b.country_code, v.organisation_id, v.id;
+```
+
+These commands leave no entry in the operator history. Replace the example ID
+with the test venue's ID in each command. Use the first command to stop lookup.
 
 ```sql
 INSERT INTO address_lookup_stopped_venues (venue_id)
@@ -199,9 +225,11 @@ account log. It also queues a warning if the operator is configured and verified
 at that time. If a cap for a given scope already refused a call this period,
 setting up the operator later leaves that particular warning until next period.
 Shared caps cover either all lookups or all free accounts.
-An own-cap warning includes the affected venue ID. A venue that stops exactly
-at its limit sends no warning. The LAN action demo captures the email in its
-private inbox. A deployment needs an operator and a qualified relay to send it.
+In the LAN action demo, a cap warning for an individual venue links to that
+venue's page. Outside the demo it includes the venue ID for the database
+fallback. A venue that stops exactly at its limit sends no warning. The demo
+captures the email in its private inbox. A deployment needs an operator and a
+qualified relay to send it.
 
 The account worker checks for old call records every minute. It deletes up to
 1,000 per pass once they belong to a previous Pacific calendar month and are

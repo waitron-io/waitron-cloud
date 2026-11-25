@@ -9,6 +9,7 @@ export function cloudActionsScreen(app:PortalApp){
  const state=(value:string)=>c[`cloudActionState_${value}` as keyof Copy];
  const notice=(value:string)=>c[`cloudActionNotice_${value}` as keyof Copy]??c.cloudActionNotice_unknown;
  return html`<div class="cloud-actions"><p>${c.cloudActionsHelp}</p>
+  ${actions.view?.operatorVenues?html`<p><a href="/operator/venues" @click=${(event:MouseEvent)=>app.follow(event,'/operator/venues')}>${c.operatorFindVenue}</a></p>`:nothing}
   ${actions.error?html`<p role="alert">${c[actions.error]}</p>`:nothing}
   ${actions.pending?html`<p role="status">${c.checking}</p>`:nothing}
   ${actions.view?html`

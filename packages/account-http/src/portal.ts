@@ -74,7 +74,7 @@ export function portalErrorResponse(request: Request, status: 400 | 404 | 405 | 
     ...(status === 503 ? {'Retry-After': '1'} : {}),
   }});
 }
-export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false, setupPairing=false, turnstile?: ReturnType<typeof turnstilePortalAssets>): Response {
+export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false, setupPairing=false, turnstile?: ReturnType<typeof turnstilePortalAssets>,operatorVenues=false): Response {
   const url = new URL(request.url);
   const failure = (status: 400 | 404 | 405) => portalErrorResponse(request, status, testBillingMethods);
   const pairingLink = setupPairing && url.pathname === '/login' && url.searchParams.size === 4
@@ -82,7 +82,8 @@ export function portalResponse(request: Request, assets: PortalAssets, testBilli
     && url.searchParams.get('code_challenge_method') === 'S256';
   if (url.search && !pairingLink && !['/signup', '/reset-password'].includes(url.pathname)) return failure(400);
   if (!['GET', 'HEAD'].includes(request.method)) return failure(405);
-  const key = documents.has(url.pathname) ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
+  const document=documents.has(url.pathname)||operatorVenues&&url.pathname==='/operator/venues';
+  const key = document ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
   const showTurnstile = !!turnstile && (url.pathname === '/forgot-password' ||
     url.pathname === '/signup' && !url.searchParams.has('token'));
   const asset = key === '/index.html' && turnstile ? (showTurnstile ? turnstile.request : turnstile.standard) : assets.get(key);

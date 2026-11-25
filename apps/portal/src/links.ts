@@ -1,6 +1,6 @@
 import type { Locale } from './locale.ts';
-export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; pairingCode?: string; recoveryId?: string; locale?: Locale; invalid: boolean};
-export function captureLink(url: URL, replace: (url: string) => void, historyState?: {pairingRequestId?: unknown}): CapturedLink {
+export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; pairingCode?: string; recoveryId?: string; operatorVenueId?:string; locale?: Locale; invalid: boolean};
+export function captureLink(url: URL, replace: (url: string) => void, historyState?: {pairingRequestId?: unknown;operatorVenueId?:unknown}): CapturedLink {
   const params = [url.searchParams, new URLSearchParams(url.hash.slice(1))];
   const tokens = params.flatMap(p => p.getAll('token'));
   const languages = params.flatMap(p => p.getAll('lang'));
@@ -34,6 +34,15 @@ export function captureLink(url: URL, replace: (url: string) => void, historySta
   if (!result.invalid && !result.requestId && ['/connect', '/login'].includes(url.pathname)) {
     const storedId = historyState?.pairingRequestId;
     if (typeof storedId === 'string' && pairingId.test(storedId)) result.requestId = storedId;
+  }
+  if(url.pathname==='/operator/venues'&&!result.invalid){
+    const venues=params[1]!.getAll('venue');
+    if(venues.length){
+      if(venues.length===1&&pairingId.test(venues[0]!))result.operatorVenueId=venues[0];
+      else result.invalid=true;
+    }else if(!url.hash&&typeof historyState?.operatorVenueId==='string'&&pairingId.test(historyState.operatorVenueId)){
+      result.operatorVenueId=historyState.operatorVenueId;
+    }
   }
   return result;
 }

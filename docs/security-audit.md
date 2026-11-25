@@ -1,8 +1,12 @@
 # Customer security audit history
 
-Waitron Cloud records the customer security decisions that change a venue's connection or recovery authority. The event and the protected action share one PostgreSQL transaction: both commit, or neither does.
+Waitron Cloud records customer decisions about connection and recovery authority,
+and the operator's venue views and address suggestion changes in the LAN action
+demo. A protected action and its event share a PostgreSQL transaction, so they
+commit together.
 
-This is an operational customer audit trail. It does not claim to be a complete compliance archive, and it does not contain authentication attempts, password changes, passive reads or actions from services that have not been integrated with the writer.
+This operational trail covers the events below. Assess compliance and retention
+requirements separately.
 
 ## Recorded events
 
@@ -13,8 +17,9 @@ The first version records:
 - owner and installation revocations;
 - customer recovery approvals; and
 - customer replacement approvals;
-- temporary support grant approvals and early revocations; and
-- successful database actions protected by a temporary support grant.
+- temporary support grant approvals and early revocations;
+- successful database actions protected by a temporary support grant; and
+- venue views and address suggestion changes in the LAN action demo.
 
 Each event contains a stable event UUID, timestamp, organisation, optional venue, fixed event type, actor kind and UUID, and subject kind and UUID. A local approval's actor is labelled `local_authority`; its UUID is the existing verified receipt reference, not a claim that Cloud knows the local person's identity.
 
@@ -23,7 +28,21 @@ Its subject UUID identifies the approved grant. The export deliberately omits th
 customer's reason, configured action, request parameters and callback result. No
 production support action is configured yet.
 
-The schema has no arbitrary details or payload field. Matching codes, session tokens, public keys, leases, storage credentials, recovery keys and raw errors therefore have nowhere to be copied. PostgreSQL rejects row updates and row deletes. Repeating a successful action returns the original event; reusing its source identity with different event fields fails closed. Credential-renewal sources combine the installation and its installation-scoped operation ID, so another installation may use the same operation UUID safely.
+In the LAN action demo, venue entries use actor kind `platform_account` and
+subject kind `venue`. Each venue disclosed by the operator search or a direct
+read gets a `venue.viewed` event before Cloud returns it. The name and search
+text stay out of the history. `venue.address_lookup_stopped` and
+`venue.address_lookup_allowed` record changes. Setting a venue to its current
+state records a view for the venue name in the reply.
+
+The schema has no arbitrary details or payload field. Matching codes, session
+tokens, public keys, leases, storage credentials, recovery keys and raw errors
+therefore have nowhere to be copied. PostgreSQL rejects row updates and row
+deletes. Repeating an action with the same source identity and event fields
+returns the original event. If the fields differ, Cloud refuses it. Each venue
+event gets a fresh source identity. Credential-renewal sources combine the
+installation and its installation-scoped operation ID, so another installation
+may use the same operation UUID safely.
 
 ## Read or export a page
 
@@ -74,4 +93,5 @@ Run the PostgreSQL-backed writer and HTTP tests:
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/security-audit.test.ts test/pairing.test.ts test/installations.test.ts
 node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/recovery-request.test.ts test/replacement.test.ts
 node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/security-audit.test.ts
+node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/operator-venues.test.ts
 ```

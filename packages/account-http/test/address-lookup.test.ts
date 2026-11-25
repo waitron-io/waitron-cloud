@@ -5,7 +5,9 @@ import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
-import {BillingStore,createLeaseIssuer,type AddressLookupCap,type SignedEnvelope} from '@waitron-cloud/registration';
+import {createSession} from '@waitron-cloud/identity';
+import {BillingStore,createLeaseIssuer,transaction,type AddressLookupCap,type SignedEnvelope} from '@waitron-cloud/registration';
+import {openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
 import {AddressLookupMachine,warnAboutAddressCap} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
@@ -401,26 +403,54 @@ test('connection loss during admission commits no address usage and sends nothin
  }finally{await f.db.close();}
 });
 
-test('a database stop affects only its test venue and resuming preserves address usage',async()=>{
+test('an operator stop affects only its test venue and allowing it again preserves address usage',async()=>{
  const f=await fixture();try{
   const other=await connectedVenue(f.db,f.issuer,origin);
-  const stop=`INSERT INTO address_lookup_stopped_venues (venue_id)
-    SELECT id FROM venues WHERE environment='test' AND id=$1 ON CONFLICT DO NOTHING`;
-  const resume=`DELETE FROM address_lookup_stopped_venues
-    WHERE venue_id IN (SELECT id FROM venues WHERE environment='test' AND id=$1)`;
+  const {pool}=f.db,venueId=f.v.venueId;
+  await pool.query("UPDATE venues SET display_name='Café Luna' WHERE id=$1",[venueId]);
+  const actor=await transaction(pool,c=>createSession(c,other.accountId));
+  await openProofWindow(pool,actor.token);
+  const operatorAppOptions={...f.options,operatorAccountId:other.accountId,operatorVenues:true,
+   config:{...f.options.config,production:false}};
+  const operatorApp=createAccountApp(operatorAppOptions);
+  const set=async(stopped:boolean)=>{
+   const response=await operatorApp.request(origin+'/api/account/operator/venues/address-lookup',{
+    method:'POST',headers:{cookie:'__Host-cloud_session='+actor.token,origin,'x-csrf-token':actor.csrfToken,'content-type':'application/json'},
+    body:JSON.stringify({venueId,stopped}),
+   },{incoming:{socket:{remoteAddress:'192.0.2.26'}}} as HttpBindings);
+   assert.equal(response.status,200,await response.clone().text());
+   assert.deepEqual(await response.json(),{id:venueId,name:'Café Luna',stopped});
+  };
   const first=suggest();assert.equal((await f.post(first)).status,200);
-  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,1);
-  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,0);
+  await set(true);
+  await set(true);
   assert.equal((await f.post(available)).status,403);
   assert.equal((await f.post(suggest())).status,403);
   assert.equal((await f.request(other.proof('address-lookup',suggest(),randomUUID(),other.lease))).status,200);
   assert.deepEqual(f.sent,['suggest','suggest']);
+  await set(false);
+  await set(false);
+  assert.equal((await f.post(validate(first.workflowId))).status,200);
+  assert.deepEqual((await calls(pool)).map(row=>[row.venue_id,row.kind]),[
+   [venueId,'suggest'],[other.venueId,'suggest'],[venueId,'validate'],
+  ]);
+  const {rows}=await pool.query('SELECT event_type FROM security_audit_events WHERE subject_id=$1 ORDER BY occurred_at',[venueId]);
+  assert.deepEqual(rows.map(row=>row.event_type),['venue.address_lookup_stopped','venue.viewed','venue.address_lookup_allowed','venue.viewed']);
+ }finally{await f.db.close();}
+});
+
+test('the trial SQL can still stop and allow a venue when the operator page is off',async()=>{
+ const f=await fixture();try{
+  const stop=`INSERT INTO address_lookup_stopped_venues (venue_id)
+    SELECT id FROM venues WHERE environment='test' AND id=$1 ON CONFLICT DO NOTHING`;
+  const resume=`DELETE FROM address_lookup_stopped_venues
+    WHERE venue_id IN (SELECT id FROM venues WHERE environment='test' AND id=$1)`;
+  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,1);
+  assert.equal((await f.db.pool.query(stop,[f.v.venueId])).rowCount,0);
+  assert.equal((await f.post(available)).status,403);
   assert.equal((await f.db.pool.query(resume,[f.v.venueId])).rowCount,1);
   assert.equal((await f.db.pool.query(resume,[f.v.venueId])).rowCount,0);
-  assert.equal((await f.post(validate(first.workflowId))).status,200);
-  assert.deepEqual((await calls(f.db.pool)).map(row=>[row.venue_id,row.kind]),[
-   [f.v.venueId,'suggest'],[other.venueId,'suggest'],[f.v.venueId,'validate'],
-  ]);
+  assert.equal((await f.post(available)).status,200);
  }finally{await f.db.close();}
 });
 
@@ -429,7 +459,8 @@ test('a failed cap warning retries and concurrent refusals queue only one warnin
   const log=t.mock.method(console,'warn',()=>{});
   const {month:period}=(await f.db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'America/Los_Angeles','YYYY-MM') AS month")).rows[0];
   const operator=await connectedVenue(f.db,f.issuer,origin);
-  const app=createAccountApp({...f.options,operatorAccountId:operator.accountId,addressLookup:{provider:f.provider,
+  const app=createAccountApp({...f.options,operatorAccountId:operator.accountId,operatorVenues:true,
+   config:{...f.options.config,production:false},addressLookup:{provider:f.provider,
    policy:{...policy,freeAccountMonth:{suggestions:1,validations:1}}}});
   const request=(body:unknown)=>f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
   const queued=()=>f.db.pool.query("SELECT * FROM email_outbox WHERE kind='operator_notice'").then(result=>result.rows);
@@ -447,7 +478,7 @@ test('a failed cap warning retries and concurrent refusals queue only one warnin
   const message=f.db.outbox.open(notices[0]);
   const email=(await f.db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[operator.accountId])).rows[0].email;
   assert.deepEqual(message,{email,locale:'en',event:'address_cap',accountId:operator.accountId,
-   bucket:'free_account_month',period,venueId:f.v.venueId});
+   bucket:'free_account_month',period,venueId:f.v.venueId,operatorVenueLink:true});
   assert.equal((await calls(f.db.pool)).length,1);
   assert.deepEqual(f.sent,['suggest']);
  }finally{await f.db.close();}

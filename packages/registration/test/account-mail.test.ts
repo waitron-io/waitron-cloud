@@ -83,6 +83,19 @@ for(const locale of ['en','es'] as const)test(`operator notice renders ${locale}
  assert.match(mail.text,/http:\/\/localhost:3000\/operator\/actions/);assert.doesNotMatch(mail.text,/token=|operator@example|approve|aprobar/);
 });
 
+test('a LAN demo cap email links to the venue while older notices keep the fallback',()=>{
+ const venueId='11111111-2222-4333-8444-555555555555';
+ const notice={email:'operator@example.test',locale:'es',event:'address_cap',accountId:'22222222-3333-4444-8555-666666666666',
+  bucket:'paid_venue_month',period:'2026-11',venueId} as const;
+ const origin=new URL('https://cloud.example.test');
+ const forDemo={...notice,operatorVenueLink:true};
+ const demo=accountMail(origin,'operator_notice',forDemo);
+ assert.deepEqual(demo.text.match(/https?:\/\/\S+/g),[`https://cloud.example.test/operator/venues#venue=${venueId}&lang=es`]);
+ const fallback=accountMail(origin,'operator_notice',notice);
+ assert.doesNotMatch(fallback.text,/https?:\/\//);
+ assert.match(fallback.text,new RegExp(venueId));
+});
+
 test('handover invitations link to the public explanation in both languages',()=>{
  for(const locale of ['en','es'] as const){
   const message={email:'recipient@example.test',locale,offerId:'11111111-2222-4333-8444-555555555555',event:'invitation' as const};

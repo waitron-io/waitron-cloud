@@ -25,7 +25,7 @@ function unavailable(request?: Request, portal = false, testBillingMethods=false
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number;localMetrics?:{host:string;port:number}; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch}): Promise<{server: Server;metricsServer?:Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number;localMetrics?:{host:string;port:number}; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch}): Promise<{server: Server;metricsServer?:Server; close(): Promise<void>}> {
   const config = validateConfig(options.config);
   if(options.localMetrics&&config.production)throw Error('Local metrics are unavailable in production');
   const app = createAccountApp({...options, config});
@@ -43,7 +43,7 @@ export async function startAccountServer(options: {operatorAccountId?:string;gue
         return new Response(null, {status: 403, headers: portalSecurityHeaders(!!options.billingMethods)});
     }
     if (stopping) return unavailable(request, portalRequest,!!options.billingMethods);
-    if (portalRequest) return portalResponse(request, options.portalAssets!, !!options.billingMethods, !!config.setupPairing, turnstileAssets);
+    if (portalRequest) return portalResponse(request, options.portalAssets!, !!options.billingMethods, !!config.setupPairing, turnstileAssets,options.operatorVenues===true);
     if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
     // Encoded aliases must use the same admission as the router's decoded submit path.
     if (options.translation && getPath(request) === submitPath) {

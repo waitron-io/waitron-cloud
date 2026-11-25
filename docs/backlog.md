@@ -544,7 +544,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    reports for the current owner.
    Waitron's A1047 owns the staff form, checked sending and offline retries.
    Cloud still needs automatic-report opt-in and Sent reports for automatic sends, private
-   bugs and status, country features with votes and comments, GitHub links, the operator
+   bugs and status, country features with votes and comments, GitHub links, the rest of the operator
    console and common country routes, grant integration and customer-visible staff history. Joining country lists waits for a second country and an
    owner decision. Privacy, retention and qualified country support authority remain open.
    Pending-action operator notices still need a production mail route.
@@ -669,10 +669,11 @@ covers Cloud's signed staff-email choice. The Mailpit rehearsal in
 The [joint Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
 covered the Waitron setup screen and one staff password reset delivered to private
 Mailpit with the local mail server blank. The [Mac address trial](address-lookup-trial.md#what-the-mac-trial-measured)
-measured first-choice drafts for 40 public addresses. The test service supports
-[a database stop and captured cap warnings](address-lookup-trial.md#stop-or-resume-a-test-venue).
-Stopping lookup from a venue's operator page remains open. Deployed operator
-email still needs a configured operator and a qualified relay.
+measured first-choice drafts for 40 public addresses. The LAN action demo
+supports [stopping and allowing suggestions from a venue page](address-lookup-trial.md#stop-or-resume-a-test-venue)
+and cap emails that link to it. Other test deployments use the database
+fallback. Deployed operator email still needs a configured operator and a
+qualified relay.
 Confirm Google’s billing category and project quotas, check the four forms on a
 connected box and publish the reviewed privacy wording before enabling production.
 Qualify providers, storage rights, account allowances and abuse limits against

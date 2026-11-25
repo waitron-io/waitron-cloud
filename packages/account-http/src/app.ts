@@ -7,6 +7,7 @@ import {OwnerTransferStore,OwnerTransferError} from '@waitron-cloud/registration
 import {CloudActions} from '@waitron-cloud/registration';
 import {CloudActionError} from '@waitron-cloud/registration';
 import {cloudActionsResponse} from './cloud-actions.ts';
+import {operatorVenuesResponse} from './operator-venues.ts';
 import {GuestMenuMachine} from '@waitron-cloud/remote-access/guest-menu';
 import {guestMenuDeliveryResponse,guestMenuResponse} from './guest-menu.ts';
 import {validateGuestOrigin} from './guest-menu-server.ts';
@@ -104,9 +105,11 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
+  const operatorVenues=options.operatorVenues===true;
+  if(operatorVenues&&config.production)throw Error('operator_venues.unavailable_in_production');
   if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
   if(options.guestOrigin){validateGuestOrigin(options.guestOrigin);if(options.guestOrigin===config.portalOrigin)throw Error('guest_origin_invalid');}
   const billingAccount=validateBillingAccountOptions(options.billingAccount,options.planMode??'existing');
@@ -117,8 +120,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   if(options.translation&&!options.leaseIssuer)throw Error('translation.installation_issuer_required');
   if(options.staffCertificates&&!options.leaseIssuer)throw Error('staff_certificate.installation_issuer_required');
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
-  const {pool, outbox} = options;
-  const cloudActions=new CloudActions(pool,options.operatorAccountId,outbox);
+  const {pool, outbox,operatorAccountId} = options;
+  const cloudActions=new CloudActions(pool,operatorAccountId,outbox);
   const factor=options.factor?validateFactorConfig(options.factor):factorConfigFromEnv(process.env);
   const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
   const actionProof=new AccountActionProofStore(pool,factor.keys,factor.policy,outbox);
@@ -143,7 +146,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const verifyBrowser = config.turnstile && createTurnstileGuard({limiter, hostname: origin.hostname,
     secret: config.turnstile.secretKey, fetcher: options.turnstileFetch});
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust,
-   (cap,venueId)=>warnAboutAddressCap(pool,limiter,outbox,options.operatorAccountId,cap,venueId)):undefined;
+   (cap,venueId)=>warnAboutAddressCap(pool,limiter,outbox,operatorAccountId,cap,venueId,operatorVenues)):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);
@@ -190,7 +193,9 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
     if(['/api/installations/guest-menu-publish','/api/installations/guest-menu-status','/api/installations/guest-menu-withdraw'].includes(c.req.path))return guestMenuDeliveryResponse(c,guestMenus);
     if(c.req.path.startsWith('/api/account/guest-menu/'))return guestMenuResponse(c,{pool,origin:config.portalOrigin,guestOrigin:options.guestOrigin});
-    if(c.req.path.startsWith('/api/account/operator/'))return cloudActionsResponse(c,cloudActions,{pool,secure,origin:config.portalOrigin,ip,consume});
+    if(c.req.path.startsWith('/api/account/operator/venues/'))return operatorVenuesResponse(c,operatorVenues?
+      {pool,operator:operatorAccountId,country:config.countryCode,secure,origin:config.portalOrigin,ip,consume}:undefined);
+    if(c.req.path.startsWith('/api/account/operator/'))return cloudActionsResponse(c,cloudActions,{pool,secure,origin:config.portalOrigin,ip,consume},operatorVenues);
     if(c.req.path.startsWith('/api/account/diagnostics/'))return diagnosticsResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});

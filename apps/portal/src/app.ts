@@ -20,7 +20,8 @@ import {UsageController} from './usage-controller.ts';
 import {BillingController} from './billing-controller.ts';
 import {DiagnosticController} from './diagnostic-controller.ts';
 import { render } from 'lit';
-import { accountRequest } from './api.ts';
+import { accountRequest,type OperatorVenue } from './api.ts';
+import {OperatorVenuesController} from './operator-venues-controller.ts';
 import { captureLink, captureSetupPairingLink, forgetSetupPairingLink, saveEmailRequestReturn, takeEmailRequestReturn, type CapturedLink, type SetupPairingLink } from './links.ts';
 import { chooseLocale, translations, type Copy, type Locale } from './locale.ts';
 import { PortalSession, type SessionState } from './session.ts';
@@ -29,6 +30,7 @@ import {SentReportsController} from './sent-reports-controller.ts';
 export type Fields = {email: string; password: string};
 type PasskeyAddRequest = {accountId: string};
 const emailRequestDocument = (path: string) => path === '/signup' || path === '/forgot-password';
+const operatorVenuesPath='/operator/venues';
 
 export class PortalApp {
   root: HTMLElement;
@@ -72,9 +74,10 @@ export class PortalApp {
   billing: BillingController;
   diagnostics: DiagnosticController;
   cloudActions:CloudActionsController;
+  operatorVenues:OperatorVenuesController;
   #route = 0;
   #passkeyAddRequest: PasskeyAddRequest | undefined;
-  #operatorSignin=false;
+  #operatorSignin:{path:string;venueId?:string}|undefined;
   #passkeyOffered = false;
   #setupResumeAttempted = false;
   #enrollmentRestricted = false;
@@ -92,7 +95,8 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     const preferred = returned?.forwarded ? returned.locale : saved ?? returned?.locale ?? null;
-    this.locale = this.link.locale ?? chooseLocale(preferred, navigator.languages);
+    const entryLocale=this.path===operatorVenuesPath?history.state?.operatorVenueLocale:undefined;
+    this.locale = this.link.locale ?? chooseLocale(preferred??(entryLocale==='en'||entryLocale==='es'?entryLocale:null), navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.billing?.error==='pairEnrollment')this.billing.error=undefined;
@@ -131,6 +135,7 @@ export class PortalApp {
     this.billing = new BillingController(() => this.draw());
     this.diagnostics = new DiagnosticController(() => this.draw());
     this.cloudActions=new CloudActionsController(()=>this.draw());
+    this.operatorVenues=new OperatorVenuesController(()=>this.draw());
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
     this.recovery.open(this.link.recoveryId ?? returned?.recoveryId);
@@ -159,7 +164,7 @@ export class PortalApp {
       this.turnstileToken = '';
       this.draw();
     });
-    window.addEventListener('pagehide', () => { this.sentReports.account(undefined); this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.sentReports.account(undefined); this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.operatorVenues.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) {
         this.session = this.#session();
@@ -174,7 +179,9 @@ export class PortalApp {
     const url = new URL(location.href);
     this.setupPairing = captureSetupPairingLink(url);
     const {pairingCode, ...link} = captureLink(url, path => history.replaceState(history.state, '', path),
-      this.pairing.requestId ? undefined : history.state);
+      {...history.state,pairingRequestId:this.pairing.requestId?undefined:history.state?.pairingRequestId});
+    if(url.pathname===operatorVenuesPath&&url.hash)
+      history.replaceState({...history.state,operatorVenueId:link.operatorVenueId,operatorVenueLocale:link.locale},'');
     if (link.requestId || link.invalid) this.pairing.open(link.requestId, pairingCode);
     if (url.pathname === '/connect' || url.pathname === '/login') {
       // Browsers may persist history state. The code stays in memory.
@@ -216,7 +223,9 @@ export class PortalApp {
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (state.kind === 'authenticated' && (page === 'account' || enrolling) && !this.authenticator.loadAttempted) void this.authenticator.load();
     this.cloudActions.account(ordinary?state.accountId:undefined);
+    this.operatorVenues.account(ordinary&&this.path===operatorVenuesPath?state.accountId:undefined);
     if(this.path==='/operator/actions'&&ordinary&&!this.cloudActions.loadAttempted)void this.cloudActions.load();
+    if(this.path===operatorVenuesPath&&ordinary&&!this.cloudActions.loadAttempted)void this.loadOperatorVenues();
     this.diagnostics.account(ordinary ? state.accountId : undefined);
     this.usage.account(ordinary ? state.accountId : undefined);
     const billingAccount=ordinary && state.billingTrialAvailable === true ? state.accountId : undefined;
@@ -247,7 +256,8 @@ export class PortalApp {
     const malformedPairingLink = this.path === '/connect' && this.link.invalid;
     if (this.sessionPage && state.kind === 'anonymous' && (state.expired || !malformedPairingLink)) {
       const signedOut = this.#signOutCheck === this.session;
-      if(this.path==='/operator/actions')this.#operatorSignin=true;
+      if(this.path==='/operator/actions'||this.path===operatorVenuesPath)
+        this.#operatorSignin={path:this.path,venueId:this.link.operatorVenueId};
       this.navigate('/login');
       if (state.expired || signedOut) { this.notice = state.expired ? 'sessionExpired' : 'signedOut'; this.draw(); }
     }
@@ -269,7 +279,7 @@ export class PortalApp {
     return Object.hasOwn(accountPages, path) ? accountPages[path as keyof typeof accountPages] : undefined;
   }
   get sessionPage() {
-    return !!this.accountPage || ['/connect', '/recover', '/operator/actions'].includes(this.path);
+    return !!this.accountPage || ['/connect', '/recover', '/operator/actions',operatorVenuesPath].includes(this.path);
   }
   get copy() { return translations[this.locale]; }
   get #setupEnrollment() { return this.path === '/login' && history.state?.setupEnrollment === true; }
@@ -323,6 +333,7 @@ export class PortalApp {
   get waiting() {
     if(this.path==='/reset-password'&&this.ownerRecovery.stage!=='idle')return this.ownerRecovery.waiting;
     if(this.path==='/operator/actions')return Math.max(this.session.waiting,this.cloudActions.waiting);
+    if(this.path===operatorVenuesPath)return Math.max(this.session.waiting,this.cloudActions.waiting,this.operatorVenues.waiting,this.actionProof.waiting);
     if (this.path === '/recover') return Math.max(this.recovery.waiting, this.backups.waiting, this.installations.waiting, this.session.waiting);
     if (this.path === '/connect') return Math.max(this.pairing.waiting, this.session.waiting);
     switch (this.accountPage) {
@@ -351,6 +362,10 @@ export class PortalApp {
     if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?(this.authenticator.proofKind==='recovery'&&!this.authenticator.challenge.rememberBrowserAllowed?c.factorRecovery:c.emailCheckTitle):c.factorTitle;
     if (this.setupPairing && this.path === '/login') return c.pairSetupSignIn;
     if(this.path==='/operator/actions')return c.cloudActionsTitle;
+    if(this.path===operatorVenuesPath){
+      const venue=this.operatorVenues.venue;
+      return venue?venue.name??c.operatorUnnamedVenue:c.operatorFindVenue;
+    }
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.path === '/receive-business') return c.receiveBusinessTitle;
@@ -385,8 +400,9 @@ export class PortalApp {
     this.backups.cancelDownload();
     this.#signOutCheck = undefined;
     if (path !== '/connect' && (path !== '/login' || this.session.state.kind !== 'anonymous')) this.pairing.discardLinkedCode();
-    if(path!=='/login')this.#operatorSignin=false;
-    this.transfers.account(undefined);this.businesses.account(undefined);this.cloudActions.account(undefined);
+    const venueId=path===operatorVenuesPath&&this.path==='/login'?this.#operatorSignin?.venueId:undefined;
+    if(path!=='/login')this.#operatorSignin=undefined;
+    this.transfers.account(undefined);this.businesses.account(undefined);this.cloudActions.account(undefined);this.operatorVenues.account(undefined);
     this.billing.fence();
     if (path === '/login') this.passkeyFirst = this.passkeys.preferred;
     this.#passkeyAddRequest = undefined;
@@ -394,11 +410,12 @@ export class PortalApp {
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
     if(!this.translationConsent.pending&&!this.translationConsent.loaded)this.translationConsent.loadAttempted=false;
-    if (push) history.pushState(null, '', path);
+    if (push) history.pushState(path===operatorVenuesPath?{operatorVenueId:venueId}:null, '', path);
     this.link = this.#capture();
     this.ownerRecovery.open(path==='/reset-password'&&!this.link.invalid?this.link.token:undefined);
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
     this.locale = this.link.locale ?? this.locale;
+    if(path===operatorVenuesPath)history.replaceState({...history.state,operatorVenueLocale:this.locale},'');
     this.fields = {email: '', password: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
     this.pending = false; this.reveal = false;
@@ -445,6 +462,7 @@ export class PortalApp {
       if (this.error === 'browserCheckFailed') this.error = undefined;
     }
     this.locale = locale;
+    if(this.path===operatorVenuesPath)history.replaceState({...history.state,operatorVenueLocale:locale},'');
     try { localStorage.setItem('cloud.locale', locale); } catch { /* The current tab still changes language. */ }
     this.draw();
   }
@@ -576,7 +594,7 @@ export class PortalApp {
     }
     this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
   }
-  #signedInPath(){return this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account';}
+  #signedInPath(){return this.#operatorSignin?.path??(this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');}
   async returnToSetup(cancel = false, resume = false) {
     const link = this.setupPairing;
     if (!link || this.pending) return;
@@ -670,6 +688,25 @@ export class PortalApp {
   }
   async proposeCloudAction(){if(await this.#requireActionProof())await this.cloudActions.propose();}
   async decideCloudAction(request:CloudActionRequest,decision:'approved'|'rejected'){if(await this.#requireActionProof())await this.cloudActions.decide(request,decision);}
+  async loadOperatorVenues(){
+    const route=this.#route;
+    await this.cloudActions.load();
+    if(route===this.#route&&this.cloudActions.view?.operatorVenues&&this.link.operatorVenueId)
+      await this.operatorVenues.read(this.link.operatorVenueId);
+  }
+  openOperatorVenue(event:MouseEvent,venue:OperatorVenue){
+    if(event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    history.pushState({operatorVenueId:venue.id,operatorVenueLocale:this.locale},'',operatorVenuesPath);
+    this.link.operatorVenueId=venue.id;
+    this.operatorVenues.select(venue);
+    this.focusHeading();
+  }
+  async setOperatorVenue(venue:OperatorVenue){
+    if(!await this.#requireActionProof())return;
+    await this.operatorVenues.set(venue);
+    if(this.operatorVenues.error==='cloudActionsProofRequired')await this.#requireActionProof();
+  }
   #sameAccountRoute(route: number, accountId: string | undefined) {
     return route === this.#route && this.session.state.kind === 'authenticated' && this.session.state.accountId === accountId;
   }
@@ -688,8 +725,9 @@ export class PortalApp {
   }
   get verifyingToAddPasskey() { return !!this.#passkeyAddRequest; }
   async proveWithCode(method: 'email' | 'app' | 'recovery') {
-    const add = this.#passkeyAddRequest;
+    const route=this.#route,add = this.#passkeyAddRequest;
     const proved = await this.actionProof.verify(method);
+    if(proved&&route===this.#route&&this.path===operatorVenuesPath)this.root.querySelector<HTMLElement>('#operator-venue-switch')?.focus();
     await this.#continuePasskeyAdd(add, proved);
   }
   async proveWithPasskey() {
@@ -704,6 +742,7 @@ export class PortalApp {
     const proved = !!result && !!this.actionProof.status?.freshUntil;
     if (!proved) this.actionProof.error = 'actionProofUnavailable';
     this.draw();
+    if(proved&&this.path===operatorVenuesPath)this.root.querySelector<HTMLElement>('#operator-venue-switch')?.focus();
     await this.#continuePasskeyAdd(add, proved);
   }
   async #continuePasskeyAdd(add: PasskeyAddRequest | undefined, proved: boolean) {

@@ -16,6 +16,14 @@ import {validDiagnosticExport} from './diagnostic-types.ts';
 import {validBillingView,validMethodPresentation,validMethodResult} from './billing-types.ts';
 export const enrollmentRequiredEvent = 'cloud-enrollment-required';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number; recoveryExpiresAt?: string};
+export type OperatorVenue={id:string;name:string|null;stopped:boolean};
+export type OperatorVenueSearch={venues:OperatorVenue[];tooMany?:true};
+function validOperatorVenue(value:unknown):value is OperatorVenue{
+  if(!value||typeof value!=='object'||Object.keys(value).sort().join(',')!=='id,name,stopped')return false;
+  const {id,name,stopped}=value as OperatorVenue;
+  return typeof id==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id)
+    &&(name===null||typeof name==='string')&&typeof stopped==='boolean';
+}
 function validResult(path: string, value: unknown, status: number): boolean {
   if(path.startsWith('/owner-recovery/'))return status===200&&validOwnerRecoveryResult(path,value);
   if (path === '/businesses' || path === '/organisations/rename') return status === 200 && validAccountBusinesses(value);
@@ -24,10 +32,18 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/owner-transfers/accept'||path==='/owner-transfers/cancel')return status===200&&validOwnerTransfer(value);
   if(path==='/operator/actions/requests'||path==='/operator/actions/decide')return [200,201].includes(status)&&validCloudActionRequest(value);
   if(path==='/operator/actions'){
-    const actions=(value as {actions?:unknown}|null)?.actions;
-    return status===200&&Array.isArray((value as any).requests)&&(value as any).requests.every(validCloudActionRequest)&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
+    const view=value as {actions?:unknown;requests?:unknown;operatorVenues?:unknown}|null;
+    const actions=view?.actions;
+    return status===200&&(view?.operatorVenues===undefined||view.operatorVenues===true)&&Array.isArray(view?.requests)
+      &&view.requests.every(validCloudActionRequest)&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
       a&&typeof a.id==='string'&&Object.hasOwn(translations.en,`cloudAction_${a.id}`)&&['ask-first','act-and-report'].includes(a.policy)&&a.available===false);
   }
+  if(path==='/operator/venues/read'){
+    const search=value as Partial<OperatorVenueSearch>|null;
+    return status===200&&Array.isArray(search?.venues)&&search.venues.length<=10&&search.venues.every(validOperatorVenue)
+      &&(search.tooMany===undefined||search.tooMany===true&&search.venues.length===0);
+  }
+  if(path==='/operator/venues/address-lookup')return status===200&&validOperatorVenue(value);
   if(path==='/security/email')return status===202&&!!value&&typeof value==='object'&&(value as {status?:unknown}).status==='accepted';
   if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
   if(path==='/billing/method/verify')return status===200&&validMethodResult(value);
@@ -82,9 +98,10 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   const installationWrite = path === '/installations/remove';
   const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
   const businessPath = path === '/businesses' || path === '/organisations/rename';
+  const operatorVenue = path.startsWith('/operator/venues/');
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || operatorVenue || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     headers['X-CSRF-Token'] = browserCsrfToken();
   }
   try {
@@ -99,7 +116,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
       }
       return {ok: false, status: 503, code: 'unexpected_response', retryAfterMs: 0};
     }
-    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || download || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || operatorVenue || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || download || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;

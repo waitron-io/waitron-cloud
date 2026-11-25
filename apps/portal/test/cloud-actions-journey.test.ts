@@ -4,11 +4,11 @@ import {mkdtemp,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {createSession} from '@waitron-cloud/identity';
+import {createSession,hashSecret} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
 import {CloudActionWorker} from '../../../packages/registration/src/cloud-action-worker.ts';
 import {openProofWindow} from '../../../packages/registration/test/fixtures/action-proof.ts';
-import {startPortalFixture} from './fixtures.ts';
+import {completeBrowserEmail,mailFor,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`approved action recovery ${locale} ${theme} ${width}: consoleLossPreservesPendingWork`,async()=>{
@@ -58,4 +58,114 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await page.screenshot({path:join(process.env.CLOUD_ACTION_SCREENSHOTS,`journey-${locale}-${theme}-${width}.png`),fullPage:true});}
  }finally{await workload?.close();await rm(directory,{recursive:true,force:true});await f.close();}
+});
+
+const venueScreens=process.env.CLOUD_OPERATOR_VENUE_SCREENSHOTS;
+for(const locale of ['en','es'] as const)
+for(const theme of (venueScreens?['light','dark']:['light']) as ('light'|'dark')[])
+for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${locale} ${theme} ${width}`,async()=>{
+ const operator=randomUUID(),email=`operator-${operator}@example.test`,password='Synthetic operator password';
+ const fixture=await startPortalFixture(undefined,undefined,undefined,undefined,false,undefined,{id:operator,venues:true});
+ try{
+  await fixture.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[operator]);
+  await fixture.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())',
+   [operator,email,await hashSecret(password)]);
+  const organisation=randomUUID(),business=randomUUID(),venueId=randomUUID(),name='Café Lunar';
+  await fixture.db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisation]);
+  await fixture.db.pool.query("INSERT INTO legal_businesses(id,organisation_id,country_code) VALUES($1,$2,'ES')",[business,organisation]);
+  await fixture.db.pool.query("INSERT INTO venues(id,environment,organisation_id,legal_business_id,display_name) VALUES($1,'test',$2,$3,$4)",
+   [venueId,organisation,business,name]);
+  const page=await fixture.browser.newPage({locale:'en',colorScheme:theme,viewport:{width,height:880}});
+  page.setDefaultTimeout(5000);
+  const find=locale==='en'?'Find a venue':'Buscar un local';
+  const stop=locale==='en'?'Stop address suggestions':'Detener las sugerencias de direcciones';
+  const allow=locale==='en'?'Allow address suggestions':'Permitir las sugerencias de direcciones';
+  const c=translations[locale];
+  const venuePath='/operator/venues';
+  assert.equal((await page.goto(`${fixture.origin}${venuePath}#venue=${venueId}&lang=${locale}`))?.status(),200);
+  await page.locator('wt-input[name=email] input').fill(email);
+  await page.locator('wt-input[name=password] input').fill(password);
+  await page.locator('#submit').click();
+  await completeBrowserEmail(fixture,page,email,locale);
+  await page.getByRole('heading',{name,exact:true,level:1}).waitFor();
+  await page.getByText(venueId).waitFor();
+  assert.equal(new URL(page.url()).pathname,venuePath);
+  assert.equal(new URL(page.url()).hash,'');
+  await page.goto(fixture.origin+'/operator/actions#lang='+locale);
+  await page.getByRole('link',{name:find,exact:true}).click();
+  const lookup=page.getByRole('searchbox',{name:locale==='en'?'Venue name':'Nombre del local'});
+  const searchButton=page.getByRole('button',{name:locale==='en'?'Search':'Buscar',exact:true});
+  const searchStyle=await searchButton.evaluate(button=>getComputedStyle(button).textDecorationLine);
+  if(locale==='es')assert.equal(searchStyle,'none','Search is styled as a button');
+  await lookup.fill('cafe lunar');
+  if(locale==='en')await lookup.press('Enter');else await searchButton.click();
+  const found=page.getByRole('link',{name,exact:true});
+  await found.waitFor();
+  const capture=async(state:string)=>{
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   if(venueScreens){
+    await mkdir(venueScreens,{recursive:true});
+    await page.screenshot({path:join(venueScreens,`${locale}-${theme}-${width}-${state}.png`),fullPage:true});
+   }
+  };
+  await capture('search');
+  await found.click();
+  const stopButton=page.getByRole('button',{name:stop,exact:true}),allowButton=page.getByRole('button',{name:allow,exact:true});
+  await stopButton.waitFor();
+  await stopButton.click();
+  const proof=page.getByRole('heading',{name:c.actionProofTitle,exact:true});
+  await proof.waitFor();
+  await page.getByRole('button',{name:c.actionProofEmail,exact:true}).click();
+  const input=page.locator('wt-input[name=actionProofCode] input');
+  await input.waitFor();
+  await fixture.drainMail();
+  const subject=locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud';
+  const proofMail=await mailFor(email,subject,fixture.mailEvidence);
+  const code=proofMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+  await input.fill(code);
+  await page.locator('#action-proof-verify').click();
+  await proof.waitFor({state:'hidden'});
+  assert.equal(await stopButton.evaluate(button=>(button.getRootNode() as Document|ShadowRoot).activeElement===button),true);
+  assert.equal(searchStyle,'none','Search is styled as a button');
+  await capture('allowed');
+  const operatorTraffic:{path:string;outcome:number|string}[]=[];
+  const record=(url:string,outcome:number|string)=>{
+   const path=new URL(url).pathname;
+   if(path.startsWith('/api/account/operator/venues/'))operatorTraffic.push({path,outcome});
+  };
+  page.on('response',response=>record(response.url(),response.status()));
+  page.on('requestfailed',request=>record(request.url(),request.failure()?.errorText??'request failed'));
+  await page.route('**/operator/venues/address-lookup',async route=>{
+   const response=await route.fetch();assert.equal(response.status(),200);await route.abort('failed');
+  },{times:1});
+  const lostReply=page.waitForEvent('requestfailed',request=>request.url().endsWith('/operator/venues/address-lookup'));
+  await stopButton.click();
+  assert.ok((await lostReply).failure());
+  try{await allowButton.waitFor();}
+  catch(error){
+   const panel=await page.locator('main').innerText({timeout:1000}).catch(()=>'<unavailable>');
+   throw Error(`Expected the saved stop after a lost reply: ${JSON.stringify({operatorTraffic,panel})}`,{cause:error});
+  }
+  await capture('stopped');
+  await page.reload();
+  let proofShownWhileChecking:boolean|undefined;
+  await page.route('**/api/account/action-proof',async route=>{
+   const response=await route.fetch();
+   proofShownWhileChecking=await proof.isVisible();
+   await route.fulfill({response});
+  },{times:1});
+  await allowButton.click();
+  await stopButton.waitFor();
+  assert.equal(proofShownWhileChecking,false,'A verified operator does not see a verification prompt while Cloud checks the session');
+  const {rows}=await fixture.db.pool.query("SELECT event_type FROM security_audit_events WHERE subject_id=$1 AND event_type<>'venue.viewed' ORDER BY occurred_at",[venueId]);
+  assert.deepEqual(rows.map(row=>row.event_type),['venue.address_lookup_stopped','venue.address_lookup_allowed']);
+  if(locale==='en'){
+   await page.getByRole('combobox',{name:'Language'}).selectOption('es');
+   await page.goBack();
+   const spanish=page.getByRole('heading',{name:'Buscar un local',exact:true,level:1});
+   await spanish.waitFor();
+   await page.reload();
+   await spanish.waitFor();
+  }
+ }finally{await fixture.close();}
 });
