@@ -1,6 +1,8 @@
+import {createServer} from 'node:http';
+import {isUuid} from './manifest.ts';
 import {matchGuestMenuLanguage} from './guest-menu-match.ts';
 import {isGuestMenuLanguage} from './guest-menu-language.ts';
-import type {Pool,PoolClient} from 'pg';
+import {Pool,type PoolClient,type PoolConfig} from 'pg';
 import {createHash} from 'node:crypto';
 import {createLeaseTrust,effectiveVenueLevel,InstallationError,readMachineClaims,transaction,verifyMachine,verifyLease,type BillingLevel,type LeaseIssuer,type PlanMode,type TrialView} from '@waitron-cloud/registration';
 export interface GuestMenuView {
@@ -8,9 +10,12 @@ export interface GuestMenuView {
  planRequired?:true;
  publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};
 }
-export async function guestMenuStatus(client:PoolClient,venueId:string,origin:string):Promise<GuestMenuView>{
+type GuestMenuStatus=Omit<GuestMenuView,'url'>&{url:string|null};
+export function guestMenuStatus(client:PoolClient,venueId:string,origin:string):Promise<GuestMenuView>;
+export function guestMenuStatus(client:PoolClient,venueId:string,origin:string|null):Promise<GuestMenuStatus>;
+export async function guestMenuStatus(client:PoolClient,venueId:string,origin:string|null):Promise<GuestMenuStatus>{
  const row=(await client.query('SELECT revision,state,body_sha256,default_language,received_at FROM guest_menus WHERE venue_id=$1',[venueId])).rows[0];
- return {version:1,url:`${origin}/m/${venueId}`,revision:Number(row?.revision??0),state:row?.state??'off',publication:row?.state==='current'
+ return {version:1,url:origin===null?null:`${origin}/m/${venueId}`,revision:Number(row?.revision??0),state:row?.state??'off',publication:row?.state==='current'
   ?{bodySha256:row.body_sha256,defaultLanguage:row.default_language,receivedAt:row.received_at.toISOString()}:null};
 }
 /** The venue parent lock also serialises the first publish with a takedown on an absent row. */
@@ -55,6 +60,41 @@ export async function readGuestMenuRelease(client:Pick<Pool,'query'>,venueId:str
  if(!row)return undefined;
  const {revision,state,environment,level,trials,today}=row;
  return {revision,state,eligible:environment==='test'&&effectiveVenueLevel(level,trials,today)!=='registered'};
+}
+
+export async function startGuestMenuAuthority(database:PoolConfig,host:string,port:number){
+ const pool=new Pool({...database,max:4,connectionTimeoutMillis:250,statement_timeout:650,query_timeout:700});
+ pool.on('error',()=>console.error('Guest menu authority database connection failed'));
+ const server=createServer({maxHeaderSize:8192,headersTimeout:1000,requestTimeout:1000,connectionsCheckingInterval:100},async(req,res)=>{
+  const path=req.url??'',id=path.slice('/guest-menu/'.length);
+  let status=404;
+  if(req.method==='GET'&&path.startsWith('/guest-menu/')&&isUuid(id)){
+   // The dedicated pool bounds the number of queries and the time spent waiting for a connection.
+   try{
+    const current=await readGuestMenuRelease(pool,id,'test-venue-levels');
+    status=current?.eligible&&current.state!=='blocked'?204:404;
+   }catch{status=503;}
+  }
+  if(!res.destroyed)res.writeHead(status,{'cache-control':'no-store'}).end();
+ });
+ try{
+  await new Promise<void>((resolve,reject)=>{
+   server.once('error',reject);
+   server.listen(port,host,()=>{server.removeListener('error',reject);resolve();});
+  });
+ }catch(error){
+  await pool.end();
+  throw error;
+ }
+ const address=server.address();
+ if(!address||typeof address==='string')throw Error('guest_menu_authority_address');
+ return {port:address.port,async close(){
+  try{
+   await new Promise<void>((resolve,reject)=>{
+    server.close(error=>error?reject(error):resolve());server.closeAllConnections();
+   });
+  }finally{await pool.end();}
+ }};
 }
 
 export type GuestMenuAction='guest-menu-publish'|'guest-menu-status'|'guest-menu-withdraw';

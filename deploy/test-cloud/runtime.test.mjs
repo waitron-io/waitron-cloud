@@ -414,3 +414,15 @@ test('capture setup refuses a public upload address outside the Amazon HTTPS sha
  await assert.rejects(openTestCaptureRuntime({mode:'test-free-paid',uploadOrigin:'https://cloud.example.test'}),/test_cloud.amazon_backups/);
  await assert.rejects(openTestCaptureRuntime({mode:'test-venue-levels',uploadOrigin:'https://cloud.example.test:8333'}),/test_cloud.amazon_backups/);
 });
+
+test('guest menu authority opt-in stays inside the test account worker',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-menu-authority-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir);
+ const enabled={CLOUD_VENUE_SERVICE_LEVELS:'test',TEST_CLOUD_LIVE_GUEST_MENU:'1'};
+ assert.equal(testRuntimeEnvironment('account',config,enabled).TEST_CLOUD_LIVE_GUEST_MENU,'1');
+ assert.equal(testRuntimeEnvironment('gateway',config,enabled).TEST_CLOUD_LIVE_GUEST_MENU,undefined);
+ assert.equal(testRuntimeEnvironment('account',config,{CLOUD_VENUE_SERVICE_LEVELS:'test'}).TEST_CLOUD_LIVE_GUEST_MENU,undefined);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{...enabled,NODE_ENV:'production'}),/test_cloud.live_guest_menu/);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{TEST_CLOUD_LIVE_GUEST_MENU:'1'}),/test_cloud.live_guest_menu/);
+});
