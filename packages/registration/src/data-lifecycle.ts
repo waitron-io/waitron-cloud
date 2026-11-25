@@ -55,7 +55,7 @@ async function locked(client:PoolClient,ref:LifecycleRef):Promise<Row>{
  if(!row||row.revision!==ref.revision)fail('lifecycle_conflict');return row;
 }
 
-// Internal journal only: a recorded request or outcome grants no permission to run its effect.
+// A recorded request or outcome grants no permission to run its effect.
 export class LifecycleStore {
  readonly #pool:Pool;
  constructor(pool:Pool){this.#pool=pool;}

@@ -18,6 +18,8 @@ test('catalogue accepts an optional exit recovery window with canonical dates',(
  const exitRecovery={effectiveEndAt:'2026-01-01T12:00:00.000Z',deadlineAt:'2026-04-01T12:00:00.000Z',expired:false};
  assert.equal(validBackupPage({...page,exitDownloadAvailable:true,exitRecovery}),true);
  assert.equal(validBackupPage({...page,exitRecovery:{...exitRecovery,expired:true}}),true);
+ assert.equal(validBackupPage({...page,exitRecovery:null}),false);
+ assert.equal(validBackupPage({...page,exitRecovery:[]}),false);
  for(const patch of [{effectiveEndAt:'2026-01-01'},{deadlineAt:'bad'},{expired:'false'},{objectKey:'private'}])
   assert.equal(validBackupPage({...page,exitRecovery:{...exitRecovery,...patch}}),false);
 });

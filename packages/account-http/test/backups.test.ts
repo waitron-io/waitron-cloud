@@ -9,7 +9,7 @@ import {BackupKeyVault} from '../../backups/src/keys.ts';
 import type {HttpBindings} from '@hono/node-server';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
-import {after,before,beforeEach,test} from 'node:test';
+import {after,before,beforeEach,test,type TestContext} from 'node:test';
 import {createLeaseIssuer,LifecycleStore,SignupStore,RegistrationStore,type PlanMode} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
 import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
@@ -139,6 +139,10 @@ test('recovered scope: backup HTTP metadata refuses a retained outside membershi
 });
 
 type ExitFixture=Awaited<ReturnType<typeof recoveryFixture>>;
+function exitClockPool(t:TestContext){
+ const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema},pg_catalog`});
+ t.after(()=>pool.end());return pool;
+}
 function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:StageOptions|undefined)=>Promise<ReturnType<typeof bufferObject>>,pool=db.pool){
  const server=createAccountApp({pool,outbox:db.outbox,planMode,
   config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
@@ -241,8 +245,7 @@ test('exit download lists the fixed dates and refuses both files once the window
 
 test('exit download disposes the staged archive if the deadline passes during staging',async t=>{
  const f=await recoveryFixture(db),venueId=f.installed.venueId;
- const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema},pg_catalog`});
- t.after(()=>pool.end());
+ const pool=exitClockPool(t);
  const {rows:[{effective_end_at}]}=await db.pool.query("SELECT clock_timestamp()-interval '2160 hours'+interval '2 minutes' AS effective_end_at");
  await new LifecycleStore(db.pool).request({venueId,operationId:randomUUID(),kind:'cancel',expectedRevision:0,
   fingerprint:'a'.repeat(64),effectiveEndAt:effective_end_at.toISOString()});
@@ -260,6 +263,27 @@ test('exit download disposes the staged archive if the deadline passes during st
  if(response.ok)await response.arrayBuffer();
  assert.equal(response.status,410);
  assert.equal(disposals,1);
+});
+
+test('backups list refuses a session that expires while waiting for the exit window',async t=>{
+ const f=await recoveryFixture(db),pool=exitClockPool(t),held=await db.secondPool.connect();
+ const send=exitDownload(f,'test-free-paid',async()=>{throw Error('unexpected read');},pool);
+ let response:Promise<Response>|undefined;
+ try{
+  await held.query('BEGIN');
+  const {rows:[{pid}]}=await held.query('SELECT pg_backend_pid() AS pid');
+  await held.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[f.installed.venueId]);
+  response=Promise.resolve(send('list'));
+  await t.waitFor(async()=>{
+   const {rows:[{waiting}]}=await held.query('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))) AS waiting',[pid]);
+   assert.equal(waiting,true);
+  },{timeout:3000});
+  await held.query("CREATE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT pg_catalog.clock_timestamp()+interval '2 days'$$");
+  await held.query('COMMIT');
+  const refusal=await response;
+  assert.equal(refusal.status,401);
+  assert.deepEqual(await refusal.json(),{error:'session_expired'});
+ }finally{await held.query('ROLLBACK');held.release();await response?.catch(()=>{});}
 });
 
 test('exit download releases database locks when its request deadline expires',async()=>{

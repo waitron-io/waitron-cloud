@@ -351,3 +351,17 @@ test('exit download window checks database time after waiting for a lifecycle ro
   assert.deepEqual(await reading,{allowed:false,window:{effectiveEndAt:'2027-03-28T00:30:00.000Z',deadlineAt:'2027-06-26T00:30:00.000Z',expired:true}});
  }finally{await held.query('ROLLBACK');held.release();await reading?.catch(()=>{});}
 });
+
+test('exit download waits for a first cancellation to fix the deadline',async()=>{
+ const held=await f.pool.connect();let reading:Promise<unknown>|undefined;
+ try{
+  await held.query('BEGIN');
+  await held.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[f.venueId]);
+  await held.query(`INSERT INTO data_lifecycles(venue_id,revision,state,requested_at,effective_end_at,deadline_at)
+   VALUES($1,1,'exit preparing',clock_timestamp(),'2026-01-01T00:00:00Z','2026-04-01T00:00:00Z')`,[f.venueId]);
+  reading=transaction(f.pool,client=>LifecycleStore.readExitRecovery(client,f.venueId));
+  await waitForLock('SELECT id FROM venues WHERE id=',reading);
+  await held.query('COMMIT');
+  assert.deepEqual(await reading,{allowed:false,window:{effectiveEndAt:'2026-01-01T00:00:00.000Z',deadlineAt:'2026-04-01T00:00:00.000Z',expired:true}});
+ }finally{await held.query('ROLLBACK');held.release();await reading?.catch(()=>{});}
+});

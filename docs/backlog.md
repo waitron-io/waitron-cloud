@@ -314,7 +314,9 @@ best guess and ask for confirmation from the specialist later”. The
 record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
 covers a verified backup and key through the fixed 90-day deadline in a disposable rehearsal.
-Add the [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud) when building full return.
+Real venue exit still needs a service-end action, the download audit with full
+return, read-only use and restore limits, resubscription, sealing and deletion.
+See the [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).
 The roadmap’s [slice 5 country-policy work](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
 remains separate. Bring later plans to the watcher one at a time for clearance.
 
@@ -324,12 +326,12 @@ remains separate. Bring later plans to the watcher one at a time for clearance.
   local slices 2–5 on 2026-10-23. Slices 6–12 remain unauthorised until each plan is cleared. It uses
   [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
   as the single application map.
-- Built, disabled: slices 1–4 (outbound AI refusal, the
+- Built: slices 1–4 (outbound AI refusal, the
   [register](cloud-data-processing-register.md) and [draft annexes](cloud-processing-annexes.md),
   the [country decision](country-policy.md), the [venue lifecycle journal](data-lifecycle-journal.md))
   and slice 5's first task, internal stored-policy admission that no product adapter calls
-  yet. The production Spain default has no qualified flows. No customer route or effects
-  worker is enabled.
+  yet. The disposable Backups rehearsal reads the journal's cutoff. The production Spain
+  default still needs qualified flows and production use of the effects worker.
 - Open in slice 5 ([plan](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)):
   placement and credential enforcement, production assignment, provider retirement,
   destructive-retention coordination and mail retry semantics. The retention and mail worker

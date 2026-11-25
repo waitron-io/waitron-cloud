@@ -1,8 +1,9 @@
 # Data lifecycle
 
-The disabled [venue lifecycle journal](../data-lifecycle-journal.md) records fixed cancellation
-deadlines, worker claims and uncertain effects; it implements no service exit, full download,
-reactivation or all-copy purge. Local capture, retention, verification, recovery, key rotation
+The [venue lifecycle journal](../data-lifecycle-journal.md) records fixed cancellation
+deadlines, worker claims and uncertain effects. The disposable Backups rehearsal uses its
+deadline for the verified archive and key. Full exit, resubscription and all-copy purge stay
+open. Local capture, retention, verification, recovery, key rotation
 and history cleanup are implemented ([proof](../local-backups.md),
 [captures](../authenticated-captures.md), [containment](../backup-verifier-containment.md),
 [recovery code keys](../recovery-code-keys.md)).

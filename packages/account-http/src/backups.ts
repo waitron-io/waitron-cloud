@@ -92,8 +92,8 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
    WHERE s.venue_id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND s.generation IS NOT NULL
    AND s.observed_at>clock_timestamp()-interval '5 minutes'`,[venueId])).rows[0];
   const points=result.rows.slice(0,50).map(p=>({id:p.id as string,capturedAt:p.captured_at.toISOString() as string,verification:p.verification as string,retention:p.retention as string,expiresAt:p.expires_at.toISOString() as string,protection:p.protection as string|null}));
-  await resolveSession(client,token,{csrfToken,touch:false});
   const exit=exitDownloads&&environment==='test'?await LifecycleStore.readExitRecovery(client,venueId):undefined;
+  await resolveSession(client,token,{csrfToken,touch:false});
   return {venueId,points,...(exit?.allowed?{exitDownloadAvailable:true}:{}),...(exit?.window?{exitRecovery:exit.window}:{}),
    nextCursor:result.rows.length>50?Buffer.from(JSON.stringify([venueId,points.at(-1)!.id])).toString('base64url'):null,defaultPointId:defaultPoint?.id??null,
    continuousRecovery:stream?{recoverableAt:stream.recoverable_at.toISOString(),checkedAt:stream.observed_at.toISOString(),sourceNodeId:stream.source_node_id}:null};
