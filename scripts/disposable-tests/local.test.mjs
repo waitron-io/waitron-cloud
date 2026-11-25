@@ -91,12 +91,19 @@ test('busy or unhealthy admission cannot create or destroy another turn', async 
 
 // A whole-turn deadline must cover preparation as well as candidate execution.
 test('preparation cannot outlive the lease deadline', async t => {
-  const f = await fixture(t, {prepare: async (_lease, {signal}) => delay(5000, undefined, {signal})});
-  const started = performance.now();
-  const result = await f.runLocal({...f, durationMs: 150});
+  // Advance the clock only in preparation so ledger I/O cannot spend the lease.
+  t.mock.timers.enable({apis: ['Date', 'setTimeout']});
+  const durationMs = 150;
+  let abortedEarly;
+  const f = await fixture(t, {prepare: async (_lease, {signal}) => {
+    t.mock.timers.tick(durationMs - 1);
+    abortedEarly = signal.aborted;
+    t.mock.timers.tick(1);
+  }});
+  const result = await f.runLocal({...f, durationMs});
+  assert.equal(abortedEarly, false);
   assert.equal(result.code, 124);
   assert.equal(result.cleanup, 'absent');
-  assert.ok(performance.now() - started < 1500);
 });
 
 test('cancellation during admission is143 even when the health reader throws', async t => {
