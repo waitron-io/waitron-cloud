@@ -62,6 +62,19 @@
   workflows, control switches and protocol tracing are removed.
 
 
+## Operator venue stop after a lost reply (D530)
+
+[Main CI](https://github.com/waitron-io/waitron-cloud/actions/runs/45659730755/job/139366227504)
+timed out waiting for the Allow button. On Linux the original fixture timed out
+once in 12 traced cases, zero times in four untraced cases, and zero times in
+eight cases at each of the two earlier revisions tested. The stop committed and
+Chromium started the verification read, which never arrived at Cloud before the
+deadline. The fixture turned interception off while the next request was starting.
+Keeping the route until the Allow button appears removes that overlap. Its role
+in the CI failure is inferred. At a failure rate of one in twelve, twelve clean
+cases have about a 35% chance. The later proof route stays in place until the
+Stop button appears. No failure was observed at that step.
+
 ## Usage rate-limit wait (D530)
 
 [PR #598's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019)

@@ -45,7 +45,8 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     translations?.attach(running.server);
     const trace:object[]=[];const traceStarted=performance.now();
-    const tracedPaths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/complete','/api/account/translation-consent']);
+    const tracedPaths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/complete','/api/account/translation-consent',
+      '/api/account/operator/venues/read','/api/account/operator/venues/address-lookup']);
     let requestId=0;
     running.server.on('request',(request,response)=>{
       const path=request.url?.split('?')[0];if(!path||!tracedPaths.has(path))return;
