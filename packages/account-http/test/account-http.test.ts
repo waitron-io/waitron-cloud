@@ -458,6 +458,7 @@ test('a browser proof is bound to the form, portal origin and IPv6 connection gr
   const alternateApp = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.secondPool, outbox: db.outbox,
     config: {...config(), portalOrigin: alternateOrigin}});
   const peer = '2001:db8:1:2::1';
+  assert.equal((await request('/browser-check', {form: '/login'}, {peer})).status, 400);
   const challenge = await request('/browser-check', {form: '/signup/request'}, {peer});
   assert.equal(challenge.status, 200);
   const headers = solveBrowserCheck(await challenge.json());

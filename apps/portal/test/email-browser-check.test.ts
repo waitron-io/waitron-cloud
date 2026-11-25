@@ -77,6 +77,36 @@ test('the email forms allow a fresh browser check after a worker fails', async t
   }
 });
 
+test('a server refusal requires a fresh challenge before retrying the email form', async t => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({locale: 'en'});
+  page.setDefaultTimeout(4000);
+  await servePortal(page);
+  let challenges = 0;
+  const proofs: string[] = [];
+  await page.route('**/api/account/browser-check', route => route.fulfill({json: {challenge: `synthetic.${++challenges}`, difficulty: 8}}));
+  await page.route('**/api/account/browser-check.js', route => route.fulfill({contentType: 'text/javascript', body: browserCheckWorker}));
+  await page.route('**/api/account/signup/request', route => {
+    proofs.push(JSON.parse(route.request().headers()['x-waitron-browser-proof'] ?? '{}').challenge);
+    return route.fulfill(proofs.length === 1 ? {status: 403, json: {error: 'browser_check_required'}}
+      : {status: 202, json: {status: 'accepted'}});
+  });
+  await page.goto('https://portal.test/signup');
+  const email = page.getByLabel('Email');
+  await email.fill('venue@example.test');
+  const submit = page.getByRole('button', {name: 'Continue', exact: true});
+  await submit.click();
+  const alert = page.getByRole('alert').getByText('The browser check failed. Try again or use another browser.');
+  await alert.waitFor();
+  assert.equal(await alert.evaluate(element => element === document.activeElement), true);
+  assert.equal(await email.inputValue(), 'venue@example.test');
+  assert.deepEqual(proofs, ['synthetic.1']);
+  await submit.click();
+  await page.getByRole('heading', {name: 'Check your email', exact: true}).waitFor();
+  assert.deepEqual(proofs, ['synthetic.1', 'synthetic.2']);
+});
+
 for (const cause of ['navigation', 'deadline'] as const) test(`a stalled browser worker stops on ${cause}`, {timeout: cause === 'navigation' ? 8_000 : 35_000}, async t => {
   const browser = await chromium.launch();
   t.after(() => browser.close());

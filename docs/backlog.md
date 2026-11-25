@@ -1308,9 +1308,9 @@ See [the native recovery boundaries](backlog/backup-recovery-http.md#recovery-de
 
 ## Public browser and network qualification
 
-Qualify the public browser check against the supported browsers and production
-networks before public exposure. Local HTTP, script and Chromium checks do not
-discharge that deployment gate.
+Qualify the browser check on public venue pages and the sign-up and password-reset
+email forms across supported browsers and production networks. Verify those paths
+before public exposure, including on slower phones.
 
 ## Public gateway deployment qualification (D191)
 
