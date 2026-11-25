@@ -477,6 +477,12 @@ test('two account servers can spend a browser proof only once', async () => {
   const responses = await Promise.all([app, other].map((target, index) =>
     request('/signup/request', {email: `proof-${index}@example.test`}, {target, headers})));
   assert.deepEqual(responses.map(response => response.status).sort(), [202, 403]);
+  // The duplicate is the only counter spent twice, and its row must outlive a two-minute challenge.
+  const claim = await db.pool.query("SELECT expires_at > clock_timestamp() + interval '2 minutes' AS live FROM account_rate_limits WHERE attempts = 2");
+  assert.deepEqual(claim.rows, [{live: true}]);
+  const {challenge: token, nonce} = JSON.parse(headers['x-waitron-browser-proof']);
+  const reordered = {'x-waitron-browser-proof': JSON.stringify({nonce, challenge: token})};
+  assert.equal((await request('/signup/request', {email: 'later@example.test'}, {headers: reordered})).status, 403);
   assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'verification'")).rows[0].count, '1');
 });
 test('address login limits survive case changes and different IPs', async () => {

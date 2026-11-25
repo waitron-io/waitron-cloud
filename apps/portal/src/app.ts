@@ -479,7 +479,7 @@ export class PortalApp {
     this.#browserCheck = undefined;
     if (check) this.draw();
     const result = proof && !proof.ok ? proof : await accountRequest(path, body, undefined, proof?.value);
-    // A late reply still sets the wait for the operation that sent it.
+    // A submitted form's Retry-After outlives navigation to another operation.
     if (!result.ok && result.code !== 'signup_rate_limited') this.#serverCooldowns.set(path, Math.max(this.#serverCooldowns.get(path) ?? 0, performance.now() + result.retryAfterMs));
     if (route !== this.#route) return;
     this.pending = false;

@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {test} from 'node:test';
-import {chromium} from 'playwright';
+import {chromium, type Page} from 'playwright';
 import {loadPortalAssets, portalResponse} from '../../../packages/account-http/src/portal.ts';
 import {browserCheckWorker} from '../../../packages/remote-access/src/browser-check.ts';
 import {translations} from '../src/locale.ts';
 
-test('the email forms allow a fresh browser check after a worker fails', async t => {
+async function servePortal(page: Page) {
   const assets = await loadPortalAssets(new URL('../dist', import.meta.url).pathname);
+  await page.route('https://portal.test/**', async route => {
+    const response = portalResponse(new Request(route.request().url()), assets);
+    await route.fulfill({status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer())});
+  });
+}
+
+test('the email forms allow a fresh browser check after a worker fails', async t => {
   const browser = await chromium.launch();
   t.after(() => browser.close());
   for (const locale of ['en', 'es'] as const) for (const colorScheme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -24,10 +31,7 @@ test('the email forms allow a fresh browser check after a worker fails', async t
       let issue!: () => void, release!: () => void;
       const issuing = new Promise<void>(resolve => {issue = resolve;});
       const releaseChallenge = new Promise<void>(resolve => {release = resolve;});
-      await page.route('https://portal.test/**', async route => {
-        const response = portalResponse(new Request(route.request().url()), assets);
-        await route.fulfill({status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer())});
-      });
+      await servePortal(page);
       await page.route('**/api/account/browser-check', async route => {
         assert.deepEqual(route.request().postDataJSON(), {form});
         if (!challenges) {issue(); await releaseChallenge;}
@@ -71,4 +75,33 @@ test('the email forms allow a fresh browser check after a worker fails', async t
       assert.deepEqual(proofs.map(proof => (proof as {challenge: string}).challenge), ['synthetic.2']);
     });
   }
+});
+
+for (const cause of ['navigation', 'deadline'] as const) test(`a stalled browser worker stops on ${cause}`, {timeout: cause === 'navigation' ? 8_000 : 35_000}, async t => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  page.setDefaultTimeout(4000);
+  await servePortal(page);
+  let emailRequests = 0;
+  await page.route('**/api/account/signup/request', route => {
+    emailRequests++;
+    return route.fulfill({status: 202, json: {status: 'accepted'}});
+  });
+  await page.route('**/api/account/browser-check', route => route.fulfill({json: {challenge: 'synthetic', difficulty: 8}}));
+  await page.route('**/api/account/browser-check.js', route => route.fulfill({contentType: 'text/javascript', body: 'onmessage = () => {};'}));
+  await page.goto('https://portal.test/signup');
+  await page.getByLabel('Email').fill('venue@example.test');
+  const submit = page.getByRole('button', {name: 'Continue', exact: true});
+  const [worker] = await Promise.all([page.waitForEvent('worker'), submit.click()]);
+  const stopped = new Promise<void>(resolve => worker.once('close', () => resolve()));
+  if (cause === 'navigation') {
+    await page.getByRole('link', {name: 'Sign in', exact: true}).click();
+    await page.getByRole('heading', {name: 'Sign in', exact: true}).waitFor();
+  } else {
+    await page.getByRole('alert').getByText('The browser check failed. Try again or use another browser.').waitFor({timeout: 30_000});
+    assert.equal(await submit.isEnabled(), true);
+  }
+  await stopped;
+  assert.equal(emailRequests, 0);
 });
