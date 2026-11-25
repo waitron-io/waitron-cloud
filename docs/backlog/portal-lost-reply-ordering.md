@@ -62,6 +62,28 @@
   workflows, control switches and protocol tracing are removed.
 
 
+## Operator venue stop after a lost reply (D530)
+
+[Main CI](https://github.com/waitron-io/waitron-cloud/actions/runs/45659730755/job/139366227504)
+timed out waiting for the Allow button. On Linux the original fixture timed out
+once in 12 traced cases, zero times in four untraced cases, and zero times in
+eight cases at each of the two earlier revisions tested. The stop committed and
+Chromium started the verification read, which never arrived at Cloud before the
+deadline. The fixture turned interception off while the next request was starting.
+Keeping the route until the Allow button appears removes that overlap. Its role
+in the CI failure is inferred. At a failure rate of one in twelve, twelve clean
+cases have about a 35% chance. A review probe on the Mac used the real portal
+and a stand-in Cloud server. In 48 parallel-load runs with one-shot routes,
+29 timed out after the stop and two timed out after the proof check. Each of
+those requests started while Chromium was turning interception off and never
+reached the stand-in server. Both routes stayed active through the follow-up in
+the retained version, which passed all 48 runs. The Linux runs had no proof-step
+timeout. A separate Mac probe saw seven stop timeouts in 150 one-shot runs.
+Each stalled read began during teardown. All 150 retained cases passed. The
+Lane J campaign retains the protocol traces and probe reports under
+`receipts/d530-operator-venue`. Chromium's internal cause and the historical
+CI cause stay open.
+
 ## Usage rate-limit wait (D530)
 
 [PR #598's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019)

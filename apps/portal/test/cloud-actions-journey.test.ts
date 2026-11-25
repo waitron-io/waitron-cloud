@@ -133,29 +133,35 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
    const path=new URL(url).pathname;
    if(path.startsWith('/api/account/operator/venues/'))operatorTraffic.push({path,outcome});
   };
+  page.on('request',request=>record(request.url(),'request'));
   page.on('response',response=>record(response.url(),response.status()));
   page.on('requestfailed',request=>record(request.url(),request.failure()?.errorText??'request failed'));
-  await page.route('**/operator/venues/address-lookup',async route=>{
+  const stopRoute='**/operator/venues/address-lookup';
+  await page.route(stopRoute,async route=>{
    const response=await route.fetch();assert.equal(response.status(),200);await route.abort('failed');
-  },{times:1});
+  });
   const lostReply=page.waitForEvent('requestfailed',request=>request.url().endsWith('/operator/venues/address-lookup'));
   await stopButton.click();
   assert.ok((await lostReply).failure());
   try{await allowButton.waitFor();}
   catch(error){
    const panel=await page.locator('main').innerText({timeout:1000}).catch(()=>'<unavailable>');
-   throw Error(`Expected the saved stop after a lost reply: ${JSON.stringify({operatorTraffic,panel})}`,{cause:error});
+   throw Error(`Expected the saved stop after a lost reply: ${JSON.stringify({operatorTraffic,serverTrace:fixture.trace,panel})}`,{cause:error});
   }
+  await page.unroute(stopRoute);
   await capture('stopped');
   await page.reload();
   let proofShownWhileChecking:boolean|undefined;
-  await page.route('**/api/account/action-proof',async route=>{
+  const proofRoute='**/api/account/action-proof';
+  await page.route(proofRoute,async route=>{
    const response=await route.fetch();
-   proofShownWhileChecking=await proof.isVisible();
+   const promptVisible=await proof.isVisible();
+   proofShownWhileChecking=proofShownWhileChecking||promptVisible;
    await route.fulfill({response});
-  },{times:1});
+  });
   await allowButton.click();
   await stopButton.waitFor();
+  await page.unroute(proofRoute);
   assert.equal(proofShownWhileChecking,false,'A verified operator does not see a verification prompt while Cloud checks the session');
   const {rows}=await fixture.db.pool.query("SELECT event_type FROM security_audit_events WHERE subject_id=$1 AND event_type<>'venue.viewed' ORDER BY occurred_at",[venueId]);
   assert.deepEqual(rows.map(row=>row.event_type),['venue.address_lookup_stopped','venue.address_lookup_allowed']);

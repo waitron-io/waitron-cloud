@@ -1,0 +1,16 @@
+# Keep the operator venue lost-reply check working
+
+The browser check must show a saved stop after losing the successful reply. In [the failed main CI job](https://github.com/waitron-io/waitron-cloud/actions/runs/45659730755/job/139366227504), the old Stop button stayed visible. On Linux at `d1088a43c`, the original route reproduced the timeout in one of 12 traced cases. The stop committed and Chromium emitted `Network.requestWillBeSent` for the verification read. Cloud logged no arrival before the existing five-second assertion timed out. The original route timed out in zero of four untraced cases and in zero of eight at each of the two earlier revisions tested. The fixture turned interception off while the next request was starting. Keeping interception active removes that overlap. Its role in the CI failure is inferred, and the exact browser-side cause remains open.
+
+## Change
+
+In `apps/portal/test/cloud-actions-journey.test.ts`, remove `{times:1}` from both the stop and proof routes. Keep the stop route until the Allow button appears, then await its removal before reloading. Keep the proof route until the Stop button appears after allowing suggestions, then await its removal. A prompt seen at any proof check must fail the test even if a later check sees it hidden. Record browser request events in the existing failure trace. Add the two operator endpoints to the static allowlist in `apps/portal/test/fixtures.ts` and include the bounded server trace on failure, so the next timeout shows whether Cloud received the read. A missing Playwright request event leaves browser dispatch unknown. Reuse the ordering in `apps/portal/test/remote-browser.test.ts`, which keeps interception active through its follow-up read. Keep the original failed-request wait, success status check, five-second UI assertion and saved audit history check.
+
+Add the new evidence to [the portal test ordering record](../../backlog/portal-lost-reply-ordering.md) and update the existing entry in `docs/backlog.md`. Keep the root cause and the separate historical failures open.
+
+## Checks
+
+- Use the unchanged Playwright assertion as the check for the reproduced symptom. The Linux trace with the original route already observed it fail after a committed write and browser dispatch. The same Linux comparison with retention passed all 12 traced cases and both normal language cases. Twelve clean cases have about a 35% chance at a failure rate of one in twelve. Use `DEBUG=pw:protocol` in the real journey to confirm the new ordering for each route. If the retained route times out at the same assertion, investigate the new trace before opening a pull request. Record the result as a test-fixture mitigation and keep the exact browser-side cause open.
+- Build with `pnpm --dir apps/portal build`. Through `scripts/test-postgres.mjs exec`, run `pnpm --dir apps/portal exec node --test --test-name-pattern='operator venue journey' test/cloud-actions-journey.test.ts` and confirm exactly two cases pass, one in English and one in Spanish. The same file checks that the browser loses the reply, shows the saved stop and records the stop and allow in audit history. Treat any retained-route timeout as evidence to investigate.
+
+Expected size is zero production lines, around ten test and test-support lines and ten to fifteen lines for the backlog record, plus this plan.

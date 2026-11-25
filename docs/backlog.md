@@ -1193,7 +1193,8 @@ timed out at sign-out waiting four seconds for the sign-in heading
 
 ## Portal lost-reply test ordering
 
-**Open:** the historical reset-link, lost-reply and translation-control failures, and the
+**Open:** the cause of the operator venue lost-reply timeout, the separate historical
+reset-link, lost-reply and translation-control failures, and the
 consent-uncertainty and usage rate-limit waits from
 [PR #598](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019),
 remain unexplained. Capture a diagnostic recurrence, reproduce its named stage
