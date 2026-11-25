@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test, type TestContext} from 'node:test';
 import {accountRequest,enrollmentRequiredEvent} from '../src/api.ts';
 import {BackupController} from '../src/backup-controller.ts';
+import {clearAbandonedDatabaseDownload} from '../src/backup-database-download.ts';
 import type {BackupPage} from '../src/backup-types.ts';
 
 const venueId = '12345678-1234-4234-8234-123456789abc';
@@ -89,6 +90,42 @@ test('backup download preserves the account enrollment event and distinguishes C
   assert.equal(f.controller.error,'permissionBusiness');
   assert.equal(f.controller.page,undefined);
   assert.equal(f.controller.selected,undefined);
+});
+
+test('database download forwards server refusals and the enrollment event',async t=>{
+  const f=fixture(t);
+  let locked=true;
+  class WorkerReply {
+    onmessage:((event:{data:unknown})=>void)|undefined;
+    postMessage(){this.onmessage?.({data:{ok:false,retryAfterMs:0,status:403,code:'enrollment_required'}});}
+    terminate(){}
+  }
+  for(const [object,name,value] of [[globalThis,'Worker',WorkerReply],
+    [navigator,'storage',{async getDirectory(){if(locked)throw new DOMException('File in use','NoModificationAllowedError');return {async removeEntry(){}};}}]] as const){
+    const previous=Object.getOwnPropertyDescriptor(object,name);
+    Object.defineProperty(object,name,{configurable:true,value});
+    t.after(()=>{if(previous)Object.defineProperty(object,name,previous);else Reflect.deleteProperty(object,name);});
+  }
+  f.replies.push({body:{...page,exitDownloadAvailable:true}});
+  await f.controller.open(venueId);
+  let enrollment=0;
+  document.addEventListener(enrollmentRequiredEvent,()=>{enrollment++;});
+  await f.controller.download('download-database');
+  assert.equal(f.controller.error,'snapshotDownloadUnavailable');
+  locked=false;
+  await f.controller.download('download-database');
+  assert.equal(f.controller.error,'pairEnrollment');
+  assert.equal(enrollment,1);
+});
+
+test('startup retries while a previous page still holds the file',async t=>{
+  let attempts=0;
+  Object.defineProperty(navigator,'storage',{configurable:true,value:{async getDirectory(){return {
+    async removeEntry(){if(++attempts===1)throw new DOMException('Worker still running','NoModificationAllowedError');},
+  };}}});
+  t.after(()=>{Reflect.deleteProperty(navigator,'storage');});
+  await clearAbandonedDatabaseDownload();
+  assert.equal(attempts,2);
 });
 
 test('changing snapshot clears a download refusal and keeps a catalogue refusal visible',async t=>{

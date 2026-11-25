@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 test('concurrent static responses share the built asset instead of copying it for every connection', () => {
   const result = JSON.parse(execFileSync(process.execPath, ['--expose-gc', 'test/fixtures/portal-memory.ts'], {encoding: 'utf8', timeout: 15000}));
+  assert.deepEqual(result.worker, {status: 200, body: '/* database worker */', cache: 'no-store',
+    policy: "default-src 'none'; script-src 'self'; connect-src 'self'"});
   assert.equal(result.size, 4 * 1024 * 1024); assert.equal(result.first, 97);
   assert.deepEqual(result.statuses, Array(24).fill(200));
   assert.deepEqual(result.lengths,Array(32).fill(4 * 1024 * 1024));

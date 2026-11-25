@@ -318,8 +318,10 @@ best guess and ask for confirmation from the specialist later”. The
 [provisional privacy answers](superpowers/specs/2026-11-24-d101-privacy-answers.md)
 record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers a verified backup, key and checksum manifest through the fixed 90-day deadline in a
-disposable owner-only rehearsal. Real venue exit still needs the
+covers a verified backup, key, checksum manifest and a browser save of the venue’s
+SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
+[Downloads above 16 MiB](superpowers/plans/2026-11-25-d642-browser-database-download.md#part-2--save-sqlite-and-the-encrypted-backup-up-to-512-mib)
+still need browser memory evidence. Real venue exit still needs the
 [support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
 and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).
 The remaining return work includes a service-end action and a

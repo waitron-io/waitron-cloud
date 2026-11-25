@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {runTestCloudClients} from './test-cloud-integration.mjs';
 
-test('a test venue owner opens the saved backup offline and all three downloads close at the recovery deadline', {
+test('a test venue owner saves SQLite, opens the backup offline, and all three downloads close at the deadline', {
   skip: !process.env.TEST_CLOUD_INTEGRATION_IMAGE || !process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
   timeout: 300_000,
 }, async () => {
@@ -11,7 +11,11 @@ test('a test venue owner opens the saved backup offline and all three downloads 
     protectedContainerIds: JSON.parse(process.env.TEST_CLOUD_PROTECTED_CONTAINER_IDS ?? '[]')});
   const {paidSnapshot: snapshot} = receipt;
   assert.ok(snapshot?.exitDownload);
-  assert.deepEqual(snapshot.exitDownload, {sha256: snapshot.sha256, bytes: snapshot.bytes, offline: true, boxOnline: true});
+  const {database, ...archive} = snapshot.exitDownload;
+  assert.deepEqual(archive, {sha256: snapshot.sha256, bytes: snapshot.bytes, offline: true, boxOnline: true});
+  assert.equal(database.sqliteIntegrity, 'ok');
+  assert.ok(database.bytes >= 4096);
+  assert.match(database.sha256, /^[a-f0-9]{64}$/);
   const window = snapshot.exitRecovery;
   assert.ok(window?.retainedSnapshotUnchanged);
   assert.equal(Date.parse(window.deadlineAt) - Date.parse(window.effectiveEndAt), 90 * 24 * 60 * 60 * 1000);

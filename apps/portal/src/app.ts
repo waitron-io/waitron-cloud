@@ -12,6 +12,7 @@ import {RemoteController} from './remote-controller.ts';
 import {TranslationConsentController} from './translation-consent-controller.ts';
 import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
+import {clearAbandonedDatabaseDownload} from './backup-database-download.ts';
 import type {BackupDownload} from './backup-types.ts';
 import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
@@ -140,6 +141,7 @@ export class PortalApp {
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
     this.recovery.open(this.link.recoveryId ?? returned?.recoveryId);
+    void clearAbandonedDatabaseDownload();
     this.backups = new BackupController(() => {
       const selected=this.backups.page?.points.find(p=>p.id===this.backups.selected&&p.verification==='verified');
       if(this.backups.selectedSource==='continuous'&&this.backups.page?.continuousRecovery)this.recovery.chooseContinuous(this.backups.venueId);

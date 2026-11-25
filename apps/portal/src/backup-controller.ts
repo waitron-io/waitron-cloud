@@ -1,5 +1,6 @@
 import {bodyRefusal} from './body-refusal.ts';
-import {accountRequest} from './api.ts';
+import {accountRequest,enrollmentRequiredEvent} from './api.ts';
+import {clearAbandonedDatabaseDownload,downloadDatabase} from './backup-database-download.ts';
 import type {Copy} from './locale.ts';
 import type {BackupDownload,BackupPage} from './backup-types.ts';
 const downloadExtension = {'download':'backup.enc','download-key':'key','download-manifest':'manifest.json'};
@@ -11,7 +12,7 @@ export class BackupController {
  // Relative retry waits use elapsed time; retryAt projects the remainder for the shared wall-clock countdown.
  #retryUntil=0;#account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
- account(id:string|undefined){if(id!==this.#account){this.#account=id;this.close();}}
+ account(id:string|undefined){if(id!==this.#account){const previous=this.#account;this.#account=id;this.close();if(previous)void clearAbandonedDatabaseDownload();}}
  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  async open(venueId:string){if(!this.#account)return;this.close();this.venueId=venueId;await this.load();this.#changed();}
@@ -33,9 +34,11 @@ export class BackupController {
   if(!this.#account||!venueId||!pointId||!this.downloadable||this.pending||this.#download||this.waiting)return;
   const transfer=new AbortController();this.#download=transfer;this.downloadError=undefined;this.#listError=undefined;this.#changed();
   try{
-   const result=await this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal);
+   const result=await (action==='download-database'?downloadDatabase(venueId,pointId,transfer.signal)
+    :this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal));
    if(transfer.signal.aborted)return;
    if(result.ok){
+    if(action==='download-database'||!result.value)return;
     const url=URL.createObjectURL(result.value),link=document.createElement('a');
     try{link.href=url;link.download=`waitron-backup-${pointId}.${downloadExtension[action]}`;link.click();}finally{URL.revokeObjectURL(url);}
    }else{
@@ -43,8 +46,10 @@ export class BackupController {
     if(result.status===401||result.code==='permission_denied'){this.page=undefined;this.selected=undefined;this.selectedSource=undefined;}
     this.downloadError=result.code==='proof_required'?'snapshotDownloadProof':result.code==='enrollment_required'?'pairEnrollment':
      result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):
-     result.code==='download_too_large'?'snapshotDownloadTooLarge':'snapshotDownloadUnavailable';
+     result.code==='download_too_large'?'snapshotDownloadTooLarge':
+     result.code==='database_storage_unavailable'?'snapshotDatabaseStorageUnavailable':result.code==='database_open_failed'?'snapshotDatabaseOpenFailed':'snapshotDownloadUnavailable';
     this.downloadProof=result.code==='proof_required'||result.code==='enrollment_required';
+    if(action==='download-database'&&result.code==='enrollment_required')document.dispatchEvent(new Event(enrollmentRequiredEvent));
    }
   }finally{if(this.#download===transfer){this.#download=undefined;this.#changed();}}
  }

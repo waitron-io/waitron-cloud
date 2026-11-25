@@ -7,6 +7,7 @@ import {admitPointFixture} from '../../../packages/backups/test/fixtures/verific
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
+import {backupBytes, backupManifest, recoveryKey, venueDatabase} from './fixtures/backup-download.ts';
 for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot history at phone width`,async()=>{
  const f=await startPortalFixture();try{
   const email='backups@example.test',password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
@@ -30,6 +31,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);await page.screenshot({path:new URL(`../dist/backups-${locale}.png`,import.meta.url).pathname,fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),JSON.stringify(await page.evaluate(()=>[...document.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth).map(e=>({tag:e.tagName,width:e.getBoundingClientRect().width})))));
   await page.getByRole('button',{name:older,exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#snapshot-choice option').length===2);assert.equal(await page.getByRole('button',{name:older,exact:true}).count(),0);
   await page.getByRole('button',{name:refresh,exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#snapshot-choice option').length===50);
+  const saveDatabase=page.getByRole('button',{name:locale==='en'?'Download database':'Descargar base de datos',exact:true});
   const saveArchive=page.getByRole('button',{name:locale==='en'?'Download backup':'Descargar copia',exact:true});
   assert.equal(await saveArchive.count(),0);
   const effectiveEndAt='2026-01-01T12:00:00.000Z',deadlineAt='2026-04-01T12:00:00.000Z';
@@ -67,13 +69,13 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    assert.deepEqual(route.request().postDataJSON(),{kind:'recovery',code:'1'.repeat(32)});
    proof=true;return route.fulfill({status:204});
   });
-  const archive='synthetic encrypted archive',key='k'.repeat(43)+'\n';
-  const manifest=JSON.stringify({archiveManifestVersion:1,capturedAt:effectiveEndAt,archiveSha256:'a'.repeat(64),laterChanges:'unknown'});
+  const archive=backupBytes({gzip:true}),key=recoveryKey+'\n';
+  const manifest=backupManifest(archive);
   for(const [action,body,contentType] of [['download',archive,'application/octet-stream'],['download-key',key,'text/plain; charset=utf-8'],['download-manifest',manifest,'application/json']] as const){
    await page.route('**/api/account/backups/'+action,route=>{
     assert.equal(route.request().method(),'POST');assert.ok(route.request().headers()['x-csrf-token']);
     assert.deepEqual(route.request().postDataJSON(),{venueId:v.venueId,pointId:verifiedId});
-    return route.fulfill({body,contentType});
+    return route.fulfill({body,contentType,headers:{'content-length':String(Buffer.byteLength(body))}});
    });
   }
   await page.getByRole('button',{name:refresh,exact:true}).click();
@@ -89,22 +91,67 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.getByText(locale==='en'?'Later changes may be missing.':'Puede que falten cambios posteriores.',{exact:true}).waitFor();
   await captureWindow('open');
   assert.deepEqual(page.viewportSize(),viewport);
-  await saveArchive.click();
+  await saveDatabase.click();
   const proofPrompt=page.getByRole('alert').filter({hasText:locale==='en'?'Verify it’s you before downloading.':'Verifica que eres tú antes de descargar.'});
   await proofPrompt.waitFor();
   await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
   await page.getByText(c.actionProofReady,{exact:true}).waitFor();
   assert.equal(await proofPrompt.count(),0);
+  const [database]=await Promise.all([page.waitForEvent('download',{timeout:15000}),saveDatabase.click()]);
+  assert.equal(database.suggestedFilename(),`waitron-backup-${verifiedId}.venue.db`);
+  assert.deepEqual(await readFile((await database.path())!),venueDatabase);
+  const stageIsPresent = async (expected:boolean) => {
+   const root=await navigator.storage.getDirectory();
+   try { await root.getDirectoryHandle('waitron-backup-download'); return expected; }
+   catch(error){if(error instanceof DOMException&&error.name==='NotFoundError')return !expected;throw error;}
+  };
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(stageIsPresent,true),true);
   for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[saveKey,key,'key'],[saveManifest,manifest,'manifest.json']] as const){
    const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
    assert.equal(download.suggestedFilename(),`waitron-backup-${verifiedId}.${extension}`);
-   const file=await download.path();assert.ok(file);assert.equal(await readFile(file,'utf8'),contents);
+   const file=await download.path();assert.ok(file);assert.deepEqual(await readFile(file),Buffer.from(contents));
+  }
+  if(locale==='en'){
+   await page.evaluate(()=>{
+    const getFile=FileSystemFileHandle.prototype.getFile;
+    FileSystemFileHandle.prototype.getFile=async function(){
+     if(this.name==='venue.db')await new Promise<void>(resolve=>{
+      window.addEventListener('test-release-database',()=>resolve(),{once:true});
+      document.documentElement.dataset.databasePaused='true';
+     });
+     return getFile.call(this);
+    };
+   });
+   let extraDownloads=0;
+   const countDownload=()=>{extraDownloads++;};
+   page.on('download',countDownload);
+   await saveDatabase.click();
+   await page.waitForFunction(()=>document.documentElement.dataset.databasePaused==='true');
+   const secondTab=await context.newPage();
+   try{
+    await secondTab.goto(f.origin+'/account');
+    await secondTab.getByRole('button',{name:c.signout,exact:true}).waitFor();
+    assert.equal(await secondTab.evaluate(stageIsPresent,true),true);
+   }finally{await secondTab.close();}
+   const replaceSession=(route:import('playwright').Route)=>route.fulfill({json:{accountId:randomUUID(),expiresAt:new Date(Date.now()+60_000).toISOString()}});
+   await page.route('**/api/account/session',replaceSession);
+   await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+   await saveDatabase.waitFor({state:'detached'});
+   await page.evaluate(()=>window.dispatchEvent(new Event('test-release-database')));
+   await page.waitForFunction(stageIsPresent,false);
+   assert.equal(extraDownloads,0);
+   page.off('download',countDownload);
+   await page.unroute('**/api/account/session',replaceSession);
+   await page.reload();
+   await page.getByRole('button',{name:browse,exact:true}).click();
+   await saveDatabase.waitFor();
   }
   expired=true;
   await page.getByRole('button',{name:refresh,exact:true}).click();
   await ended.waitFor();await checkDates();
-  assert.equal(await saveArchive.count(),0);assert.equal(await saveKey.count(),0);
+  assert.equal(await saveDatabase.count(),0);assert.equal(await saveArchive.count(),0);assert.equal(await saveKey.count(),0);
   assert.equal(await saveManifest.count(),0);
   assert.equal(await warning.count(),0);
   await captureWindow('ended');

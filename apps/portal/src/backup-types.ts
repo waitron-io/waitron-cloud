@@ -15,4 +15,15 @@ export function validBackupPage(value:unknown):value is BackupPage{
   &&(v.defaultPointId===null||id(v.defaultPointId))&&(v.nextCursor===null||(typeof v.nextCursor==='string'&&/^[A-Za-z0-9_-]{1,256}$/.test(v.nextCursor)))
   &&Array.isArray(v.points)&&v.points.length<=50&&new Set(v.points.map(p=>p?.id)).size===v.points.length&&v.points.every(p=>p&&typeof p==='object'&&!Array.isArray(p)&&keys(p,['id','capturedAt','expiresAt','retention','verification','protection'])&&id(p.id)&&date(p.capturedAt)&&date(p.expiresAt)&&['pending','verified','failed'].includes(p.verification as string)&&['daily','monthly'].includes(p.retention as string)&&(p.protection===null||['fallback','recovery'].includes(p.protection as string)));
 }
-export type BackupDownload = 'download'|'download-key'|'download-manifest';
+export type BackupDownload = 'download'|'download-key'|'download-manifest'|'download-database';
+export const backupDownloadDirectory = 'waitron-backup-download';
+export interface DatabaseDownloadRequest {venueId: string; pointId: string; attempt: string; csrfToken: string;}
+export async function removeDatabaseDownload(root: FileSystemDirectoryHandle) {
+ try { await root.removeEntry(backupDownloadDirectory, {recursive: true}); }
+ catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }
+}
+export function databaseStorageRefusal(error: unknown) {
+ if (!(error instanceof DOMException)) return undefined;
+ if (error.name === 'NoModificationAllowedError') return 'temporarily_unavailable';
+ if (['QuotaExceededError','NotSupportedError','UnknownError','SecurityError','NotAllowedError'].includes(error.name)) return 'database_storage_unavailable';
+}

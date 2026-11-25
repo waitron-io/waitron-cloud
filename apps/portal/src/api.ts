@@ -88,12 +88,12 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
   return path === '/password-reset/complete' && status === 200 && data.status === 'completed';
 }
-function browserCsrfToken() {
+export function browserCsrfToken() {
  const name=location.protocol==='https:'?'__Host-cloud_csrf':'cloud_csrf';
  const values=document.cookie.split(';').map(value=>value.trim()).filter(value=>value.startsWith(name+'='));
  return values.length===1?values[0]!.slice(name.length+1):'';
 }
-export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<ApiResult<T>> {
+export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal, workerCsrfToken?: string): Promise<ApiResult<T>> {
   const keyDownload = path === '/backups/download-key';
   const manifestDownload = path === '/backups/download-manifest';
   const download = keyDownload || manifestDownload || path === '/backups/download';
@@ -105,7 +105,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
   if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || operatorVenue || venueEmailSave || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
-    headers['X-CSRF-Token'] = browserCsrfToken();
+    headers['X-CSRF-Token'] = workerCsrfToken ?? browserCsrfToken();
   }
   try {
     const timeout = AbortSignal.timeout(download ? 30_000 : 15_000);
@@ -115,6 +115,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if (download && response.ok) {
       const contentType = manifestDownload ? 'application/json' : keyDownload ? 'text/plain; charset=utf-8' : 'application/octet-stream';
       if (response.status === 200 && response.headers.get('content-type') === contentType) {
+        if (workerCsrfToken !== undefined && !keyDownload && !manifestDownload) return {ok: true, value: response as T};
         const value = await response.blob();
         const maxBytes = manifestDownload ? 1024 : 16 * 1024 * 1024;
         if (keyDownload ? value.size === 44 : value.size > 0 && value.size <= maxBytes) return {ok: true, value: value as T};

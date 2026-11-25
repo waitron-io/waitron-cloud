@@ -5,7 +5,9 @@ import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {createHash, createHmac, randomUUID} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {createDecipheriv, createHash, createHmac, randomUUID, scryptSync} from 'node:crypto';
+import {gunzipSync} from 'node:zlib';
 import {request} from 'node:https';
 import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
@@ -247,7 +249,61 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online}) {
+async function saveExitDatabase({origin, port, session, pointId}) {
+  const {chromium} = createRequire(new URL('../apps/portal/package.json', import.meta.url))('playwright');
+  const {hostname} = new URL(origin);
+  const browser = await chromium.launch({args: [`--host-resolver-rules=MAP ${hostname} 127.0.0.1:${port}`, '--no-proxy-server']});
+  try {
+    // This disposable proxy uses a private test CA already checked by the HTTPS client.
+    const context = await browser.newContext({locale: 'en', ignoreHTTPSErrors: true});
+    await context.addCookies(session.cookie.split('; ').map(cookie => {
+      const index = cookie.indexOf('=');
+      const name = cookie.slice(0, index);
+      return {url: origin, name, value: cookie.slice(index + 1), secure: true, httpOnly: name === '__Host-cloud_session'};
+    }));
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    const response = await page.goto(origin + '/account/venues');
+    assert.equal(response.status(), 200, 'integration.exit_portal');
+    await page.getByRole('button', {name: 'View snapshots', exact: true}).click();
+    await page.locator('#snapshot-choice').selectOption(pointId);
+    const [download] = await Promise.all([page.waitForEvent('download', {timeout: 60_000}),
+      page.getByRole('button', {name: 'Download database', exact: true}).click()]);
+    assert.equal(download.suggestedFilename(), `waitron-backup-${pointId}.venue.db`);
+    const filename = await download.path();
+    const {DatabaseSync} = await import('node:sqlite');
+    const database = new DatabaseSync(filename, {readOnly: true});
+    try {
+      const [{integrity_check: sqliteIntegrity}] = database.prepare('PRAGMA integrity_check').all();
+      const bytes = await readFile(filename);
+      return {sqliteIntegrity, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex')};
+    } finally { database.close(); }
+  } finally { await browser.close(); }
+}
+
+// Open the archive accepted by the offline verifier without using the browser code.
+function offlineExitDatabaseDigest(archive, secret) {
+  const key = scryptSync(secret, archive.subarray(5, 21), 32, {N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 ** 2});
+  const decipher = createDecipheriv('aes-256-gcm', key, archive.subarray(21, 33));
+  key.fill(0);
+  decipher.setAAD(archive.subarray(0, 33));
+  decipher.setAuthTag(archive.subarray(33, 49));
+  const opened = Buffer.concat([decipher.update(archive.subarray(49)), decipher.final()]);
+  const bytes = opened[0] === 0x1f && opened[1] === 0x8b ? gunzipSync(opened, {maxOutputLength: 32 * 1024 ** 2}) : opened;
+  assert.equal(bytes.toString('ascii', 0, 5), 'WBA1\x01');
+  const entries = bytes.readUInt32LE(5);
+  for (let offset = 9, n = 0; n < entries; n++) {
+    const nameEnd = offset + 4 + bytes.readUInt32LE(offset);
+    const name = bytes.toString('utf8', offset + 4, nameEnd);
+    const end = nameEnd + 8 + Number(bytes.readBigUInt64LE(nameEnd));
+    assert.ok(end <= bytes.length);
+    if (name === 'db.dump') return createHash('sha256').update(bytes.subarray(nameEnd + 8, end)).digest('hex');
+    offset = end;
+  }
+  assert.fail('integration.exit_offline_database_missing');
+}
+
+async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online, origin, port}) {
   const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
   const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
   const {venueId, pointId, archive, backupKey} = request;
@@ -282,8 +338,10 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   assert.equal(result.activation, 'not_attempted');
   assert.equal(receipt.cleanupConfirmed, true);
   assert.deepEqual(await verifierChildren(controllerScope), [], 'integration.exit_verifier_child_remains');
+  const database = await saveExitDatabase({origin, port, session: browser, pointId});
+  assert.equal(database.sha256, offlineExitDatabaseDigest(saved, secret), 'integration.exit_browser_matches_verified_database');
   await online();
-  return {sha256, bytes: saved.length, offline: true, boxOnline: true};
+  return {sha256, bytes: saved.length, offline: true, boxOnline: true, database};
 }
 
 export async function captureInboxWitness(readInbox, signal) {
@@ -846,7 +904,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             journeyStage = 'exit-download';
             const request = parseIntegrationJson(await accountPhase('inspect-exit-download', {...captured, image:verifierImage, revision, nativeTarget}));
             const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
-            publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage,
+            publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage, origin, port,
             scratchVolume: exitScratch.volume, verifierChildren, onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
               await control(id, 'ready');
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
