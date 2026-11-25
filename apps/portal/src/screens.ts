@@ -49,17 +49,21 @@ export function screen(app: PortalApp) {
   const retryBrowserCheck = () => html`<button type="button" class="text-button" @click=${() => app.retryTurnstile()}>${c.retry}</button>`;
   const browserCheckFailed = app.error === 'browserCheckFailed';
   const browserCheck = () => {
-    if (!app.showTurnstile && !browserCheckFailed) return nothing;
-    const notice = app.showTurnstile ? html`<p class="help">${c.browserCheckNotice} <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener noreferrer">${c.browserCheckPrivacy}</a></p>` : nothing;
-    if (browserCheckFailed) return html`${notice}<div class="browser-check-failure">
+    const showCheck = app.showTurnstile;
+    if (!showCheck && !browserCheckFailed) return nothing;
+    let control;
+    if (browserCheckFailed || app.turnstileUnavailable) control = html`<div class="browser-check-failure">
       <p id="form-refusal" role="alert" tabindex="-1">${c.browserCheckFailed}</p>
       ${retryBrowserCheck()}
     </div>`;
-    if (app.turnstileUnavailable || !app.turnstileSiteKey) return html`${notice}${retryBrowserCheck()}`;
-    return html`${notice}${keyed(app.locale, html`<turnstile-widget .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
+    else if (!app.turnstileSiteKey) control = retryBrowserCheck();
+    else control = html`${keyed(app.locale, html`<turnstile-widget tabindex="-1" .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
         .action=${app.path === '/signup' ? 'signup' : 'password_reset'}
         @check-result=${(event: CustomEvent<string | null>) => app.checkResult(event.detail)}></turnstile-widget>`)}
       ${app.turnstileToken ? nothing : html`<p class="help" role="status">${c.browserChecking}</p>`}`;
+    return html`
+      ${showCheck ? html`<p class="help">${c.browserCheckNotice} <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener noreferrer">${c.browserCheckPrivacy}</a></p>` : nothing}
+      ${control}`;
   };
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   const accountPage = app.accountPage;

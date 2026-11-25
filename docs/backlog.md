@@ -637,7 +637,7 @@ to use the existing email confirmation and connection, mailbox and domain limits
 until keys are set. Qualify the live widget with the portal's content security and
 referrer policies, record supplier and cookie evidence, and wire the keys and outbound
 HTTPS in Kubernetes before enabling it. Complete the evidence placeholders and have a
-lawyer review the [draft browser-check privacy notice](cloud-processing-annexes.md#draft-browser-check-privacy-notice-for-legal-review)
+lawyer review the [draft browser-check privacy notice](cloud-processing-annexes.md#4-onward-processing-and-supplier-changes)
 before publishing it. High sign-up volume writes
 one operator warning to the account log each UTC day. Local tests delivered the
 warning to a configured operator over SMTP, including the Amazon SES delivery path

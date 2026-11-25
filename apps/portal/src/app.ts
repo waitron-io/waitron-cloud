@@ -309,6 +309,7 @@ export class PortalApp {
     this.turnstileUnavailable = false;
     this.error = undefined;
     this.draw();
+    this.root.querySelector<HTMLElement>('turnstile-widget')?.focus();
   }
   get #emailCooldown() {
     return this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0;

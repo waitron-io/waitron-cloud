@@ -52,15 +52,19 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       const retry = page.getByRole('button', {name: c.retry, exact: true});
       const privacyLink = page.getByRole('link').and(page.locator(`a[href="${turnstilePrivacyUrl}"]`));
       const emailBox = (await email.boundingBox())!;
+      const privacyBox = (await privacyLink.boundingBox())!;
       const alertBox = (await alert.boundingBox())!;
       const retryBox = (await retry.boundingBox())!;
+      const submitBox = (await submit.boundingBox())!;
       assert.deepEqual({
         alertBelowEmail: alertBox.y >= emailBox.y + emailBox.height,
+        alertInCheckPosition: alertBox.y >= privacyBox.y + privacyBox.height && alertBox.y + alertBox.height <= submitBox.y,
         retryBesideAlert: retryBox.x >= alertBox.x + alertBox.width
           && retryBox.y < alertBox.y + alertBox.height && alertBox.y < retryBox.y + retryBox.height,
         privacyLink: await privacyLink.textContent(),
       }, {
         alertBelowEmail: true,
+        alertInCheckPosition: true,
         retryBesideAlert: true,
         privacyLink: locale === 'en' ? "Cloudflare's privacy notice" : 'Aviso de privacidad de Cloudflare',
       });
@@ -74,6 +78,12 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
         }
       };
       await screen('blocked');
+      if (locale === 'es' && colorScheme === 'dark' && width === 390 && !signUp) {
+        await page.evaluate(() => {document.documentElement.style.fontSize = '200%';});
+        assert.equal(await alert.evaluate(element => element.scrollWidth <= element.clientWidth), true,
+          'the message fits at 200% text size');
+        await page.evaluate(() => {document.documentElement.style.removeProperty('font-size');});
+      }
       blocked = false;
       await retry.click();
       const widget = page.getByRole('button', {name: locale === 'en' ? 'Verify (stand-in)' : 'Verificar (simulación)'});
@@ -81,8 +91,11 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await screen('widget');
       if (locale === 'en' && colorScheme === 'light' && width === 390 && signUp) {
+        await privacyLink.focus();
         await widget.dispatchEvent('error-fixture');
         await alert.waitFor();
+        assert.equal(await privacyLink.evaluate(element => element === document.activeElement), true,
+          'an asynchronous widget error keeps focus on the privacy link');
         await retry.click();
       }
       await widget.click();
@@ -101,6 +114,13 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       assert.equal(await retry.evaluate(element => element === document.activeElement), true);
       await screen('rejected');
       await retry.press('Enter');
+      if (locale === 'en' && colorScheme === 'light' && width === 390 && signUp) {
+        await widget.waitFor();
+        assert.equal(await page.evaluate(() => document.activeElement !== document.body), true,
+          'retry keeps focus at the check');
+        await page.keyboard.press('Tab');
+        assert.equal(await widget.evaluate(element => element === document.activeElement), true);
+      }
       await widget.click();
       await submit.click();
       await page.getByRole('heading', {name: c.checkEmail}).waitFor();
@@ -110,6 +130,30 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       assert.equal(await widget.count(), 0, 'the resend cooldown postpones a new widget');
     });
   }
+});
+
+test('changing email while the resend check is unavailable preserves the retry explanation', async t => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({locale: 'en'});
+  page.setDefaultTimeout(3000);
+  await page.clock.install();
+  await servePortal(page);
+  await interceptTurnstile(page);
+  await page.route('**/api/account/password-reset/request', route => route.fulfill({status: 202, json: {status: 'accepted'}}));
+  await page.goto('https://portal.test/forgot-password');
+  const c = translations.en;
+  const widget = page.getByRole('button', {name: 'Verify (stand-in)'});
+  await page.getByLabel(c.email).fill('owner@example.test');
+  await widget.click();
+  await page.getByRole('button', {name: c.sendReset, exact: true}).click();
+  await page.getByRole('heading', {name: c.checkEmail}).waitFor();
+  await page.clock.fastForward(61_000);
+  await widget.dispatchEvent('error-fixture');
+  await page.getByRole('button', {name: c.retry, exact: true}).waitFor();
+  await page.getByRole('button', {name: c.changeEmail, exact: true}).click();
+  await page.getByRole('button', {name: c.retry, exact: true}).waitFor();
+  await page.getByRole('alert').getByText(c.browserCheckFailed, {exact: true}).waitFor();
 });
 
 test('the password reset round trip preserves the pairing request and link language', async t => {

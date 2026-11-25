@@ -83,24 +83,27 @@ AWS and EU SES selection, the actual OpenAI adapter, and candidate Anthropic and
 
 **Draft subprocessor entry.** Google Maps Platform provides Places Autocomplete and Address Validation for address lookup in Spain. Confirm the contracting and processing entities, access locations, onward processors, transfers, provider retention and applicable terms under `ev-google-maps-address-v1` before any production use.
 
-### Draft browser-check privacy notice for legal review
+**Draft browser-check privacy notice for legal review.**
 
-**English.** Waitron Cloud is responsible for how your data is used for the browser
-check. We use Cloudflare Turnstile to protect sign-up and password-reset email
-requests from automated abuse. Our legal basis is our legitimate interest in
-protecting these services. Turnstile receives browser signals including your IP
-address, a fingerprint of how your browser sets up an encrypted connection (TLS),
-your browser's user-agent header, and which Waitron Cloud page is being checked.
+**English.** Waitron Cloud is the controller responsible for how your data is used
+for the browser check. We use Cloudflare Turnstile to protect sign-up and
+password-reset email requests from automated abuse. Our legal basis is our
+legitimate interest in protecting these services. Turnstile receives browser signals
+including your IP address, a fingerprint of how your browser sets up an encrypted
+connection (TLS), your browser's user-agent header, and which Waitron Cloud form
+is being checked (sign-up or password reset).
 Waitron Cloud does not send the information you enter in the form to Turnstile.
+Waitron Cloud keeps records derived from your IP address and the check proof
+to limit repeat requests and prevent reuse of the same proof.
 
 Cloudflare processes these signals on our behalf to run the check. It also uses
 them as a separate controller to improve its ability to detect bots. Read more in
 [Cloudflare's privacy notice](https://www.cloudflare.com/turnstile-privacy-policy/).
 
-With pre-clearance switched off, the check does not set the `cf_clearance`
-cookie. [Confirm other cookies and their purpose and duration.] [Confirm where
-data is transferred, what safeguards apply and how to obtain them.] [Confirm how
-long the signals are kept.] These details await evidence `ev-cloudflare-turnstile-v1`.
+[Confirm which cookies the check sets, their purpose and duration, and whether
+`cf_clearance` is set with pre-clearance switched off.] [Confirm where data is
+transferred, what safeguards apply and how to obtain them.] [Confirm how long
+Waitron Cloud keeps its check records and Cloudflare keeps the signals.]
 
 You can ask to access, correct or delete your data, restrict its use or object
 to its use. Contact Waitron Cloud at [privacy contact to confirm]. You can
@@ -112,25 +115,30 @@ de correo de registro y de restablecimiento de contraseña frente a abusos autom
 La base jurídica es nuestro interés legítimo en proteger estos servicios.
 Turnstile recibe señales del navegador, como tu dirección IP, una huella de cómo
 tu navegador establece una conexión cifrada (TLS), la cabecera de agente de usuario
-del navegador y qué página de Waitron Cloud se está comprobando. Waitron Cloud
-no envía a Turnstile los datos que introduces en el formulario.
+del navegador y qué formulario de Waitron Cloud se está comprobando (registro o
+restablecimiento de contraseña). Waitron Cloud no envía a Turnstile los datos que
+introduces en el formulario.
+Waitron Cloud conserva registros derivados de tu dirección IP y de la prueba de
+comprobación para limitar las solicitudes repetidas e impedir que se reutilice la
+misma prueba.
 
 Cloudflare trata estas señales por cuenta de Waitron Cloud para realizar la
 comprobación. También las usa como responsable independiente para mejorar la
 detección de bots. Consulta el [aviso de privacidad de Cloudflare](https://www.cloudflare.com/turnstile-privacy-policy/).
 
-Con la autorización previa desactivada, la comprobación no instala la cookie
-`cf_clearance`. [Confirmar qué otras cookies se usan, su finalidad y su duración.]
+[Confirmar qué cookies instala la comprobación, su finalidad y su duración,
+y si se instala `cf_clearance` con la autorización previa desactivada.]
 [Confirmar adónde se transfieren los datos, qué garantías se aplican y cómo
-obtenerlas.] [Confirmar cuánto tiempo se conservan las señales.] Estos datos
-quedan pendientes de la verificación de `ev-cloudflare-turnstile-v1`.
+obtenerlas.] [Confirmar cuánto tiempo conservan Waitron Cloud sus registros
+y Cloudflare las señales.]
 
 Puedes solicitar el acceso, la rectificación o la supresión de tus datos,
 la limitación de su tratamiento u oponerte a él. Contacta con Waitron Cloud
 en [contacto de privacidad pendiente de confirmar]. También puedes presentar una
 reclamación ante tu autoridad de protección de datos.
 
-### Supplier qualification
+Complete the cookie, transfer and retention details once
+`ev-cloudflare-turnstile-v1` is qualified.
 
 | Account surface | Supplier evidence | Open qualification |
 | --- | --- | --- |
