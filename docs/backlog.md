@@ -1106,12 +1106,12 @@ and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every
 
 ## Parallel storage-cache fixture failure on main
 
-Repeated calls to stop a native test store now share one cleanup.
 The original read-only-cache rejection is unexplained; the readiness
 and port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
 child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md)
 and [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
+Repeated stops share one native-store cleanup. A caller can retry a failed cleanup.
 
 ## Reduce unnecessary CI work (D613)
 
