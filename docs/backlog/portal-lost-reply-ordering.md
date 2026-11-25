@@ -78,8 +78,9 @@ and a stand-in Cloud server. In 48 parallel-load runs with one-shot routes,
 those requests started while Chromium was turning interception off and never
 reached the stand-in server. Both routes stayed active through the follow-up in
 the retained version, which passed all 48 runs. The Linux runs had no proof-step
-timeout. The probe leaves Chromium's internal cause and the historical CI cause
-open.
+timeout. A separate Mac probe saw seven stop timeouts in 150 one-shot runs, all
+during teardown, and none in 150 retained runs. These probes leave Chromium's
+internal cause and the historical CI cause open.
 
 ## Usage rate-limit wait (D530)
 

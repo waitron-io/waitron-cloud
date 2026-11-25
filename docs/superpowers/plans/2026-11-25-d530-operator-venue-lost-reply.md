@@ -6,7 +6,7 @@ The browser check must show a saved stop after losing the successful reply. In [
 
 In `apps/portal/test/cloud-actions-journey.test.ts`, remove `{times:1}` from both the stop and proof routes. Keep the stop route until the Allow button appears, then await its removal before reloading. Keep the proof route until the Stop button appears after allowing suggestions, then await its removal. A visible proof prompt must fail the test even if a later check observes it hidden. Record browser request events in the existing failure trace. Add the two operator endpoints to the static allowlist in `apps/portal/test/fixtures.ts` and include the bounded server trace on failure, so the next timeout shows whether Cloud received the read. A missing Playwright request event leaves browser dispatch unknown. Reuse the ordering in `apps/portal/test/remote-browser.test.ts`, which keeps interception active through its follow-up read. Keep the original failed-request wait, success status check, five-second UI assertion and saved audit history check.
 
-Add the new evidence to `docs/backlog/portal-lost-reply-ordering.md` and update the existing entry in `docs/backlog.md`. Keep the root cause and the separate historical failures open. Lane J’s local `receipts/d530-operator-venue/findings.md` records the exact commands, protocol traces and alternate injections.
+Add the new evidence to [the portal test ordering record](../../backlog/portal-lost-reply-ordering.md) and update the existing entry in `docs/backlog.md`. Keep the root cause and the separate historical failures open.
 
 ## Checks
 
