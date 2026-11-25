@@ -8,7 +8,7 @@ import {createSession,hashSecret} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
 import {CloudActionWorker} from '../../../packages/registration/src/cloud-action-worker.ts';
 import {openProofWindow} from '../../../packages/registration/test/fixtures/action-proof.ts';
-import {completeBrowserEmail,prepareBrowserActionWindow,startPortalFixture} from './fixtures.ts';
+import {completeBrowserEmail,mailFor,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`approved action recovery ${locale} ${theme} ${width}: consoleLossPreservesPendingWork`,async()=>{
@@ -80,6 +80,7 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   const find=locale==='en'?'Find a venue':'Buscar un local';
   const stop=locale==='en'?'Stop address suggestions':'Detener las sugerencias de direcciones';
   const allow=locale==='en'?'Allow address suggestions':'Permitir las sugerencias de direcciones';
+  const c=translations[locale];
   const venuePath='/operator/venues';
   assert.equal((await page.goto(`${fixture.origin}${venuePath}#venue=${venueId}&lang=${locale}`))?.status(),200);
   await page.locator('wt-input[name=email] input').fill(email);
@@ -89,12 +90,14 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   await page.getByRole('heading',{name,exact:true,level:1}).waitFor();
   assert.equal(new URL(page.url()).pathname,venuePath);
   assert.equal(new URL(page.url()).hash,'');
-  await prepareBrowserActionWindow(fixture,page);
   await page.goto(fixture.origin+'/operator/actions#lang='+locale);
   await page.getByRole('link',{name:find,exact:true}).click();
   const lookup=page.getByRole('searchbox',{name:locale==='en'?'Venue name':'Nombre del local'});
+  const searchButton=page.getByRole('button',{name:locale==='en'?'Search':'Buscar',exact:true});
+  const searchStyle=await searchButton.evaluate(button=>getComputedStyle(button).textDecorationLine);
+  if(locale==='es')assert.equal(searchStyle,'none','Search is styled as a button');
   await lookup.fill('cafe lunar');
-  await lookup.press('Enter');
+  if(locale==='en')await lookup.press('Enter');else await searchButton.click();
   const found=page.getByRole('link',{name,exact:true});
   await found.waitFor();
   const capture=async(state:string)=>{
@@ -108,6 +111,21 @@ for(const width of venueScreens?[390,1280]:[390])test(`operator venue journey ${
   await found.click();
   const stopButton=page.getByRole('button',{name:stop,exact:true}),allowButton=page.getByRole('button',{name:allow,exact:true});
   await stopButton.waitFor();
+  await stopButton.click();
+  const proof=page.getByRole('heading',{name:c.actionProofTitle,exact:true});
+  await proof.waitFor();
+  await page.getByRole('button',{name:c.actionProofEmail,exact:true}).click();
+  const input=page.locator('wt-input[name=actionProofCode] input');
+  await input.waitFor();
+  await fixture.drainMail();
+  const subject=locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud';
+  const proofMail=await mailFor(email,subject,fixture.mailEvidence);
+  const code=proofMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+  await input.fill(code);
+  await page.locator('#action-proof-verify').click();
+  await proof.waitFor({state:'hidden'});
+  assert.equal(await stopButton.evaluate(button=>(button.getRootNode() as Document|ShadowRoot).activeElement===button),true);
+  assert.equal(searchStyle,'none','Search is styled as a button');
   await capture('allowed');
   await page.route('**/operator/venues/address-lookup',async route=>{
    const response=await route.fetch();assert.equal(response.status(),200);await route.abort('failed');

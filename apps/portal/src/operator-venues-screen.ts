@@ -20,9 +20,9 @@ export function operatorVenuesScreen(app:PortalApp){
   const id=app.link.operatorVenueId;
   return html`${notice}${venue?html`
     <p role="status">${venue.stopped?c.operatorSuggestionsStopped:c.operatorSuggestionsAllowed}</p>
-    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.setOperatorVenue(venue);}}>
+    <wt-button id="operator-venue-switch" .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.setOperatorVenue(venue);}}>
      ${venue.stopped?c.operatorAllowSuggestions:c.operatorStopSuggestions}</wt-button>
-    ${app.actionProof.loaded||app.actionProof.pending?accountActionProofScreen(app,2):nothing}`:
+    ${(app.actionProof.loaded||app.actionProof.pending)&&!app.actionProof.status?.freshUntil?accountActionProofScreen(app,2):nothing}`:
    controller.pending||!error?html`<wt-spinner .label=${c.checking}></wt-spinner>`:
     html`<wt-button .disabled=${disabled} @click=${()=>{void controller.read(id);}}>${c.retry}</wt-button>`}
    <nav>${find}</nav>`;
@@ -38,7 +38,8 @@ export function operatorVenuesScreen(app:PortalApp){
   <input type="search" id="operator-venue-query" name="query" minlength="3" maxlength="80" required autocomplete="off"
    aria-describedby="operator-venue-hint">
   <p class="help" id="operator-venue-hint">${c.operatorVenueSearchHint}</p>
-  <button type="submit" class="text-button" ?disabled=${disabled}>${c.operatorVenueSearch}</button>
+  <wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}>
+   ${c.operatorVenueSearch}</wt-button>
  </form></search>
  ${notice}<p role="status">${!results?'':results.tooMany?c.operatorVenueNarrow:count?
   c.operatorVenuesFound.replace('{count}',String(count)):c.operatorVenuesEmpty}</p>

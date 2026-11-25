@@ -50,7 +50,7 @@ button:disabled { cursor: default; opacity: .6; }
   min-width: 0; min-height: 2.75rem; box-sizing: border-box;
 }
 :is(#account-businesses .business-choice, #operator-venue-search) .help { margin-block: 0; }
-:is(#account-businesses .business-choice, #operator-venue-search) .text-button { justify-self: start; }
+#account-businesses .business-choice .text-button, #operator-venue-search wt-button { justify-self: start; }
 #account-businesses :is(h3,strong,dd) { overflow-wrap: anywhere; }
 
 .installation { border-block-start: 1px solid var(--wt-color-border); margin-block: 1rem; padding-block: .75rem; }

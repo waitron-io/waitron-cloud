@@ -723,8 +723,9 @@ export class PortalApp {
   }
   get verifyingToAddPasskey() { return !!this.#passkeyAddRequest; }
   async proveWithCode(method: 'email' | 'app' | 'recovery') {
-    const add = this.#passkeyAddRequest;
+    const route=this.#route,add = this.#passkeyAddRequest;
     const proved = await this.actionProof.verify(method);
+    if(proved&&route===this.#route&&this.path===operatorVenuesPath)this.root.querySelector<HTMLElement>('#operator-venue-switch')?.focus();
     await this.#continuePasskeyAdd(add, proved);
   }
   async proveWithPasskey() {
@@ -739,6 +740,7 @@ export class PortalApp {
     const proved = !!result && !!this.actionProof.status?.freshUntil;
     if (!proved) this.actionProof.error = 'actionProofUnavailable';
     this.draw();
+    if(proved&&this.path===operatorVenuesPath)this.root.querySelector<HTMLElement>('#operator-venue-switch')?.focus();
     await this.#continuePasskeyAdd(add, proved);
   }
   async #continuePasskeyAdd(add: PasskeyAddRequest | undefined, proved: boolean) {
