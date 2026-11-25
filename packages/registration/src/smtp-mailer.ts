@@ -1,4 +1,5 @@
 import type {ServiceAlert} from './service-alert.ts';
+import type {RelaySender} from './relay-smtp.ts';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import { connect, type TLSSocket } from 'node:tls';
@@ -42,7 +43,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
   // Capture configuration so a caller cannot change the destination or credential during a send.
   const {host, user, password, from} = config;
   const ca = Buffer.isBuffer(trust.ca) ? Buffer.from(trust.ca) : trust.ca;
-  return async (recipient:string,render:()=>{subject:string;text:string;html?:string},messageId:string,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
+  return async (recipient:string,render:()=>{subject:string;text:string;html?:string},messageId:string,context?:EmailDeliveryContext,sender?:RelaySender):Promise<EmailDeliveryReceipt>=>{
     if(normaliseEmail(recipient)!==recipient)throw new EmailDeliveryError('delivery_rejected');
     const headers=ses?sesSmtpHeaders(ses,context?.ses):undefined;
     if(!ses&&context?.ses)throw new EmailDeliveryError('delivery_configuration');
@@ -73,7 +74,8 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
       signal?.addEventListener('abort', abort, {once: true});
       timer = setTimeout(abort, timeout);
       const rendered=render();
-      const result = await Promise.race([abortPromise, transport.sendMail({from: {name: 'Waitron Cloud', address: from},
+      const result = await Promise.race([abortPromise, transport.sendMail({from: {name: sender?.name ?? 'Waitron Cloud', address: from},
+        replyTo: sender && {name: '', address: sender.replyTo},
         to: {address: recipient, name: ''}, subject: rendered.subject, text: rendered.text, html: rendered.html, messageId,headers})]);
       if (result.rejected.length || result.accepted.length !== 1) throw new EmailDeliveryError('delivery_rejected');
       const providerReceipt=ses?sesProviderReceipt(result.response):undefined;

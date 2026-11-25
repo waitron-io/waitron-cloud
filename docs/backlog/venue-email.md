@@ -2,8 +2,8 @@
 
 **Paid venue email is open.** The owner approved the
 [paid venue email design](../superpowers/specs/2026-11-23-venue-email-paid-design.md)
-on 23 November 2026, for release soon after go-live. The Mailpit build can start
-now. Only the domain sandbox check waits for D621’s free diagnostics. The
+on 23 November 2026, for release soon after go-live. The domain sandbox check
+waits for scoped access. The
 [relay contract](../transactional-email-relay-contract.md#choose-staff-email-in-test-setup)
 tracks the free test pilot.
 
@@ -36,6 +36,12 @@ Cloud still has to keep its own list of blocked addresses and tell the venue, be
 judges Cloud's sending account by every bounce (see *Abuse limits* below).
 
 ## Set up the sending domain
+
+In the Connected and Hosted test setup, open **Remote access** for your venue to
+set the reply address for staff email. Use **Use standard sender** to clear it.
+An accepted ownership transfer also clears it. The Mailpit test covers the venue’s
+name and reply address on a Waitron message and the standard sender after downgrade.
+The saved address applies again on a return to Connected or Hosted.
 
 The design puts the email and remote access records on one page in the Cloud
 portal. Whoever runs the venue's domain will be able to copy each value or

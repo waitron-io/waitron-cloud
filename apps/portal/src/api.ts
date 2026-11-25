@@ -4,7 +4,7 @@ import {validOwnerTransfer,validOwnerTransferList} from './owner-transfer-types.
 import {translations} from './locale.ts';
 import {validPasswordLogin,validFactorStatus,validFactorEnrolment,validFactorChange} from './authenticator-types.ts';
 import {validRecoveryDate,validRecoveryView} from './recovery-types.ts';
-import {validRemoteView,validRemoteDns,validGuestMenuView} from './remote-types.ts';
+import {validRemoteView,validRemoteDns,validGuestMenuView,validVenueEmail} from './remote-types.ts';
 import {validBackupPage} from './backup-types.ts';
 import {validSentReportDetail, validSentReportsPage} from './sent-reports-types.ts';
 import {validInstallation} from './installation-types.ts';
@@ -68,6 +68,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path.startsWith('/recovery/'))return validRecoveryView(value);
   if(path==='/remote-access/status'||path==='/remote-access/apply'||path==='/remote-access/recheck')return validRemoteView(value);
   if(path==='/remote-access/dns')return validRemoteDns(value);
+  if(path==='/venue-email/save')return status===200&&validVenueEmail(value);
   if(path==='/guest-menu/takedown'||path==='/guest-menu/enable')return status===200&&validGuestMenuView(value);
   if(path==='/translation-consent')return status===200&&validTranslationConsents(value);
   if(path==='/alerts')return typeof data.enabled==='boolean'&&typeof data.locale==='string'&&['en','es'].includes(data.locale);
@@ -99,9 +100,10 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
   const businessPath = path === '/businesses' || path === '/organisations/rename';
   const operatorVenue = path.startsWith('/operator/venues/');
+  const venueEmailSave = path === '/venue-email/save';
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || operatorVenue || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if ((businessPath && body) || path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || operatorVenue || venueEmailSave || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || download || sentReports || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     headers['X-CSRF-Token'] = browserCsrfToken();
   }
   try {
@@ -116,7 +118,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
       }
       return {ok: false, status: 503, code: 'unexpected_response', retryAfterMs: 0};
     }
-    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || operatorVenue || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || download || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = businessPath || path.startsWith('/owner-recovery/') || path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || operatorVenue || venueEmailSave || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || download || sentReports || path.startsWith('/pairing/') || path === '/installations' || installationWrite || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;
@@ -137,6 +139,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if(path.startsWith('/operator/actions/')&&response.status===409)codes.push('conflict');
     if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active');
+    if(response.status===403&&venueEmailSave)codes.push('venue_email_connected_required');
     if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply','/remote-access/recheck'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');
     if(path.startsWith('/recovery/')){
       if(response.status===400)codes.push('confirmation_required','unverified');

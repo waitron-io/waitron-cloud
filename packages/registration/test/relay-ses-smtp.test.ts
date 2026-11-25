@@ -100,3 +100,13 @@ test('the TLS relay delivers version 2 as plain text and HTML',async()=>{
   assert.match(raw,/Ana added you to Night service/);
  }finally{await smtp.close();}
 });
+
+test('the TLS relay carries a venue name and reply address with the configured sender', async t=>{
+ const smtp=await tlsSmtp();t.after(()=>smtp.close());
+ const send=createSesRelaySender(config(),{...smtpConfig,port:smtp.port},{ca:smtp.cert});
+ const sent=await send(content(),admission,new AbortController().signal,{name:'Cafe Sol',replyTo:'office@example.test'});
+ assert.equal(sent.outcome,'accepted');
+ assert.equal(smtp.captured[0]!.from,smtpConfig.from);
+ assert.ok(smtp.captured[0]!.raw.includes(`From: Cafe Sol <${smtpConfig.from}>`));
+ assert.match(smtp.captured[0]!.raw,/^Reply-To: office@example\.test\r?$/m);
+});

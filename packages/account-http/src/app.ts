@@ -39,6 +39,7 @@ import {passkeyResponse} from './passkeys.ts';
 import {authenticatorResponse} from './authenticator-factor.ts';
 import {recoveryResponse} from './recovery.ts';
 import {remoteAccessResponse,type RemoteResolver} from './remote-access.ts';
+import {venueEmailResponse} from './venue-email.ts';
 import {BackupCaptures,type CaptureOptions} from '@waitron-cloud/backups/captures';
 import {BackupCatalogue} from '@waitron-cloud/backups/catalogue';
 import {captureResponse} from './captures.ts';
@@ -216,6 +217,7 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
     if(['/api/installations/staff-certificate-submit','/api/installations/staff-certificate-status'].includes(c.req.path))return staffCertificateResponse(c,{exchange:staffExchange,ip,consume});
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume,startedAt});
     if(['/api/installations/backup-stream-configure','/api/installations/backup-stream-observe'].includes(c.req.path))return managedStreamResponse(c,{streams,ip,consume});
+    if(options.planMode==='test-venue-levels'&&c.req.path==='/api/account/venue-email/save')return venueEmailResponse(c,{pool,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode,guestOrigin:options.guestOrigin});
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(['/api/account/billing/method/start','/api/account/billing/method/verify'].includes(c.req.path))return billingMethodsResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methods:billingMethods});

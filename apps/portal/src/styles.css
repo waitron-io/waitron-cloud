@@ -80,6 +80,12 @@ summary { cursor: pointer; }
 
 .remote-setup { overflow-wrap: anywhere; margin-block: 1rem; }
 .remote-setup details { margin-block: 1rem; }
+.venue-email-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 1rem; }
+.venue-email-options h6 { font-size: 1rem; margin-block: .5rem; }
+.venue-email-options input {
+  box-sizing: border-box; width: 100%; min-width: 0; padding: .5rem; font: inherit;
+  color: var(--wt-color-text); background: var(--wt-color-bg); border: 1px solid var(--wt-color-text-muted); border-radius: .35rem;
+}
 
 .separator { align-items: center; display: flex; gap: .75rem; margin: 1.25rem 0; }
 .separator::before, .separator::after { background: var(--wt-color-border); content: ""; flex: 1; height: 1px; }

@@ -4,6 +4,7 @@ import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import type {AccountInstallation} from './installation-types.ts';
 import type {PortalApp} from './app.ts';
 import {remoteReady,type RemoteKind,type ForwardCause} from './remote-types.ts';
+import {venueEmailScreen} from './venue-email-screen.ts';
 const forwardCopy:Record<ForwardCause,'forwardNon200'|'forwardTimeout'|'forwardLimit'|'forwardTransport'|'forwardInternal'>={upstream_non_200:'forwardNon200',upstream_timeout:'forwardTimeout',upstream_response_limit:'forwardLimit',upstream_transport:'forwardTransport',forward_internal:'forwardInternal'};
 export function remoteScreen(app:PortalApp,installation:AccountInstallation){
  const {installationId:id,venueId,revokedAt}=installation;
@@ -49,6 +50,7 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
    <p>${!v.publicForward?c.forwardUnknown:v.publicForward.category===null?c.forwardSuccess:c[forwardCopy[v.publicForward.category]]}</p>
    ${v.publicForward?html`<dl><dt>${c.forwardObserved}</dt><dd><time datetime=${v.publicForward.observedAt}>${new Date(v.publicForward.observedAt).toLocaleString(app.locale)}</time></dd><dt>${c.forwardExpires}</dt><dd><time datetime=${v.publicForward.expiresAt}>${new Date(v.publicForward.expiresAt).toLocaleString(app.locale)}</time></dd></dl>${v.publicForward.category!==null?html`<p>${c.forwardCheck}</p>`:nothing}`:nothing}
   </section>`:nothing}
+  ${v?.venueEmail&&!v.revoked?venueEmailScreen(app,v.venueEmail,disabled):nothing}
   ${v?.names&&!v.connectedRequired?html`<p>${c.remotePrivacy}</p>
    ${(['staff','public'] as const).map(kind=>{
     const name=v.names![kind],heading='remote-name-'+kind;

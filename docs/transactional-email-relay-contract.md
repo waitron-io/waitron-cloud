@@ -79,10 +79,14 @@ attachments, CC/BCC, caller-selected headers, envelope sender, reply-to, provide
 credentials and marketing, receipts or bulk notices. Version 2 defines separate
 schemas for the five staff notices.
 
-Cloud controls the fixed sender and template revision, validates text lengths and
-escapes display names. Use a verified Cloud sender domain; the venue name may appear
-as bounded template text, never as sender authority. Cloud constructs links from the
-grant's verified management origin and fixed paths. Invitations/resets carry the
+Cloud controls the sender address and template revision, validates text lengths and
+escapes display names. It uses a verified Cloud sender domain. In the Connected and
+Hosted test setup, an owner can save a reply address. When sending existing staff
+mail, Cloud uses that address for Reply-To and uses the venue name as the display
+name when available. Clearing the address or accepting an ownership transfer
+restores the standard sender. The box supplies the template fields. Cloud reads the sender
+settings separately. Cloud constructs links from the grant's verified management
+origin and fixed paths. Invitations/resets carry the
 Waitron token for `/manage/account`, with the class as purpose and recipient in the
 fragment. Email change carries a code and uses `/`; no caller-provided action URL is
 accepted. An optional privacy link must come from reviewed grant configuration, not
@@ -642,8 +646,9 @@ configuration, `runOnce()` returns false and leaves the queue unchanged. The
 capture worker only in test-venue-levels mode; production startup remains off.
 
 The default adapter connects only to `127.0.0.1` at the supplied disposable capture port.
-It uses the fixed sender `relay@example.test`, no credentials and plain SMTP for
-that loopback fixture. It does not provide production TLS delivery. To select the existing SES adapter
+It uses `relay@example.test` as the sender address, no credentials and plain SMTP
+for that loopback fixture. For Connected and Hosted test venues, it applies the
+same owner-set reply address and venue display name as the TLS relay. It does not provide production TLS delivery. To select the existing SES adapter
 inside the worker, also supply `ses: {config, recipientKeys}` and
 `sesSmtp: {smtp, trust?}`. The worker constructs that sender from its own validated
 venue-email admission configuration, passes its committed attempt and saves the

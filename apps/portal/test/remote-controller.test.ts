@@ -214,3 +214,31 @@ test('successful Check again closes a preview for another hostname',async()=>{
  assert.equal(c.hostname,dns.hostname);
  assert.equal(c.confirmation,undefined);
 });
+
+for(const [status,code,error] of [[401,'unauthenticated','pairSession'],[403,'permission_denied','permissionBusiness'],[429,'rate_limited','limited']] as const) {
+ test(`reply address save uses the normal ${status} response`,async()=>{
+  const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')
+   ?{ok:true,value:{...view,venueEmail:{replyTo:'old@example.test'}} as T}
+   :{ok:false,status,code,retryAfterMs:status===429?60000:0});
+  c.account('owner');await c.open(id);await c.saveVenueEmail('new@example.test');
+  assert.equal(c.error,error);
+  assert.equal(c.view?.venueEmail?.replyTo,status===429?'old@example.test':undefined);
+ });
+}
+
+test('refresh clears the failed reply address save message',async()=>{
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')
+  ?{ok:true,value:{...view,venueEmail:{replyTo:'old@example.test'}} as T}
+  :{ok:false,status:503,code:'temporarily_unavailable',retryAfterMs:0});
+ c.account('owner');await c.open(id);await c.saveVenueEmail('new@example.test');
+ assert.equal(c.venueEmailResult,'failed');
+ await c.load();assert.equal(c.venueEmailResult,undefined);
+});
+
+test('a busy reply address save keeps the server’s retry wait',async()=>{
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')
+  ?{ok:true,value:{...view,venueEmail:{replyTo:'old@example.test'}} as T}
+  :{ok:false,status:503,code:'temporarily_unavailable',retryAfterMs:60000});
+ c.account('owner');await c.open(id);await c.saveVenueEmail('new@example.test');
+ assert.equal(c.venueEmailResult,'failed');assert.ok(c.waiting>0);
+});
