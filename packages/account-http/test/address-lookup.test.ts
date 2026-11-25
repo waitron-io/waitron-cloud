@@ -426,8 +426,10 @@ test('the operator can stop one venue and resume it with its address usage intac
  }finally{await f.db.close();}
 });
 
-test('a failed cap warning retries and concurrent refusals queue only one warning without spending a lookup',async()=>{
+test('a failed cap warning retries and concurrent refusals queue only one warning without spending a lookup',async t=>{
  const f=await fixture();try{
+  const log=t.mock.method(console,'warn',()=>{});
+  const {month:period}=(await f.db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'America/Los_Angeles','YYYY-MM') AS month")).rows[0];
   const operator=await connectedVenue(f.db,f.issuer,origin);
   const app=createAccountApp({...f.options,operatorAccountId:operator.accountId,addressLookup:{provider:f.provider,
    policy:{...policy,freeAccountMonth:{suggestions:1,validations:1}}}});
@@ -438,6 +440,7 @@ test('a failed cap warning retries and concurrent refusals queue only one warnin
   await f.db.pool.query(`ALTER TABLE email_outbox ADD CONSTRAINT test_refuse_operator_notice CHECK (kind<>'operator_notice')`);
   assert.equal((await request(available)).status,429);
   assert.deepEqual(await queued(),[]);
+  assert.deepEqual(log.mock.calls.map(call=>call.arguments),[['Cloud address lookup cap warning failed','free_account_month',period]]);
   await f.db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT test_refuse_operator_notice');
   const replies=await Promise.all([request(suggest()),request(available),request(suggest())]);
   assert.deepEqual(replies.map(reply=>reply.status),[429,429,429]);
@@ -446,7 +449,7 @@ test('a failed cap warning retries and concurrent refusals queue only one warnin
   const message=f.db.outbox.open(notices[0]);
   const email=(await f.db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[operator.accountId])).rows[0].email;
   assert.deepEqual(message,{email,locale:'en',event:'address_cap',accountId:operator.accountId,
-   bucket:'free_account_month',period:(await f.db.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'America/Los_Angeles','YYYY-MM') AS month")).rows[0].month,venueId:f.v.venueId});
+   bucket:'free_account_month',period,venueId:f.v.venueId});
   assert.equal((await calls(f.db.pool)).length,1);
   assert.deepEqual(f.sent,['suggest']);
  }finally{await f.db.close();}
@@ -463,6 +466,7 @@ test('cap warnings keep separate venue and period claims and omit a venue on sha
   await warn(own(first,month),first);await warn(own(first,month),first);
   await warn(own(second,month),second);await warn(own(first,nextMonth),first);
   await warn(shared,first);await warn(shared,second);
+  await warn({...shared,bucket:'free_month'},first);
   // Simulate the end of a 31-day month before the cleanup of a warning claim.
   await pool.query("UPDATE account_rate_limits SET expires_at=expires_at-interval '31 days'");
   await warn(own(first,month),first);
@@ -473,11 +477,12 @@ test('cap warnings keep separate venue and period claims and omit a venue on sha
    });
   assert.deepEqual(notices.map(value=>JSON.stringify(value)).sort(),[
    ['paid_venue_month',month,first],['paid_venue_month',month,second],
-   ['paid_venue_month',nextMonth,first],['cloud_month',month,undefined],
+   ['paid_venue_month',nextMonth,first],['cloud_month',month,undefined],['free_month',month,undefined],
   ].map(value=>JSON.stringify(value)).sort());
   assert.deepEqual(log.mock.calls.map(call=>call.arguments),[
    ['Cloud address lookup cap refused','paid_venue_month',month],['Cloud address lookup cap refused','paid_venue_month',month],
    ['Cloud address lookup cap refused','paid_venue_month',nextMonth],['Cloud address lookup cap refused','cloud_month',month],
+   ['Cloud address lookup cap refused','free_month',month],
   ]);
  }finally{await f.db.close();}
 });

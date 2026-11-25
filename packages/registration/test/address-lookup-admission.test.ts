@@ -243,14 +243,16 @@ test('lookup cleanup is bounded and keeps the current Pacific month and recently
 test('paid calls leave the free group’s monthly spend available',async()=>{
  const f=await venueServiceFixture();try{
   const free=await ownerScope(f,f.scope.organisationId,f.venues[0]!),paidVenue=f.venues[1]!;
-  const installationId=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1',[paidVenue])).rows[0].id;
+  const installationId=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[paidVenue])).rows[0].id;
   await set(f,'connected',paidVenue);
   const one={freeSuggestions:1,freeValidations:1,limitMicros:0};
   const limits={...policy,freeDay:one,freeMonth:one};
   const admit=(box:Scope)=>registration.transaction(f.pool,client=>registration.admitAddressLookup(client,box,request(),limits));
-  await admit({...free,venueId:paidVenue,installationId});
+  const paid={...free,venueId:paidVenue,installationId};
+  await admit(paid);
   await admit(free);
   await assert.rejects(admit(free),error=>error instanceof registration.AddressLookupAdmissionError
    &&error.code==='limit'&&error.cap?.bucket==='free_month'&&error.cap.scope==='*');
+  await admit(paid);
  }finally{await f.close();}
 });

@@ -160,7 +160,7 @@ key are missing, the box loses authority, or admission fails.
 
 ## Stop or resume a test venue
 
-In the configured local stack or the LAN action demo, sign in as the operator and open
+In the LAN action demo, sign in as the configured operator and open
 `/operator/actions`. Under **Address lookup**, enter the test venue ID, then
 choose **Stop lookup** or **Resume lookup**. A fresh verification is required.
 Once you stop the venue, new availability checks and lookups are refused. Calls
@@ -179,7 +179,8 @@ it recreates the account process. See the [test Cloud settings](test-cloud.md#co
 
 The first refusal for a cap, scope and period writes the cap and period to the
 account log. It also queues a warning if the operator is configured and verified
-at that time. Setting up the operator later takes effect for the next period.
+at that time. If a cap for a given scope already refused a call this period,
+setting up the operator later leaves that particular warning until next period.
 Shared caps cover either all lookups or all free accounts.
 An own-cap warning includes the affected venue ID. A venue that stops exactly
 at its limit sends no warning. The LAN action demo captures the email in its
