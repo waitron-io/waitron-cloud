@@ -7,8 +7,8 @@ venue controls and brand delivery remain in Waitron. The runtime package depends
 Lit rather than `@waitron/shared`. A built tarball installs outside the workspace and
 passes declaration, Chromium form, theme and accessibility checks. Both UI packages
 retain coverage and weekly mutation gates.
-The [Waitron publisher](../shared-ui-release.md) published private `@waitron-io/ui-core@0.2.34`
-from Waitron `5e91f7a9ef2a0aede4ff5500c305b1477b907fc7`. Cloud pins it in its
+The [Waitron publisher](../shared-ui-release.md) published private `@waitron-io/ui-core@0.2.45`
+from Waitron `ff647911ac88a15be1e167ea4cb336acaf9f2b7a`. Cloud pins it in its
 manifest and lockfile; a Chromium fixture checks the installed controls and themes,
 and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
 authentication; CI uses its package-read token. The portal now uses these controls for signup, login and recovery. Read the first weekly mutation scores
