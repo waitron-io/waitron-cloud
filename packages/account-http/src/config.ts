@@ -58,8 +58,9 @@ function signupLimits(value: unknown): Readonly<SignupLimits> {
   return Object.freeze({...defaultSignupLimits, ...value});
 }
 
+interface TurnstileConfig { siteKey: string; secretKey: string }
 interface SetupPairingConfig { publicKey: string; redirectUri: string }
-export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; countryCode?: string; setupPairing?: Readonly<SetupPairingConfig>; signupLimits?: Partial<SignupLimits>; }
+export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; countryCode?: string; setupPairing?: Readonly<SetupPairingConfig>; signupLimits?: Partial<SignupLimits>; turnstile?: Readonly<TurnstileConfig>; }
 
 function validateSetupPairing(config: SetupPairingConfig): Readonly<SetupPairingConfig> {
   const {publicKey, redirectUri} = config;
@@ -85,20 +86,26 @@ export function validateConfig(config: AccountHttpConfig) {
       || !Array.isArray(config.trustedProxyIps)) throw new Error();
     const trustedProxyIps = Object.freeze(config.trustedProxyIps.map(canonicalIp));
     const setupPairing = config.setupPairing === undefined ? undefined : validateSetupPairing(config.setupPairing);
+    const turnstile = config.turnstile;
+    if (turnstile !== undefined && (!turnstile || typeof turnstile.siteKey !== 'string' || typeof turnstile.secretKey !== 'string'
+      || !/^[A-Za-z0-9_-]{1,256}$/.test(turnstile.siteKey) || !turnstile.secretKey.trim()
+      || turnstile.secretKey !== turnstile.secretKey.trim())) throw new Error();
     return Object.freeze({countryCode, portalOrigin: origin.origin, production: config.production, rateKey: config.rateKey, trustedProxyIps,
-      ...(config.requireEnrollment ? {requireEnrollment: true} : {}), ...(setupPairing ? {setupPairing} : {}), signupLimits: limits});
+      ...(config.requireEnrollment ? {requireEnrollment: true} : {}), ...(setupPairing ? {setupPairing} : {}), signupLimits: limits, turnstile: turnstile && Object.freeze({...turnstile})});
   } catch { throw new Error('Invalid account HTTP configuration'); }
 }
 export function accountHttpConfig(env: NodeJS.ProcessEnv) {
   if (env.CLOUD_REQUIRE_ENROLLMENT !== undefined && !['true', 'false'].includes(env.CLOUD_REQUIRE_ENROLLMENT)) throw new Error('Invalid enrollment requirement');
   const {CLOUD_SETUP_PAIRING_PUBLIC_KEY: publicKey, CLOUD_SETUP_PAIRING_REDIRECT_URI: redirectUri} = env;
   const setupPairing = publicKey === undefined && redirectUri === undefined ? undefined : {publicKey: publicKey ?? '', redirectUri: redirectUri ?? ''};
+  const {CLOUD_TURNSTILE_SITE_KEY: siteKey, CLOUD_TURNSTILE_SECRET_KEY: secretKey} = env;
+  const turnstile = siteKey || secretKey ? {siteKey: siteKey ?? '', secretKey: secretKey ?? ''} : undefined;
   let limits: unknown;
   try { limits = env.CLOUD_SIGNUP_LIMITS ? JSON.parse(env.CLOUD_SIGNUP_LIMITS) : undefined; }
   catch { throw new Error('Invalid sign-up limits'); }
   return validateConfig({signupLimits: signupLimits(limits), countryCode: env.CLOUD_COUNTRY_CODE, portalOrigin: env.CLOUD_PORTAL_ORIGIN ?? '', production: env.NODE_ENV === 'production',
     rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', requireEnrollment: env.CLOUD_REQUIRE_ENROLLMENT === 'true',
-    trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : [], setupPairing});
+    trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : [], setupPairing, turnstile});
 }
 
 export function passwordCorpusPath(env: NodeJS.ProcessEnv): string | undefined {

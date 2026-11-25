@@ -80,6 +80,14 @@ evidence, immutable version and review date. Every record is currently unqualifi
 AWS and EU SES selection, the actual OpenAI adapter and candidate Anthropic/Google
 status remain distinct; no automatic supplier fallback follows.
 
+| Account surface | Supplier evidence | Open qualification |
+| --- | --- | --- |
+| Sign-up and password-reset email browser checks | `cloudflare-turnstile`, `ev-cloudflare-turnstile-v1` | Cloudflare processes browser signals to provide the check and acts as controller for detection improvement. The check is for Cloud account security. Public enablement awaits the supplier, transfer and cookie evidence. |
+
+With pre-clearance off, Turnstile does not set `cf_clearance`. Review what other
+cookies the widget uses before enabling it. Cloudflare links to its cookie policy
+from its [Turnstile Privacy Addendum](https://www.cloudflare.com/turnstile-privacy-policy/).
+
 The proposed authorisation process is **general written authorisation with 30 days'
 advance supplier-change notice**, subject to lawyer question 3. Thirty days is a
 proposal, not an established legal deadline or a signed customer term. Record the

@@ -21,13 +21,14 @@ import {BillingController} from './billing-controller.ts';
 import {DiagnosticController} from './diagnostic-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
-import { captureLink, captureSetupPairingLink, forgetSetupPairingLink, type CapturedLink, type SetupPairingLink } from './links.ts';
+import { captureLink, captureSetupPairingLink, forgetSetupPairingLink, saveEmailRequestReturn, takeEmailRequestReturn, type CapturedLink, type SetupPairingLink } from './links.ts';
 import { chooseLocale, translations, type Copy, type Locale } from './locale.ts';
 import { PortalSession, type SessionState } from './session.ts';
 import { accountPages, screen } from './screens.ts';
 import {SentReportsController} from './sent-reports-controller.ts';
 export type Fields = {email: string; password: string};
 type PasskeyAddRequest = {accountId: string};
+const emailRequestDocument = (path: string) => path === '/signup' || path === '/forgot-password';
 
 export class PortalApp {
   root: HTMLElement;
@@ -42,6 +43,11 @@ export class PortalApp {
   requested = false;
   reveal = false;
   pending = false;
+  readonly #turnstileEnabled = !!document.querySelector('meta[name="turnstile-enabled"]');
+  readonly turnstileSiteKey = document.querySelector<HTMLMetaElement>('meta[name="turnstile-site-key"]')?.content;
+  turnstileToken = '';
+  turnstileUnavailable = false;
+  #pageHidden = false;
   #serverCooldowns = new Map<string, number>();
   #emailCooldowns = new Map<string, number>();
   session: PortalSession;
@@ -80,10 +86,13 @@ export class PortalApp {
       this.#loadBusinessOptions();
       this.draw();
     });
+    const returned = takeEmailRequestReturn(this.path);
+    if (returned?.pairingId) this.pairing.open(returned.pairingId);
     this.link = this.#capture();
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
-    this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
+    const preferred = returned?.forwarded ? returned.locale : saved ?? returned?.locale ?? null;
+    this.locale = this.link.locale ?? chooseLocale(preferred, navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.billing?.error==='pairEnrollment')this.billing.error=undefined;
@@ -124,7 +133,7 @@ export class PortalApp {
     this.cloudActions=new CloudActionsController(()=>this.draw());
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
-    this.recovery.open(this.link.recoveryId);
+    this.recovery.open(this.link.recoveryId ?? returned?.recoveryId);
     this.backups = new BackupController(() => {
       const selected=this.backups.page?.points.find(p=>p.id===this.backups.selected&&p.verification==='verified');
       if(this.backups.selectedSource==='continuous'&&this.backups.page?.continuousRecovery)this.recovery.chooseContinuous(this.backups.venueId);
@@ -145,9 +154,18 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (this.sessionPage) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (this.sessionPage) void this.session.activity(event); });
+    if (this.turnstileSiteKey) window.addEventListener('pagehide', () => {
+      this.#pageHidden = true;
+      this.turnstileToken = '';
+      this.draw();
+    });
     window.addEventListener('pagehide', () => { this.sentReports.account(undefined); this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined);this.businesses.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
-      if (event.persisted) { this.session = this.#session(); void this.session.check(); }
+      if (event.persisted) {
+        this.session = this.#session();
+        if (this.turnstileSiteKey) {this.#pageHidden = false; this.draw();}
+        void this.session.check();
+      }
     });
     this.installations.showRecovery(this.path==='/recover');
     this.draw(); void this.session.check();
@@ -266,6 +284,32 @@ export class PortalApp {
     if (this.path === '/reset-password') return '/password-reset/complete';
     return this.path;
   }
+  get requiresTurnstile() {
+    return this.#turnstileEnabled && emailRequestDocument(this.path) && !this.completion && !this.link.invalid && !this.notice;
+  }
+  get showTurnstile() {
+    return this.requiresTurnstile && !this.waiting && !this.pending && !this.#pageHidden;
+  }
+  checkResult(token: string | null) {
+    this.readFields();
+    this.turnstileToken = token ?? '';
+    if (token === null) {
+      this.turnstileUnavailable = true;
+      this.error = 'browserCheckFailed';
+    }
+    this.draw();
+  }
+  retryTurnstile() {
+    if (!this.turnstileSiteKey) {
+      this.#carryEmailRequest(this.path);
+      location.reload();
+      return;
+    }
+    this.readFields();
+    this.turnstileUnavailable = false;
+    this.error = undefined;
+    this.draw();
+  }
   get #emailCooldown() {
     return this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0;
   }
@@ -314,7 +358,25 @@ export class PortalApp {
     if (this.accountPage) return c[this.accountPage];
     return c.login;
   }
+  #carryEmailRequest(path: string) {
+    // Only the operation IDs and language cross a document boundary. Codes and link secrets stay in memory.
+    saveEmailRequestReturn({path, pairingId: this.pairing.requestId, recoveryId: this.recovery.requestId, locale: this.locale});
+  }
   navigate(path: string, push = true) {
+    if (!push && this.turnstileSiteKey && path === '/signup' && new URLSearchParams(location.hash.slice(1)).has('token')) {
+      // An email link can arrive as a fragment change in the tab where the widget already ran.
+      this.#carryEmailRequest(path);
+      location.reload();
+      return;
+    }
+    if (this.#turnstileEnabled && push && (path !== this.path && (emailRequestDocument(path) || !!this.turnstileSiteKey)
+      || emailRequestDocument(path) && !this.turnstileSiteKey)) {
+      this.#carryEmailRequest(path);
+      location.assign(path);
+      return;
+    }
+    this.turnstileToken = '';
+    this.turnstileUnavailable = false;
     this.sentReports.close();
     this.backups.cancelDownload();
     this.#signOutCheck = undefined;
@@ -336,7 +398,7 @@ export class PortalApp {
     this.fields = {email: '', password: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
     this.pending = false; this.reveal = false;
-    // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
+    // Keep the cooldown across in-page navigation. Full reloads rely on the server limit.
     this.installations.showRecovery(path==='/recover');
     this.draw(); this.focusHeading();
     if (this.sessionPage) void this.session.check();
@@ -372,7 +434,13 @@ export class PortalApp {
     }
   }
   setLocale(locale: Locale) {
-    this.readFields(); this.locale = locale;
+    this.readFields();
+    if (locale !== this.locale) {
+      this.turnstileToken = '';
+      this.turnstileUnavailable = false;
+      if (this.error === 'browserCheckFailed') this.error = undefined;
+    }
+    this.locale = locale;
     try { localStorage.setItem('cloud.locale', locale); } catch { /* The current tab still changes language. */ }
     this.draw();
   }
@@ -381,7 +449,7 @@ export class PortalApp {
     queueMicrotask(() => {
       const field = Object.keys(this.errors)[0];
       if (field) this.root.querySelector<HTMLElement>(`wt-input[name="${field}"]`)?.focus();
-      else this.root.querySelector<HTMLElement>('#signup-refusal, wt-form-error-summary')?.focus();
+      else this.root.querySelector<HTMLElement>('#form-refusal, wt-form-error-summary')?.focus();
     });
   }
   async submitPairing() {
@@ -465,7 +533,15 @@ export class PortalApp {
     if (this.path === '/signup' && this.link.token) {
       path = '/signup/complete'; body = {token: this.link.token, password: f.password};
     } else if (this.path === '/reset-password') { path = '/password-reset/complete'; body = {token: this.link.token!, password: f.password, locale: this.locale}; }
-    else { path = this.path === '/signup' ? '/signup/request' : '/password-reset/request'; body = {email: f.email, locale: this.locale}; }
+    else {
+      path = this.path === '/signup' ? '/signup/request' : '/password-reset/request';
+      body = {email: f.email, locale: this.locale};
+      if (this.requiresTurnstile) {
+        if (!this.turnstileToken) {this.draw(); return;}
+        body.turnstileToken = this.turnstileToken;
+        this.turnstileToken = '';
+      }
+    }
     this.pending = true; const route = this.#route;
     this.draw();
     const result = await accountRequest(path, body);
@@ -484,7 +560,8 @@ export class PortalApp {
       const cause = bodyRefusal(result);
       if (cause) this.error = `${path.startsWith('/signup/')&&path.endsWith('/complete')?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
-      else this.error = result.code === 'signup_rate_limited' ? 'signupConnectionLimited'
+      else this.error = result.code === 'browser_check_failed' ? 'browserCheckFailed'
+        : result.code === 'signup_rate_limited' ? 'signupConnectionLimited'
         : result.code === 'signup_domain_limited' ? 'signupDomainLimited'
         : result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'

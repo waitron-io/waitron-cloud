@@ -19,9 +19,13 @@ test('operatorSettingReachesAccountOnly',async()=>{
 
 test('sign-up limits reach only the account runtime', async () => {
  const {config} = await configured(), limits = '{"requestsPerHour":20}';
- const settings = {CLOUD_SIGNUP_LIMITS: limits};
+ const settings = {CLOUD_SIGNUP_LIMITS: limits, CLOUD_TURNSTILE_SITE_KEY: 'test-site', CLOUD_TURNSTILE_SECRET_KEY: 'test-secret'};
  assert.equal(runtimeEnvironment('account', config, settings).CLOUD_SIGNUP_LIMITS, limits);
  assert.equal(runtimeEnvironment('email', config, settings).CLOUD_SIGNUP_LIMITS, undefined);
+ for (const key of ['CLOUD_TURNSTILE_SITE_KEY', 'CLOUD_TURNSTILE_SECRET_KEY']) {
+  assert.equal(runtimeEnvironment('account', config, settings)[key], settings[key]);
+  assert.equal(runtimeEnvironment('email', config, settings)[key], undefined);
+ }
 });
 
 test('guest menu settings reach only the account runtime',async()=>{

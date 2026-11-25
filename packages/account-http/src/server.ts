@@ -13,7 +13,7 @@ import { getPath } from 'hono/utils/url';
 import type { Pool } from 'pg';
 import type { RelayAdmissionConfig, EmailOutbox, LeaseIssuer, PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { validateConfig, type AccountHttpConfig, type FactorConfig } from './config.ts';
-import { portalErrorResponse, portalResponse, portalSecurityHeaders, securityHeaders, type PortalAssets } from './portal.ts';
+import { portalErrorResponse, portalResponse, portalSecurityHeaders, securityHeaders, turnstilePortalAssets, type PortalAssets } from './portal.ts';
 import { createAccountApp } from './app.ts';
 import { clientAddress } from './client-address.ts';
 import { submitPath, submitRequestMs, submitSlots } from './translation.ts';
@@ -25,11 +25,13 @@ function unavailable(request?: Request, portal = false, testBillingMethods=false
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number;localMetrics?:{host:string;port:number}; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server;metricsServer?:Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number;localMetrics?:{host:string;port:number}; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch}): Promise<{server: Server;metricsServer?:Server; close(): Promise<void>}> {
   const config = validateConfig(options.config);
   if(options.localMetrics&&config.production)throw Error('Local metrics are unavailable in production');
   const app = createAccountApp({...options, config});
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
+  const turnstileAssets = options.portalAssets && config.turnstile
+    ? turnstilePortalAssets(options.portalAssets, config.turnstile.siteKey) : undefined;
   let publishing=0;const publishers=new Set<string>();
   let submitting = 0; const submitters = new Set<string>();
   const listener = getRequestListener(async (request, bindings) => {
@@ -41,7 +43,7 @@ export async function startAccountServer(options: {operatorAccountId?:string;gue
         return new Response(null, {status: 403, headers: portalSecurityHeaders(!!options.billingMethods)});
     }
     if (stopping) return unavailable(request, portalRequest,!!options.billingMethods);
-    if (portalRequest) return portalResponse(request, options.portalAssets!, !!options.billingMethods, !!config.setupPairing);
+    if (portalRequest) return portalResponse(request, options.portalAssets!, !!options.billingMethods, !!config.setupPairing, turnstileAssets);
     if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
     // Encoded aliases must use the same admission as the router's decoded submit path.
     if (options.translation && getPath(request) === submitPath) {

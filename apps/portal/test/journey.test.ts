@@ -4,11 +4,13 @@ import { test } from 'node:test';
 import {completeBrowserEmail,contextSignIn, startPortalFixture, mailFor } from './fixtures.ts';
 import { translations } from '../src/locale.ts';
 import {portalTrace} from './portal-trace.ts';
-for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions and recovery through the worker and Mailpit`, async () => {
-  const f=await startPortalFixture();
+import {interceptTurnstile, startTurnstilePortalFixture} from './turnstile-fixture.ts';
+for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions and recovery with Turnstile and Mailpit`, async () => {
+  const f=await startTurnstilePortalFixture();
   let trace: ReturnType<typeof portalTrace>|undefined;
   try {
     const context=await f.browser.newContext({locale});const page=await context.newPage();page.setDefaultTimeout(5000);trace=portalTrace(page);
+    await interceptTurnstile(page, {automatic: true});
     const c=translations[locale];const email=`portal-${randomUUID()}@example.test`;const password='A real café account password';
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()+' '+(r.headers()['referer']??'')));
     await page.goto(`${f.origin}/signup`);await page.getByLabel(c.email).fill(email);

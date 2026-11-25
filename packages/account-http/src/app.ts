@@ -66,6 +66,7 @@ import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
 import { readSessionCookie, writeSessionCookies, readBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
+import {createTurnstileGuard, turnstileAction} from './turnstile.ts';
 const paths: Record<string, readonly string[]> = {
   '/signup/request': ['email'], '/signup/complete': ['token', 'password'],
   '/login': ['email', 'password'], '/session/activity': [], '/logout': [],
@@ -103,7 +104,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
   if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
@@ -139,6 +140,8 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const guestMenus=options.guestOrigin&&options.leaseIssuer?new GuestMenuMachine(pool,options.leaseIssuer,config.portalOrigin,options.guestOrigin,options.leaseTrust,options.planMode):undefined;
   const boxErrors=options.leaseIssuer?new BoxErrorReports(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
+  const verifyBrowser = config.turnstile && createTurnstileGuard({limiter, hostname: origin.hostname,
+    secret: config.turnstile.secretKey, fetcher: options.turnstileFetch});
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
@@ -226,11 +229,14 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
+    const action = turnstileAction(c.req.path);
+    const optional = ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : [];
+    if (action) optional.push('turnstileToken');
+    const body = await readAccountBody(c.req.raw, fields!, optional);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
-    const started = performance.now();
-    const slow = ['/login', '/signup/request', '/password-reset/request'].includes(path);
+    let started = performance.now();
+    let padReply = ['/login', '/signup/request', '/password-reset/request'].includes(path) && !(verifyBrowser && action);
     try {
       const email = 'email' in body ? normaliseEmail(body.email) : undefined;
       if ('email' in body && !email) throw new AccountHttpError(400, 'invalid_input');
@@ -252,6 +258,12 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         return c.json({accountId: credentials.accountId});
       }
       if (path.endsWith('/request')) {
+        if (verifyBrowser && action) {
+          await verifyBrowser(ip, action, body.turnstileToken);
+          // A slow provider reply must leave the same padding for the email lookup.
+          started = performance.now();
+          padReply = true;
+        }
         if (path === '/signup/request') {
           const decision = await limiter.consume([{scope: 'signup-request-hour-ip', subject: ip, limit: config.signupLimits.requestsPerHour, windowSeconds: 3600}]);
           if (!decision.allowed) throw new AccountHttpError(429, 'signup_rate_limited', decision.retryAfterSeconds);
@@ -288,7 +300,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         if (!(error instanceof IdentityError) || !['session_unavailable', 'session_expired'].includes(error.code)) throw error;
       }
       writeSessionCookies(c, secure); return c.body(null, 204);
-    } finally {if (slow) await delay(Math.max(0, 300 - (performance.now() - started)));}
+    } finally {if (padReply) await delay(Math.max(0, 300 - (performance.now() - started)));}
   });
   return app;
 }

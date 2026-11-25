@@ -9,7 +9,7 @@ let db: Awaited<ReturnType<typeof database>>;
 before(async () => { db = await database(); });
 after(async () => { await db.close(); });
 const assets = new Map([
-  ['/index.html', {body: Buffer.from('<!doctype html><title>Cloud</title>'), contentType: 'text/html; charset=utf-8'}],
+  ['/index.html', {body: Buffer.from('<!doctype html><head><title>Cloud</title></head>'), contentType: 'text/html; charset=utf-8'}],
   ['/app.js', {body: Buffer.from('/* portal */'), contentType: 'text/javascript; charset=utf-8'}],
   ['/app.css', {body: Buffer.from('body {}'), contentType: 'text/css; charset=utf-8'}],
 ]);
@@ -111,6 +111,31 @@ test('retired_registry_document uses the ordinary translated missing page for GE
       if (method === 'HEAD') assert.equal(retired.body, '');
       for (const name of ['cache-control', 'referrer-policy', 'x-content-type-options', 'content-security-policy', 'content-type', 'content-length', 'set-cookie'])
         assert.deepEqual(retired.headers[name], missing.headers[name], name);
+    }
+  } finally {await running.close();}
+});
+
+test('the Turnstile key and policy are added only to email request documents', async () => {
+  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, portalAssets: assets, port: 0,
+    config: {portalOrigin: 'http://localhost', production: false, rateKey: db.rateKey, trustedProxyIps: [],
+      turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}}});
+  const address = running.server.address(); assert.ok(address && typeof address !== 'string');
+  const port = address.port;
+  try {
+    for (const path of ['/signup', '/forgot-password']) {
+      const res = await send(port, path).result;
+      const head = await send(port, path, 'HEAD').result;
+      assert.match(res.body, /<meta name="turnstile-site-key" content="test-site">/);
+      assert.doesNotMatch(res.body, /test-secret/);
+      assert.match(String(res.headers['content-security-policy']), /script-src 'self' https:\/\/challenges\.cloudflare\.com;/);
+      assert.match(String(res.headers['content-security-policy']), /frame-src https:\/\/challenges\.cloudflare\.com(?:;|$)/);
+      assert.equal(res.headers['referrer-policy'], 'no-referrer');
+      assert.equal(Number(head.headers['content-length']), Buffer.byteLength(res.body));
+    }
+    for (const path of ['/login', '/signup?token=old', '/reset-password', '/account/billing', '/app.js']) {
+      const res = await send(port, path).result;
+      assert.doesNotMatch(res.body, /turnstile-site-key|test-secret/);
+      assert.doesNotMatch(String(res.headers['content-security-policy']), /cloudflare/);
     }
   } finally {await running.close();}
 });

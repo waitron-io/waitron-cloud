@@ -41,6 +41,7 @@ try {
   if(!['0','1'].includes(metricsFlag)||metricsFlag==='1'&&process.env.NODE_ENV==='production')throw new Error();
   const localMetrics=metricsFlag==='1'?{host:'0.0.0.0',port:9092}:undefined;
   const config = accountHttpConfig(process.env);
+  if (config.production && !config.turnstile) console.warn('Turnstile is disabled for account email requests');
   const guestEnabled=['GUEST_ORIGIN','GUEST_TLS_KEY_FILE','GUEST_TLS_CERT_FILE','GUEST_HTTP_PORT','GUEST_HTTP_HOST'].some(name=>!!process.env[name]);
   let guestOptions:{origin:string;tls:{key:Buffer;cert:Buffer};port:number;host:string}|undefined;
   if(guestEnabled){

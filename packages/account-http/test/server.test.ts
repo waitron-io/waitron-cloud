@@ -413,3 +413,55 @@ test('CLI forwards test plan mode to lifecycle and staff certificate boundaries'
   }finally{assert.equal((await running.stop()).code,0);}
  }
 });
+
+test('slow Turnstile requests leave server slots for sign-in', async () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => {resolve = done;});
+  let verifying = 0;
+  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: 0,
+    config: {...config(), turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}},
+    turnstileFetch: async () => {
+      verifying++;
+      if (verifying <= 4) await promise;
+      return Response.json({success: false});
+    }});
+  const address = running.server.address(); assert.ok(address && typeof address !== 'string');
+  const sendSignup = (path = '/signup/request') => send(address.port, path, JSON.stringify({email: 'guest@example.test', turnstileToken: 'proof'}));
+  const pending = Array.from({length: 4}, () => sendSignup());
+  try {
+    await until(async () => verifying === 4, 1500);
+    const attempts = () => db.pool.query(`SELECT attempts FROM account_rate_limits
+      WHERE expires_at BETWEEN clock_timestamp() + interval '14 minutes' AND clock_timestamp() + interval '15 minutes'`);
+    assert.deepEqual((await attempts()).rows, [{attempts: 4}]);
+    const excess = await sendSignup('/%73ignup/request').result;
+    assert.equal(excess.status, 503);
+    assert.deepEqual(JSON.parse(excess.body), {error: 'browser_check_failed'});
+    assert.deepEqual((await attempts()).rows, [{attempts: 4}], 'a busy reply does not spend a verification attempt');
+    assert.equal((await send(address.port, '/login', JSON.stringify({email: 'guest@example.test', password: 'wrong password'})).result).status, 401);
+    assert.equal(verifying, 4);
+  } finally {
+    resolve();
+    await Promise.all(pending.map(item => item.result));
+    await running.close();
+  }
+});
+
+test('unfinished Turnstile uploads do not occupy verification slots', async () => {
+  let verified = 0;
+  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: 0,
+    config: {...config(), turnstile: {siteKey: 'test-site', secretKey: 'test-secret'}},
+    turnstileFetch: async () => {verified++; return Response.json({success: false});}});
+  const address = running.server.address(); assert.ok(address && typeof address !== 'string');
+  const port = address.port;
+  const incomplete = Array.from({length: 4}, () => send(port, '/signup/request', '{', {}, false));
+  try {
+    await until(async () => Number((await db.pool.query('SELECT sum(attempts) AS n FROM account_rate_limits')).rows[0].n) >= 4);
+    const result = await send(port, '/signup/request', JSON.stringify({email: 'guest@example.test', turnstileToken: 'proof'})).result;
+    assert.equal(result.status, 400);
+    assert.deepEqual(JSON.parse(result.body), {error: 'browser_check_failed'});
+    assert.equal(verified, 1);
+  } finally {
+    incomplete.forEach(request => request.abort());
+    await running.close();
+  }
+});

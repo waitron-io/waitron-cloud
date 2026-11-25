@@ -75,3 +75,32 @@ export function captureSetupPairingLink(url: URL): SetupPairingLink | undefined 
   } catch { /* Unavailable or invalid tab storage carries no authority. */ }
   forgetSetupPairingLink();
 }
+
+const pageReturnKey = 'cloud.emailRequestReturn';
+type PageReturn = {path: string; pairingId?: string; recoveryId?: string; locale: Locale};
+
+export function saveEmailRequestReturn(value: PageReturn) {
+  history.replaceState({...history.state, emailRequestReturn: {...value, path: location.pathname}}, '');
+  try {sessionStorage.setItem(pageReturnKey, JSON.stringify(value));} catch { /* Storage is optional. */ }
+}
+
+function emailRequestReturn(value: Partial<PageReturn> | null | undefined, path: string): PageReturn | undefined {
+  if (value?.path !== path || (value.locale !== 'en' && value.locale !== 'es')) return;
+  const id = (candidate: unknown) => typeof candidate === 'string' && pairingId.test(candidate) ? candidate : undefined;
+  return {path, locale: value.locale, pairingId: id(value.pairingId), recoveryId: id(value.recoveryId)};
+}
+
+export function takeEmailRequestReturn(path: string): (PageReturn & {forwarded: boolean}) | undefined {
+  let forwarded: ReturnType<typeof emailRequestReturn>;
+  try {
+    const raw = sessionStorage.getItem(pageReturnKey);
+    sessionStorage.removeItem(pageReturnKey);
+    if (raw) forwarded = emailRequestReturn(JSON.parse(raw), path);
+  } catch { /* Unavailable or invalid tab storage carries no context. */ }
+  if (forwarded) {
+    history.replaceState({...history.state, emailRequestReturn: forwarded}, '');
+    return {...forwarded, forwarded: true};
+  }
+  const restored = emailRequestReturn(history.state?.emailRequestReturn, path);
+  return restored && {...restored, forwarded: false};
+}

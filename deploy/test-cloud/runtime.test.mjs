@@ -24,9 +24,13 @@ test('Test Cloud passes an explicit sign-up limit only to the account process', 
  const dir = await mkdtemp(join(tmpdir(), 'cloud-signup-limits-'));
  t.after(() => rm(dir, {recursive: true, force: true}));
  const config = await bootstrap(dir), limits = '{"accountsPerConnectionPerDay":8}';
- const settings = {CLOUD_SIGNUP_LIMITS: limits};
+ const settings = {CLOUD_SIGNUP_LIMITS: limits, CLOUD_TURNSTILE_SITE_KEY: 'test-site', CLOUD_TURNSTILE_SECRET_KEY: 'test-secret'};
  assert.equal(testRuntimeEnvironment('account', config, settings).CLOUD_SIGNUP_LIMITS, limits);
  assert.equal(testRuntimeEnvironment('email', config, settings).CLOUD_SIGNUP_LIMITS, undefined);
+ for (const key of ['CLOUD_TURNSTILE_SITE_KEY', 'CLOUD_TURNSTILE_SECRET_KEY']) {
+  assert.equal(testRuntimeEnvironment('account', config, settings)[key], settings[key]);
+  assert.equal(testRuntimeEnvironment('email', config, settings)[key], undefined);
+ }
 });
 
 test('only the test account process gets enabled address lookup settings and its provider key',async t=>{
