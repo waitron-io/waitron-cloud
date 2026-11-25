@@ -96,6 +96,17 @@ export function servicesStorageSettings(custody, {role, accountCredentials, work
   }};
 }
 
+export function renderServicesProxy(source, baseline) {
+  const proxy = source.replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
+  if (!baseline) return proxy;
+  // A transaction marker survives to proxy-generated responses, where the request path is unavailable.
+  return proxy.replace('  default_backend account', [
+    '  http-request set-var(txn.p1_session) int(1) if { path -m str /api/account/session }',
+    '  http-after-response set-header X-Waitron-Test-Account-Node "${TEST_CLOUD_ACCOUNT_NODE}" if { var(txn.p1_session) -m found }',
+    '  default_backend account',
+  ].join('\n'));
+}
+
 export async function configureServices(context, kube, store, custody) {
   if (context.baseline) {
     // Each service machine has store copies. A stale endpoint on a stopped machine cannot serve a read.
@@ -141,8 +152,7 @@ export async function configureServices(context, kube, store, custody) {
   const mailFiles = {'tls.crt': tls.cert, 'tls.key': tls.key, ...mail};
   if (!context.baseline) await secret('services-mail', mailFiles);
   await secret('services-proxy-key', {'proxy.pem': tls.cert + tls.key});
-  const proxy = (await asset('deploy/test-cloud/proxy.cfg'))
-    .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
+  const proxy = renderServicesProxy(await asset('deploy/test-cloud/proxy.cfg'), context.baseline);
   await create(resource('ConfigMap', 'services-proxy', {data: {'haproxy.cfg': proxy, 'ca.crt': tls.root, 'passwords.sha256': corpus}}));
   await create(resource('ConfigMap', 'services-store-ca', {data: {'ca.crt': store.ca}}));
   return {ca: tls.root, tls, config, runtimeDirectory, mailFiles, signupRequestsPerHour: signupLimits?.requestsPerHour, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};

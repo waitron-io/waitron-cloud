@@ -1,12 +1,99 @@
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {once} from 'node:events';
+import {createServer} from 'node:https';
 import {test} from 'node:test';
-import {mkdtemp, mkdir, writeFile, rmdir, rm, stat} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, writeFile, rmdir, rm, stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {promisify} from 'node:util';
 
 const load = () => import('./test-cloud-integration.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url?.endsWith('/test-cloud-integration.mjs')) return {};
   throw error;
+});
+
+test('the measured session failure survives in stderr after recovery', {concurrency: true}, async t => {
+  const execute = promisify(execFile);
+  const directory = await mkdtemp(join(tmpdir(), 'cloud-session-test-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const keyFile = join(directory, 'key.pem'), certFile = join(directory, 'cert.pem');
+  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+    '-subj', '/CN=localhost', '-keyout', keyFile, '-out', certFile], {timeout: 10_000});
+  const [key, cert] = await Promise.all([readFile(keyFile), readFile(certFile)]);
+  const child = `
+    import {readFileSync} from 'node:fs';
+    import {createMeasuredSessionProbe, requestIntegrationApi} from './scripts/test-cloud-integration.mjs';
+    import {observeP1} from './scripts/p1-observer.mjs';
+    const [port, certificate] = process.argv.slice(1);
+    const options = {hostname: '127.0.0.1', servername: 'localhost', port: Number(port), ca: readFileSync(certificate)};
+    const browser = {cookie: 'fixture-cookie-private'};
+    const api = (path, body, headers, _trust, _servername, signal, _fresh, onHeaders) =>
+      requestIntegrationApi({...options, path, signal, headers}, body, false, onHeaders);
+    const session = createMeasuredSessionProbe(api, browser);
+    try {
+      const healthy = async () => true;
+      await observeP1({probes: {session, remote: healthy, login: healthy, backup: healthy, signup: healthy},
+        ready() {}, stopped() {}, replacement() {}});
+    } catch (error) {
+      console.error(error.message);
+      process.exitCode = 1;
+    }
+  `;
+  const cases = [
+    {name: 'HTML 503', status: 503, header: 'account.worker-2', node: 'account.worker-2', error: 'Error'},
+    {name: 'invalid node', status: 503, header: 'fixture/header-private', node: 'unknown', error: 'Error'},
+    {name: 'JSON 401', status: 401, node: 'unknown', error: 'AssertionError'},
+    {name: 'reset before headers', status: null, node: 'unknown', error: 'ECONNRESET'},
+    {name: 'invalid TLS reply', status: null, node: 'unknown', error: 'EPROTO'},
+    {name: 'silent connection', status: null, node: 'unknown', error: 'ETIMEDOUT'},
+  ];
+  await Promise.all(cases.map(failure => t.test(failure.name, async () => {
+    const sockets = new Set();
+    let calls = 0;
+    const server = createServer({key, cert}, (req, res) => {
+      assert.equal(req.url, '/api/account/session');
+      assert.equal(req.headers.cookie, 'fixture-cookie-private');
+      if (++calls <= 2) {
+        if (failure.error === 'EPROTO') res.setHeader('connection', 'close');
+        res.end('{}');
+      } else if (failure.header) {
+        res.writeHead(503, {'x-waitron-test-account-node': failure.header});
+        res.end('<p>fixture-body-private</p>');
+      } else if (failure.status === 401) {
+        res.writeHead(401).end('{}');
+      } else if (failure.error === 'ECONNRESET') res.destroy();
+    });
+    server.prependListener('connection', socket => {
+      if (failure.error === 'EPROTO' && calls === 2) socket.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+    });
+    server.on('connection', socket => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+    });
+    await once(server.listen(0, '127.0.0.1'), 'listening');
+    try {
+      await assert.rejects(execute(process.execPath,
+        ['--input-type=module', '-e', child, String(server.address().port), certFile],
+        {cwd: new URL('../', import.meta.url), timeout: 20_000}), result => {
+        assert.equal(result.code, 1, result.stderr);
+        assert.match(result.stderr, /p1\.session_after_recovery/);
+        const lines = result.stderr.split('\n').filter(line => line.startsWith('D621 session probe '));
+        assert.equal(lines.length, 1, result.stderr);
+        const {at, elapsedMs, status, node, error} = JSON.parse(lines[0].slice('D621 session probe '.length));
+        assert.ok(Number.isFinite(at) && Math.abs(Date.now() - at) < 20_000);
+        assert.ok(elapsedMs >= 0 && elapsedMs < 6500);
+        if (failure.error === 'ETIMEDOUT') assert.ok(elapsedMs >= 4900);
+        assert.deepEqual({status, node, error}, {status: failure.status, node: failure.node, error: failure.error});
+        assert.doesNotMatch(result.stderr, /fixture-(?:cookie|body)-private|fixture\/header-private|integration\.invalid_json/);
+        return true;
+      });
+      assert.equal(calls, failure.error === 'EPROTO' ? 2 : 3);
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise(resolve => server.close(resolve));
+    }
+  })));
 });
 
 test('client proof refuses mutable image references before creating resources', async () => {

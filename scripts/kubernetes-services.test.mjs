@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {get} from 'node:https';
 import {createServer} from 'node:net';
 import {execFileSync} from 'node:child_process';
-import {mkdtemp, rm} from 'node:fs/promises';
+import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {prepareKindOutsideBaseline} from './kubernetes-outside.mjs';
@@ -17,6 +17,16 @@ import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
 
 import * as servicesScript from './kubernetes-services.mjs';
 const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
+
+test('only the outside account proxy identifies itself on session replies, including its own errors', async () => {
+  const source = await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8');
+  const legacy = source.replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
+  const render = servicesScript.renderServicesProxy;
+  assert.equal(render(source, false), legacy);
+  const frontend = render(source, true).split('frontend account_https\n')[1].split('\nbackend account')[0];
+  assert.match(frontend, /http-request set-var\(txn\.p1_session\) int\(1\) if \{ path -m str \/api\/account\/session \}/);
+  assert.match(frontend, /http-after-response set-header X-Waitron-Test-Account-Node "\$\{TEST_CLOUD_ACCOUNT_NODE\}" if \{ var\(txn\.p1_session\) -m found \}/);
+});
 
 test('measured stops cover all three machines and the live roles before returning a receipt', async t => {
   const nodes = ['a', 'b', 'c'], changes = [];
