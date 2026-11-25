@@ -2,7 +2,7 @@ import type {Locale} from './locale.ts';
 
 type TurnstileApi = {
   render(container: HTMLElement, options: {
-    sitekey: string; action: string; theme: 'auto'; language: Locale; 'response-field': false; 'refresh-expired': 'manual';
+    sitekey: string; action: string; theme: 'auto'; language: Locale; size: 'normal' | 'compact'; 'response-field': false; 'refresh-expired': 'manual';
     callback: (token: string) => void; 'expired-callback': () => void; 'error-callback': () => void;
     'timeout-callback': () => void; 'unsupported-callback': () => void;
   }): string;
@@ -43,7 +43,8 @@ class TurnstileWidget extends HTMLElement {
     void sdk().then(api => {
       if (!current()) return;
       this.#widget = api.render(this, {
-        sitekey: this.siteKey, action: this.action, theme: 'auto', language: this.locale, 'response-field': false, 'refresh-expired': 'manual',
+        sitekey: this.siteKey, action: this.action, theme: 'auto', language: this.locale,
+        size: this.clientWidth < 300 ? 'compact' : 'normal', 'response-field': false, 'refresh-expired': 'manual',
         callback: report,
         'expired-callback': () => {
           if (!current()) return;

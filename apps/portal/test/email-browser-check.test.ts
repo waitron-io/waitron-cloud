@@ -34,7 +34,7 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       await interceptTurnstile(page, {blocked: () => blocked});
       await page.route(`**/api/account${form}`, route => {
         proofs.push(route.request().postDataJSON().turnstileToken);
-        return route.fulfill(proofs.length === 1 ? {status: 400, json: {error: 'browser_check_failed'}}
+        return route.fulfill(proofs.length === 1 ? {status: signUp ? 400 : 503, json: {error: 'browser_check_failed'}}
           : {status: 202, json: {status: 'accepted'}});
       });
       await page.goto(`https://portal.test${path}`);
@@ -62,8 +62,15 @@ test('both forms recover from a blocked check and send only a fresh proof', asyn
       await widget.waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await screen('widget');
+      if (locale === 'en' && colorScheme === 'light' && width === 390 && signUp) {
+        await widget.dispatchEvent('error-fixture');
+        await alert.waitFor();
+        await page.getByRole('button', {name: c.retry, exact: true}).click();
+      }
       await widget.click();
+      await email.focus();
       await widget.dispatchEvent('expire-fixture');
+      assert.equal(await widget.evaluate(element => element === document.activeElement), true);
       assert.equal(await submit.isDisabled(), true);
       await widget.click();
       await submit.click();
@@ -121,18 +128,25 @@ test('an emailed completion link never loads the Turnstile script', async t => {
   }
 });
 
-test('opening a sign-up completion link in the request tab unloads the widget', async t => {
+test('opening a sign-up completion link in the request tab unloads the widget and keeps the pairing request', async t => {
   const browser = await chromium.launch();
   t.after(() => browser.close());
   const page = await browser.newPage({locale: 'en'});
+  page.setDefaultTimeout(3000);
   await servePortal(page);
   await interceptTurnstile(page);
-  await page.goto('https://portal.test/signup');
-  await page.getByRole('button', {name: 'Verify (stand-in)'}).waitFor({timeout: 2000});
+  const requestId = '11111111-1111-4111-8111-111111111111';
+  await page.goto(`https://portal.test/connect#request=${requestId}&lang=es`);
+  await page.getByRole('link', {name: translations.es.signup, exact: true}).click();
+  await page.getByRole('button', {name: 'Verificar (simulación)'}).waitFor({timeout: 2000});
   await page.goto(`https://portal.test/signup#token=${'b'.repeat(43)}`);
   await page.locator('input[name=password]').waitFor({timeout: 3000});
   assert.equal(await page.evaluate(() => typeof window.turnstile), 'undefined');
   assert.equal(new URL(page.url()).hash, '');
+  await page.getByRole('link', {name: 'Waitron Cloud', exact: true}).click();
+  await page.waitForURL('**/login');
+  await page.getByRole('heading', {name: translations.es.login, exact: true}).waitFor();
+  assert.equal(await page.evaluate(() => history.state.pairingRequestId), requestId);
 });
 
 test('browser Back from password reset keeps the recovery request and link language', async t => {
@@ -213,4 +227,15 @@ test('a restored request page drops its proof each time it leaves', async t => {
     assert.equal(await submit.isDisabled(), true);
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})));
   }
+});
+
+test('the widget fits a narrow phone at its real dimensions', async t => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({locale: 'en', viewport: {width: 320, height: 800}});
+  await servePortal(page);
+  await interceptTurnstile(page);
+  await page.goto('https://portal.test/signup');
+  await page.getByRole('button', {name: 'Verify (stand-in)'}).waitFor({timeout: 3000});
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });

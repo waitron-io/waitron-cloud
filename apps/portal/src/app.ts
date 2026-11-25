@@ -364,6 +364,7 @@ export class PortalApp {
   navigate(path: string, push = true) {
     if (!push && this.turnstileSiteKey && path === '/signup' && new URLSearchParams(location.hash.slice(1)).has('token')) {
       // An email link can arrive as a fragment change in the tab where the widget already ran.
+      this.#carryEmailRequest(path);
       location.reload();
       return;
     }
@@ -396,7 +397,7 @@ export class PortalApp {
     this.fields = {email: '', password: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
     this.pending = false; this.reveal = false;
-    // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
+    // Keep the cooldown across in-page navigation. Full reloads rely on the server limit.
     this.installations.showRecovery(path==='/recover');
     this.draw(); this.focusHeading();
     if (this.sessionPage) void this.session.check();

@@ -23,9 +23,11 @@ export async function interceptTurnstile(page: Page, {blocked = () => false, aut
           const button = document.createElement('button');
           button.type = 'button';
           button.textContent = options.language === 'es' ? 'Verificar (simulación)' : 'Verify (stand-in)';
-          button.style.cssText = 'width:min(300px,100%);height:65px;color-scheme:light dark';
+          button.style.cssText = options.size === 'compact'
+            ? 'width:150px;height:140px;color-scheme:light dark' : 'width:300px;height:65px;color-scheme:light dark';
           button.onclick = () => options.callback(options.action + '-proof-' + (++sequence));
           button.addEventListener('expire-fixture', () => options['expired-callback']());
+          button.addEventListener('error-fixture', () => options['error-callback']());
           element.append(button);
           widgets.set(id, button);
           if (${automatic}) queueMicrotask(() => button.click());

@@ -218,6 +218,7 @@ test('Turnstile refusals leave mail allowances available and a replay across rep
   assert.equal(missing.status, 400);
   assert.deepEqual(await missing.json(), {error: 'browser_check_failed'});
   assert.equal((await request(signupPath, {...signup, turnstileToken: 'x'.repeat(2049)}, peer, {origin}, first)).status, 400);
+  assert.equal((await request(signupPath, {...signup, turnstileToken: ' proof '}, peer, {origin}, first)).status, 400);
   assert.deepEqual(attempts, []);
 
   const refusal = await request(signupPath, {...signup, turnstileToken: 'refused'}, peer, {origin}, first);
