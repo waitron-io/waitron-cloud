@@ -64,9 +64,9 @@ for(const level of ['registered','connected','hosted'])test(`venue basic ${level
   await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[owner.organisationId]);
   await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[owner.legalBusinessId,owner.organisationId]);
   await (await billingVenue(db,owner))(level);
-  const environment=testRuntimeEnvironment('account',await bootstrap(directory),{CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TRANSLATION:'1',CLOUD_ADDRESS_LOOKUP:'1',GOOGLE_MAPS_API_KEY:'fake-only',GEOAPIFY_API_KEY:'fake-only'});
+  const environment=testRuntimeEnvironment('account',await bootstrap(directory),{CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TRANSLATION:'1',GOOGLE_MAPS_SERVER_KEY:'fake-only',GEOAPIFY_API_KEY:'fake-only'});
   assert.equal(environment.CLOUD_TRANSLATION,'0');
-  for(const key of ['CLOUD_ADDRESS_LOOKUP','GOOGLE_MAPS_API_KEY','GEOAPIFY_API_KEY'])assert.equal(environment[key],undefined);
+  for(const key of ['CLOUD_ADDRESS_LOOKUP_SETTINGS','GOOGLE_MAPS_SERVER_KEY','GEOAPIFY_API_KEY'])assert.equal(environment[key],undefined);
   running=await startAccountServer({pool:db.pool,outbox:db.outbox,port:0,planMode:parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS),translation:environment.CLOUD_TRANSLATION==='1',config:{portalOrigin:'http://localhost',production:false,rateKey:db.rateKey,trustedProxyIps:[]}});
   const port=running.server.address().port;
   const post=(path,browser=true)=>new Promise((resolve,reject)=>{

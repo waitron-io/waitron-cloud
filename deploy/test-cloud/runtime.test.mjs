@@ -44,7 +44,7 @@ test('only the test account process gets enabled address lookup settings and its
  const account=testRuntimeEnvironment('account',config,enabled);
  assert.equal(account.CLOUD_ADDRESS_LOOKUP_SETTINGS,enabled.CLOUD_ADDRESS_LOOKUP_SETTINGS);
  assert.equal(account.GOOGLE_MAPS_SERVER_KEY,enabled.GOOGLE_MAPS_SERVER_KEY);
- for(const role of ['email','migrate','translation','backup','gateway']){
+ for(const role of ['email','migrate','translation','backup','gateway','storage','manifest','reconcile','monitor','usage','probe']){
   const child=testRuntimeEnvironment(role,config,enabled);
   assert.equal(child.GOOGLE_MAPS_SERVER_KEY,undefined,role);
   assert.equal(child.CLOUD_ADDRESS_LOOKUP_SETTINGS,undefined,role);
@@ -57,6 +57,8 @@ test('only the test account process gets enabled address lookup settings and its
   {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudMonth:{...month,limitMicros:-1}})},
   {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,suggestionMicros:0})},
   {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,cloudDay:{...day,limitMicros:month.limitMicros+1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeMonth:{...budget.freeMonth,limitMicros:month.limitMicros+1}})},
+  {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeMonth:{...budget.freeMonth,limitMicros:budget.freeDay.limitMicros-1}})},
   {...enabled,CLOUD_ADDRESS_LOOKUP_SETTINGS:JSON.stringify({...budget,freeDay:{...budget.freeDay,freeSuggestions:day.freeSuggestions+1}})}])
   assert.equal(address.addressLookupOptionsFromEnv(env),undefined);
  assert.equal(testRuntimeEnvironment('account',config,{GOOGLE_MAPS_SERVER_KEY:'ambient-key'}).GOOGLE_MAPS_SERVER_KEY,undefined);

@@ -114,6 +114,8 @@ test('refused signed lookups still use the minute limits',async()=>{
    assert.equal((await f.post({...suggest(),language:'fr'})).status,400);
   }
   assert.equal((await f.post(validate(randomUUID()))).status,429);
+  const owner=rateKey(f.db.rateKey,'address-lookup-owner',f.v.accountId);
+  assert.equal((await f.db.pool.query('SELECT attempts FROM account_rate_limits WHERE key=$1',[owner])).rows[0].attempts,30);
   const network=rateKey(f.db.rateKey,'address-lookup-network',ip);
   await f.db.pool.query('UPDATE account_rate_limits SET attempts=60 WHERE key=$1',[network]);
   const signed=f.v.proof('address-lookup',suggest(),randomUUID(),f.v.lease);
@@ -236,12 +238,12 @@ test('losing verified-account authority during a lock wait rolls back the debit'
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });
 
-test('a lease expiring during counter contention cannot authorize a provider call',async()=>{
+test('a lease expiring during the owner lock wait cannot authorize a provider call',async()=>{
  const f=await fixture(),holder=await f.db.pool.connect();let pending:Promise<Response>|undefined;
  try{
   const body=suggest();assert.equal((await f.post(body)).status,200);
   const key=rateKey(f.db.rateKey,'address-lookup-box',f.v.installationId);
-  await holder.query('BEGIN');await holder.query('SELECT key FROM account_rate_limits WHERE key=$1 FOR UPDATE',[key]);
+  await holder.query('BEGIN');await holder.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[f.v.accountId]);
   const now=Date.now(),expiresAt=now+3000;
   const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'test',publicKey:f.v.installationKey,issuedAt:now,expiresAt});
   pending=f.request(f.v.proof('address-lookup',body,randomUUID(),lease));await blocked(f.db.pool,f.db.schema);

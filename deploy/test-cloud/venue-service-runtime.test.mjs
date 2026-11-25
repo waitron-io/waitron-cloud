@@ -11,10 +11,10 @@ const roles=['account','storage','backup','manifest','reconcile','translation','
 for(const role of roles)test(`venue runtime forwards explicit test authority to ${role} without provider inputs`,async t=>{
  const directory=await mkdtemp(join(tmpdir(),'venue-runtime-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const config=await bootstrap(directory);
- const value=testRuntimeEnvironment(role,config,{CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'1',CLOUD_ADDRESS_LOOKUP:'1',GOOGLE_MAPS_API_KEY:'fake-only',GEOAPIFY_API_KEY:'fake-only',CLOUD_OPENAI_API_KEY:'fake-only',CLOUD_SMTP_HOST:'outside.test',NODE_AUTH_TOKEN:'fake-only',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64)});
+ const value=testRuntimeEnvironment(role,config,{CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'1',GOOGLE_MAPS_SERVER_KEY:'fake-only',GEOAPIFY_API_KEY:'fake-only',CLOUD_OPENAI_API_KEY:'fake-only',CLOUD_SMTP_HOST:'outside.test',NODE_AUTH_TOKEN:'fake-only',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64)});
  assert.equal(value.CLOUD_VENUE_SERVICE_LEVELS,'test');assert.equal(value.CLOUD_TEST_SERVICE_PLANS,'0');
  assert.equal(parsePlanMode(value.CLOUD_TEST_SERVICE_PLANS,value.CLOUD_VENUE_SERVICE_LEVELS),'test-venue-levels');
- for(const key of ['CLOUD_ADDRESS_LOOKUP','GOOGLE_MAPS_API_KEY','GEOAPIFY_API_KEY','CLOUD_OPENAI_API_KEY','CLOUD_SMTP_HOST','NODE_AUTH_TOKEN'])assert.equal(value[key],undefined,key);
+ for(const key of ['CLOUD_ADDRESS_LOOKUP_SETTINGS','GOOGLE_MAPS_SERVER_KEY','GEOAPIFY_API_KEY','CLOUD_OPENAI_API_KEY','CLOUD_SMTP_HOST','NODE_AUTH_TOKEN'])assert.equal(value[key],undefined,key);
  assert.notEqual(value.CLOUD_TRANSLATION,'1');
  if(role==='account'){assert.equal(value.CLOUD_TRANSLATION,'0');assert.equal(value.CLOUD_STAFF_CERTIFICATES,'1');}
  if(['storage','manifest','reconcile'].includes(role))assert.match(value.DATABASE_URL,/postgres:5432/);

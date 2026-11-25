@@ -131,12 +131,14 @@ export class AddressLookupMachine{
   const claims=readMachineClaims(envelope);
   const box=await this.#authorize(this.#pool,envelope,claims.installationId,await instant(this.#pool));
   if(!isAvailability(claims.body)){
-   // A rejected lookup still used the service. Its request counters commit before admission.
-   const limit=await this.#limiter.consume([
+   // Stop at the box limit before charging the allowance its owner shares with other boxes.
+   for(const rule of [
     {scope:'address-lookup-box',subject:box.installationId,limit:30,windowSeconds:60},
     {scope:'address-lookup-owner',subject:box.accountId,limit:60,windowSeconds:60},
-   ]);
-   if(!limit.allowed)throw new AccountHttpError(429,'rate_limited',limit.retryAfterSeconds);
+   ]){
+    const limit=await this.#limiter.consume([rule]);
+    if(!limit.allowed)throw new AccountHttpError(429,'rate_limited',limit.retryAfterSeconds);
+   }
   }
   const body=parseBody(claims.body);
   const admission=await this.#admit(envelope,body,box,claims.operationId);

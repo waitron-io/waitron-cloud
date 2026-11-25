@@ -127,8 +127,9 @@ server checks. A draft is not a saved or fiscally accepted address.
 
 Keep manual text editable and show Google Maps attribution. Choosing a suggestion
 starts validation. Keep every field visible and editable so **Save** confirms the
-address the person sees. Cloud records the call type, time and the account, venue,
-box, workflow and operation IDs for its limits. Queries and drafts are discarded.
+address the person sees. Cloud records the call type, time, paid or free class,
+and the account, venue, box, workflow and operation IDs for its limits. Queries
+and drafts are discarded.
 
 ## How the limits work
 
@@ -139,8 +140,9 @@ Another workflow can use that room first.
 
 Alongside the configured venue or owner allowance, the test service applies daily
 and monthly spend caps for all requests and a separate share for free accounts.
-Daily and monthly periods start at midnight in Pacific time. Provider calls also
-have their own per-minute limits of 30 per box, 60 per network and 60 per owner.
+Daily and monthly periods start at midnight in Pacific time. Lookup attempts,
+including refusals, have separate per-minute limits of 30 per box, 60 per network
+and 60 per owner. Cloud charges the owner’s counter after the box’s check passes.
 
 | Refusal | What you do |
 | --- | --- |
