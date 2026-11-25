@@ -437,6 +437,7 @@ own mail server always wins. Without one, the free relay pilot covers staff
 account emails and five staff notices. The paid design covers every email the
 box sends, from the venue's own domain or a Waitron address. Start by checking
 whether Amazon SES accepts the one-record domain setup.
+[Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
 [Decisions and open work](backlog/venue-email.md).
 
 ## Launch platform work, in priority order
