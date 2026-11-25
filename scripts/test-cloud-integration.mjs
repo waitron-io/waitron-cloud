@@ -65,18 +65,28 @@ export function requestIntegrationApi({signal, ...options}, body, download, onHe
   });
 }
 
+const publicSessionCodes = new Set(['session_expired', 'unauthenticated', 'enrollment_required',
+  'forbidden', 'rate_limited', 'temporarily_unavailable']);
+
 export function createMeasuredSessionProbe(api, browser) {
-  return async signal => {
+  let expiresAt = null;
+  const probe = async (signal, activity) => {
     const started = performance.now();
-    let status = null, node = 'unknown';
+    let status = null, node = 'unknown', publicCode = null;
     try {
-      const reply = await api('/api/account/session', undefined, browser, undefined, undefined, signal, false, (code, headers) => {
+      const path = activity ? '/api/account/session/activity' : '/api/account/session';
+      const reply = await api(path, activity ? {} : undefined, browser, undefined, undefined, signal, false, (code, headers) => {
         status = code;
         const value = headers['x-waitron-test-account-node'];
         if (typeof value === 'string' && value.length <= 253 &&
           value.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) node = value;
       });
-      assert.equal(reply.status, 200, 'p1.session');
+      status = reply.status;
+      if (publicSessionCodes.has(reply.body?.error)) publicCode = reply.body.error;
+      assert.equal(status, 200, activity ? 'p1.session_activity' : 'p1.session');
+      const deadline = reply.body?.expiresAt;
+      if (typeof deadline === 'string' && Number.isFinite(Date.parse(deadline))) expiresAt = new Date(deadline).toISOString();
+      return {status, expiresAt, code: publicCode};
     } catch (error) {
       const code = error?.code;
       const elapsedMs = Math.round(performance.now() - started);
@@ -85,10 +95,14 @@ export function createMeasuredSessionProbe(api, browser) {
       else if (error?.message === 'integration.api_timeout') failure = 'ETIMEDOUT';
       else if (error instanceof assert.AssertionError) failure = 'AssertionError';
       else if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)) failure = code;
-      process.stderr.write('D621 session probe ' + JSON.stringify({at: Date.now(), elapsedMs, status, node, error: failure}) + '\n');
+      process.stderr.write('D621 session probe ' + JSON.stringify({at: Date.now(), elapsedMs, status, node,
+        expiresAt, code: publicCode, error: failure}) + '\n');
       throw error;
     }
   };
+  const session = signal => probe(signal, false);
+  session.activity = signal => probe(signal, true);
+  return session;
 }
 
 
@@ -993,9 +1007,10 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                   }
                   runSignal().throwIfAborted();
                 }));
-                const serviceStops = await kubernetes.stopServices({...probes, session: createMeasuredSessionProbe(api, browser),
+                const session = createMeasuredSessionProbe(api, browser), sessionActivity = session.activity;
+                const serviceStops = await kubernetes.stopServices({...probes, session, sessionActivity,
                   inboxWitness, publication, signedBackupReservations}, spaceSignup);
-                const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, inboxWitness, remote: cold.healthy,
+                const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, session, sessionActivity, inboxWitness, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({
                     ...backupOperations, original: lastAcknowledged,

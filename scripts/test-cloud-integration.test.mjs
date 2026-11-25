@@ -43,7 +43,8 @@ test('the measured session failure survives in stderr after recovery', {concurre
   const cases = [
     {name: 'HTML 503', status: 503, header: 'account.worker-2', node: 'account.worker-2', error: 'Error'},
     {name: 'invalid node', status: 503, header: 'fixture/header-private', node: 'unknown', error: 'Error'},
-    {name: 'JSON 401', status: 401, node: 'unknown', error: 'AssertionError'},
+    {name: 'JSON 401', status: 401, node: 'unknown', error: 'AssertionError', publicCode: 'session_expired'},
+    {name: 'unrecognized JSON error', status: 401, node: 'unknown', error: 'AssertionError'},
     {name: 'reset before headers', status: null, node: 'unknown', error: 'ECONNRESET'},
     {name: 'invalid TLS reply', status: null, node: 'unknown', error: 'EPROTO'},
     {name: 'silent connection', status: null, node: 'unknown', error: 'ETIMEDOUT'},
@@ -56,12 +57,12 @@ test('the measured session failure survives in stderr after recovery', {concurre
       assert.equal(req.headers.cookie, 'fixture-cookie-private');
       if (++calls <= 2) {
         if (failure.error === 'EPROTO') res.setHeader('connection', 'close');
-        res.end('{}');
+        res.end('{"expiresAt":"2026-11-25T22:30:00.000Z"}');
       } else if (failure.header) {
         res.writeHead(503, {'x-waitron-test-account-node': failure.header});
         res.end('<p>fixture-body-private</p>');
       } else if (failure.status === 401) {
-        res.writeHead(401).end('{}');
+        res.writeHead(401).end(JSON.stringify({error: failure.publicCode ?? 'fixture-body-private'}));
       } else if (failure.error === 'ECONNRESET') res.destroy();
     });
     server.prependListener('connection', socket => {
@@ -80,11 +81,13 @@ test('the measured session failure survives in stderr after recovery', {concurre
         assert.match(result.stderr, /p1\.session_after_recovery/);
         const lines = result.stderr.split('\n').filter(line => line.startsWith('D621 session probe '));
         assert.equal(lines.length, 1, result.stderr);
-        const {at, elapsedMs, status, node, error} = JSON.parse(lines[0].slice('D621 session probe '.length));
+        const {at, elapsedMs, status, node, error, expiresAt, code} = JSON.parse(lines[0].slice('D621 session probe '.length));
         assert.ok(Number.isFinite(at) && Math.abs(Date.now() - at) < 20_000);
         assert.ok(elapsedMs >= 0 && elapsedMs < 6500);
         if (failure.error === 'ETIMEDOUT') assert.ok(elapsedMs >= 4900);
         assert.deepEqual({status, node, error}, {status: failure.status, node: failure.node, error: failure.error});
+        assert.equal(expiresAt, '2026-11-25T22:30:00.000Z');
+        assert.equal(code, failure.publicCode ?? null);
         assert.doesNotMatch(result.stderr, /fixture-(?:cookie|body)-private|fixture\/header-private|integration\.invalid_json/);
         return true;
       });
@@ -94,6 +97,23 @@ test('the measured session failure survives in stderr after recovery', {concurre
       await new Promise(resolve => server.close(resolve));
     }
   })));
+});
+
+test('measured activity renews the original session and leaves subsequent reads passive', async () => {
+  const {createMeasuredSessionProbe} = await load();
+  const browser = {cookie: 'original-cookie', 'x-csrf-token': 'original-csrf'};
+  const requests = [], expiresAt = '2026-11-25T22:30:00.000Z';
+  const session = createMeasuredSessionProbe(async (path, body, credentials) => {
+    requests.push({path, body, credentials});
+    return {status: 200, body: {expiresAt, accountId: 'fixture-account'}};
+  }, browser);
+  assert.equal(typeof session.activity, 'function');
+  assert.deepEqual(await session.activity(), {status: 200, expiresAt, code: null});
+  assert.deepEqual(await session(undefined, true), {status: 200, expiresAt, code: null});
+  assert.deepEqual(requests, [
+    {path: '/api/account/session/activity', body: {}, credentials: browser},
+    {path: '/api/account/session', body: undefined, credentials: browser},
+  ]);
 });
 
 test('client proof refuses mutable image references before creating resources', async () => {
