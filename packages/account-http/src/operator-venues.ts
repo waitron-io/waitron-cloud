@@ -47,8 +47,12 @@ export async function operatorVenuesResponse(c:Context,o:Boundary|undefined){
   if(!venueId||typeof stopped!=='boolean'||Object.keys(body).length!==2)throw invalid();
   return c.json(await transaction(o.pool,async client=>{
    await requireAccountActionProof(client,token,csrfToken);
-   // Admission takes the same venue lock. Read or change the stop row only after acquiring it.
-   const {rows:[venue]}=await client.query<Venue>(`SELECT ${columns} ${venueScope} AND v.id=$2 FOR NO KEY UPDATE OF v`,[o.country,venueId]);
+   const {rows:[candidate]}=await client.query<{organisation_id:string}>(`SELECT v.organisation_id ${venueScope} AND v.id=$2`,[o.country,venueId]);
+   if(!candidate)throw missing();
+   // Setup and admission lock the organisation before its venue.
+   await client.query('SELECT id FROM organisations WHERE id=$1 FOR KEY SHARE',[candidate.organisation_id]);
+   const {rows:[venue]}=await client.query<Venue>(`SELECT ${columns} ${venueScope}
+    AND v.id=$2 AND v.organisation_id=$3 FOR NO KEY UPDATE OF v`,[o.country,venueId,candidate.organisation_id]);
    if(!venue)throw missing();
    const change=await client.query(stopped?
     'INSERT INTO address_lookup_stopped_venues(venue_id) VALUES($1) ON CONFLICT DO NOTHING':
@@ -68,7 +72,9 @@ export async function operatorVenuesResponse(c:Context,o:Boundary|undefined){
    [o.country,venueId??query]);
   if(venueId&&!rows.length)throw missing();
   if(rows.length>10)return {venues:[],tooMany:true};
-  for(const venue of rows)await audit(client,venue,actor,'venue.viewed');
+  // History inserts lock their referenced organisations in the same order as owner setup.
+  for(const venue of rows.toSorted((a,b)=>a.organisation_id.localeCompare(b.organisation_id)))
+   await audit(client,venue,actor,'venue.viewed');
   await authorize(client);
   return {venues:rows.map(publicVenue)};
  }));

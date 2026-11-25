@@ -33,10 +33,10 @@ const send=(app:ReturnType<typeof createAccountApp>,actor?:Awaited<ReturnType<ty
    cookie:actor?'__Host-cloud_session='+actor.token:''},body:JSON.stringify(body),
  },{incoming:{socket:{remoteAddress:'192.0.2.25'}}} as HttpBindings);
 
-async function venue(name:string|null,environment='test'){
+async function venue(name:string|null,environment='test',scope={organisation,business}){
  const id=randomUUID();
  await db.pool.query('INSERT INTO venues(id,environment,organisation_id,legal_business_id,display_name) VALUES($1,$2,$3,$4,$5)',
-  [id,environment,organisation,business,name]);
+  [id,environment,scope.organisation,scope.business,name]);
  return id;
 }
 
@@ -140,4 +140,48 @@ test('a stop waits for the venue lock and rolls back if fresh proof expires whil
  assert.deepEqual(await response.json(),{error:'proof_required'});
  assert.equal((await db.pool.query('SELECT 1 FROM address_lookup_stopped_venues WHERE venue_id=$1',[venueId])).rowCount,0);
  assert.equal((await db.pool.query('SELECT 1 FROM security_audit_events WHERE venue_id=$1',[venueId])).rowCount,0);
+});
+
+test('search records venues in the same organisation order as owner setup',async()=>{
+ const scopes=[0,1].map(()=>({organisation:randomUUID(),business:randomUUID()}))
+  .sort((a,b)=>a.organisation.localeCompare(b.organisation));
+ const [first,last]=scopes as [typeof scopes[number],typeof scopes[number]];
+ for(const scope of scopes){
+  await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[scope.organisation]);
+  await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,country_code) VALUES($1,$2,'ES')",[scope.business,scope.organisation]);
+ }
+ const north=await venue('Ordered audit North','test',last);
+ const south=await venue('Ordered audit South','test',first);
+ const actor=await session();
+ let pending:Promise<Response>|undefined;
+ await transaction(db.secondPool,async holder=>{
+  await holder.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[first.organisation]);
+  const {rows:[{pid}]}=await holder.query('SELECT pg_backend_pid() AS pid');
+  pending=send(app(),actor)('read',{query:'Ordered audit'});
+  await waitLock(db.pool,db.schema,'INSERT INTO security_audit_events',pid);
+  await holder.query("SET LOCAL lock_timeout='500ms'");
+  await holder.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[last.organisation]);
+ }).catch(async error=>{await pending;throw error;});
+ const result=await pending!;
+ assert.equal(result.status,200);
+ assert.deepEqual(await result.json(),{venues:[
+  {id:north,name:'Ordered audit North',stopped:false},{id:south,name:'Ordered audit South',stopped:false},
+ ]});
+});
+
+test('the stop takes the organisation before the venue so setup can complete',async()=>{
+ const venueId=await venue('Organisation lock');
+ const actor=await session();await openProofWindow(db.pool,actor.token);
+ let pending:Promise<Response>|undefined;
+ await transaction(db.secondPool,async holder=>{
+  await holder.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[organisation]);
+  const {rows:[{pid}]}=await holder.query('SELECT pg_backend_pid() AS pid');
+  pending=send(app(),actor)('address-lookup',{venueId,stopped:true});
+  await waitLock(db.pool,db.schema,'',pid);
+  await holder.query("SET LOCAL lock_timeout='500ms'");
+  await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[venueId]);
+ }).catch(async error=>{await pending;throw error;});
+ const result=await pending!;
+ assert.equal(result.status,200);
+ assert.deepEqual(await result.json(),{id:venueId,name:'Organisation lock',stopped:true});
 });

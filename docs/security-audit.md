@@ -2,7 +2,8 @@
 
 Waitron Cloud records the customer security decisions that change a venue's connection or recovery authority. The event and the protected action share one PostgreSQL transaction: both commit, or neither does.
 
-This is an operational customer audit trail. Its scope is the events below.
+This operational trail covers the events below. Assess compliance and retention
+requirements separately.
 
 ## Recorded events
 
