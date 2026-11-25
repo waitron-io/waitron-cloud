@@ -83,13 +83,69 @@ AWS and EU SES selection, the actual OpenAI adapter, and candidate Anthropic and
 
 **Draft subprocessor entry.** Google Maps Platform provides Places Autocomplete and Address Validation for address lookup in Spain. Confirm the contracting and processing entities, access locations, onward processors, transfers, provider retention and applicable terms under `ev-google-maps-address-v1` before any production use.
 
+**Draft browser-check privacy notice for legal review.**
+
+**English.** Waitron Cloud is the controller responsible for how your data is used
+for the browser check. We use Cloudflare Turnstile to protect sign-up and
+password-reset email requests from automated abuse. Our legal basis is our
+legitimate interest in protecting these services. Turnstile receives browser signals
+including your IP address, a fingerprint of how your browser sets up an encrypted
+connection (TLS), and your browser's user-agent header. The check includes a code
+identifying this site, its web address, the widget language and whether you are
+signing up or resetting your password.
+Waitron Cloud does not send the information you enter in the form to Turnstile.
+Waitron Cloud keeps records derived from your IP address and the check proof
+to limit repeat requests and prevent reuse of the same proof.
+
+Cloudflare processes these signals on our behalf to run the check. It also uses
+them as a separate controller to improve its ability to detect bots. Read more in
+[Cloudflare's privacy notice](https://www.cloudflare.com/turnstile-privacy-policy/).
+
+[Confirm which cookies the check sets, their purpose and duration, and whether
+`cf_clearance` is set with pre-clearance switched off.] [Confirm where data is
+transferred, what safeguards apply and how to obtain them.] [Confirm how long
+Cloudflare keeps these signals.] [Confirm how long Waitron Cloud keeps its records.]
+
+You can ask to access, correct or delete your data, restrict its use or object
+to its use. Contact Waitron Cloud at [privacy contact to confirm]. You can
+also complain to your data protection authority.
+
+**Español.** Waitron Cloud es responsable del tratamiento de tus datos para la
+comprobación del navegador. Usamos Cloudflare Turnstile para proteger las solicitudes
+de correo de registro y de restablecimiento de contraseña frente a abusos automatizados.
+La base jurídica es nuestro interés legítimo en proteger estos servicios.
+Turnstile recibe señales del navegador, como tu dirección IP, una huella de cómo
+tu navegador establece una conexión cifrada (TLS) y la cabecera de agente de usuario
+del navegador. La comprobación incluye un código que identifica este sitio, su
+dirección web, el idioma del control y si te estás registrando o restableciendo
+tu contraseña. Waitron Cloud no envía a Turnstile los datos que introduces en
+el formulario.
+Waitron Cloud conserva registros derivados de tu dirección IP y de la prueba de
+comprobación para limitar las solicitudes repetidas e impedir que se reutilice la
+misma prueba.
+
+Cloudflare trata estas señales por cuenta de Waitron Cloud para realizar la
+comprobación. También las usa como responsable independiente para mejorar la
+detección de bots. Consulta el [aviso de privacidad de Cloudflare](https://www.cloudflare.com/turnstile-privacy-policy/).
+
+[Confirmar qué cookies instala la comprobación, su finalidad y su duración,
+y si se instala `cf_clearance` con la autorización previa desactivada.]
+[Confirmar adónde se transfieren los datos, qué garantías se aplican y cómo
+obtenerlas.] [Confirmar cuánto tiempo conserva Cloudflare las señales.]
+[Confirmar cuánto tiempo conserva Waitron Cloud sus registros.]
+
+Puedes solicitar el acceso, la rectificación o la supresión de tus datos,
+la limitación de su tratamiento u oponerte a él. Contacta con Waitron Cloud
+en [contacto de privacidad pendiente de confirmar]. También puedes presentar una
+reclamación ante tu autoridad de protección de datos.
+
+**Drafting note.** Complete the supplier's cookie, transfer and retention details
+once `ev-cloudflare-turnstile-v1` is qualified. Confirm Waitron Cloud's own
+contact and retention separately.
+
 | Account surface | Supplier evidence | Open qualification |
 | --- | --- | --- |
 | Sign-up and password-reset email browser checks | `cloudflare-turnstile`, `ev-cloudflare-turnstile-v1` | Cloudflare processes browser signals to provide the check and acts as controller for detection improvement. The check is for Cloud account security. Public enablement awaits the supplier, transfer and cookie evidence. |
-
-With pre-clearance off, Turnstile does not set `cf_clearance`. Review what other
-cookies the widget uses before enabling it. Cloudflare links to its cookie policy
-from its [Turnstile Privacy Addendum](https://www.cloudflare.com/turnstile-privacy-policy/).
 
 The proposed authorisation process is **general written authorisation with 30 days'
 advance supplier-change notice**, subject to lawyer question 3. Thirty days is a

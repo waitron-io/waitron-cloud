@@ -291,6 +291,8 @@ export class PortalApp {
     return this.requiresTurnstile && !this.waiting && !this.pending && !this.#pageHidden;
   }
   checkResult(token: string | null) {
+    const focusWasInCheck = token === null
+      && this.root.querySelector('turnstile-widget')?.contains(document.activeElement);
     this.readFields();
     this.turnstileToken = token ?? '';
     if (token === null) {
@@ -298,6 +300,7 @@ export class PortalApp {
       this.error = 'browserCheckFailed';
     }
     this.draw();
+    if (focusWasInCheck) this.root.querySelector<HTMLElement>('#form-refusal')?.focus();
   }
   retryTurnstile() {
     if (!this.turnstileSiteKey) {
@@ -309,6 +312,7 @@ export class PortalApp {
     this.turnstileUnavailable = false;
     this.error = undefined;
     this.draw();
+    this.root.querySelector<HTMLElement>('turnstile-widget')?.focus();
   }
   get #emailCooldown() {
     return this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0;
@@ -449,7 +453,8 @@ export class PortalApp {
     queueMicrotask(() => {
       const field = Object.keys(this.errors)[0];
       if (field) this.root.querySelector<HTMLElement>(`wt-input[name="${field}"]`)?.focus();
-      else this.root.querySelector<HTMLElement>('#form-refusal, wt-form-error-summary')?.focus();
+      else (this.root.querySelector<HTMLElement>('#form-refusal')
+        ?? this.root.querySelector<HTMLElement>('wt-form-error-summary'))?.focus();
     });
   }
   async submitPairing() {

@@ -47,15 +47,25 @@ export function screen(app: PortalApp) {
   const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending || (app.requiresTurnstile && !app.turnstileToken) || (app.path === '/login' && app.passkeys.pending)}
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryBrowserCheck = () => html`<button type="button" class="text-button" @click=${() => app.retryTurnstile()}>${c.retry}</button>`;
-  const browserCheck = () => app.showTurnstile ? html`
-    <p class="help">${c.browserCheckNotice} <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener noreferrer">${c.browserCheckPrivacy}</a></p>
-    ${app.turnstileUnavailable || !app.turnstileSiteKey
-      ? retryBrowserCheck()
-      : html`${keyed(app.locale, html`<turnstile-widget .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
+  const browserCheckFailed = app.error === 'browserCheckFailed';
+  const browserCheck = () => {
+    const showCheck = app.showTurnstile;
+    if (!showCheck && !browserCheckFailed) return nothing;
+    let control;
+    if (browserCheckFailed || app.turnstileUnavailable) control = html`<div class="browser-check-failure">
+      <p id="form-refusal" role="alert" tabindex="-1">${c.browserCheckFailed}</p>
+      ${retryBrowserCheck()}
+    </div>`;
+    else if (!app.turnstileSiteKey) control = retryBrowserCheck();
+    else control = html`${keyed(app.locale, html`<turnstile-widget tabindex="-1" role="group" aria-label=${c.browserCheckLabel}
+        .siteKey=${app.turnstileSiteKey} .locale=${app.locale}
         .action=${app.path === '/signup' ? 'signup' : 'password_reset'}
         @check-result=${(event: CustomEvent<string | null>) => app.checkResult(event.detail)}></turnstile-widget>`)}
-        ${app.turnstileToken ? nothing : html`<p class="help" role="status">${c.browserChecking}</p>`}`}`
-    : app.error === 'browserCheckFailed' && !app.turnstileSiteKey ? retryBrowserCheck() : nothing;
+      ${app.turnstileToken ? nothing : html`<p class="help" role="status">${c.browserChecking}</p>`}`;
+    return html`
+      ${showCheck ? html`<p class="help">${c.browserCheckNotice} <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener noreferrer">${c.browserCheckPrivacy}</a></p>` : nothing}
+      ${control}`;
+  };
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   const accountPage = app.accountPage;
   const state = app.session.state;
@@ -113,10 +123,9 @@ export function screen(app: PortalApp) {
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${browserCheck()}${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
   const signupRefusal = app.error === 'signupConnectionLimited' || app.error === 'signupDomainLimited' ? c[app.error] : undefined;
-  const formRefusal = app.error === 'browserCheckFailed' ? c.browserCheckFailed : signupRefusal;
   const waiting = app.waiting;
   const minutes = app.waitingForSignupEmail && waiting >= 60 ? Math.ceil(waiting / 60) : 0;
-  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error && !formRefusal ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
+  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error && !signupRefusal && !browserCheckFailed ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>
@@ -127,7 +136,7 @@ export function screen(app: PortalApp) {
             <nav>${link('/login', c.login)} ${link('/signup', c.signup)}</nav>`}` : html`
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
-        ${formRefusal ? html`<p id="form-refusal" role="alert" tabindex="-1">${formRefusal}</p>`
+        ${signupRefusal ? html`<p id="form-refusal" role="alert" tabindex="-1">${signupRefusal}</p>`
           : html`<wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>`}
         ${app.setupPairing && app.path === '/login' && !app.enrollmentPage && !app.authenticator.challenge && !app.factorCodes.length ? html`<p class="help">${c.pairSetupMethods}</p>` : nothing}
         ${content}
