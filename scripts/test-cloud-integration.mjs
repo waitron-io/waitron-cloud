@@ -81,10 +81,8 @@ export function createMeasuredSessionProbe(api, browser) {
       let failure = 'Error';
       if (code === 'ABORT_ERR') failure = error.cause?.name === 'TimeoutError' ? 'ETIMEDOUT' : 'AbortError';
       else if (error?.message === 'integration.api_timeout') failure = 'ETIMEDOUT';
-      else if (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE', 'ENOTFOUND',
-        'EAI_AGAIN', 'ERR_TLS_CERT_ALTNAME_INVALID', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
-        'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN'].includes(code)) failure = code;
       else if (error instanceof assert.AssertionError) failure = 'AssertionError';
+      else if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)) failure = code;
       process.stderr.write('D621 session probe ' + JSON.stringify({at: Date.now(), elapsedMs, status, node, error: failure}) + '\n');
       throw error;
     }

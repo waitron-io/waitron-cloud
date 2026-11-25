@@ -43,7 +43,9 @@ test('the measured session failure survives in stderr after recovery', {concurre
   const cases = [
     {name: 'HTML 503', status: 503, header: 'account.worker-2', node: 'account.worker-2', error: 'Error'},
     {name: 'invalid node', status: 503, header: 'fixture/header-private', node: 'unknown', error: 'Error'},
+    {name: 'JSON 401', status: 401, node: 'unknown', error: 'AssertionError'},
     {name: 'reset before headers', status: null, node: 'unknown', error: 'ECONNRESET'},
+    {name: 'invalid TLS reply', status: null, node: 'unknown', error: 'EPROTO'},
     {name: 'silent connection', status: null, node: 'unknown', error: 'ETIMEDOUT'},
   ];
   await Promise.all(cases.map(failure => t.test(failure.name, async () => {
@@ -52,11 +54,18 @@ test('the measured session failure survives in stderr after recovery', {concurre
     const server = createServer({key, cert}, (req, res) => {
       assert.equal(req.url, '/api/account/session');
       assert.equal(req.headers.cookie, 'fixture-cookie-private');
-      if (++calls <= 2) res.end('{}');
-      else if (failure.header) {
+      if (++calls <= 2) {
+        if (failure.error === 'EPROTO') res.setHeader('connection', 'close');
+        res.end('{}');
+      } else if (failure.header) {
         res.writeHead(503, {'x-waitron-test-account-node': failure.header});
         res.end('<p>fixture-body-private</p>');
+      } else if (failure.status === 401) {
+        res.writeHead(401).end('{}');
       } else if (failure.error === 'ECONNRESET') res.destroy();
+    });
+    server.prependListener('connection', socket => {
+      if (failure.error === 'EPROTO' && calls === 2) socket.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');
     });
     server.on('connection', socket => {
       sockets.add(socket);
@@ -79,7 +88,7 @@ test('the measured session failure survives in stderr after recovery', {concurre
         assert.doesNotMatch(result.stderr, /fixture-(?:cookie|body)-private|fixture\/header-private|integration\.invalid_json/);
         return true;
       });
-      assert.equal(calls, 3);
+      assert.equal(calls, failure.error === 'EPROTO' ? 2 : 3);
     } finally {
       for (const socket of sockets) socket.destroy();
       await new Promise(resolve => server.close(resolve));
