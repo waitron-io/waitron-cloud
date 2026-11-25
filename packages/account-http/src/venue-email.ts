@@ -29,7 +29,7 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
   const active=(await client.query(`SELECT 1 FROM installations WHERE id=$1 AND venue_id=$2
    AND revoked_at IS NULL AND superseded_by IS NULL FOR SHARE`,[installationId,venue.id])).rowCount;
   if(!active||permission.organisationId!==venue.organisation_id)throw new AccountHttpError(403,'permission_denied');
-  if(permission.level!=='connected'&&permission.level!=='hosted')throw new AccountHttpError(403,'permission_denied');
+  if(permission.level!=='connected'&&permission.level!=='hosted')throw new AccountHttpError(403,'venue_email_connected_required');
   await client.query('UPDATE venues SET waitron_mail_reply_to=$2 WHERE id=$1',[venue.id,replyTo]);
   return {replyTo};
  }));

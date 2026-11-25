@@ -134,7 +134,8 @@ test('Registered venues cannot save the Waitron reply address',async t=>{
  const request=venueEmailSettings(f),installationId=f.v.installation;
  const before=await request('status',f.v.session,{installationId});
  assert.equal(before.status,200);assert.equal((await before.json()).venueEmail,undefined);
- assert.equal((await request('save',f.v.session,{installationId,replyTo:'office@example.test'})).status,403);
+ const refusal=await request('save',f.v.session,{installationId,replyTo:'office@example.test'});
+ assert.equal(refusal.status,403);assert.deepEqual(await refusal.json(),{error:'venue_email_connected_required'});
 });
 
 test('a Connected owner can clear the Waitron reply address',async t=>{

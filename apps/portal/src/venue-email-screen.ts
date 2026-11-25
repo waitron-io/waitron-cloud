@@ -21,9 +21,9 @@ export function venueEmailScreen(app:PortalApp,settings:VenueEmailSettings,disab
     <h6 id="venue-email-waitron">${c.venueEmailWaitron}</h6><p class="help">${c.venueEmailWaitronHelp}</p>
     <label for="venue-email-reply">${c.venueEmailReply}</label>
     <input id="venue-email-reply" name="replyTo" type="email" autocomplete="email" required maxlength="254"
-     autocapitalize="none" autocorrect="off" spellcheck="false" .value=${settings.replyTo??''} ?readonly=${disabled}
+     autocapitalize="none" autocorrect="off" spellcheck="false" .value=${app.remote.venueEmailDraft} ?readonly=${disabled}
      aria-invalid=${result==='invalid'?'true':nothing} aria-describedby=${result==='invalid'?'venue-email-refusal':nothing}
-     @input=${()=>app.remote.editVenueEmail()}>
+     @input=${(event:Event)=>app.remote.editVenueEmail((event.currentTarget as HTMLInputElement).value)}>
     <wt-form-actions>
      <wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}>
       ${c.venueEmailSave}</wt-button>

@@ -41,6 +41,7 @@ In the Connected and Hosted test setup, open **Remote access** for your venue to
 set the reply address for staff email. Use **Use standard sender** to clear it.
 An accepted ownership transfer also clears it. The Mailpit test covers the venue’s
 name and reply address on a Waitron message and the standard sender after downgrade.
+The saved address applies again on a return to Connected or Hosted.
 
 The design puts the email and remote access records on one page in the Cloud
 portal. Whoever runs the venue's domain will be able to copy each value or

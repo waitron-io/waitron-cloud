@@ -234,3 +234,11 @@ test('refresh clears the failed reply address save message',async()=>{
  assert.equal(c.venueEmailResult,'failed');
  await c.load();assert.equal(c.venueEmailResult,undefined);
 });
+
+test('a busy reply address save keeps the server’s retry wait',async()=>{
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')
+  ?{ok:true,value:{...view,venueEmail:{replyTo:'old@example.test'}} as T}
+  :{ok:false,status:503,code:'temporarily_unavailable',retryAfterMs:60000});
+ c.account('owner');await c.open(id);await c.saveVenueEmail('new@example.test');
+ assert.equal(c.venueEmailResult,'failed');assert.ok(c.waiting>0);
+});

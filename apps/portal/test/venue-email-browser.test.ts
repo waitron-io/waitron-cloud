@@ -12,8 +12,8 @@ const bundle=await build({stdin:{contents:`
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 const csrf='A'.repeat(43),id='12345678-1234-4234-8234-123456789abc',url='https://portal.test/account/remote-access';
-const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies go to',saved:'Reply address saved.',reset:'Use standard sender',cleared:'Standard sender restored.'},
- es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.'}};
+const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies go to',saved:'Reply address saved.',reset:'Use standard sender',cleared:'Standard sender restored.',refresh:'Refresh status'},
+ es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.',refresh:'Actualizar estado'}};
 
 test('a venue owner can save a reply address from Remote access',async t=>{
  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
@@ -25,6 +25,7 @@ test('a venue owner can save a reply address from Remote access',async t=>{
   await page.context().addCookies([{name:'__Host-cloud_csrf',value:csrf,url:'https://portal.test',secure:true}]);
   try{
    const c=labels[locale],requests:unknown[]=[],tokens:(string|null)[]=[];
+   let savedReplyTo:string|null=null;
    await page.route(url,route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
    await page.route('**/api/account/**',async route=>{
     const request=route.request(),endpoint=new URL(request.url()).pathname.slice('/api/account'.length);
@@ -34,11 +35,14 @@ test('a venue owner can save a reply address from Remote access',async t=>{
      environment:'test',revision:1,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
      services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))}]}});
     if(endpoint==='/remote-access/status')return route.fulfill({json:{installationId:id,revision:1,revoked:false,names:null,
-     service:{state:'unconfigured',health:'unknown',observedAt:null,validUntil:null},venueEmail:{replyTo:null}}});
+     service:{state:'unconfigured',health:'unknown',observedAt:null,validUntil:null},venueEmail:{replyTo:savedReplyTo}}});
     if(endpoint==='/venue-email/save'){
      requests.push(request.postDataJSON());
      tokens.push(await request.headerValue('x-csrf-token'));
-     return route.fulfill({json:{replyTo:request.postDataJSON().replyTo||null}});
+     const replyTo=request.postDataJSON().replyTo;
+     if(replyTo==='unsaved@example.test')return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+     savedReplyTo=replyTo||null;
+     return route.fulfill({json:{replyTo:savedReplyTo}});
     }
     return route.fulfill({status:503,json:{error:'unavailable'}});
    });
@@ -61,6 +65,11 @@ test('a venue owner can save a reply address from Remote access',async t=>{
    await reply.press('Enter');
    await sender.getByRole('alert').waitFor();
    assert.equal(requests.length,1);
+   await reply.fill('unsaved@example.test');await reply.press('Enter');
+   await sender.getByRole('alert').waitFor();
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await sender.getByRole('alert').waitFor({state:'hidden'});
+   await t.waitFor(async()=>assert.equal(await reply.inputValue(),'office@example.test'),{timeout:3000});
    await sender.getByRole('button',{name:c.reset,exact:true}).click();
    await sender.getByRole('status').filter({hasText:c.cleared}).waitFor();
    assert.deepEqual(requests.at(-1),{installationId:id,replyTo:''});

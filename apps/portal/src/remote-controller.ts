@@ -5,6 +5,7 @@ import type {Copy} from './locale.ts';
 import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:[]|RemoteDns['records']}|undefined;
+ venueEmailDraft='';
  venueEmailResult:'saved'|'cleared'|'invalid'|'failed'|undefined;
  error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
@@ -31,22 +32,26 @@ export class RemoteController {
   this.pending=false;
   if(result.ok&&this.view){
    this.view={...this.view,venueEmail:result.value};
+   this.venueEmailDraft=result.value.replyTo??'';
    this.venueEmailResult=result.value.replyTo===null?'cleared':'saved';
   }else if(!result.ok){
    if(result.status===401||result.status===403||result.status===429)this.#failure(result);
-   else this.venueEmailResult=result.status===400?'invalid':'failed';
+   else{
+    this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+    this.venueEmailResult=result.status===400?'invalid':'failed';
+   }
   }
   this.#changed();
  }
- editVenueEmail(){
-  if(this.venueEmailResult){this.venueEmailResult=undefined;this.#changed();}
+ editVenueEmail(replyTo:string){
+  this.venueEmailDraft=replyTo;this.venueEmailResult=undefined;this.error=undefined;this.#changed();
  }
  get hostnameChanged(){return !!this.view?.names&&this.hostname.trim().toLowerCase().replace(/\.$/,'')!==this.view.names[this.kind].current;}
  // Relative server waits keep their deadline across wall-clock corrections and account changes.
  #retryUntil=0;
  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
- close(){this.#generation++;this.installationId=undefined;this.view=undefined;this.hostname='';this.confirmation=undefined;this.pending=false;this.error=undefined;this.notice=undefined;this.venueEmailResult=undefined;}
+ close(){this.#generation++;this.installationId=undefined;this.view=undefined;this.hostname='';this.confirmation=undefined;this.pending=false;this.error=undefined;this.notice=undefined;this.venueEmailDraft='';this.venueEmailResult=undefined;}
  async open(id:string){if(!this.#account)return;this.close();this.installationId=id;this.kind='staff';await this.load();this.#changed();}
  choose(kind:RemoteKind){if(this.pending)return;this.kind=kind;this.edit(this.view?.names?.[kind].current??'');}
  edit(value:string){this.hostname=value;this.confirmation=undefined;this.error=undefined;this.notice=undefined;this.#changed();}
@@ -57,8 +62,8 @@ export class RemoteController {
    this.error=result.code==='enrollment_required'?'pairEnrollment':'actionProofUnavailable';return;
   }
   const cause=bodyRefusal(result);
-  this.error=cause?`remoteRequest${cause}`:result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':result.code==='remote_plan_required'?'remotePlanRequired':result.code==='remote_setup_required'?'remoteSetupRequired':result.code==='remote_test_only'?'remoteTestOnly':result.code==='revoked'?'remoteRevoked':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
-  if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';}
+  this.error=cause?`remoteRequest${cause}`:result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':result.code==='venue_email_connected_required'?'venueEmailConnectedRequired':result.code==='remote_plan_required'?'remotePlanRequired':result.code==='remote_setup_required'?'remoteSetupRequired':result.code==='remote_test_only'?'remoteTestOnly':result.code==='revoked'?'remoteRevoked':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
+  if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';this.venueEmailDraft='';}
  }
  expireForward(now=Date.now()){if(this.view?.publicForward&&Date.parse(this.view.publicForward.expiresAt)<=now)this.view={...this.view,publicForward:null};}
  #clearForward(){if(this.view?.publicForward)this.view={...this.view,publicForward:null};}
@@ -69,7 +74,7 @@ export class RemoteController {
   this.#clearForward();const generation=this.#generation,id=this.installationId;this.pending=true;this.error=undefined;this.confirmation=undefined;this.venueEmailResult=undefined;this.#changed();
   const result=await this.#request<RemoteView>('/remote-access/status',{installationId:id});if(generation!==this.#generation)return;
   this.pending=false;
-  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';}
+  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';this.venueEmailDraft=result.value.venueEmail?.replyTo??'';}
   else if(!result.ok)this.#failure(result);else {this.#clearForward();this.error='unavailable';}this.#changed();return this.view;
  }
  async recheck(kind:RemoteKind){
