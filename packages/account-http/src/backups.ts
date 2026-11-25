@@ -31,7 +31,7 @@ async function ownerVenue(client:PoolClient,venueId:string,accountId:string):Pro
 export async function backupResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;exitDownloads?:BackupCatalogue|undefined}):Promise<Response>{
  const {pool,origin,consume,exitDownloads}=options;
  const action=c.req.path.slice('/api/account/backups/'.length);
- if(action!=='list'&&(!exitDownloads||!['download','download-key'].includes(action)))throw new AccountHttpError(404,'not_found');
+ if(action!=='list'&&(!exitDownloads||!['download','download-key','download-manifest'].includes(action)))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrfToken=c.req.header('x-csrf-token')??'';
@@ -49,6 +49,11 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
    if(!(await LifecycleStore.readExitRecovery(client,venueId)).allowed)throw new AccountHttpError(410,'unavailable');
   };
   try{
+   if(action==='download-manifest'){
+    const manifest=await exitDownloads.exitArchiveManifest(venueId,pointId,fence);
+    return Response.json(manifest,{headers:{...securityHeaders,
+     'content-disposition':`attachment; filename="waitron-backup-${pointId}.manifest.json"`}});
+   }
    if(action==='download-key'){
     const key=await exitDownloads.exitArchiveKey(venueId,pointId,fence);
     return new Response(key+'\n',{headers:{...securityHeaders,'content-type':'text/plain; charset=utf-8',

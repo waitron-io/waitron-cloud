@@ -673,12 +673,15 @@ Only undeleted snapshots appear; an unprovisioned venue has an empty list.
 
 On test Cloud, POST to `/api/account/backups/download` to save a currently verified
 encrypted snapshot up to 16 MiB. POST to `/api/account/backups/download-key` to save its
-matching recovery key. Both accept `venueId` and `pointId` and require the same browser
+matching recovery key. POST to `/api/account/backups/download-manifest` to save a JSON
+file with `archiveManifestVersion`, `capturedAt`, `archiveSha256` and `laterChanges`
+(`unknown`). The manifest identifies the qualified encrypted archive and leaves the key
+in its separate file. All three accept `venueId` and `pointId` and require the same browser
 credentials as the list, plus fresh confirmation from an enrolled account owner. The
 server matches the archive to the stored checksum and rechecks authority and the deadline
-after reading the archive. At the deadline, both routes return HTTP 410 with `{"error":"unavailable"}`.
-An archive transfer the server already approved can finish. Both responses are attachments
-with `Cache-Control: no-store`. Test mode and test venue ownership are required on both routes.
+after reading the archive. At the deadline, all three routes return HTTP 410 with `{"error":"unavailable"}`.
+An archive transfer the server already approved can finish. All three responses are attachments
+with `Cache-Control: no-store`. Test mode and test venue ownership are required on all three routes.
 
 Daily snapshots have 30-day ordinary retention and monthly snapshots have 12 calendar
 months, calculated in UTC for both display and cleanup. The last snapshot that passed verification remains protected even if a later

@@ -95,7 +95,8 @@ function browserCsrfToken() {
 }
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<ApiResult<T>> {
   const keyDownload = path === '/backups/download-key';
-  const download = keyDownload || path === '/backups/download';
+  const manifestDownload = path === '/backups/download-manifest';
+  const download = keyDownload || manifestDownload || path === '/backups/download';
   const installationWrite = path === '/installations/remove';
   const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
   const businessPath = path === '/businesses' || path === '/organisations/rename';
@@ -112,9 +113,11 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       ...(download ? {mode: 'same-origin', redirect: 'error', cache: 'no-store'} : {})});
     if (download && response.ok) {
-      if (response.status === 200 && response.headers.get('content-type') === (keyDownload ? 'text/plain; charset=utf-8' : 'application/octet-stream')) {
+      const contentType = manifestDownload ? 'application/json' : keyDownload ? 'text/plain; charset=utf-8' : 'application/octet-stream';
+      if (response.status === 200 && response.headers.get('content-type') === contentType) {
         const value = await response.blob();
-        if (keyDownload ? value.size === 44 : value.size > 0 && value.size <= 16 * 1024 * 1024) return {ok: true, value: value as T};
+        const maxBytes = manifestDownload ? 1024 : 16 * 1024 * 1024;
+        if (keyDownload ? value.size === 44 : value.size > 0 && value.size <= maxBytes) return {ok: true, value: value as T};
       }
       return {ok: false, status: 503, code: 'unexpected_response', retryAfterMs: 0};
     }

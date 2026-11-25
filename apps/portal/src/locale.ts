@@ -295,6 +295,8 @@ const enBase = {
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
   snapshotDownload:'Download backup', snapshotDownloadKey:'Download recovery key', snapshotDownloadProof:'Verify it’s you before downloading.',
+  snapshotDownloadManifest:'Download backup manifest', snapshotLaterChanges:'Later changes may be missing.',
+  snapshotFiscalWarning:'You are now responsible for keeping your fiscal records. Download and check your copies.',
   snapshotDownloadTooLarge:'This backup is too large to download.', snapshotDownloadUnavailable:'The download is unavailable.',
   snapshotServiceEnded:'Service ended (UTC)', snapshotDownloadDeadline:'Download deadline (UTC)', snapshotDownloadsEnded:'Downloads have ended.',
   snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'To restore a snapshot, open the Cloud recovery link from the replacement server’s setup screen.',
@@ -676,6 +678,8 @@ const esBase: typeof enBase = {
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
   snapshotDownload:'Descargar copia', snapshotDownloadKey:'Descargar clave de recuperación', snapshotDownloadProof:'Verifica que eres tú antes de descargar.',
+  snapshotDownloadManifest:'Descargar manifiesto de la copia', snapshotLaterChanges:'Puede que falten cambios posteriores.',
+  snapshotFiscalWarning:'Ahora debes conservar tus registros fiscales. Descarga y comprueba tus copias.',
   snapshotDownloadTooLarge:'Esta copia es demasiado grande para descargarla.', snapshotDownloadUnavailable:'La descarga no está disponible.',
   snapshotServiceEnded:'Fin del servicio (UTC)', snapshotDownloadDeadline:'Fecha límite de descarga (UTC)', snapshotDownloadsEnded:'El plazo de descarga ha terminado.',
   snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'Para restaurar una instantánea, abre el enlace de recuperación de Cloud desde la configuración del servidor de sustitución.',

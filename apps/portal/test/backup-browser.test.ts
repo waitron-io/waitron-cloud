@@ -36,6 +36,9 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   const endedLabel=locale==='en'?'Service ended (UTC)':'Fin del servicio (UTC)',deadlineLabel=locale==='en'?'Download deadline (UTC)':'Fecha límite de descarga (UTC)';
   const ended=page.getByText(locale==='en'?'Downloads have ended.':'El plazo de descarga ha terminado.',{exact:true});
   const saveKey=page.getByRole('button',{name:locale==='en'?'Download recovery key':'Descargar clave de recuperación',exact:true});
+  const saveManifest=page.getByRole('button',{name:locale==='en'?'Download backup manifest':'Descargar manifiesto de la copia',exact:true});
+  const warning=page.getByText(locale==='en'?'You are now responsible for keeping your fiscal records. Download and check your copies.':'Ahora debes conservar tus registros fiscales. Descarga y comprueba tus copias.',{exact:true});
+  assert.equal(await saveManifest.count(),0);
   let expired=false;
   const flag=async(route:import('playwright').Route)=>{
    const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),
@@ -63,7 +66,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    proof=true;return route.fulfill({status:204});
   });
   const archive='synthetic encrypted archive',key='k'.repeat(43)+'\n';
-  for(const [action,body,contentType] of [['download',archive,'application/octet-stream'],['download-key',key,'text/plain; charset=utf-8']] as const){
+  const manifest=JSON.stringify({archiveManifestVersion:1,capturedAt:effectiveEndAt,archiveSha256:'a'.repeat(64),laterChanges:'unknown'});
+  for(const [action,body,contentType] of [['download',archive,'application/octet-stream'],['download-key',key,'text/plain; charset=utf-8'],['download-manifest',manifest,'application/json']] as const){
    await page.route('**/api/account/backups/'+action,route=>{
     assert.equal(route.request().method(),'POST');assert.ok(route.request().headers()['x-csrf-token']);
     assert.deepEqual(route.request().postDataJSON(),{venueId:v.venueId,pointId:verifiedId});
@@ -73,16 +77,18 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.getByRole('button',{name:refresh,exact:true}).click();
   await choices.selectOption(verifiedId);
   await checkDates();assert.equal(await ended.count(),0);
+  await warning.waitFor();
+  await page.getByText(locale==='en'?'Later changes may be missing.':'Puede que falten cambios posteriores.',{exact:true}).waitFor();
   await captureWindow('open');
   assert.deepEqual(page.viewportSize(),viewport);
-  await saveArchive.click();
+  await saveManifest.click();
   const proofPrompt=page.getByRole('alert').filter({hasText:locale==='en'?'Verify it’s you before downloading.':'Verifica que eres tú antes de descargar.'});
   await proofPrompt.waitFor();
   await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
   await page.getByText(c.actionProofReady,{exact:true}).waitFor();
   assert.equal(await proofPrompt.count(),0);
-  for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[saveKey,key,'key']] as const){
+  for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[saveKey,key,'key'],[saveManifest,manifest,'manifest.json']] as const){
    const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
    assert.equal(download.suggestedFilename(),`waitron-backup-${verifiedId}.${extension}`);
    const file=await download.path();assert.ok(file);assert.equal(await readFile(file,'utf8'),contents);
@@ -91,6 +97,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   await page.getByRole('button',{name:refresh,exact:true}).click();
   await ended.waitFor();await checkDates();
   assert.equal(await saveArchive.count(),0);assert.equal(await saveKey.count(),0);
+  assert.equal(await saveManifest.count(),0);
   await captureWindow('ended');
   await page.unroute('**/api/account/backups/list',flag);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:refresh,exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await choices.count(),0);

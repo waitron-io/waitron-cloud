@@ -29,9 +29,10 @@ export function backupScreen(app:PortalApp,venueId:string){
     <p>${selected.verification==='verified'?c.snapshotDataChecked:selected.verification==='failed'?c.snapshotIntegrityFailed:c.snapshotCheckUnavailable}</p>
     ${selected.protection?html`<p>${selected.protection==='recovery'?c.snapshotRecoveryHold:c.snapshotFallback}</p>`:nothing}`:nothing}
   <p class="help">${c.snapshotRetentionHelp}</p>
-  ${!recover&&b.downloadable?html`<div class="snapshot-actions">
-   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup(false);}}>${c.snapshotDownload}</wt-button>
-   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup(true);}}>${c.snapshotDownloadKey}</wt-button></div>
+  ${!recover&&b.downloadable?html`<p>${c.snapshotLaterChanges}</p><p>${c.snapshotFiscalWarning}</p><div class="snapshot-actions">
+   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download');}}>${c.snapshotDownload}</wt-button>
+   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-key');}}>${c.snapshotDownloadKey}</wt-button>
+   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>
    ${b.downloadProof?(b.error==='pairEnrollment'?html`<a href="/account" @click=${(event:MouseEvent)=>app.openAccountSecurity(event)}>${c.accountSecurity}</a>`:accountActionProofScreen(app)):nothing}`:nothing}
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void b.load();}}>${c.latestSnapshots}</wt-button>
    ${b.page?.nextCursor?html`<wt-button .disabled=${disabled} @click=${()=>{void b.load(true);}}>${c.olderSnapshots}</wt-button>`:nothing}

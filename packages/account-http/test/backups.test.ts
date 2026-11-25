@@ -8,7 +8,7 @@ import {verifyPointFixture} from '../../backups/test/fixtures/verification.ts';
 import {BackupKeyVault} from '../../backups/src/keys.ts';
 import type {HttpBindings} from '@hono/node-server';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test,type TestContext} from 'node:test';
 import {createLeaseIssuer,LifecycleStore,SignupStore,RegistrationStore,type PlanMode} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
@@ -175,30 +175,48 @@ test('exit download returns the verified archive and its matching key while the 
  assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
 });
 
+test('exit manifest describes the qualified encrypted archive without opening storage',async()=>{
+ const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;
+ const send=exitDownload(f,'test-free-paid',async()=>assert.fail('manifest must not stage the archive'));
+ const response=await send('download-manifest');
+ assert.equal(response.status,200);
+ assert.equal(response.headers.get('cache-control'),'no-store');
+ assert.equal(response.headers.get('content-type'),'application/json');
+ assert.equal(response.headers.get('content-disposition'),`attachment; filename="waitron-backup-${f.point.id}.manifest.json"`);
+ assert.deepEqual(await response.json(),{archiveManifestVersion:1,capturedAt:f.point.capturedAt,
+  archiveSha256:createHash('sha256').update(bytes).digest('hex'),laterChanges:'unknown'});
+});
+
 test('exit download refuses unavailable copies and stale or non-owner authority before reading storage',async()=>{
  const f=await recoveryFixture(db);
  let reads=0;
  const stage=async()=>{reads++;throw Error('unexpected read');};
  assert.equal((await exitDownload(f,'existing',stage)('download')).status,404);
+ assert.equal((await exitDownload(f,'existing',stage)('download-manifest')).status,404);
  const send=exitDownload(f,'test-venue-levels',stage);
  const foreign=await point(),unchecked=await point(f.installed);
  assert.equal((await send('download',foreign)).status,410);
  assert.equal((await send('download-key',foreign)).status,410);
+ assert.equal((await send('download-manifest',foreign)).status,410);
  assert.equal((await send('download',unchecked)).status,400);
  assert.equal((await send('download-key',unchecked)).status,400);
+ assert.equal((await send('download-manifest',unchecked)).status,400);
  const large=Buffer.alloc(16*1024*1024+1),capture=await f.catalogue.reserveCapture(f.installed.installationId,randomUUID());
  f.objects.set(capture.incomingKey,large);
  const oversized=await f.catalogue.publish(f.installed.installationId,capture.id,{...receipt(large),capturedAt:new Date().toISOString(),
   retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});
  await verifyPointFixture(db.pool,f.catalogue,oversized.id);
  assert.equal((await send('download',oversized.id)).status,413);
+ assert.equal((await send('download-manifest',oversized.id)).status,413);
  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);
  assert.equal((await send('download')).status,403);
  assert.equal((await send('download-key')).status,403);
+ assert.equal((await send('download-manifest')).status,403);
  await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.owner.accountId]);
  await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes' WHERE account_id=$1",[f.owner.accountId]);
  assert.deepEqual(await (await send('download')).json(),{error:'proof_required'});
  assert.deepEqual(await (await send('download-key')).json(),{error:'proof_required'});
+ assert.deepEqual(await (await send('download-manifest')).json(),{error:'proof_required'});
  assert.equal(reads,0);
 });
 
@@ -225,7 +243,7 @@ test('exit download rejects different stored bytes and disposes the staged copy'
  assert.equal(disposals,1);
 });
 
-test('exit download lists the fixed dates and refuses both files once the window has ended',async()=>{
+test('exit download lists the fixed dates and refuses all files once the window has ended',async()=>{
  const f=await recoveryFixture(db),venueId=f.installed.venueId;
  const send=exitDownload(f,'test-free-paid',async()=>bufferObject(f.objects.get(f.point.objectKey)!));
  const disabled=exitDownload(f,'existing',async()=>{throw Error('unexpected read');});
@@ -236,7 +254,7 @@ test('exit download lists the fixed dates and refuses both files once the window
  assert.deepEqual(closed.exitRecovery,{effectiveEndAt,deadlineAt,expired:true});
  assert.equal(closed.exitDownloadAvailable,undefined);
  assert.equal((await (await disabled('list')).json()).exitRecovery,undefined);
- for(const path of ['download','download-key']){
+ for(const path of ['download','download-key','download-manifest']){
   const response=await send(path);
   assert.equal(response.status,410,path);
   assert.deepEqual(await response.json(),{error:'unavailable'});

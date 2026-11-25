@@ -12,6 +12,7 @@ import {RemoteController} from './remote-controller.ts';
 import {TranslationConsentController} from './translation-consent-controller.ts';
 import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
+import type {BackupDownload} from './backup-types.ts';
 import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
 import {PasskeyController} from './passkey-controller.ts';
@@ -496,7 +497,7 @@ export class PortalApp {
     else {await recovery.approve();return;}
     this.draw();
   }
-  async downloadBackup(key:boolean){
+  async downloadBackup(action:BackupDownload){
     const b=this.backups,page=b.page,point=b.selected;
     if(!b.downloadable||b.pending||b.downloading||b.waiting||this.actionProof.pending)return;
     b.downloadProof=true;
@@ -504,7 +505,7 @@ export class PortalApp {
     if(route!==this.#route||page!==b.page||point!==b.selected||!b.downloadProof)return;
     if(this.actionProof.status?.methods.every(method=>method==='email'))b.downloadError='pairEnrollment';
     else if(!proved)b.downloadError=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
-    else{b.downloadProof=false;await b.download(key);return;}
+    else{b.downloadProof=false;await b.download(action);return;}
     this.draw();
   }
   async startPaymentMethod(kind:'card'|'direct_debit'){
