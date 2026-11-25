@@ -1111,7 +1111,7 @@ and port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
 child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md)
 and [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
-Repeated stops share one native-store cleanup. A caller can retry a failed cleanup.
+Repeated stops share the successful native-store cleanup.
 
 ## Reduce unnecessary CI work (D613)
 

@@ -148,7 +148,7 @@ async function startBackupStorageAttempt(options) {
   function stop() {
     // The caller and its teardown hook share the one notification to the reaper.
     return stopping ??= cleanup().catch(error => {
-      // A failed cleanup can be retried by the caller.
+      // A failure handler can start another attempt.
       stopping = undefined;
       throw error;
     });

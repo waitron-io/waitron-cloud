@@ -180,12 +180,14 @@ test('identity discovery, provider configuration and tokens use the bound HTTPS 
   assert.equal(identity.listening, false, 'stopping the fixture closes its original identity listener');
 });
 
-test('a second stop after native storage cleanup reuses the completed cleanup', {timeout:90000}, async () => {
+test('repeated native storage stops share the in-progress and completed cleanup', {timeout:90000}, async () => {
   const storage = await startBackupStorage();
   const first = storage.stop();
-  await first;
-  const second = storage.stop();
-  await second;
-  assert.equal(second, first, 'a later stop must receive the completed cleanup promise');
+  const overlapping = storage.stop();
+  await Promise.all([first, overlapping]);
+  assert.equal(overlapping, first, 'an overlapping stop must wait for the active cleanup');
+  const later = storage.stop();
+  await later;
+  assert.equal(later, first, 'a later stop must receive the completed cleanup promise');
   await assert.rejects(access(storage.root), {code:'ENOENT'});
 });
