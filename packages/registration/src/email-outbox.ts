@@ -183,7 +183,10 @@ export class EmailWorker {
     const pilot=this.#sesRecipient;
     const ses=pilot&&(claim.kind==='operator_notice'||message.email!==pilot.email)?undefined:this.#ses;
     const mailer=pilot&&!ses?pilot.captureMailer:this.#mailer;
-    if(claim.kind==='operator_notice'&&(!mailer.sendOperatorNotice||ses)){await this.#fail(claim,'delivery_configuration',false);return true;}
+    if (claim.kind === 'operator_notice' && (!mailer.sendOperatorNotice || (ses && !validSignupVolumeNotice(message)))) {
+      await this.#fail(claim, 'delivery_configuration', false);
+      return true;
+    }
     let handoff:boolean|HandoffAdmission;
     try{handoff=await this.#handoff(claim,message,ses);if(!handoff)return true;}
     catch(error){

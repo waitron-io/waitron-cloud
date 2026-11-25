@@ -10,6 +10,8 @@ import {openProofWindow} from './fixtures/action-proof.ts';
 import {testOutbox as outbox} from './fixtures/delivery.ts';
 import {createLocalAccountMailer} from '../src/local-mailer.ts';
 import {captured} from './fixtures/captured-mail.ts';
+import {createSmtpAccountMailer} from '../src/smtp-mailer.ts';
+import {smtpConfig,tlsSmtp} from './fixtures/ses-smtp.ts';
 import {config as sesConfig,keys as recipientKeys} from './fixtures/mail-attempt.ts';
 if(!process.env.TEST_DATABASE_URL)throw Error('Run through scripts/test-postgres.mjs');
 const schema='action_notice_'+randomUUID().replaceAll('-','');
@@ -72,6 +74,37 @@ test('a sign-up volume notice reaches the verified operator through Mailpit with
  assert.doesNotMatch(mail.Text,/operator\/actions|token=/);
 });
 
+for (const transport of ['SES SMTP', 'generic SMTP']) {
+ test(`a sign-up volume notice reaches the verified operator through ${transport}`, async () => {
+  await transaction(pool, client => outbox.enqueue(client, 'operator_notice', {
+   email: 'operator@example.test', locale: 'en', event: 'signup_volume',
+   accountId: operator, day: '2026-11-24', threshold: 10,
+  }));
+  const row = await queued();
+  const config = transport === 'SES SMTP' ? sesConfig() : undefined;
+  const smtp = await tlsSmtp();
+  try {
+   const mailer = createSmtpAccountMailer({...smtpConfig, port: smtp.port}, {ca: smtp.cert}, config);
+   const worker = new EmailWorker(pool, outbox, mailer, config ? {ses: {config, recipientKeys}} : {});
+   assert.equal(await worker.runOnce(), true);
+   assert.equal(await worker.runOnce(), false);
+
+   const delivery = (await pool.query('SELECT status,last_error FROM email_outbox WHERE id=$1', [row.id])).rows[0];
+   assert.equal(delivery.status, 'sent', delivery.last_error ?? 'notice delivery');
+   assert.equal(smtp.captured.length, 1);
+   const [mail] = smtp.captured;
+   assert.equal(mail!.secure, true);
+   assert.deepEqual(mail!.to, ['operator@example.test']);
+   assert.match(mail!.raw, /^Subject: Waitron Cloud: sign-up volume\r?$/m);
+   assert.match(mail!.raw, /More than 10 accounts were created on 2026-11-24/);
+   const attempts = await pool.query('SELECT provider_message_id FROM mail_attempts');
+   assert.deepEqual(attempts.rows, config ? [{provider_message_id: 'ses-message-1'}] : []);
+  } finally {
+   await smtp.close();
+  }
+ });
+}
+
 test('a sign-up volume notice is cancelled if the operator email changes before handoff', async () => {
  await transaction(pool,client=>outbox.enqueue(client,'operator_notice',{
   email:'operator@example.test', locale:'en', event:'signup_volume', accountId:operator, day:'2026-11-24', threshold:10,
@@ -108,7 +141,8 @@ test('operator notices to the pilot mailbox stay in the local inbox',async()=>{
  await pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) VALUES($1,false,'es')",[operator]);
  const request=await propose(),row=await queued();
  const captureMailer=createLocalAccountMailer({port:Number(process.env.MAILPIT_TEST_SMTP_PORT),portalOrigin:'http://localhost:3000'});
- const w=new EmailWorker(pool,outbox,captureMailer,{ses:{config:sesConfig(),recipientKeys},
+ const primaryMailer={...captureMailer,sendOperatorNotice:async()=>{throw Error('pilot sent an operator notice through its primary mailer');}};
+ const w=new EmailWorker(pool,outbox,primaryMailer,{ses:{config:sesConfig(),recipientKeys},
   sesRecipient:{email,captureMailer}});
  assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);
  assert.equal((await pool.query('SELECT status FROM email_outbox WHERE id=$1',[row.id])).rows[0].status,'sent');

@@ -628,9 +628,12 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 Add the browser check to sign-up and password-reset email requests. Sign-up has email
 confirmation and connection, mailbox and domain limits. High sign-up volume writes
-one operator warning to the account log each UTC day. A configured operator can
-also receive it in the local capture stacks. Operator email delivery through SMTP
-and SES remains open.
+one operator warning to the account log each UTC day. Local tests delivered the
+warning to a configured operator over SMTP, including the Amazon SES delivery path
+with a local relay. The hosted pilot keeps these notices in its local inbox and
+sets the operator account only in action-demo mode. No deployment emails this
+warning today. Spain still needs an approved mail route, live SES qualification
+and `CLOUD_OPERATOR_ACCOUNT_ID` wiring in Kubernetes.
 
 The [Stockholm rehearsal](superpowers/plans/2026-11-21-cloud-setup-qualification.md#stockholm-result-21-november-2026)
 covered sign-in after Admin and return to the original tab on a synthetic box.

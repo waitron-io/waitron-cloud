@@ -6,8 +6,8 @@ Claude's plan review and the watcher's smaller cut. Build from main. #1401
 already queues the warning, independently of #1403's browser check.
 
 A Cloud configured with a verified operator and a mail relay can deliver the
-daily sign-up warning. Prove plain SMTP and Amazon SES SMTP with a local TLS relay
-and synthetic settings. The hosted single-recipient SES pilot keeps operator
+daily sign-up warning. Prove generic SMTP and Amazon SES SMTP with a local
+TLS relay and synthetic settings. The hosted single-recipient SES pilot keeps operator
 notices in its local inbox and supplies the operator ID in action-demo mode.
 Shipping the code enables delivery in a configured environment. Spain still needs
 an approved mail route, live SES qualification and Kubernetes operator account
