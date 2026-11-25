@@ -30,6 +30,7 @@ test('Cloud roles start through the TLS schema gate with production service plan
   }
   assert.equal(spec.volumes.find(volume => volume.name === 'db-ca').secret.secretName, 'cloud-db-ca');
   assert.deepEqual(spec.containers.find(row => row.name === 'proxy').ports, [{containerPort: 3443, hostPort: 3000}]);
+  assert.equal(spec.containers.find(row => row.name === 'proxy').env.some(row => row.name === 'TEST_CLOUD_ACCOUNT_NODE'), false);
 });
 
 test('outside services run one restarting copy per cell machine with a scoped inspector', () => {
@@ -38,6 +39,9 @@ test('outside services run one restarting copy per cell machine with a scoped in
   assert.deepEqual(spec.selector.matchLabels, spec.template.metadata.labels);
   const pod = spec.template.spec;
   assert.equal(pod.nodeName, undefined);
+  const proxy = pod.containers.find(container => container.name === 'proxy');
+  assert.deepEqual(proxy.env.find(row => row.name === 'TEST_CLOUD_ACCOUNT_NODE')?.valueFrom,
+    {fieldRef: {fieldPath: 'spec.nodeName'}});
   assert.equal(pod.restartPolicy, 'Always');
   assert.deepEqual(pod.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
     ['node-a', 'node-b', 'node-c'].map(name => ({

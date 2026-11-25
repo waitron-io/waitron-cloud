@@ -1454,7 +1454,12 @@ All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
 holds. Its 20-request sign-up allowance covers all three stops within one
 hour. The next stop can begin after the returning machine passes its health
-checks. The launcher refreshes the outside peer’s route after each
+checks. If the existing account session fails during an individual stop,
+look for `D621 session probe` near the failure in stderr. Each line gives the
+time, elapsed milliseconds, any HTTP status and the error code or class.
+The account proxy names its Kubernetes node when it sends response headers.
+The node is reported as unknown if no valid header arrives.
+The launcher refreshes the outside peer’s route after each
 restart and reports how long control plane selection took. It then restarts
 the same three Stockholm instances, checks their boot IDs, volumes and
 scratch mounts, and refreshes the outside routes to their new addresses.

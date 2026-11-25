@@ -71,6 +71,8 @@ export function servicesDaemonSet(image, nodes, remoteCell) {
   const email = spec.containers.find(row => row.name === 'email');
   email.env.find(row => row.name === 'CLOUD_SMTP_HOST').value = outsideMailHost;
   email.env.push({name: 'CLOUD_SMTP_USER', valueFrom: {fieldRef: {fieldPath: 'spec.nodeName'}}});
+  spec.containers.find(row => row.name === 'proxy').env.push(
+    {name: 'TEST_CLOUD_ACCOUNT_NODE', valueFrom: {fieldRef: {fieldPath: 'spec.nodeName'}}});
   const labels = {app: metadata.name};
   // Each field selector accepts one node name, and Kubernetes matches any term.
   const terms = nodes.map(name => ({matchFields: [{key: 'metadata.name', operator: 'In', values: [name]}]}));

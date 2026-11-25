@@ -40,6 +40,57 @@ export function parseIntegrationJson(text) {
   try {return JSON.parse(text);} catch {throw Error('integration.invalid_json');}
 }
 
+export function requestIntegrationApi({signal, ...options}, body, download, onHeaders) {
+  const requestSignal = AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean));
+  return new Promise((resolve, reject) => {
+    const req = request({...options, signal: requestSignal, method: body === undefined ? 'GET' : 'POST'}, res => {
+      onHeaders?.(res.statusCode, res.headers);
+      if (download && res.statusCode === 200) {
+        const chunks = []; let bytes = 0;
+        res.on('data', chunk => {bytes += chunk.length; if (bytes > 16 * 1024 * 1024) req.destroy(Error('integration.response_large')); else chunks.push(chunk);});
+        res.once('error', reject);
+        res.once('end', () => resolve({status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks, bytes)}));
+        return;
+      }
+      let text = '';
+      res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
+      res.once('error', reject); res.once('end', () => {
+        try {resolve({status: res.statusCode, headers: res.headers, body: text ? parseIntegrationJson(text) : null});} catch (error) {reject(error);}
+      });
+    });
+    req.once('error', reject); req.setTimeout(download ? 30_000 : signal ? 5000 : 10000, () => req.destroy(Error('integration.api_timeout')));
+    req.end(body === undefined ? undefined : JSON.stringify(body));
+  });
+}
+
+export function createMeasuredSessionProbe(api, browser) {
+  return async signal => {
+    const started = performance.now();
+    let status = null, node = 'unknown';
+    try {
+      const reply = await api('/api/account/session', undefined, browser, undefined, undefined, signal, false, (code, headers) => {
+        status = code;
+        const value = headers['x-waitron-test-account-node'];
+        if (typeof value === 'string' && value.length <= 253 &&
+          value.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) node = value;
+      });
+      assert.equal(reply.status, 200, 'p1.session');
+    } catch (error) {
+      const code = error?.code;
+      const elapsedMs = Math.round(performance.now() - started);
+      let failure = 'Error';
+      if (code === 'ABORT_ERR') failure = error.cause?.name === 'TimeoutError' ? 'ETIMEDOUT' : 'AbortError';
+      else if (error?.message === 'integration.api_timeout') failure = 'ETIMEDOUT';
+      else if (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE', 'ENOTFOUND',
+        'EAI_AGAIN', 'ERR_TLS_CERT_ALTNAME_INVALID', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+        'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN'].includes(code)) failure = code;
+      else if (error instanceof assert.AssertionError) failure = 'AssertionError';
+      process.stderr.write('D621 session probe ' + JSON.stringify({at: Date.now(), elapsedMs, status, node, error: failure}) + '\n');
+      throw error;
+    }
+  };
+}
+
 
 export function streamCommandDiagnostic(text) {
   const names=['shape','venueId','installationId','sourceNodeId','streamId','generation','recoverableAt','observation','identity',
@@ -559,30 +610,14 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const measured = Boolean(kubernetes?.stopServices);
     const budget = kubernetes?.observe || measured ? createP1Budget(undefined, kubernetes.signupRequestsPerHour) : undefined;
-    const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal, fresh = false) => {
+    const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal, fresh = false, onHeaders) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path === '/api/account/signup/request') budget?.attempt('signup-request', body.email);
       if (path === '/api/account/signup/complete') budget?.attempt('signup-complete');
       const download = paidExitDownload && /^\/api\/account\/backups\/download(?:-key|-manifest)?$/.test(path);
-      return new Promise((resolve, reject) => {
-      const req = request({hostname: stockholmBaseline ? kubernetes.proxyIp : '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
-        ...(fresh && {agent: false}), headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
-        if (download && res.statusCode === 200) {
-          const chunks = []; let bytes = 0;
-          res.on('data', chunk => {bytes += chunk.length; if (bytes > 16 * 1024 * 1024) req.destroy(Error('integration.response_large')); else chunks.push(chunk);});
-          res.once('error', reject);
-          res.once('end', () => resolve({status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks, bytes)}));
-          return;
-        }
-        let text = '';
-        res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
-        res.once('error', reject); res.once('end', () => {
-          try {resolve({status: res.statusCode, headers: res.headers, body: text ? parseIntegrationJson(text) : null});} catch (error) {reject(error);}
-        });
-      });
-      req.once('error', reject); req.setTimeout(download ? 30_000 : signal ? 5000 : 10000, () => req.destroy(Error('integration.api_timeout')));
-      req.end(body === undefined ? undefined : JSON.stringify(body));
-    });
+      return requestIntegrationApi({hostname: stockholmBaseline ? kubernetes.proxyIp : '127.0.0.1', port, servername, ca: trust, path, signal,
+        ...(fresh && {agent: false}), headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}},
+      body, download, onHeaders);
     };
     if (stockholmBaseline) await untilRemote(async signal =>
       (await api('/api/health/ready', undefined, {}, ca, cloudHostname, signal)).status === 200,
@@ -902,7 +937,8 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                   }
                   runSignal().throwIfAborted();
                 }));
-                const serviceStops = await kubernetes.stopServices({...probes, inboxWitness, publication, signedBackupReservations}, spaceSignup);
+                const serviceStops = await kubernetes.stopServices({...probes, session: createMeasuredSessionProbe(api, browser),
+                  inboxWitness, publication, signedBackupReservations}, spaceSignup);
                 const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, inboxWitness, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({

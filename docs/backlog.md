@@ -923,6 +923,11 @@ implementation or production evidence.
     the worker now [reconnects](superpowers/plans/2026-11-24-d621-email-worker-reconnect.md).
     If a challenge is stranded, the measured observer restarts 60 seconds after the password
     reply, which can miss the 90-second target.
+  - The second Stockholm stop also lost an existing session after initial recovery. The
+    [session trace](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
+    records the HTTP status or transport failure, elapsed time and responding proxy node when
+    known. Loopback HTTPS exercises those fields. The failure's cause, the third stop and the
+    full restart still need Stockholm evidence from a separately approved run.
   - In the 25 November free Kind rehearsal the returning store answered on the Docker bridge
     while its WireGuard metrics request timed out. Kind now logs one sample after bridge repair
     and records the filter and route if it fails. Repeat all three stops, repairs and the
