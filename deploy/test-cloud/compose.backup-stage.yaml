@@ -3,6 +3,7 @@ services:
   account:
     environment:
       CLOUD_BACKUP_STAGE_ROOT: /run/backup-stage
+      CLOUD_EXIT_STAGE_ROOT: /run/backup-stage
     volumes:
       - type: bind
         source: ${TEST_CLOUD_ACCOUNT_BACKUP_STAGE:?Set the account's bounded backup stage path}
