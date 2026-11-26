@@ -284,12 +284,18 @@ async function saveExitFile({origin, port, session, pointId, rangeSize, archive 
     assert.equal(response.status(), 200, 'integration.exit_portal');
     await page.getByRole('button', {name: 'View snapshots', exact: true}).click();
     await page.locator('#snapshot-choice').selectOption(pointId);
-    const starts = [], reads = [];
-    if (rangeSize) page.on('response', response => {
-      const route = new URL(response.url()).pathname;
-      if (route.endsWith('/download-range/start')) starts.push(response);
-      if (route.endsWith('/download-range/read')) reads.push(response);
-    });
+    const requests = new Map();
+    if (rangeSize) {
+      page.on('request', request => {
+        const route = new URL(request.url()).pathname;
+        if (route.startsWith('/api/account/backups/download-range/'))
+          requests.set(request, {route: route.split('/').at(-1), at: performance.now()});
+      });
+      page.on('response', response => {
+        const record = requests.get(response.request());
+        if (record) Object.assign(record, {status: response.status(), responseAt: performance.now()});
+      });
+    }
     const clickedAt = performance.now();
     const [download] = await Promise.all([page.waitForEvent('download', {timeout: 60_000}),
       page.getByRole('button', {name: archive ? 'Download backup' : 'Download database', exact: true}).click()]);
@@ -297,15 +303,15 @@ async function saveExitFile({origin, port, session, pointId, rangeSize, archive 
     assert.equal(download.suggestedFilename(), `waitron-backup-${pointId}.${archive ? 'backup.enc' : 'venue.db'}`);
     let rangeTransfer;
     if (rangeSize) {
-      assert.deepEqual(starts.map(response => response.status()), [200]);
-      assert.deepEqual(reads.map(response => response.status()), Array(Math.ceil(rangeSize / (4 * 1024 ** 2))).fill(206));
-      const timings = await Promise.all([starts[0], ...reads].map(async response => {
-        assert.equal(await response.finished(), null);
-        return response.request().timing();
-      }));
-      const [stage, ...replies] = timings;
-      rangeTransfer = {stageMs: stage.responseEnd, longestReplyMs: Math.max(...replies.map(reply => reply.responseEnd)),
-        transferMs: replies.at(-1).startTime - stage.startTime + replies.at(-1).responseEnd, downloadMs};
+      const trace = [...requests.values()];
+      const stage = trace[0], release = trace.at(-1), replies = trace.slice(1, -1);
+      assert.deepEqual([stage?.route, stage?.status, release?.route, release?.status], ['start', 200, 'release', 204]);
+      assert.deepEqual(replies.map(reply => [reply.route, reply.status]),
+        Array.from({length: Math.ceil(rangeSize / (4 * 1024 ** 2))}, () => ['read', 206]));
+      // The worker sends the next request after consuming the previous body. A terminated worker may drop Playwright's completion event.
+      rangeTransfer = {stageMs: stage.responseAt - stage.at,
+        longestReplyMs: Math.max(...replies.map((reply, index) => (trace[index + 2].at - reply.at))),
+        transferMs: release.responseAt - clickedAt, downloadMs};
     }
     const filename = await download.path();
     if (archive) return {bytes: await readFile(filename), rangeTransfer};
