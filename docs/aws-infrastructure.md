@@ -1147,6 +1147,11 @@ spending authority:
    For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
    Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
    In `measured-stops`, the `Waitron rehearsal image` line gives the bundled image ID.
+   Open the stderr log with `umask 077` outside the launcher's scratch folder. It records the
+   database writer's process start time and restart count, previous PostgreSQL logs,
+   operator and Flux logs, and cluster events. A failed service check stays in the final
+   summary and makes the rehearsal fail. The launcher continues through the remaining checks
+   as long as it can verify each machine rejoined and meet the existing deadlines.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    An unhandled Kubernetes command failure records its stage, journey phase,
    wait arguments, elapsed time, exit code or signal, exception and the last
