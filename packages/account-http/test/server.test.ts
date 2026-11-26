@@ -8,11 +8,11 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import { generateKeyPairSync,randomBytes,randomUUID } from 'node:crypto';
-import {encryptFactorSecret,hashSecret} from '@waitron-cloud/identity';
+import {createSession,encryptFactorSecret,hashSecret} from '@waitron-cloud/identity';
 import {recoveryCodeHash} from '../../registration/src/password-login.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
-import {migrationNames,createLeaseIssuer} from '@waitron-cloud/registration';
+import {migrationNames,createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {connectedVenue} from '../../translation/test/fixtures.ts';
 import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import { database } from './fixtures.ts';
@@ -172,6 +172,62 @@ test('the account CLI replaces a terminated idle database connection without res
   }
   const outcome = await running.exited;
   assert.equal(outcome.code, 0, outcome.stderr);
+});
+
+test('the account CLI replies before the client deadline when a fresh database connection stalls', async () => {
+  const accountId = randomUUID();
+  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)', [accountId]);
+  const session = await transaction(db.pool, client => createSession(client, accountId));
+  const headers = {cookie: 'cloud_session=' + session.token};
+  const databaseUrl = new URL(process.env.TEST_DATABASE_URL!);
+  const upstreamPort = Number(databaseUrl.port), upstreamHost = databaseUrl.hostname;
+  const sockets = new Set<Socket>();
+  let stall = false, receivedHandshake = false;
+  const proxy = createServer(client => {
+    sockets.add(client);
+    client.once('close', () => sockets.delete(client));
+    client.on('error', () => client.destroy());
+    if (stall) {
+      client.once('data', () => {receivedHandshake = true;});
+      return;
+    }
+    const upstream = connect(upstreamPort, upstreamHost);
+    sockets.add(upstream);
+    upstream.on('error', () => upstream.destroy());
+    upstream.once('close', () => {sockets.delete(upstream); client.destroy();});
+    client.once('close', () => upstream.destroy());
+    client.pipe(upstream).pipe(client);
+  });
+  await once(proxy.listen(0, '127.0.0.1'), 'listening');
+  const address = proxy.address();
+  assert.ok(address && typeof address !== 'string');
+  databaseUrl.hostname = '127.0.0.1';
+  databaseUrl.port = String(address.port);
+  const running = cli({}, databaseUrl.href, 28000);
+  try {
+    const port = await running.ready();
+    const read = () => send(port, '/session', undefined, headers).result;
+    assert.equal((await read()).status, 200);
+    stall = true;
+    for (const socket of sockets) socket.destroy();
+    await until(async () => running.diagnostics().includes('Account server database connection failed'));
+
+    const started = performance.now();
+    const unavailable = await read();
+    const elapsedMs = Math.round(performance.now() - started);
+    assert.ok(receivedHandshake, 'the account process tried a new PostgreSQL connection');
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.headers['retry-after'], '1');
+    assert.deepEqual(JSON.parse(unavailable.body), {error: 'temporarily_unavailable'});
+
+    stall = false;
+    assert.equal((await read()).status, 200);
+    assert.ok(elapsedMs < 4000, `unavailable response took ${elapsedMs} ms`);
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await running.stop();
+    await new Promise<void>(resolve => proxy.close(() => resolve()));
+  }
 });
 
 test('account readiness finishes when PostgreSQL stops answering an established connection', async () => {
