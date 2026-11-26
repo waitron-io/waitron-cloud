@@ -3,6 +3,7 @@ import {lookup} from 'node:dns';
 import {once} from 'node:events';
 import {createConnection, createServer} from 'node:net';
 import {setTimeout as delay} from 'node:timers/promises';
+import {connect as connectTls} from 'node:tls';
 
 const [primary, upstreamPort = '31820', listenPort = '51820', listenHost = '0.0.0.0', tcpPort = '30443', ...args] = process.argv.slice(2);
 const hosts = [primary, ...args.filter(value => !value.startsWith('--tcp='))];
@@ -20,15 +21,21 @@ function lookupAddress(host) {
   });
 }
 
-function reachable(address, port) {
+function reachable(address, port, tlsProbe = false) {
   return new Promise(resolve => {
-    const socket = createConnection({host: address, port}, () => {
+    const options = {host: address, port};
+    // Readiness only checks for a completed handshake. Clients verify TLS through the byte stream.
+    const socket = tlsProbe ? connectTls({...options, rejectUnauthorized: false}, ready) : createConnection(options, ready);
+    const timer = setTimeout(() => socket.destroy(), probeTimeoutMs);
+    function ready() {
       resolve(true);
       socket.destroy();
+    }
+    socket.once('error', () => socket.destroy());
+    socket.once('close', () => {
+      clearTimeout(timer);
+      resolve(false);
     });
-    socket.on('error', () => socket.destroy());
-    socket.on('close', () => resolve(false));
-    socket.setTimeout(probeTimeoutMs, () => socket.destroy());
   });
 }
 
@@ -72,14 +79,22 @@ function tcpRelay(port, address) {
 
 const tcp = tcpRelay(30443, () => route?.address);
 const services = args.filter(value => value.startsWith('--tcp=')).map(value => {
-  const [listen, port] = value.slice('--tcp='.length).split(':').map(Number);
-  let active;
+  const [listen, destination, probe] = value.slice('--tcp='.length).split(':');
+  const port = Number(destination);
+  const tlsProbe = probe === 'tls';
+  let active, checked = false;
   const server = tcpRelay(port, () => active?.address);
-  server.listen(listen, listenHost);
+  server.listen(Number(listen), listenHost);
   return {server, async check(addresses) {
     const healthy = (await Promise.all(addresses.map(async row =>
-      row.address && await reachable(row.address, port) ? row : undefined))).filter(Boolean);
-    active = healthy.find(row => row.host === active?.host) ?? healthy[0];
+      row.address && await reachable(row.address, port, tlsProbe) ? row : undefined))).filter(Boolean);
+    const next = healthy.find(row => row.host === active?.host) ?? healthy[0];
+    if (tlsProbe && (!checked || next?.host !== active?.host || next?.address !== active?.address)) {
+      console.log(JSON.stringify({event: 'remote.relay_account_target', at: new Date().toISOString(),
+        target: next?.host ?? null, address: next?.address ?? null}));
+    }
+    checked = true;
+    active = next;
   }};
 });
 inbound.on('message', (data, source) => {

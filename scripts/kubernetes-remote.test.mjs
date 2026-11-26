@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {spawn} from 'node:child_process';
+import {execFileSync, spawn} from 'node:child_process';
 import {createSocket} from 'node:dgram';
 import {EventEmitter, once} from 'node:events';
+import {createServer as createHttpsServer, get} from 'node:https';
 import {createConnection, createServer} from 'node:net';
 import {createInterface} from 'node:readline';
-import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -389,16 +390,32 @@ test('outside relay keeps the client-facing address and uses only the three mesh
   assert.deepEqual(calls.at(-1), ['docker', ['rm', '-f', id], {signal: null}]);
 });
 
-test('the outside service relay binds account and store separately from the gateway', async () => {
-  const calls = [];
-  await remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof',
+test('the outside service relay binds account and store separately from the gateway', async t => {
+  const calls = [], output = [], relayId = 'a'.repeat(64);
+  const picked = '{"event":"remote.relay_account_target","target":"10.77.0.1"}';
+  const lost = '{"event":"remote.relay_account_target","target":null}';
+  t.mock.method(process.stderr, 'write', line => {output.push(String(line)); return true;});
+  const relay = await remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof',
     outside: true, services: true, nodes: ['a', 'b', 'c'].map(name => ({name})),
     run: async (_binary, args) => {
       calls.push(args);
-      if (args[0] === 'create') return 'a'.repeat(64);
-      if (args[0] === 'inspect') return args[2].includes('.State.ExitCode') ? '' : 'true 172.30.250.8';
+      if (args[0] === 'create') return relayId;
+      if (args[0] === 'inspect') return args[2].includes('.State.ExitCode') ? 'running 0' : 'true 172.30.250.8';
+      if (args[0] === '-c') {
+        const docker = [
+          'docker() {',
+          '  if [ "$1" != logs ] || [ "$2" != ' + relayId + ' ] || [ "$#" -ne 2 ]; then return 1; fi',
+          "  printf '%s\\n' '" + picked + "' '" + lost + "'",
+          '  for i in ' + 'x '.repeat(30) + '; do echo remote.relay_endpoint_unavailable; done',
+          '}',
+        ].join('\n');
+        return execFileSync('sh', ['-c', docker + '\n' + args[1], ...args.slice(2)], {encoding: 'utf8'}).trim();
+      }
     }});
-  assert.deepEqual(calls[0].slice(-4), ['10.77.0.2', '10.77.0.3', '--tcp=3000:3000', '--tcp=9000:30900']);
+  assert.deepEqual(calls[0].slice(-4), ['10.77.0.2', '10.77.0.3', '--tcp=3000:3000:tls', '--tcp=9000:30900']);
+  await relay.close();
+  assert.deepEqual(output, [picked + '\n' + lost + '\n']);
+  assert.equal(calls.at(-1)[0], 'rm');
 });
 
 for (const exitsBeforeInspect of [true, false]) test(
@@ -418,11 +435,13 @@ for (const exitsBeforeInspect of [true, false]) test(
           if (args[2].includes('.State.ExitCode')) return 'exited 1';
           return exitsBeforeInspect ? 'false 172.30.250.8' : 'true 172.30.250.8';
         }
-        if (args[1]?.includes('docker logs')) return 'MODULE_NOT_FOUND';
+        if (args[2] === 'relay account targets') throw Error('synthetic relay log read failure');
+        if (args[2] === 'relay logs') return 'MODULE_NOT_FOUND';
       }});
     if (exitsBeforeInspect) await assert.rejects(relay, /remote\.relay_stopped/);
     else await (await relay).close();
-    assert.deepEqual(calls.slice(-4), [
+    assert.deepEqual(calls.slice(-5), [
+      ['stderr', 'D621 relay account target trace unavailable\n'],
       ['stderr', 'D621 relay exit code 1\n'], ['-c', 'exec docker logs --tail 20 "$1" 2>&1', 'relay logs', id],
       ['stderr', 'MODULE_NOT_FOUND\n'], ['rm', '-f', id],
     ]);
@@ -505,6 +524,98 @@ test('the account relay switches nodes while storage keeps its route', {timeout:
   await expectRoutes('account on A');
   await new Promise(resolve => primary.close(resolve));
   await expectRoutes('account on B');
+});
+
+test('a fresh account read reaches the standby when the current relay target stalls TLS', {timeout: 16_000}, async t => {
+  const local = '127.0.0.1', name = 'cloud.example.test';
+  const directory = await mkdtemp(join(tmpdir(), 'cloud-account-relay-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const certPath = join(directory, 'cert.pem'), keyPath = join(directory, 'key.pem');
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+    '-out', certPath, '-keyout', keyPath, '-subj', '/CN=' + name, '-addext', 'subjectAltName=DNS:' + name],
+    {stdio: ['ignore', 'ignore', 'pipe'], timeout: 5000});
+  const [cert, key] = await Promise.all([readFile(certPath), readFile(keyPath)]);
+  async function backend(node) {
+    const state = {accepts: 0, stalled: false}, sockets = new Set();
+    const https = createHttpsServer({cert, key}, (request, reply) => {
+      assert.equal(request.url, '/api/account/session');
+      assert.equal(request.headers.cookie, 'session=synthetic');
+      reply.writeHead(200, {'x-fixture-node': node}).end();
+    });
+    const listener = createServer(socket => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      state.accepts += 1;
+      if (!state.stalled) https.emit('connection', socket);
+    });
+    listener.listen(0, local);
+    t.after(() => {
+      listener.close();
+      for (const socket of sockets) socket.destroy();
+    });
+    await once(listener, 'listening', {signal: t.signal});
+    return Object.assign(state, {port: listener.address().port});
+  }
+  const [primary, standby] = await Promise.all([backend('primary'), backend('standby')]);
+  primary.stalled = standby.stalled = true;
+  const preload = `
+    import net from 'node:net';
+    const ports = {'192.0.2.1': ${primary.port}, '192.0.2.2': ${standby.port}};
+    const connect = net.Socket.prototype.connect;
+    net.Socket.prototype.connect = function (...args) {
+      const options = Array.isArray(args[0]) ? args[0][0] : args[0];
+      if (Object.hasOwn(ports, options?.host)) {
+        Object.assign(options, {host: '127.0.0.1', port: options.port === 3000 ? ports[options.host] : 0});
+      }
+      return connect.apply(this, args);
+    };
+  `;
+  const relay = spawn(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(preload),
+    fileURLToPath(new URL('../deploy/kubernetes/remote-relay.mjs', import.meta.url)),
+    '192.0.2.1', '31820', '0', local, '0', '192.0.2.2', '--tcp=0:3000:tls',
+  ], {stdio: ['ignore', 'pipe', 'inherit']});
+  const lines = createInterface({input: relay.stdout}), exited = once(relay, 'exit');
+  t.after(async () => {lines.close(); relay.kill(); await exited;});
+  const [line] = await Promise.race([once(lines, 'line', {signal: t.signal}),
+    exited.then(() => assert.fail('relay exited before listening'))]);
+  const [relayPort] = JSON.parse(line).services;
+  const targetEvents = [];
+  lines.on('line', line => {
+    if (line.startsWith('{"event":"remote.relay_account_target",')) targetEvents.push(JSON.parse(line));
+  });
+  const readSession = (port, ms = 5000) => new Promise((resolve, reject) => {
+    get({host: local, port, servername: name, ca: cert, agent: false, path: '/api/account/session',
+      headers: {cookie: 'session=synthetic'}, signal: AbortSignal.any([t.signal, AbortSignal.timeout(ms)])}, response => {
+      response.on('error', reject);
+      response.resume();
+      response.on('end', () => resolve([response.statusCode, response.headers['x-fixture-node']]));
+    }).on('error', reject);
+  });
+  await remoteRehearsal.untilRemote(() => targetEvents.length,
+    2500, t.signal, 'initial_empty_account_target');
+  assert.equal(targetEvents[0].target, null);
+  await assert.rejects(readSession(relayPort), {code: 'ECONNRESET'});
+  primary.stalled = standby.stalled = false;
+  await remoteRehearsal.untilRemote(async () => {
+    assert.deepEqual(await readSession(relayPort, 250), [200, 'primary']);
+    return true;
+  }, 3000, t.signal, 'initial_account_target');
+  assert.deepEqual(await readSession(relayPort), [200, 'primary']);
+  const acceptsAtStall = primary.accepts;
+  primary.stalled = true;
+  assert.deepEqual(await readSession(standby.port), [200, 'standby']);
+
+  // The second connection proves the earlier readiness round already finished.
+  await remoteRehearsal.untilRemote(() => primary.accepts >= acceptsAtStall + 2,
+    4000, t.signal, 'recheck_stalled_target');
+  assert.deepEqual(await readSession(relayPort), [200, 'standby']);
+  const acceptsBeforeStandbyStall = standby.accepts;
+  standby.stalled = true;
+  await remoteRehearsal.untilRemote(() => standby.accepts >= acceptsBeforeStandbyStall + 2,
+    4000, t.signal, 'recheck_both_stalled_targets');
+  await assert.rejects(readSession(relayPort), {code: 'ECONNRESET'});
+  assert.deepEqual(targetEvents.map(event => event.target), [null, '192.0.2.1', '192.0.2.2', null]);
+  assert.ok(targetEvents.every(event => Number.isFinite(Date.parse(event.at))));
 });
 
 test('the outside Kind network drops traffic to the private API port and carries Flux and signed remote HTTPS', {

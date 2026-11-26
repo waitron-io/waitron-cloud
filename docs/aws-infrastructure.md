@@ -1465,6 +1465,12 @@ The node is reported as unknown if no valid header arrives. An early
 `AbortError` can occur when the observer ends the stop for another reason
 or the rehearsal is cancelled. The observer can also abort the request
 at its five-second deadline. Read its final error alongside the trace.
+Compare the request time with the timestamped `remote.relay_account_target`
+lines printed during relay cleanup. The relay records its first result and later
+target changes. It selects a target after a TLS handshake completes. Each client
+still verifies its own TLS connection. A null target means the relay found no
+reachable node that finished the handshake. If you see
+`D621 relay account target trace unavailable`, the target history is missing.
 The launcher refreshes the outside peer’s route after each
 restart and reports how long control plane selection took. It then restarts
 the same three Stockholm instances, checks their boot IDs, volumes and
