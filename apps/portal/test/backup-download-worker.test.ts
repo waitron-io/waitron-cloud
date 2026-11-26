@@ -13,16 +13,16 @@ let browser: Browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser?.close(); });
 
-for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag', 'oversized database', 'oversized download', 'quota', 'interrupted staging', 'ranged', 'bad range', 'range proof', 'encrypted ranges', 'repeated range proof', 'failed release']) {
+for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag', 'oversized database', 'oversized download', 'quota', 'interrupted staging', 'ranged', 'bad range', 'range proof', 'encrypted ranges', 'bad encrypted digest', 'repeated range proof', 'failed release']) {
   test(`database worker handles ${scenario}`, async () => {
-    const ranged = ['ranged','bad range','range proof','encrypted ranges','repeated range proof','failed release'].includes(scenario);
+    const ranged = ['ranged','bad range','range proof','encrypted ranges','bad encrypted digest','repeated range proof','failed release'].includes(scenario);
     const sizeMiB = ({'quota': 2, 'oversized download': 17} as Record<string,number>)[scenario] ?? 0;
     const database = ranged ? Buffer.concat([venueDatabase, Buffer.alloc(4 * 1024 ** 2)]) : venueDatabase;
     const archive = backupBytes({gzip: ['gzip','quota'].includes(scenario),
       ...(scenario === 'oversized database' ? {databaseLength: 512 * 1024 ** 2 + 1} : {}),
       ...(sizeMiB ? {database: Buffer.concat([venueDatabase, Buffer.alloc(sizeMiB * 1024 ** 2)])} : {database})});
     if (scenario === 'wrong tag') archive[33]! ^= 1;
-    const manifest = backupManifest(scenario === 'wrong digest' ? Buffer.from('different archive') : archive);
+    const manifest = backupManifest(['wrong digest','bad encrypted digest'].includes(scenario) ? Buffer.from('different archive') : archive);
     const offsets:number[] = [], requests:string[] = [];
     let releases = 0;
     const server = createServer(async (req, res) => {
@@ -104,7 +104,7 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         const file=await saved?.getFile();
         const sha256=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):undefined;
         return {ok:reply.ok, code:reply.code, files, sha256, released, bytes: file&&file.size<2**20 ? Array.from(new Uint8Array(await file.arrayBuffer())) : []};
-      },{interrupted:scenario === 'interrupted staging',encrypted:scenario==='encrypted ranges'});
+      },{interrupted:scenario === 'interrupted staging',encrypted:['encrypted ranges','bad encrypted digest'].includes(scenario)});
       if (scenario === 'interrupted staging') {
         await page.close();
         const inspector = await context.newPage();
@@ -130,7 +130,7 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         assert.deepEqual(Buffer.from(result.bytes),venueDatabase);
         assert.deepEqual(requests,['download-manifest','download-key','download']);
       } else if (ranged) {
-        assert.equal(result.ok,!['bad range','repeated range proof'].includes(scenario));
+        assert.equal(result.ok,!['bad range','bad encrypted digest','repeated range proof'].includes(scenario));
         assert.deepEqual(offsets,scenario==='bad range'?[0]:scenario==='range proof'?[0,4194304,4194304]:scenario==='repeated range proof'?[0,0]:[0,4194304]);
         assert.equal(releases,1);
         assert.equal(result.released,scenario!=='failed release');

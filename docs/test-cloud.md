@@ -1160,7 +1160,8 @@ service ends, Backups reminds you to keep your fiscal records and check your cop
 while the downloads are open. The ordinary test portal accepts verified archives
 up to 16 MiB. Set `CLOUD_EXIT_RANGE_DOWNLOADS=1` with the
 [private LAN stage](local-backups.md#use-disk-stages-for-the-local-publication-trial)
-to save verified archives up to 512 MiB in a LAN test account. In either case
+to save verified archives up to 512 MiB in a LAN test account. Use a regular
+browser window for large saves so it can stage them on disk. In either case
 the browser saves SQLite databases up to 512 MiB after opening. Your browser
 keeps a temporary copy for ten minutes while the portal stays open. It clears the copy
 sooner if you save another database, sign out or change accounts. If the page
