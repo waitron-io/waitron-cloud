@@ -147,6 +147,53 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    await page.reload();
    await page.getByRole('button',{name:browse,exact:true}).click();
    await saveDatabase.waitFor();
+
+   const piece = 4 * 1024 ** 2, attemptId = randomUUID();
+   const largeDatabase = Buffer.concat([venueDatabase, Buffer.alloc(piece)]);
+   const largeArchive = backupBytes({database:largeDatabase});
+   const offsets:number[] = [];
+   let expireOnSecondRead = true, releases = 0;
+   await page.route('**/api/account/backups/download',route=>route.fulfill({status:413,json:{error:'download_too_large'}}));
+   await page.route('**/api/account/backups/download-manifest',route=>route.fulfill({
+    body:backupManifest(largeArchive),contentType:'application/json'}));
+   await page.route('**/api/account/backups/download-range/start',route=>route.fulfill({json:{attemptId,size:largeArchive.length}}));
+   await page.route('**/api/account/backups/download-range/read',route=>{
+    const input=route.request().postDataJSON(),offset=Number(input.offset);
+    assert.deepEqual(input,{venueId:v.venueId,pointId:verifiedId,attemptId,offset:String(offset)});
+    offsets.push(offset);
+    if(expireOnSecondRead&&offset===piece){
+     expireOnSecondRead=false;proof=false;
+     return route.fulfill({status:403,json:{error:'proof_required'}});
+    }
+    assert.equal(proof,true);
+    const end=Math.min(largeArchive.length,offset+piece);
+    return route.fulfill({status:206,contentType:'application/octet-stream',body:largeArchive.subarray(offset,end),
+     headers:{'content-range':`bytes ${offset}-${end-1}/${largeArchive.length}`,'content-length':String(end-offset)}});
+   });
+   await page.route('**/api/account/backups/download-range/release',async route=>{
+    if(releases++===0){
+     assert.equal(await page.evaluate(async()=>{
+      const root=await navigator.storage.getDirectory(), parent=await root.getDirectoryHandle('waitron-backup-download');
+      for await(const folder of parent.values())if(folder.kind==='directory'){
+       for await(const name of (folder as FileSystemDirectoryHandle).keys())if(name==='venue.db')return true;
+      }
+      return false;
+     }),false);
+     return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+    }
+    return route.fulfill({status:204});
+   });
+   await Promise.all([page.waitForResponse(response=>response.url().endsWith('/download-range/read')&&response.status()===403),
+    saveDatabase.click()]);
+   await page.locator('#action-proof-heading').waitFor();
+   assert.deepEqual(offsets,[0,piece]);
+   await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
+   const [resumed]=await Promise.all([page.waitForEvent('download',{timeout:15000}),
+    page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click()]);
+   assert.deepEqual(await readFile((await resumed.path())!),largeDatabase);
+   const [encrypted]=await Promise.all([page.waitForEvent('download',{timeout:15000}),saveArchive.click()]);
+   assert.deepEqual(await readFile((await encrypted.path())!),largeArchive);
+   assert.deepEqual(offsets,[0,piece,piece,0,piece]);assert.equal(releases,3);
   }
   expired=true;
   await page.getByRole('button',{name:refresh,exact:true}).click();

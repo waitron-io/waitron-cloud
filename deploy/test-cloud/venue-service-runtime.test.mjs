@@ -66,6 +66,18 @@ test('only opted-in LAN account modes receive the private exit stage',async t=>{
  assert.equal(testRuntimeEnvironment('account',config,{CLOUD_EXIT_STAGE_ROOT:root}).CLOUD_EXIT_STAGE_ROOT,undefined);
 });
 
+test('ranged exit needs an explicit LAN account opt-in with a private mount',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'cloud-exit-runtime-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const config=await bootstrap(directory),enabled={CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_EXIT_RANGE_DOWNLOADS:'1'};
+ const environment={...enabled,CLOUD_EXIT_STAGE_ROOT:'/run/backup-stage'};
+ assert.equal(testRuntimeEnvironment('account',config,environment).CLOUD_EXIT_RANGE_DOWNLOADS,'1');
+ assert.equal(testRuntimeEnvironment('backup',config,environment).CLOUD_EXIT_RANGE_DOWNLOADS,undefined);
+ assert.throws(()=>testRuntimeEnvironment('account',config,enabled),/test_cloud.exit_stage/);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{...environment,CLOUD_TEST_SERVICE_PLANS:'0'}),/test_cloud.exit_stage/);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{...environment,TEST_CLOUD_AMAZON:'1'}),/test_cloud.exit_stage/);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{...environment,NODE_ENV:'production'}),/test_cloud.exit_stage/);
+});
+
 test('the exit worker clears only its abandoned stage after acquiring the mount', {skip:process.platform!=='linux',timeout:8000},async t=>{
  const {spawnExitWorker,openExitStage}=await import('./runtime.mjs');
  const root=await mkdtemp(join(tmpdir(),'cloud-exit-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));

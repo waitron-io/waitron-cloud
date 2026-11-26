@@ -331,7 +331,7 @@ export class BackupCatalogue {
     return {storage, selected};
   }
   async #stageExit(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal, rangeOwner?: ExitDownloadOwner) {
-    const deadline = new PublicationDeadline(Date.now() + 10_000);
+    const deadline = new PublicationDeadline(Date.now() + (rangeOwner ? 25_000 : 10_000));
     const signal = AbortSignal.any([deadline.signal, requestSignal]);
     const maxBytes = rangeOwner ? MAX_OBJECT_BYTES : exitDownloadMaxBytes;
     const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence, deadline, maxBytes));
@@ -470,14 +470,16 @@ export class BackupCatalogue {
   async exitArchiveKey(venueId: string, pointId: string, fence: MutationFence) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     return deadline.run(() => transaction(this.#pool, async client => {
-      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline);
+      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline,
+        this.exitRangesEnabled ? MAX_OBJECT_BYTES : exitDownloadMaxBytes);
       return (await pointKeys(client, this.#vault, venueId, selected.keyVersion)).recoveryKey;
     }));
   }
   async exitArchiveManifest(venueId: string, pointId: string, fence: MutationFence) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     return deadline.run(() => transaction(this.#pool, async client => {
-      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline);
+      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline,
+        this.exitRangesEnabled ? MAX_OBJECT_BYTES : exitDownloadMaxBytes);
       // Current qualification binds the archive manifest version, timestamp and digest to this point.
       return {archiveManifestVersion: 1, capturedAt: selected.capturedAt, archiveSha256: selected.digest, laterChanges: 'unknown'};
     }));

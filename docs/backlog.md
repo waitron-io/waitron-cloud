@@ -315,12 +315,16 @@ record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
 covers a verified backup, key, checksum manifest and a browser save of the venue’s
 SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
-[Downloads above 16 MiB](superpowers/plans/2026-11-25-d642-ranged-download.md)
-still need browser support and an HTTPS rehearsal that checks browser memory. The
-[private LAN disk](local-backups.md#use-disk-stages-for-the-local-publication-trial) can hold a
-single verified copy for the server's 4 MiB replies. The ranged route stays off in test deployments.
-The pinned LAN checker verified a 512 MiB synthetic archive following the
-[local qualification](superpowers/plans/2026-11-26-d642-large-download-qualification.md#verify-a-512-mib-backup-on-the-lan-worker).
+In an opted-in LAN test account, the [private stage](local-backups.md#use-disk-stages-for-the-local-publication-trial)
+holds a single verified copy for 4 MiB replies. The
+[pinned checker](superpowers/plans/2026-11-26-d642-large-download-qualification.md#verify-a-512-mib-backup-on-the-lan-worker)
+verified a 512 MiB synthetic archive. The
+[matched browser runs](superpowers/plans/2026-11-26-d642-large-download-qualification.md#isolate-and-fix-browser-memory-growth)
+saved identical SQLite from a near-508 MiB archive, with peak memory above idle of 189 MiB in
+Chromium, 333 MiB in Firefox and 459 MiB in WebKit. The watcher accepted those
+measurements before the HTTPS rehearsal. That rehearsal compared browser
+saves of the encrypted archive and SQLite from a second snapshot of about
+20 MiB while the original box stayed online.
 Real venue exit still needs the
 [support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
 and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).

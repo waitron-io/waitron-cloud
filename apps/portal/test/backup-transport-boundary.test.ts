@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test, type TestContext} from 'node:test';
 import {accountRequest,enrollmentRequiredEvent} from '../src/api.ts';
 import {BackupController} from '../src/backup-controller.ts';
-import {clearAbandonedDatabaseDownload} from '../src/backup-database-download.ts';
+import {clearAbandonedDatabaseDownload,downloadDatabase} from '../src/backup-database-download.ts';
 import type {BackupPage} from '../src/backup-types.ts';
 
 const venueId = '12345678-1234-4234-8234-123456789abc';
@@ -68,6 +68,69 @@ test('manifest transport requires the expected media type and a nonempty bounded
     assert.ok(!rejected.ok);
     assert.equal(rejected.code,'unexpected_response');
   }
+});
+
+test('range transport validates the stage and uses the worker proof for every request',async t=>{
+ const f=fixture(t),attemptId='42345678-1234-4234-8234-123456789abc',point={venueId,pointId};
+ const start=()=>accountRequest<{attemptId:string;size:number}>('/backups/download-range/start',point,undefined,'worker-proof');
+ f.replies.push({body:{attemptId,size:536870912}});
+ assert.deepEqual(await start(),{ok:true,value:{attemptId,size:536870912}});
+ f.replies.push({body:{attemptId,size:536870913}});
+ assert.equal((await start()).ok,false);
+ const read=()=>accountRequest<Response>('/backups/download-range/read',{...point,attemptId,offset:'4194304'},undefined,'worker-proof');
+ f.replies.push({status:206,raw:'tail',contentType:'application/octet-stream'});
+ const reply=await read();assert.ok(reply.ok);assert.equal(await reply.value.text(),'tail');
+ f.replies.push({status:200,raw:'tail',contentType:'application/octet-stream'});
+ assert.equal((await read()).ok,false);
+ f.replies.push({status:204});
+ assert.deepEqual(await accountRequest('/backups/download-range/release',{...point,attemptId},undefined,'worker-proof'),{ok:true,value:undefined});
+ assert.equal(f.requests.length,5);
+ for(const {init} of f.requests){
+  assert.equal(init.method,'POST');assert.equal(init.redirect,'error');assert.equal(init.cache,'no-store');
+  assert.equal((init.headers as Record<string,string>)['X-CSRF-Token'],'worker-proof');
+ }
+});
+
+test('canceling the browser worker releases its server stage',async t=>{
+ const f=fixture(t),attemptId='42345678-1234-4234-8234-123456789abc',stop=new AbortController();
+ let ready!:()=>void;
+ const mounted=new Promise<void>(resolve=>{ready=resolve;});
+ class WaitingWorker {
+  onmessage?: (event:{data:unknown})=>void;
+  postMessage(){this.onmessage?.({data:{kind:'stage',attemptId}});ready();}
+  terminate(){}
+ }
+ const root={async removeEntry(){}};
+ for(const [object,name,value] of [[globalThis,'Worker',WaitingWorker],
+  [navigator,'storage',{async getDirectory(){return root;}}],
+  [navigator,'locks',{async request(_name:string,_options:unknown,run:()=>unknown){return run();}}]] as const){
+  const old=Object.getOwnPropertyDescriptor(object,name);
+  Object.defineProperty(object,name,{configurable:true,value});
+  t.after(()=>{if(old)Object.defineProperty(object,name,old);else Reflect.deleteProperty(object,name);});
+ }
+ f.replies.push({status:204});
+ const download=downloadDatabase(venueId,pointId,stop.signal);
+ await mounted;stop.abort();await download;
+ assert.deepEqual(f.requests.map(request=>[request.url,JSON.parse(request.init.body as string)]),
+  [['/api/account/backups/download-range/release',{venueId,pointId,attemptId}]]);
+});
+
+for(const disk of ['absent','refused'])test(`a browser with disk storage ${disk} keeps the encrypted archive size refusal`,async t=>{
+ const f=fixture(t);
+ if(disk==='refused'){
+  const stub={locks:{async request(_name:string,_options:unknown,run:()=>Promise<unknown>){return run();}},
+   storage:{async getDirectory(){throw new DOMException('Disk refused','SecurityError');}}};
+  for(const [name,value] of Object.entries(stub)){
+   const previous=Object.getOwnPropertyDescriptor(navigator,name);
+   Object.defineProperty(navigator,name,{configurable:true,value});
+   t.after(()=>{if(previous)Object.defineProperty(navigator,name,previous);else Reflect.deleteProperty(navigator,name);});
+  }
+ }
+ f.replies.push({body:{...page,exitDownloadAvailable:true}});
+ await f.controller.open(venueId);
+ f.replies.push({status:413,body:{error:'download_too_large'}});
+ await f.controller.download('download');
+ assert.equal(f.controller.error,'snapshotDownloadTooLarge');
 });
 
 test('backup download preserves the account enrollment event and distinguishes CSRF from loss of ownership',async t=>{

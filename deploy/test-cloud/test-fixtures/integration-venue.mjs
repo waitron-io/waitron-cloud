@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {fixtureFailureDiagnostic} from '/proof/integration-renewal.mjs';
 import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {randomUUID, createHash} from 'node:crypto';
+import {randomBytes, randomUUID, createHash} from 'node:crypto';
+import {DatabaseSync} from 'node:sqlite';
 import {spawn} from 'node:child_process';
 import {dirname} from 'node:path';
 import {createRequire} from 'node:module';
@@ -96,8 +97,18 @@ const control = createServer(async (req, res) => {
       res.end(JSON.stringify(await prepareIntegrationVerificationState(root)));
       return;
     }
-    if (req.url === '/snapshot-publish' || req.url === '/snapshot-altered') {
+    if (['/snapshot-publish', '/snapshot-altered', '/snapshot-large'].includes(req.url)) {
       const altered = req.url === '/snapshot-altered';
+      if (req.url === '/snapshot-large') {
+        assert.equal(process.env.CLOUD_INTEGRATION_LARGE_EXIT, '1');
+        const db = new DatabaseSync(root + '/venue/venue.db');
+        try {
+          db.exec("PRAGMA busy_timeout=5000; BEGIN; INSERT INTO printers (id,name,transport,local_key) VALUES ('exit-proof','Test','usb','exit-proof');");
+          const insert = db.prepare("INSERT INTO print_jobs (id,printer_id,payload,created_at,status) VALUES (?, 'exit-proof', ?, ?, 'done')");
+          for (let i = 0; i < 160; i++) insert.run('exit-proof-' + i, randomBytes(128 * 1024), new Date().toISOString());
+          db.exec('COMMIT');
+        } finally {db.close();}
+      }
       if (altered) assert.ok(process.env.CLOUD_TEST_STORE_CA, 'integration.altered_snapshot_scope');
       assert.equal(process.env.CLOUD_TEST_BACKUP_STATE, '1');
       const requestedAt = Date.now();

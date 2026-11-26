@@ -5,7 +5,7 @@ import {translations} from './locale.ts';
 import {validPasswordLogin,validFactorStatus,validFactorEnrolment,validFactorChange} from './authenticator-types.ts';
 import {validRecoveryDate,validRecoveryView} from './recovery-types.ts';
 import {validRemoteView,validRemoteDns,validGuestMenuView,validVenueEmail} from './remote-types.ts';
-import {validBackupPage} from './backup-types.ts';
+import {validBackupPage,validBackupRangeStage} from './backup-types.ts';
 import {validSentReportDetail, validSentReportsPage} from './sent-reports-types.ts';
 import {validInstallation} from './installation-types.ts';
 import { validBusinesses, validPairingView } from './pairing-types.ts';
@@ -25,6 +25,7 @@ function validOperatorVenue(value:unknown):value is OperatorVenue{
     &&(name===null||typeof name==='string')&&typeof stopped==='boolean';
 }
 function validResult(path: string, value: unknown, status: number): boolean {
+  if(path==='/backups/download-range/start')return status===200&&validBackupRangeStage(value);
   if(path.startsWith('/owner-recovery/'))return status===200&&validOwnerRecoveryResult(path,value);
   if (path === '/businesses' || path === '/organisations/rename') return status === 200 && validAccountBusinesses(value);
   if(path==='/owner-transfers')return status===200&&validOwnerTransferList(value);
@@ -96,7 +97,10 @@ export function browserCsrfToken() {
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal, workerCsrfToken?: string): Promise<ApiResult<T>> {
   const keyDownload = path === '/backups/download-key';
   const manifestDownload = path === '/backups/download-manifest';
-  const download = keyDownload || manifestDownload || path === '/backups/download';
+  const wholeDownload = keyDownload || manifestDownload || path === '/backups/download';
+  const rangeRead = path === '/backups/download-range/read';
+  const rangeRelease = path === '/backups/download-range/release';
+  const download = wholeDownload || rangeRead || rangeRelease || path === '/backups/download-range/start';
   const installationWrite = path === '/installations/remove';
   const sentReports = path === '/sent-reports/list' || path === '/sent-reports/read';
   const businessPath = path === '/businesses' || path === '/organisations/rename';
@@ -112,7 +116,13 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       ...(download ? {mode: 'same-origin', redirect: 'error', cache: 'no-store'} : {})});
-    if (download && response.ok) {
+    if (rangeRead && response.ok) {
+      if (response.status === 206 && response.body && response.headers.get('content-type') === 'application/octet-stream') return {ok:true,value:response as T};
+      await response.body?.cancel().catch(()=>{});
+      return {ok:false,status:503,code:'unexpected_response',retryAfterMs:0};
+    }
+    if (rangeRelease && response.status === 204) return {ok:true,value:undefined as T};
+    if (wholeDownload && response.ok) {
       const contentType = manifestDownload ? 'application/json' : keyDownload ? 'text/plain; charset=utf-8' : 'application/octet-stream';
       if (response.status === 200 && response.headers.get('content-type') === contentType) {
         if (workerCsrfToken !== undefined && !keyDownload && !manifestDownload) return {ok: true, value: response as T};

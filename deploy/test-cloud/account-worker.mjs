@@ -69,7 +69,7 @@ try {
     const uploadOrigin=process.env.CLOUD_TEST_AMAZON_BACKUPS==='1'?config.portalOrigin:undefined;
     if(uploadOrigin!==undefined&&(planMode!=='test-venue-levels'||process.env.NODE_ENV==='production'))throw Error('test_cloud.amazon_backups');
     captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory,uploadOrigin}):undefined;
-    const exitRanges=await openExitStage(process.env.CLOUD_EXIT_STAGE_ROOT,process.env.CLOUD_EXIT_STAGE_LOCKED);
+    const exitRanges=await openExitStage(process.env.CLOUD_EXIT_STAGE_ROOT,process.env.CLOUD_EXIT_STAGE_LOCKED,process.env.CLOUD_EXIT_RANGE_DOWNLOADS==='1');
     let relay;
     try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode,
       setupExpiresAt:process.env.CLOUD_TEST_RELAY_SETUP_EXPIRES_AT || undefined});}

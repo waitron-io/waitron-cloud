@@ -16,8 +16,17 @@ export function validBackupPage(value:unknown):value is BackupPage{
   &&Array.isArray(v.points)&&v.points.length<=50&&new Set(v.points.map(p=>p?.id)).size===v.points.length&&v.points.every(p=>p&&typeof p==='object'&&!Array.isArray(p)&&keys(p,['id','capturedAt','expiresAt','retention','verification','protection'])&&id(p.id)&&date(p.capturedAt)&&date(p.expiresAt)&&['pending','verified','failed'].includes(p.verification as string)&&['daily','monthly'].includes(p.retention as string)&&(p.protection===null||['fallback','recovery'].includes(p.protection as string)));
 }
 export type BackupDownload = 'download'|'download-key'|'download-manifest'|'download-database';
+export const backupArchiveLimit = 512 * 1024 ** 2;
+export const backupRangeBytes = 4 * 1024 ** 2;
+export interface BackupRangeStage {attemptId:string;size:number;}
+export function validBackupRangeStage(value:unknown):value is BackupRangeStage{
+ if(!value||typeof value!=='object')return false;
+ const {attemptId,size}=value as Partial<BackupRangeStage>;
+ return typeof attemptId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(attemptId)&&
+  typeof size==='number'&&Number.isSafeInteger(size)&&size>0&&size<=backupArchiveLimit;
+}
 export const backupDownloadDirectory = 'waitron-backup-download';
-export interface DatabaseDownloadRequest {venueId: string; pointId: string; attempt: string; csrfToken: string;}
+export interface DatabaseDownloadRequest {venueId: string; pointId: string; attempt: string; csrfToken: string;kind?:'archive';}
 export async function removeDatabaseDownload(root: FileSystemDirectoryHandle) {
  try { await root.removeEntry(backupDownloadDirectory, {recursive: true}); }
  catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }

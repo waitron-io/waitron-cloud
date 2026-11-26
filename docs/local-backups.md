@@ -90,8 +90,9 @@ unmounting the two filesystems. Remove only the stage directory you created.
 In either test account mode, the account disk also holds the verified exit copy. Keep
 the account mount private so only its worker can use it. At startup the worker locks
 the directory before clearing any abandoned `exit-download` stage inside it. A second
-worker using the same disk refuses to start. The ranged route stays off while its
-browser and HTTPS checks are still pending.
+worker using the same disk refuses to start. Export `CLOUD_EXIT_RANGE_DOWNLOADS=1`
+before starting either LAN test account mode with this overlay to accept verified
+encrypted archives up to 512 MiB.
 
 Run the signed TLS publication and retry proof.
 

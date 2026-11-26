@@ -277,6 +277,23 @@ test('failed deletion blocks more reads while keeping the slot occupied',async t
  }finally{refuseCleanup=false;await release();}
  assert.deepEqual(await readdir(stageRoot),[]);
 });
+
+test('keys and manifests follow the larger cap only when the range route is enabled',async t=>{
+ const f=await recoveryFixture(db),root=await mkdtemp(join(tmpdir(),'cloud-exit-test-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ const id=await point(f.installed,new Date().toISOString());
+ await db.pool.query("UPDATE backup_points SET size=$2,modules='{\"core\":1}' WHERE id=$1",[id,536870912]);
+ await admitPointFixture(db.pool,id);
+ const stage=async()=>assert.fail('key and manifest must not read archive bytes');
+ const off=exitDownload(f,'test-free-paid',stage,db.pool,{stageRoot:root,enabled:false});
+ const on=exitDownload(f,'test-free-paid',stage,db.pool,{stageRoot:root,enabled:true});
+ for(const file of ['download-manifest','download-key']){
+  assert.equal((await off(file,id)).status,413);
+  assert.equal((await on(file,id)).status,200);
+ }
+ assert.equal((await on('download',id)).status,413);
+});
 test('exit download returns the verified archive and its matching key while the installation stays active',async()=>{
  const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;
  let disposals=0;

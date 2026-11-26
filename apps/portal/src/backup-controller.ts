@@ -9,6 +9,7 @@ export class BackupController {
  downloadProof=false;downloadError:keyof Copy|undefined;
  #listError:keyof Copy|undefined;
  #download:AbortController|undefined;
+ #finishProof:((proved:boolean)=>void)|undefined;
  // Relative retry waits use elapsed time; retryAt projects the remainder for the shared wall-clock countdown.
  #retryUntil=0;#account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
@@ -29,13 +30,32 @@ export class BackupController {
   if(this.selected!==id)this.cancelDownload();
   this.selected=id;this.selectedSource='snapshot';this.#changed();
  }}
- async download(action:BackupDownload){
+ resumeDownloadProof(){this.#finishProof?.(true);}
+ async download(action:BackupDownload,refreshProof?:()=>Promise<boolean>){
   const venueId=this.venueId,pointId=this.selected;
   if(!this.#account||!venueId||!pointId||!this.downloadable||this.pending||this.#download||this.waiting)return;
   const transfer=new AbortController();this.#download=transfer;this.downloadError=undefined;this.#listError=undefined;this.#changed();
+  const renewProof=async()=>{
+   if(!refreshProof||transfer.signal.aborted)return false;
+   let finish!:(proved:boolean)=>void;
+   const resumed=new Promise<boolean>(resolve=>{finish=resolve;});
+   this.#finishProof=finish;
+   const cancel=()=>finish(false);
+   transfer.signal.addEventListener('abort',cancel,{once:true});
+   this.downloadProof=true;this.#changed();
+   try{return await refreshProof()||await resumed;}
+   finally{
+    transfer.signal.removeEventListener('abort',cancel);
+    if(this.#finishProof===finish){this.#finishProof=undefined;this.downloadProof=false;this.#changed();}
+   }
+  };
   try{
-   const result=await (action==='download-database'?downloadDatabase(venueId,pointId,transfer.signal)
+   let result=await (action==='download-database'?downloadDatabase(venueId,pointId,transfer.signal,{renewProof})
     :this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal));
+   if(action==='download'&&!result.ok&&result.status===413){
+    const ranged=await downloadDatabase(venueId,pointId,transfer.signal,{kind:'archive',renewProof});
+    if(ranged.ok||ranged.code!=='database_storage_unavailable')result=ranged;
+   }
    if(transfer.signal.aborted)return;
    if(result.ok){
     if(action==='download-database'||!result.value)return;
