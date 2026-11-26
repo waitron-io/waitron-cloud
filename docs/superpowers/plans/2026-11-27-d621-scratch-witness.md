@@ -8,3 +8,8 @@ Move the Stockholm restart marker to the root of its scratch disk so the backup 
 - Update `docs/backlog.md` with the verified local result and the open Stockholm restart and restore. Record that the PostgreSQL process restarted inside the same pod on the surviving machine, and that the saved kubelet events lack the affected object and probe detail needed to identify the trigger.
 
 Expected size is two implementation lines changed and about three to five test lines, plus the backlog update. Paid launch is outside this pull request.
+
+## Verification
+
+- The retained 26 November launcher log records three single-machine stop confirmations, hold and rejoin measurements, and 1,098 `d618-cold-restart: No such file` messages (`aws-stderr.private.log:5393` onward). The third-stop writer samples (`:3964–3972`) report the same pod identity, a restart count rising from zero to one and a new PostgreSQL start time. The kubelet records at `:5084` contain only time, reason and component.
+- The `test-box-run.sh G … node --input-type=module -e …` probe ran the launcher’s marker shell on a 64 MiB ext4 mount with the real verifier controller. It exited zero and reported `{"placement":"ext4-root","markerSurvived":true,"workEntriesAfterCleanup":[]}` after verifier startup and owned-child cleanup. Hard-stop durability and restore still need Stockholm evidence.

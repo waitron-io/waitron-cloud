@@ -932,7 +932,7 @@ implementation or production evidence.
     when a rehearsal fails. The 26 November [evidence rehearsal](superpowers/plans/2026-11-26-d621-stockholm-evidence.md)
     completed all three stops and rejoins. All three machines came back after the full stop,
     then the scratch marker check timed out before restore. A free Linux probe confirmed that
-    the [marker at the scratch disk root](superpowers/plans/2026-11-27-d621-scratch-witness.md)
+    the [marker at the scratch disk root](superpowers/plans/2026-11-27-d621-scratch-witness.md#verification)
     remained readable after verifier startup and cleanup. Stockholm still needs to verify the
     full restart and restore.
   - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
