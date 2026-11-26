@@ -143,9 +143,9 @@ export class PortalApp {
     this.recovery.open(this.link.recoveryId ?? returned?.recoveryId);
     void clearAbandonedDatabaseDownload();
     this.backups = new BackupController(() => {
-      const selected=this.backups.page?.points.find(p=>p.id===this.backups.selected&&p.verification==='verified');
-      if(this.backups.selectedSource==='continuous'&&this.backups.page?.continuousRecovery)this.recovery.chooseContinuous(this.backups.venueId);
-      else this.recovery.choose(this.backups.venueId,selected?.id);
+      const venue=this.backups.page?.venueId;
+      if(this.backups.selectedSource==='continuous')this.recovery.chooseContinuous(venue);
+      else this.recovery.choose(venue);
       this.draw();
     });
     this.sentReports = new SentReportsController(() => this.draw());
@@ -154,7 +154,7 @@ export class PortalApp {
       if (this.accountPage === 'venues' && this.session?.state.kind === 'authenticated' && this.usage.organisationId && !this.usage.loaded) void this.usage.load();
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId
         &&i.canRevoke&&!i.portalRemovedAt&&(!i.revokedAt||this.remote.view?.revoked)))this.remote.close();
-      if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
+      if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined);}
       if(this.sentReports.venueId&&!this.installations.visible.some(i=>i.venueId===this.sentReports.venueId&&i.canRevoke))this.sentReports.close();
       this.draw();
     });
@@ -351,7 +351,7 @@ export class PortalApp {
   draw() {
     this.remote.expireForward();
     // Account can inspect production backups; recovery accepts only its offered test venues.
-    if(this.path==='/recover'&&this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke&&i.environment==='test')){this.backups.close();this.recovery.choose(undefined,undefined);}
+    if(this.path==='/recover'&&this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke&&i.environment==='test')){this.backups.close();this.recovery.choose(undefined);}
     document.documentElement.lang = this.locale;
     const title = this.title(); document.title = `${title} · Waitron Cloud`;
     render(screen(this), this.root);

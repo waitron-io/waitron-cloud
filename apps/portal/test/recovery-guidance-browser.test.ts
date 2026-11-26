@@ -23,7 +23,7 @@ const bundle=await build({stdin:{contents:`
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 const scenarios=[
  {action:'approve',status:400,code:'confirmation_required',key:'recoveryConfirmation',en:/old.server.*data.loss/i,es:/servidor anterior.*pérdida de datos/i},
- {action:'approve',status:400,code:'unverified',key:'recoveryUnverified',en:/verified.*compatible/i,es:/verificada.*compatible/i},
+ {action:'approve',status:400,code:'unverified',key:'recoveryUnverified',en:/refresh.*replacement server.*checked for that server/i,es:/actualiza.*servidor de sustitución.*verificadas para ese servidor/i},
  {action:'approve',status:400,code:'invalid_input',key:'recoveryInput',en:/matching code.*source/i,es:/código.*origen/i},
  {action:'approve',status:409,code:'target_not_fresh',key:'recoveryFreshTarget',en:/fresh replacement/i,es:/sustitución nuevo/i},
  {action:'approve',status:409,code:'recovery_active',key:'recoveryActive',en:/original recovery link.*close/i,es:/enlace.*recuperación.*cierra/i},
@@ -75,13 +75,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     assert.equal(await page.evaluate(()=>(window as any).app.recovery.uncertain),false);
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action]);
     if(scenario.code==='unverified'){
-     stage='recovery snapshot refresh';
-     await page.getByRole('button',{name:c.latestSnapshots,exact:true}).click();await page.waitForFunction(() => !(window as any).app.backups.pending);
-     assert.match(text,locale==='en'?/verified does not always mean compatible/i:/verificada no siempre significa compatible/i);
-     assert.doesNotMatch(text,/choose a verified, compatible|elige una verificada y compatible/i);
-     assert.equal(snapshotReads,2);await page.getByLabel(c.chooseSnapshot,{exact:true}).selectOption(second);
-     assert.equal(await page.getByLabel(c.recoveryStopped,{exact:true}).isChecked(),false);assert.equal(await page.getByLabel(c.recoveryAcceptLoss,{exact:true}).isChecked(),false);
-     assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isDisabled(),true);assert.equal(calls.length,2);
+     stage='recovery snapshot guidance';
+     assert.equal(snapshotReads,1);
+     assert.equal(await page.getByLabel(c.chooseSnapshot,{exact:true}).count(),0);
+     assert.equal(await page.getByRole('button',{name:c.latestSnapshots,exact:true}).count(),0);
+     assert.equal(calls.length,2);
     }
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR){await mkdir(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}-${scenario.action}-${scenario.code}${'recoveryExpiresAt'in scenario?'-with-expiry':''}.png`,fullPage:true});}

@@ -77,7 +77,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
     const approve = page.getByRole('button', {name: c.recoveryApprove, exact: true});
     const exposed = await approve.count();
     if (exposed) {
-      await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).check();
+      await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: source === 'snapshot' ? c.recoveryAcceptSnapshotLoss : c.recoveryAcceptLoss, exact: true}).check();
       const replied = page.waitForResponse(r => r.url().endsWith('/api/account/recovery/approve'));
       await approve.click(); assert.equal((await replied).status(), journey === 'test-venue' ? 200 : 403);
       if (journey === 'test-venue') await page.getByText(source === 'snapshot' ? c.recoveryApprovedSnapshot : c.recoveryApprovedContinuous, {exact: true}).waitFor();
@@ -92,8 +92,8 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
       assert.equal(approvals.length, 1); assert.equal(approvals[0]!.status, 403); assert.deepEqual(rows, []);
     } else {
       assert.equal(approvals.length, 1); assert.equal(approvals[0]!.status, 200);
-      assert.deepEqual(approvals[0]!.sent, {requestId: target.id, code: target.code, ...(source === 'snapshot' ? {source: 'snapshot', pointId: point.id} : {source: 'continuous', venueId: venue.venueId}), oldServerUnavailable: 'true', acceptDataLoss: 'true'});
-      assert.deepEqual(rows, [{venue_id: venue.venueId, point_id: source === 'snapshot' ? point.id : null, source_kind: source}]);
+      assert.deepEqual(approvals[0]!.sent, {requestId: target.id, code: target.code, source, venueId: venue.venueId, oldServerUnavailable: 'true', acceptDataLoss: 'true'});
+      assert.deepEqual(rows, [{venue_id: venue.venueId, point_id: null, source_kind: source}]);
     }
     await context.close();
   } finally {await f.close();}

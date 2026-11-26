@@ -24,7 +24,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path==='/installations')return route.fulfill({json:{installations:[{installationId:id,venueId,organisationId:id,legalBusinessId:id,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,overview:{organisationName:'Café Sol',businessName:'Sol SL',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))}]}});
    if(path==='/backups/list')return route.fulfill({json:{venueId,points:[{id:pointId,capturedAt:'2026-11-12T10:00:00.000Z',verification:'verified',retention:'daily',expiresAt,protection:null}],nextCursor:null,defaultPointId:pointId,continuousRecovery:null}});
    if(path==='/recovery/inspect')return route.fulfill({json:view});
-   if(path==='/recovery/approve'){assert.deepEqual(route.request().postDataJSON(),{requestId:id,code:'12345678',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'});approvals++;view=approved;return route.fulfill({json:approved});}
+   if(path==='/recovery/approve'){assert.deepEqual(route.request().postDataJSON(),{requestId:id,code:'12345678',source:'snapshot',...(approvals?{pointId}:{venueId}),oldServerUnavailable:'true',acceptDataLoss:'true'});approvals++;view=approved;return route.fulfill({json:approved});}
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
   await page.goto('https://portal.test/recover#request='+id);await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});

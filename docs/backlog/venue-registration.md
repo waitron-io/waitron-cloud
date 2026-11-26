@@ -19,8 +19,8 @@ old server follows Waitron's recovery rules. Cloud revocation alone does not est
 that an offline server has stopped trading.
 The shared replacement flow for planned upgrades and failure recovery is implemented
 locally. Add the final-backup handover after stopping writes during a planned move.
-Failure recovery already shows the selected snapshot time or continuous recovery
-point and potential data loss. Approval requires confirmation that the old server
+Cloud shows the continuous recovery time and explains the potential data loss for
+both sources. The replacement shows the capture time of the snapshot you choose. Approval requires confirmation that the old server
 is unavailable and acceptance of data loss; replacement separately requires explicit
 confirmation. PostgreSQL and HTTP refusal tests cover the server-side checks in
 `packages/backups/test/recovery-request.test.ts` and `replacement.test.ts`.

@@ -74,7 +74,7 @@ function harness() {
   }
   function state() {
     return structuredClone({requestId: controller.requestId, code: controller.code, view: controller.view,
-      venueId: controller.venueId, pointId: controller.pointId, source: controller.source,
+      venueId: controller.venueId, source: controller.source,
       stopped: controller.stopped, acceptLoss: controller.acceptLoss, confirmReplacement: controller.confirmReplacement,
       uncertain: controller.uncertain, pending: controller.pending, retryAt: controller.retryAt,
       error: controller.error, changes, calls});
@@ -89,12 +89,12 @@ async function prepare(h: ReturnType<typeof harness>, action: Action) {
   const loading = c.inspect();
   reply({ok: true, value: action === 'approve' ? views().pending : views().restored});
   await loading;
-  c.choose(venueId, pointId); c.stopped = true; c.acceptLoss = true; c.confirmReplacement = true;
+  c.choose(venueId); c.stopped = true; c.acceptLoss = true; c.confirmReplacement = true;
 }
 
 function body(action: Action) {
   return {requestId, code,
-    ...(action === 'approve' ? {source: 'snapshot', pointId, oldServerUnavailable: 'true', acceptDataLoss: 'true'} : {}),
+    ...(action === 'approve' ? {source: 'snapshot', venueId, oldServerUnavailable: 'true', acceptDataLoss: 'true'} : {}),
     ...(action === 'replace' ? {oldInstallationId: views().restored.replacement!.oldInstallationId,
       oldServerUnavailable: 'true', confirmReplacement: 'true'} : {})};
 }
@@ -112,7 +112,7 @@ for (const action of actions) for (const outcome of outcomes) {
         if (destination === 'another request') c.open(nextRequestId);
         else { c.account('different'); if (destination === 'returning account') c.account('owner'); }
         assert.equal(c.code, ''); assert.equal(c.view, undefined);
-        assert.equal(c.venueId, undefined); assert.equal(c.pointId, undefined); assert.equal(c.source, undefined);
+        assert.equal(c.venueId, undefined); assert.equal(c.source, undefined);
         assert.equal(c.stopped, false); assert.equal(c.acceptLoss, false); assert.equal(c.confirmReplacement, false);
         assert.equal(c.uncertain, false); assert.equal(c.pending, false); assert.equal(c.error, undefined);
         const id = destination === 'another request' ? nextRequestId : requestId;

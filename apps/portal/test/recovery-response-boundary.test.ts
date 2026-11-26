@@ -61,7 +61,7 @@ function harness(t: TestContext) {
 }
 
 function select(c: RecoveryController, action: Action) {
-  if (action === 'approve') {c.choose(venueId, pointId); c.stopped = true; c.acceptLoss = true;}
+  if (action === 'approve') {c.choose(venueId); c.stopped = true; c.acceptLoss = true;}
   if (action === 'replace') c.confirmReplacement = true;
 }
 
@@ -133,7 +133,7 @@ for (const action of actions) {
       assert.equal(write.init.credentials, 'same-origin');
       assert.equal(new Headers(write.init.headers).get('X-CSRF-Token'), 'recovery-proof');
       assert.deepEqual(JSON.parse(String(write.init.body)), {requestId, code: '12345678',
-        ...(action === 'approve' ? {source: 'snapshot', pointId, oldServerUnavailable: 'true', acceptDataLoss: 'true'} : {}),
+        ...(action === 'approve' ? {source: 'snapshot', venueId, oldServerUnavailable: 'true', acceptDataLoss: 'true'} : {}),
         ...(action === 'replace' ? {oldInstallationId, oldServerUnavailable: 'true', confirmReplacement: 'true'} : {})});
     });
   }
@@ -159,7 +159,9 @@ for (const entry of [
 ] as const) {
   test(`recovery HTTP ${entry.action} cannot confirm a well-shaped reply for ${entry.name}`, async t => {
     const {c, replies, calls} = harness(t);
-    const initial = entry.action === 'approve' ? pending : ready;
+    const initial = entry.name === 'another snapshot'
+      ? {...approved, operation: {...approved.operation!, status: 'pending'}}
+      : entry.action === 'approve' ? pending : ready;
     replies.inspect = {body: initial}; await c.inspect(); select(c, entry.action);
     replies[entry.action] = {body: entry.body};
     replies.inspect = {body: {error: 'temporarily_unavailable'}, status: 503};
@@ -178,11 +180,11 @@ for (const action of ['inspect', ...actions] as const) {
       const {c, replies, calls} = harness(t);
       replies.inspect = {body: action === 'approve' ? pending : ready}; await c.inspect();
       if (action !== 'inspect') select(c, action);
-      else {c.choose(venueId, pointId); c.confirmReplacement = true;}
+      else {c.choose(venueId); c.confirmReplacement = true;}
       replies[action] = {body: {error: status === 401 ? 'session_expired' : 'forbidden'}, status};
       await c[action]();
       assert.equal(c.view, undefined);
-      assert.equal(c.venueId, undefined); assert.equal(c.pointId, undefined); assert.equal(c.source, undefined);
+      assert.equal(c.venueId, undefined); assert.equal(c.source, undefined);
       assert.equal(c.confirmReplacement, false);
       assert.equal(c.uncertain, false); assert.equal(c.pending, false);
       assert.equal(c.error, status === 401 ? 'pairSession' : 'forbidden');

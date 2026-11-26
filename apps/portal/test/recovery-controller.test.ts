@@ -10,6 +10,29 @@ const continuousSource={kind:'continuous',recoverableAt:'2026-01-02T12:00:00.000
 const approved={...pending,state:'approved',operationId:id,operation:{id,pointId,venueId,source:snapshotSource,mode:'failure',status:'pending',expiresAt:new Date(Date.now()+3600000).toISOString()}};
 const continuousApproved={...pending,state:'approved',operationId:id,operation:{...approved.operation,pointId:null,source:continuousSource}};
 const replacement={requestId:id,pointId,venueId,source:snapshotSource,oldInstallationId:'42345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt:new Date(Date.now()+3600000).toISOString(),organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null};
+const unselected={...approved,operation:{...approved.operation,pointId:null,source:{kind:'snapshot',pointId:null}}};
+test('the owner view accepts an unselected snapshot until a copy has been restored',()=>{
+ assert(validRecoveryView(unselected));
+ assert(validRecoveryView({...unselected,operation:{...unselected.operation,status:'closed'}}));
+ assert(!validRecoveryView({...unselected,operation:{...unselected.operation,status:'restored'}}));
+ assert(!validRecoveryView({...unselected,operation:{...unselected.operation,pointId}}));
+ assert(!validRecoveryView({...unselected,operation:{...unselected.operation,source:{kind:'snapshot'}}}));
+ assert(!validRecoveryView({...unselected,operation:{...unselected.operation,source:{kind:'snapshot',pointId:null,key:'private'}}}));
+});
+test('snapshot approval and reauthorisation before box selection both name only the venue',async()=>{
+ const writes:Record<string,unknown>[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  if(path.endsWith('/approve'))writes.push(body!);
+  return {ok:true,value:(writes.length?unselected:pending) as T};
+ });
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId);
+ for(let attempt=0;attempt<2;attempt++){
+  c.stopped=true;c.acceptLoss=true;await c.approve();
+  assert.deepEqual(c.view,unselected);
+  assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
+ }
+ assert.deepEqual(writes,Array.from({length:2},()=>({requestId:id,code:'12345678',source:'snapshot',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'})));
+});
 test('replacement view requires a restored operation and matching request, point and venue',()=>{
  const restored={...approved,operation:{...approved.operation,status:'restored'},replacement};
  assert(validRecoveryView(restored));assert(!validRecoveryView({...restored,replacement:{...replacement,pointId:id}}));
@@ -40,18 +63,18 @@ test('owner view accepts strict continuous sources and excludes provider or tena
  ])assert(!validRecoveryView({...continuousApproved,operation}));
  assert(!validRecoveryView({...pending,tenantId:'private'}));
 });
-test('lost approval replies reconcile by inspection without another grant; confirmations bind the chosen point',async()=>{
+test('lost approval replies reconcile by inspection without another grant; confirmations bind the chosen venue',async()=>{
  const calls:string[]=[];let granted=false;const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?approved:pending) as T};});
- c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);await c.approve();assert.equal(calls.length,1);
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId);await c.approve();assert.equal(calls.length,1);
  c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.view?.state,'approved');assert.deepEqual(calls,['/recovery/inspect','/recovery/approve','/recovery/inspect']);
  await c.approve();assert.equal(calls.length,3);
- c.choose(venueId,id);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
+ c.stopped=true;c.acceptLoss=true;c.choose(id);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
 });
 test('pending reauthorisation freezes its source and consumes both confirmations again',async()=>{
  for(const original of [approved,continuousApproved])for(const [status,expired,want] of [['pending',false,1],['restored',false,0],['closed',false,0],['pending',true,0]] as const){
   const writes:Record<string,unknown>[]=[];const view={...original,expiresAt:'2000-01-01T00:00:00.000Z',operation:{...original.operation,status,expiresAt:expired?'2000-01-01T00:00:00.000Z':original.operation.expiresAt}};
   const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{if(path.endsWith('/approve'))writes.push(body!);return {ok:true,value:view as T};});
-  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(id,id);
+  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(id);
   await c.approve();assert.equal(writes.length,0);c.stopped=true;await c.approve();assert.equal(writes.length,0);
   c.acceptLoss=true;await c.approve();assert.equal(writes.length,want);
   if(want){assert.deepEqual(writes[0],original===approved?{requestId:id,code:'12345678',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'}:{requestId:id,code:'12345678',source:'continuous',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'});assert.equal(c.uncertain,false);assert.deepEqual(c.view?.operation?.source,original.operation.source);}
@@ -65,25 +88,19 @@ test('continuous approval is the default source shape and reconciles an uncertai
  assert.equal(c.view?.operation?.source.kind,'continuous');assert.equal(c.uncertain,false);
  assert.deepEqual(calls[1],{path:'/recovery/approve',body:{requestId:id,code:'12345678',source:'continuous',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'}});
 });
-test('snapshot fallback approval names its source and selected point explicitly',async()=>{
- const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];
- const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:(path.endsWith('/approve')?approved:pending) as T};});
- c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();
- assert.deepEqual(calls[1],{path:'/recovery/approve',body:{requestId:id,code:'12345678',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'}});
-});
 test('account reset discards delayed inspection and clears matching code',async()=>{
  let finish!:(r:ApiResult<unknown>)=>void;const c=new RecoveryController(()=>{},<T>()=>new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;}));c.open(id);c.account('a');c.code='12345678';const load=c.inspect();c.account('b');finish({ok:true,value:approved});await load;assert.equal(c.view,undefined);assert.equal(c.code,'');
 });
 test('unconfirmed write locks approval until inspection, permission failure clears details and cooldown survives reset',async()=>{
- let mode='ok';const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>mode==='ok'?{ok:true,value:pending as T}:mode==='lost'?{ok:false,status:0,code:'network_error',retryAfterMs:0}:{ok:false,status:403,code:'forbidden',retryAfterMs:60000});c.open(id);c.account('a');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;mode='lost';await c.approve();assert(c.uncertain);mode='ok';await c.inspect();assert(!c.uncertain);mode='forbidden';await c.inspect();assert.equal(c.view,undefined);c.account('b');assert(c.waiting>0);
+ let mode='ok';const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>mode==='ok'?{ok:true,value:pending as T}:mode==='lost'?{ok:false,status:0,code:'network_error',retryAfterMs:0}:{ok:false,status:403,code:'forbidden',retryAfterMs:60000});c.open(id);c.account('a');c.code='12345678';await c.inspect();c.choose(venueId);c.stopped=true;c.acceptLoss=true;mode='lost';await c.approve();assert(c.uncertain);mode='ok';await c.inspect();assert(!c.uncertain);mode='forbidden';await c.inspect();assert.equal(c.view,undefined);c.account('b');assert(c.waiting>0);
 });
 test('a pending approval expires in the open page and permission failure drops its confirmation',async()=>{
- const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:false,status:403,code:'forbidden',retryAfterMs:0}));c.open(id);c.account('a');c.code='12345678';c.view={...pending,expiresAt:new Date(Date.now()-1).toISOString()} as typeof c.view;c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.error,undefined);
+ const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:false,status:403,code:'forbidden',retryAfterMs:0}));c.open(id);c.account('a');c.code='12345678';c.view={...pending,expiresAt:new Date(Date.now()-1).toISOString()} as typeof c.view;c.choose(venueId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.error,undefined);
  await c.inspect();assert.equal(c.view,undefined);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
 });
 for(const field of ['pointId','venueId'] as const)test(`a successful approval reply naming a different ${field} is rejected and reconciled`,async()=>{
- let reads=0;const calls:string[]=[];const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve'))return {ok:true,value:{...approved,operation:{...approved.operation,[field]:id}} as T};if(reads++===0)return {ok:true,value:pending as T};return {ok:false,status:0,code:'network_error',retryAfterMs:0};});
- c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.view?.state,'awaiting_owner');assert(c.uncertain);assert.deepEqual(calls,['/recovery/inspect','/recovery/approve','/recovery/inspect']);
+ let reads=0;const calls:string[]=[];const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve'))return {ok:true,value:{...approved,operation:{...approved.operation,[field]:id}} as T};if(reads++===0)return {ok:true,value:(field==='pointId'?approved:pending) as T};return {ok:false,status:0,code:'network_error',retryAfterMs:0};});
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.view,field==='pointId'?approved:pending);assert(c.uncertain);assert.deepEqual(calls,['/recovery/inspect','/recovery/approve','/recovery/inspect']);
 });
 
 for(const action of ['approve','close','replace'] as const)for(const {status,code,error}of [
@@ -98,7 +115,7 @@ for(const action of ['approve','close','replace'] as const)for(const {status,cod
  const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
   calls.push(path);return path.endsWith('/inspect')?{ok:true,value:view as T}:{ok:false,status,code,retryAfterMs:status===429?60000:0};
  });
- c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
  await c[action]();
  assert.equal(c.error,error);assert.equal(c.uncertain,false);assert.equal(c.pending,false);
  assert.deepEqual(calls,['/recovery/inspect','/recovery/'+action]);
@@ -110,7 +127,7 @@ for(const action of ['inspect','approve','close','replace'] as const)test(`recov
  const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];
  const ready={...approved,operation:{...approved.operation,status:'restored'},replacement};
  const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:(path.endsWith('/inspect')&&action==='approve'?pending:ready) as T};});
- c.open(id);c.account('owner');c.code='12345678';if(action!=='inspect')await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
+ c.open(id);c.account('owner');c.code='12345678';if(action!=='inspect')await c.inspect();c.choose(venueId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
  c.code=' \t00123456\n ';await c[action]();
  assert.equal(c.code,'00123456');const sent=calls.find(call=>call.path==='/recovery/'+action&&call.body?.code==='00123456');assert.ok(sent);
 });
@@ -126,7 +143,7 @@ for(const action of ['approve','close','replace'] as const)for(const result of [
   calls.push(path);if(!path.endsWith('/inspect'))return result;
   return reads++===0?{ok:true,value:(action==='approve'?pending:ready) as T}:{ok:false,status:0,code:'network_error',retryAfterMs:0};
  });
- c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
  assert.equal(c.uncertain,true);assert.equal(c.confirmReplacement,false);assert.deepEqual(calls,['/recovery/inspect','/recovery/'+action,'/recovery/inspect']);
 });
 
@@ -142,7 +159,7 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  });
  c.account('owner');c.open(id);c.code='12345678';
  c.view=(action==='replace'?{...approved,operation:{...approved.operation,status:'restored'},replacement}:action==='close'?approved:pending) as NonNullable<typeof c.view>;
- c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
+ c.choose(venueId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
  assert.equal(c.error,`recoveryRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.uncertain,false);
  assert.equal(calls.length,1);assert.equal(calls[0]?.path,`/recovery/${action}`);assert.equal(calls[0]?.body?.requestId,id);
 });
@@ -150,9 +167,9 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
 for(const code of ['enrollment_required','proof_required'] as const)test(`recovery ${code} keeps the selected request for an explicit proof retry`,async()=>{
  const calls:string[]=[];
  const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return {ok:false,status:403,code,retryAfterMs:0};});
- c.open(id);c.account('owner');c.code='12345678';c.view=pending as typeof c.view;c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;
+ c.open(id);c.account('owner');c.code='12345678';c.view=pending as typeof c.view;c.choose(venueId);c.stopped=true;c.acceptLoss=true;
  await c.approve();
  assert.equal(c.error,code==='enrollment_required'?'pairEnrollment':'recoveryProofRequired');
- assert.equal(c.view,pending);assert.equal(c.pointId,pointId);assert.equal(c.stopped,true);assert.equal(c.acceptLoss,true);
+ assert.equal(c.view,pending);assert.equal(c.venueId,venueId);assert.equal(c.source,'snapshot');assert.equal(c.stopped,true);assert.equal(c.acceptLoss,true);
  assert.deepEqual(calls,['/recovery/approve']);assert.equal(c.uncertain,false);
 });

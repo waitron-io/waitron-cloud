@@ -5,9 +5,10 @@ export interface ReplacementView {
  registration:null|{venueId:string;installationId:string;organisationId:string;legalBusinessId:string};
 }
 export type RecoverySource={kind:'snapshot';pointId:string}|{kind:'continuous';recoverableAt:string;sourceNodeId:string};
+type RecoveryOperationSource=RecoverySource|{kind:'snapshot';pointId:null};
 export interface RecoveryView {
  requestId:string;state:'awaiting_owner'|'approved';expiresAt:string;operationId:string|null;
- operation:null|{id:string;venueId:string;pointId:string|null;source:RecoverySource;mode:'failure';status:'pending'|'restored'|'closed';expiresAt:string};
+ operation:null|{id:string;venueId:string;pointId:string|null;source:RecoveryOperationSource;mode:'failure';status:'pending'|'restored'|'closed';expiresAt:string};
  replacement?:ReplacementView|null;
 }
 const uuid=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
@@ -19,7 +20,7 @@ function validSource(value:unknown):value is RecoverySource{
  return v.kind==='snapshot'?exact(v,['kind','pointId'])&&uuid(v.pointId)
   :v.kind==='continuous'&&exact(v,['kind','recoverableAt','sourceNodeId'])&&validRecoveryDate(v.recoverableAt)&&uuid(v.sourceNodeId);
 }
-function sameSource(a:RecoverySource,b:RecoverySource){return a.kind===b.kind&&(a.kind==='snapshot'&&b.kind==='snapshot'?a.pointId===b.pointId:a.kind==='continuous'&&b.kind==='continuous'&&a.recoverableAt===b.recoverableAt&&a.sourceNodeId===b.sourceNodeId);}
+function sameSource(a:RecoverySource,b:RecoveryOperationSource){return a.kind===b.kind&&(a.kind==='snapshot'&&b.kind==='snapshot'?a.pointId===b.pointId:a.kind==='continuous'&&b.kind==='continuous'&&a.recoverableAt===b.recoverableAt&&a.sourceNodeId===b.sourceNodeId);}
 const canonicalBase64=(v:unknown,length:number,url:boolean)=>{
  if(typeof v!=='string'||!(url?/^[A-Za-z0-9_-]+$/:/^[A-Za-z0-9+/]+={0,2}$/).test(v))return false;
  try{const bytes=Uint8Array.from(atob(url?v.replace(/-/g,'+').replace(/_/g,'/'):v),c=>c.charCodeAt(0));
@@ -47,6 +48,8 @@ export function validRecoveryView(value:unknown):value is RecoveryView {
  if(v.state==='awaiting_owner')return v.operationId===null&&v.operation===null&&(v.replacement===undefined||v.replacement===null);
  if(v.state!=='approved'||v.operationId!==v.requestId||!v.operation||typeof v.operation!=='object')return false;
  const op=v.operation as Record<string,unknown>;
- if(!exact(op,['id','venueId','pointId','source','mode','status','expiresAt'])||op.id!==v.requestId||!uuid(op.venueId)||!validSource(op.source)||op.pointId!==(op.source.kind==='snapshot'?op.source.pointId:null)||op.mode!=='failure'||!['pending','restored','closed'].includes(String(op.status))||!validRecoveryDate(op.expiresAt))return false;
+ const source=op.source as Record<string,unknown>|null|undefined;
+ const awaitingCopy=source?.kind==='snapshot'&&exact(source,['kind','pointId'])&&source.pointId===null&&op.status!=='restored';
+ if(!exact(op,['id','venueId','pointId','source','mode','status','expiresAt'])||op.id!==v.requestId||!uuid(op.venueId)||(!validSource(source)&&!awaitingCopy)||op.pointId!==(source?.kind==='snapshot'?source.pointId:null)||op.mode!=='failure'||!['pending','restored','closed'].includes(String(op.status))||!validRecoveryDate(op.expiresAt))return false;
  return v.replacement===undefined||v.replacement===null||validReplacement(v.replacement,v.requestId as string,op as NonNullable<RecoveryView['operation']>);
 }

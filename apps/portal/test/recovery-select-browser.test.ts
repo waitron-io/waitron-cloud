@@ -94,7 +94,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await returnToRecovery();
       assert.equal(await venue.inputValue(), second);
       assert.equal(await venue.locator('option:checked').textContent(), 'Second test venue · ' + second);
-      assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).inputValue(), point);
+      assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).count(), 0);
+      assert.equal(await page.getByRole('radio', {name: c.recoverySnapshotFallback, exact: true}).isChecked(), true);
       assert.equal(await page.locator('time[datetime="2026-04-01T12:00:00.000Z"]').count(), 0);
       assert.equal(await page.getByText(locale==='en'?'Downloads have ended.':'El plazo de descarga ha terminado.',{exact:true}).count(),0);
     });
@@ -133,7 +134,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await returnToRecovery();
       assert.equal(await page.getByRole('region', {name: c.recoverySource, exact: true}).count(), 0);
       assert.equal(await page.getByRole('button', {name: c.recoveryApprove, exact: true}).count(), 0);
-      assert.deepEqual(await page.evaluate(() => {const app = (window as any).app; return [app.backups.venueId ?? null, app.recovery.venueId ?? null, app.recovery.pointId ?? null, app.recovery.source ?? null, app.recovery.stopped, app.recovery.acceptLoss];}), [null, null, null, null, false, false]);
+      assert.deepEqual(await page.evaluate(() => {const app = (window as any).app; return [app.backups.venueId ?? null, app.recovery.venueId ?? null, app.recovery.source ?? null, app.recovery.stopped, app.recovery.acceptLoss];}), [null, null, null, false, false]);
       assert.deepEqual(approvals, []);
     });
     for (const source of ['snapshot', 'continuous'] as const) await t.test(`the recovery template independently hides an unoffered stale ${source} source`, async () => {
@@ -159,14 +160,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     });
       await page.evaluate(({installations, second}) => {const app = (window as any).app; app.installations.installations = installations; app.installations.selectOrganisation(second);}, {installations, second});
     }
-    await t.test('a later offered test venue sends the selected snapshot', async () => {
-    await venue.selectOption(second); await page.getByLabel(c.chooseSnapshot, {exact: true}).waitFor();
+    await t.test('a later offered test venue sends the selected venue for snapshot recovery', async () => {
+    await venue.selectOption(second); await page.getByRole('radio', {name: c.recoverySnapshotFallback, exact: true}).waitFor();
     assert.equal(await venue.inputValue(), second);
-    await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).check();
+    await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: c.recoveryAcceptSnapshotLoss, exact: true}).check();
     if (process.env.RECOVERY_PORTAL_RECEIPT_DIR) {await mkdir(process.env.RECOVERY_PORTAL_RECEIPT_DIR, {recursive: true}); await page.screenshot({path: `${process.env.RECOVERY_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-recovery${handler === 'ordinary' ? '' : `-${handler}`}.png`, fullPage: true});}
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.getByRole('button', {name: c.recoveryApprove, exact: true}).click(); await page.waitForFunction(() => !(window as any).app.recovery.pending&&!(window as any).app.actionProof.pending);
-    assert.deepEqual(approvals, [{requestId: request, code: '12345678', source: 'snapshot', pointId: point, oldServerUnavailable: 'true', acceptDataLoss: 'true'}]);
+    assert.deepEqual(approvals, [{requestId: request, code: '12345678', source: 'snapshot', venueId: second, oldServerUnavailable: 'true', acceptDataLoss: 'true'}]);
     });
     await t.test('pairing keeps a supplied second business selected, including redraw and edits', async () => {
       await page.evaluate(({first, second, request}) => {
