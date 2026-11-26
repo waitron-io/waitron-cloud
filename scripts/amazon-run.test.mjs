@@ -34,6 +34,7 @@ for (const abort of [false, true]) test('Stockholm writes recorded failures befo
   }, {evidence, waitExpiry: async () => {calls.push('expiry');}}), abort ? /unsafe rejoin/ : /amazon.qualification_failed/);
   const summary = calls.findIndex(line => line.startsWith('D621 failure summary '));
   assert.ok(summary >= 0 && summary < calls.indexOf('delete'));
+  assert.equal(calls.filter(line => line.startsWith('D621 failure summary ')).length, 1);
   assert.match(calls[summary], /p1\.session_after_recovery/);
   assert.equal(JSON.parse(calls[summary].slice('D621 failure summary '.length)).measurements?.restored, abort ? undefined : true);
   assert.equal(calls.includes('final-restore'), !abort);
@@ -316,6 +317,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
     t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
+  let evidenceBOffline = false;
   const dryRun = scenario === 'measured stops dry run';
   const checksSource = dryRun || scenario === 'baseline measured stops';
   const relayPath = 'deploy/kubernetes/remote-relay.mjs';
@@ -370,6 +372,11 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
         assert.deepEqual(transports.at(-1).args.slice(-2), ['admin@203.0.113.2',
           "'sudo' 'kubectl' '--kubeconfig=/etc/kubernetes/admin.conf' '--context' '" + context.cluster +
           "' 'get' 'cluster' 'cloud-db' '-o' 'name' 2>/dev/null"]);
+        await assert.rejects(kubeEvidence(['get', 'cluster', 'cloud-db'], {signal: AbortSignal.abort()}), {name: 'AbortError'});
+        evidenceBOffline = true;
+        await context.bindEvidenceKube(context.signal);
+        assert.equal(transports.at(-1).args.at(-2), 'admin@203.0.113.3');
+        evidenceBOffline = false;
       }
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: 'synthetic-migration'});
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});
@@ -406,7 +413,13 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
           ['Waitron rehearsal image sha256:' + hashes + '\n']);
         const {name} = context.nodes[2];
         const resumed = await context.stopNode(name, {
-          async whileStopped({holdMs}) {stopClock += holdMs; return {};},
+          async whileStopped({holdMs, signal}) {
+            const kubeEvidence = await context.bindEvidenceKube(signal);
+            await kubeEvidence(['get', 'cluster', 'cloud-db']);
+            assert.equal(transports.at(-1).args.at(-2), 'admin@203.0.113.2', 'samples avoid the stopped controller');
+            stopClock += holdMs;
+            return {};
+          },
           async afterRestart() {
             assert.ok(calls.some(row => row[0] === 'sudo' && row.includes('wg') && row.includes(restartedAddress + ':51821')));
             assert.ok(transports.some(row => row.args.at(-2) === 'admin@' + restartedAddress &&
@@ -568,6 +581,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
           return JSON.stringify({spec: {renewTime: restarted && !(scenario.endsWith('stale lease') && args.at(-2).endsWith('.13')) ? '2026-11-10T00:16:01Z' : '2026-11-10T00:00:01Z'}});
         }
         if (script.includes('--raw=/readyz')) {
+          if (evidenceBOffline && script.includes('--request-timeout=250ms') && args.at(-2) === 'admin@203.0.113.2') throw Error('synthetic evidence controller offline');
           if (['baseline', 'baseline measured stops', 'baseline interrupted'].includes(scenario) && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
           return 'ok';
         }

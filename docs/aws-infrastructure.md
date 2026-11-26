@@ -1148,8 +1148,8 @@ spending authority:
    Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
    In `measured-stops`, the `Waitron rehearsal image` line gives the bundled image ID.
    Open the stderr log with `umask 077` outside the launcher's scratch folder. It records the
-   database writer's process start time and restart count. It keeps timestamps, reasons,
-   and PostgreSQL error codes from current and previous database logs, operator and Flux
+   database writer's process start time and restart count. It keeps timestamps, levels, component
+   names, reasons and PostgreSQL error codes from current and previous database logs, operator and Flux
    logs, and cluster events. A failed service check keeps the measured
    results in that private log and makes the rehearsal fail. The launcher continues through
    the remaining checks as long as it can verify each machine rejoined and meet the deadlines.

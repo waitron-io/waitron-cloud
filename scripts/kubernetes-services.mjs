@@ -237,7 +237,7 @@ export async function readStockholmDiagnostics(bindKube, signal) {
   } catch (error) {return {gap: error.code ?? error.name};}
 }
 
-export async function monitorStockholmDatabase({bindKube, signal, stage}, work) {
+async function monitorStockholmDatabase({bindKube, signal, stage}, work) {
   if (!bindKube) return work(async () => {});
   const controller = new AbortController();
   const limit = AbortSignal.any([signal, controller.signal]);

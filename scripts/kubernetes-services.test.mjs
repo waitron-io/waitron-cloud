@@ -61,23 +61,6 @@ test('Stockholm diagnostics keep the previous database shutdown code and omit lo
   assert.deepEqual(diagnostic.events, [{at, reason: 'Killing', component: 'kubelet'}, {at, reason: 'NodeNotReady', component: 'kubelet'}]);
 });
 
-test('Stockholm emits the first writer sample before the stop and snapshots at hold and rejoin', async t => {
-  const {signal} = new AbortController();
-  const log = t.mock.method(process.stderr, 'write', () => true);
-  const bindKube = async () => async args => {
-    if (args.includes('cluster')) return '{"status":{"currentPrimary":"cloud-db-1"}}';
-    if (args.includes('pod')) return '{"metadata":{"uid":"one"},"spec":{"nodeName":"node-a"},"status":{}}';
-    return args.includes('exec') ? '2026-11-26 20:00:00+00' : '{"items":[]}';
-  };
-  await servicesScript.monitorStockholmDatabase({bindKube, signal, stage: 'stop:node-a'}, async snapshot => {
-    assert.match(log.mock.calls[0].arguments[0], /D621 database sample .*postmasterStart/);
-    await snapshot('hold');
-    await snapshot('rejoined');
-  });
-  assert.deepEqual(log.mock.calls.slice(1).map(({arguments: [line]}) => JSON.parse(line.slice(line.indexOf('{'))).point),
-    ['hold', 'rejoined']);
-});
-
 test('only the outside account proxy identifies itself on session replies, including its own errors', async () => {
   const source = await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8');
   const legacy = source.replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');

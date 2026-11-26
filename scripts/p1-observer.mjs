@@ -1,17 +1,12 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 
-function failureReason(error) {
-  const reason = error?.cause?.code ?? error?.code ?? error?.name;
-  return typeof reason === 'string' && /^[\w.-]{1,64}$/.test(reason) ? reason : undefined;
-}
-
 export async function measureP1Check(failures, signal, check, work) {
   try {return await work();}
   catch (error) {
     signal?.throwIfAborted();
     if (!failures) throw error;
-    failures.push({check, count: 1, reason: failureReason(error)});
+    failures.push({check, count: 1});
   }
 }
 
@@ -24,9 +19,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
   const failures = new Map();
   const fail = (check, error = Error(check)) => {
     if (!recordFailures) throw error;
-    const failure = failures.get(check) ?? {check, count: 0, reason: failureReason(error)};
-    failure.count++;
-    failures.set(check, failure);
+    failures.set(check, (failures.get(check) ?? 0) + 1);
   };
   for (const name of names.filter(name => name !== 'signup')) {
     try {
@@ -133,7 +126,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
           names.every(name => states[name].recovered && !states[name].pending))) {
         return {samples, backupsAfterStop: states.backup.count, reconciliation: reconcile ? repair?.result : 'unavailable',
           stoppedMs: stoppedAt - faultAt, offMs: at - stoppedAt,
-          ...(recordFailures && {failures: [...failures.values()]}),
+          ...(recordFailures && {failures: [...failures].map(([check, count]) => ({check, count}))}),
           recovery: Object.fromEntries(names.map(name => {
             const {withinMs, longestGapMs, result} = states[name];
             return [name, {withinMs, longestGapMs, ...(holdMs !== undefined && {result})}];
