@@ -84,7 +84,7 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
 }
 
 import {execFile, spawn} from 'node:child_process';
-import {mkdir, mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, realpath, writeFile, rm} from 'node:fs/promises';
 import {isIPv4} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -106,7 +106,12 @@ async function command(binary, args, input, signal, timeout = 180000) {
 
 async function main() {
   const [mode, stack] = process.argv.slice(2);
-  assert.ok(['start', 'stop', 'observe', 'baseline', 'measured-stops'].includes(mode), 'Use start or stop or observe or baseline or measured-stops');
+  const dryRun = mode === 'measured-stops-dry-run';
+  const measuredStops = dryRun || mode === 'measured-stops';
+  assert.ok(['start', 'stop', 'observe', 'baseline', 'measured-stops', 'measured-stops-dry-run'].includes(mode),
+    'Use start or stop or observe or baseline or measured-stops or measured-stops-dry-run');
+  if (measuredStops) assert.equal(await realpath(process.cwd()), await realpath(new URL('../', import.meta.url)),
+    'Run from the launcher checkout root');
   assert.ok(process.env.D618_CONFIG, 'Set D618_CONFIG to your private run configuration JSON file.');
   const config = JSON.parse(await readFile(process.env.D618_CONFIG, 'utf8'));
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
@@ -127,7 +132,7 @@ async function main() {
     const revision = await command('git', ['rev-parse', 'HEAD']);
     process.stderr.write('Amazon launch mode ' + mode + '; Cloud commit ' + revision + '\n');
     process.stdout.write(JSON.stringify(await startAmazon({...config, observer: mode === 'observe',
-      baseline: mode === 'baseline' || mode === 'measured-stops', measuredStops: mode === 'measured-stops'}, {
+      baseline: mode === 'baseline' || measuredStops, measuredStops, dryRun}, {
       signal: stop.signal, run: (binary, args, input, cleanup, timeout, request) => command(binary, args, input,
         cleanup ? undefined : AbortSignal.any([stop.signal, request].filter(Boolean)), timeout), aws,
       sleep: ms => delay(ms, undefined, {signal: stop.signal})})) + '\n');
@@ -172,6 +177,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   observe = observerCommand, prepareFlux = prepareFluxBundle, runBaseline = runOutsideServices}) {
   assert.ok(!(config.baseline && config.observer), 'amazon.mode');
   assert.ok(!config.measuredStops || config.baseline, 'amazon.measured_stops_scope');
+  assert.ok(!config.dryRun || config.measuredStops, 'amazon.dry_run_scope');
   if (config.measuredStops) assert.match(config.rehearsedWaitronImage ?? '', /^sha256:[a-f0-9]{64}$/,
     'Set rehearsedWaitronImage to the loaded rehearsal image ID');
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
@@ -185,15 +191,31 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   };
   const run = async (binary, args, input, cleanup, timeout, request) =>
     execute(binary, args, input, cleanup, timeout, active(cleanup, request));
-  const aws = async (service, args, cleanup, request) => provider(service, args, cleanup, active(cleanup, request));
-  const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
-  assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
+  const aws = async (service, args, cleanup, request) => {
+    assert.ok(!config.dryRun, 'amazon.dry_run_provider');
+    return provider(service, args, cleanup, active(cleanup, request));
+  };
+  if (!config.dryRun) {
+    const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
+    assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
+  }
   assert.match(config.image, /^ami-[a-f0-9]{17}$/);
   assert.match(config.operatorCidr, /^(?:\d{1,3}\.){3}\d{1,3}\/32$/);
-  const quota = JSON.parse(await aws('service-quotas', ['get-service-quota', '--service-code', 'ec2', '--quota-code', 'L-1216C47A'])).Quota.Value;
-  assert.ok(quota >= 12, `D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${quota}. Request an increase in ${config.region} before retrying.`);
+  if (!config.dryRun) {
+    const quota = JSON.parse(await aws('service-quotas', ['get-service-quota', '--service-code', 'ec2', '--quota-code', 'L-1216C47A'])).Quota.Value;
+    assert.ok(quota >= 12, `D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${quota}. Request an increase in ${config.region} before retrying.`);
+  }
   assert.equal(await run('uname', ['-m']), 'x86_64', 'Use the x86 test-box builder');
   assert.equal(await run('git', ['status', '--porcelain']), '', 'Use a clean, committed Cloud checkout');
+  if (config.measuredStops) {
+    await run('kubectl', ['version', '--client=true']);
+    const privateKey = await run('wg', ['genkey']);
+    await run('wg', ['pubkey'], privateKey + '\n');
+    await run('sudo', ['-n', 'wg', 'show', 'interfaces']);
+    await run('sudo', ['-n', 'wg-quick', '--help']);
+    await import('./kubernetes-services.mjs');
+    await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
+  }
   const name = 'd618-' + randomUUID();
   const directory = await mkdtemp(join(tmpdir(), 'd618-')), ownedImages = [];
   const sourceArchive = join(directory, 'source.tar'), sourceDirectory = join(directory, 'source');
@@ -217,6 +239,11 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
     await run('git', ['-c', 'tar.umask=0022', 'archive', '--format=tar', '-o', sourceArchive, 'HEAD']);
     await mkdir(sourceDirectory, {mode: 0o700});
     await run('tar', ['-xpf', sourceArchive, '-C', sourceDirectory]);
+    if (config.measuredStops) {
+      await run(process.execPath, ['--input-type=module', '-e',
+        "import {pathToFileURL} from 'node:url'; await import(pathToFileURL(process.argv[1]));",
+        join(sourceDirectory, 'scripts', 'kubernetes-data.mjs')]);
+    }
     ownedImages.push(cloud);
     await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',
       '--secret', 'id=npm_token,env=NODE_AUTH_TOKEN', '--build-arg', 'SEAWEED_AMD64_SHA256=31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d',
@@ -599,6 +626,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       assert.match(id, /^[a-f0-9]{64}$/, 'amazon.outside_network');
       networkId = id;
     }
+    if (config.dryRun) return {dryRun: true, revision: await run('git', ['rev-parse', 'HEAD']), images: archiveIds};
     const outcome = await runAmazonExperiment(operations, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
   } catch (error) {
