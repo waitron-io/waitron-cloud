@@ -950,9 +950,9 @@ implementation or production evidence.
   - The [Account connection budget](superpowers/plans/2026-11-26-d621-account-connection-budget.md)
     gives Account two seconds to acquire a PostgreSQL connection. In the real-database proxy
     test, the session read returns HTTP 503 with `Retry-After` before the client's five-second
-    deadline and the same session recovers when the database answers again. Confirm the
-    database failover and session recovery timings in Stockholm, including whether an
-    established connection stops answering.
+    deadline and the same session recovers when the database answers again. A query on an
+    established connection that stops answering can still hit the 11-second query deadline.
+    Confirm the database failover and session recovery timings in Stockholm.
   - In the 25 November free Kind rehearsal the returning store answered on the Docker bridge
     while its WireGuard metrics request timed out. Kind now logs one sample after bridge repair
     and records the filter and route if it fails. Repeat all three stops, repairs and the
