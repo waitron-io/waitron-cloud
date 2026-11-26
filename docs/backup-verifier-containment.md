@@ -80,6 +80,23 @@ docker volume create --driver local --label cloud.backup-verifier.scratch=waitro
 ```
 
 Build the paired Waitron image with `node scripts/build-backup-verifier.mjs --streamed`.
+When you update the image, stop the worker. After an unclean stop, wait for the old attempt's
+deadline, up to five minutes. From the previous Cloud checkout, run
+`node deploy/test-cloud/backup-worker.mjs --once` with the old image, controller state and policy.
+It reclaims expired work and may process one job. Confirm
+that the verifier container has stopped and its scratch directory is empty before switching.
+Start the new image with a fresh controller state directory and the matching policy below.
+Keep the old checkout, image and state for rollback. Rolling back also requires its old policy, and
+copies checked only under the new policy then need rechecking.
+
+A retained copy is unavailable for download until it passes the new check. To find disposable
+venues that need a reset and fresh backup, run this against the test database after rechecking.
+
+```sql
+SELECT DISTINCT p.venue_id FROM backup_points p
+JOIN backup_point_qualification q ON q.point_id=p.id
+WHERE q.last_reason='target_incompatible' AND p.deleted_at IS NULL;
+```
 Run the venue-level test worker as uid 1000 on the same Linux host as its database
 so the worker can clear scratch and both use the same clock. Put the pinned image ID in
 `CLOUD_VERIFIER_IMAGE`, its own controller state directory in `CLOUD_VERIFIER_STATE_DIR`,
@@ -120,8 +137,8 @@ The worker has six minutes to keep its claim on a job. Verification has five
 minutes, with the final 30 seconds reserved for cleanup and recording the result.
 The controller confirms the exact child is gone, restores write permission on any
 read-only scratch directories and removes their contents without following links.
-After a worker restart, use the same volume and controller state to reclaim expired
-work. If you reboot the host, remount the same filesystem at the same path before
+When you restart the worker with the same image, use the same volume and controller state
+to reclaim expired work. If you reboot the host, remount the same filesystem at the same path before
 starting the worker. If the controller cannot confirm the child's removal or the
 volume's emptiness, it withholds the result.
 
