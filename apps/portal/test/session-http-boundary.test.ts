@@ -166,6 +166,17 @@ test('an unavailable session preflight refuses logout before any cookie-changing
 
 const transient = {status: 503, body: {error: 'temporarily_unavailable'}, retry: '1'};
 
+test('a browser without combined abort signals can still read its session', async t => {
+  const {session, replies, requests} = fixture(t);
+  const any = Object.getOwnPropertyDescriptor(AbortSignal, 'any')!;
+  Object.defineProperty(AbortSignal, 'any', {...any, value: undefined});
+  t.after(() => Object.defineProperty(AbortSignal, 'any', any));
+  replies.push({body: owner});
+  await session.check();
+  assert.deepEqual(session.state, {kind: 'authenticated', ...owner});
+  assert.equal(requests.length, 1);
+});
+
 for (const [label, reply, elapsed, kind] of [
   ['recovers', {body: owner}, 0, 'authenticated'],
   ['stops after the second 503', transient, 0, 'unavailable'],
@@ -177,6 +188,7 @@ for (const [label, reply, elapsed, kind] of [
   await settle();
   assert.equal(session.check(), check, 'callers share the pending check during the retry wait');
   t.mock.timers.tick(999);
+  await settle();
   assert.equal(requests.length, 1);
   assert.deepEqual(changes, []);
   t.mock.timers.tick(1);
@@ -193,12 +205,15 @@ for (const [label, reply, elapsed, kind] of [
 test('disposing the portal aborts a passive check during the retry wait', async t => {
   const {session, replies, requests, changes} = fixture(t);
   replies.push(transient);
-  const check = session.check();
+  let finished = false;
+  const check = session.check().then(() => {finished = true;});
   await settle();
   session.dispose();
   assert.equal(requests[0]!.init.signal?.aborted, true);
-  await check;
+  await settle();
+  assert.equal(finished, true, 'disposal releases callers without advancing the retry timer');
   t.mock.timers.tick(1000);
+  await check;
   assert.equal(requests.length, 1);
   assert.deepEqual(changes, []);
 });

@@ -44,6 +44,7 @@ export class PortalSession {
       : result.status === 401 ? {kind: 'anonymous', ...(result.code === 'session_expired' ? {expired: true as const} : {})} : {kind: 'unavailable'});
   }
   async #readSession(generation: number): Promise<ApiResult<Session>> {
+    if (typeof AbortSignal.any !== 'function') return accountRequest<Session>('/session');
     const deadline = performance.now() + sessionCheckMs;
     const signal = AbortSignal.any([this.#disposal.signal, AbortSignal.timeout(sessionCheckMs)]);
     let result = await accountRequest<Session>('/session', undefined, signal);
@@ -68,7 +69,7 @@ export class PortalSession {
     if (this.#pending && !fresh) return this.#pending;
     const generation = this.#generation; const sequence = ++this.#sequence;
     const pending = this.#readSession(generation).then(result => {
-      if (!this.#disposed && generation === this.#generation) this.#accept(result, sequence);
+      if (generation === this.#generation) this.#accept(result, sequence);
     }).finally(() => { if (this.#pending === pending) this.#pending = undefined; });
     this.#pending = pending;
     return pending;
