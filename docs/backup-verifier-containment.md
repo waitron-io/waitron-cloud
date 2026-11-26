@@ -80,6 +80,10 @@ docker volume create --driver local --label cloud.backup-verifier.scratch=waitro
 ```
 
 Build the paired Waitron image with `node scripts/build-backup-verifier.mjs --streamed`.
+When you update the image, stop the worker and confirm that its verifier container has stopped
+and its scratch directory is empty. Start the new image with a fresh controller state directory
+and the matching policy below. A retained copy is unavailable for download until it passes the
+new check. Reset disposable venues with an incompatible schema and capture fresh backups.
 Run the venue-level test worker as uid 1000 on the same Linux host as its database
 so the worker can clear scratch and both use the same clock. Put the pinned image ID in
 `CLOUD_VERIFIER_IMAGE`, its own controller state directory in `CLOUD_VERIFIER_STATE_DIR`,

@@ -316,7 +316,8 @@ record the research for the specialist to confirm. The
 covers a verified backup, key, checksum manifest and a browser save of the venue’s
 SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
 [Downloads above 16 MiB](superpowers/plans/2026-11-25-d642-ranged-download.md)
-still need matched browser memory evidence and a backup checker that can verify 512 MiB. Real venue exit still needs the
+still need the ranged route and its integrated HTTPS rehearsal. The pinned LAN checker verified
+a 512 MiB synthetic archive. Real venue exit still needs the
 [support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
 and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).
 The remaining return work includes a service-end action and a

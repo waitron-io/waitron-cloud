@@ -25,10 +25,10 @@ activation.
   synthetic database, about 1 GB compressed, and ask Lane I for private transfer into one isolated
   55-minute Linux slot (an estimate). At the measured growth a venue reaches the 4 GiB expanded
   limit after about 15–16 months; Cloud then reports capture failure and keeps the last copy.
-  `backup.verifier_resource` refused the 269 MB and 368 MB test archives; Waitron's
-  `compareBackupTables` sorting is a possible cause (Lane J's VERIFIER-MEMORY).
-- **Fiscal verification** waits for Lane L's VERIFIER-CERT-OPEN: the certificate opener needs a
-  subprocess and the verifier denies them (`secret_unavailable`). Rerun the paired fixture then.
+  The pinned LAN checker verified an encrypted archive of exactly 512 MiB with a 1 GiB memory
+  limit and private disk scratch. The year-sized capture, preview and staging still need testing.
+- **Fiscal verification** passed on a small synthetic Spanish archive with the pinned LAN
+  checker. Qualification in the deployed service stays open.
 - **Deployment measurements:** uplink bandwidth, spool volume, shutdown latency during copy and
   encryption, provider policies, transfer interruption, expiry and cancellation at scale, worker
   counts and scheduling for the real venue distribution. The
@@ -38,6 +38,8 @@ activation.
   Cloud's stream settings on the source box without showing credentials to the browser, alerts
   for missing stream observations, the provider's prefix and conditional-write
   semantics, production host/kernel verifier hardening, hostile exploits and fleet sizing.
+  From go-live, a verifier upgrade must still check retained archives of every schema a live venue
+  may hold.
   Qualify untrusted diagnostic forwarding before widening the trusted-local adapter.
 - **Policies:** production cutoffs, recovery-request and audit retention, account deletion,
   explicit deletion and cancellation, what survives subscription termination and for how long,
