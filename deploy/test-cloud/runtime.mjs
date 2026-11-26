@@ -30,6 +30,10 @@ export function testRuntimeEnvironment(role,config,environment={}){
   if(environment.NODE_ENV==='production'||environment.TEST_CLOUD_AMAZON==='1'||environment.CLOUD_EXIT_STAGE_ROOT!=='/run/backup-stage')throw Error('test_cloud.exit_stage');
   result.CLOUD_EXIT_STAGE_ROOT=environment.CLOUD_EXIT_STAGE_ROOT;
  }
+ if(role==='account'&&environment.CLOUD_EXIT_RANGE_DOWNLOADS!==undefined){
+  if(environment.CLOUD_EXIT_RANGE_DOWNLOADS!=='1'||!result.CLOUD_EXIT_STAGE_ROOT)throw Error('test_cloud.exit_stage');
+  result.CLOUD_EXIT_RANGE_DOWNLOADS='1';
+ }
  if(role==='account'&&environment.NODE_ENV!=='production'&&environment.CLOUD_ADDRESS_LOOKUP_SETTINGS&&environment.GOOGLE_MAPS_SERVER_KEY){
   result.CLOUD_ADDRESS_LOOKUP_SETTINGS=environment.CLOUD_ADDRESS_LOOKUP_SETTINGS;
   result.GOOGLE_MAPS_SERVER_KEY=environment.GOOGLE_MAPS_SERVER_KEY;
@@ -88,11 +92,11 @@ export async function spawnExitWorker(directory,args,options){
  });
 }
 
-export async function openExitStage(directory,locked){
+export async function openExitStage(directory,locked,enabled=false){
  if(directory===undefined)return undefined;
  if(locked!=='1')throw Error('test_cloud.exit_stage');
  await rm(join(directory,'exit-download'),{force:true,recursive:true});
- return {stageRoot:directory,enabled:false};
+ return {stageRoot:directory,enabled};
 }
 
 export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',demoCommand='--fail'){

@@ -470,14 +470,16 @@ export class BackupCatalogue {
   async exitArchiveKey(venueId: string, pointId: string, fence: MutationFence) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     return deadline.run(() => transaction(this.#pool, async client => {
-      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline);
+      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline,
+        this.exitRangesEnabled ? MAX_OBJECT_BYTES : exitDownloadMaxBytes);
       return (await pointKeys(client, this.#vault, venueId, selected.keyVersion)).recoveryKey;
     }));
   }
   async exitArchiveManifest(venueId: string, pointId: string, fence: MutationFence) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     return deadline.run(() => transaction(this.#pool, async client => {
-      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline);
+      const {selected} = await this.#exitPoint(client, venueId, pointId, fence, deadline,
+        this.exitRangesEnabled ? MAX_OBJECT_BYTES : exitDownloadMaxBytes);
       // Current qualification binds the archive manifest version, timestamp and digest to this point.
       return {archiveManifestVersion: 1, capturedAt: selected.capturedAt, archiveSha256: selected.digest, laterChanges: 'unknown'};
     }));

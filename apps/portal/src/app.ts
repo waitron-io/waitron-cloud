@@ -507,7 +507,7 @@ export class PortalApp {
     if(route!==this.#route||page!==b.page||point!==b.selected||!b.downloadProof)return;
     if(this.actionProof.status?.methods.every(method=>method==='email'))b.downloadError='pairEnrollment';
     else if(!proved)b.downloadError=this.actionProof.error?'actionProofUnavailable':'snapshotDownloadProof';
-    else{b.downloadProof=false;await b.download(action);return;}
+    else{b.downloadProof=false;await b.download(action,()=>this.#requireActionProof());return;}
     this.draw();
   }
   async startPaymentMethod(kind:'card'|'direct_debit'){
@@ -730,6 +730,7 @@ export class PortalApp {
   async proveWithCode(method: 'email' | 'app' | 'recovery') {
     const route=this.#route,add = this.#passkeyAddRequest;
     const proved = await this.actionProof.verify(method);
+    if(proved&&route===this.#route)this.backups.resumeDownloadProof();
     if(proved&&route===this.#route&&this.path===operatorVenuesPath)this.root.querySelector<HTMLElement>('#operator-venue-switch')?.focus();
     await this.#continuePasskeyAdd(add, proved);
   }
@@ -743,6 +744,7 @@ export class PortalApp {
     await this.actionProof.load();
     if (!this.#sameAccountRoute(route, account)) return;
     const proved = !!result && !!this.actionProof.status?.freshUntil;
+    if(proved)this.backups.resumeDownloadProof();
     if (!proved) this.actionProof.error = 'actionProofUnavailable';
     this.draw();
     if(proved&&this.path===operatorVenuesPath)this.root.querySelector<HTMLElement>('#operator-venue-switch')?.focus();

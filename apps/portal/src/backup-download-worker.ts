@@ -5,7 +5,7 @@ import forge from 'node-forge/lib/forge.js';
 import 'node-forge/lib/aes.js';
 import {accountRequest, type ApiResult} from './api.ts';
 import {readBytes} from './backup-download-bytes.ts';
-import {backupDownloadDirectory, databaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
+import {backupDownloadDirectory, backupRangeBytes, databaseStorageRefusal, removeDatabaseDownload, type BackupRangeStage, type DatabaseDownloadRequest} from './backup-types.ts';
 
 interface SyncFile {
   read(bytes: Uint8Array, options: {at: number}): number;
@@ -29,10 +29,10 @@ const downloadInterrupted = new Error('Download interrupted');
 const frameBytes = 49;
 const text = new TextDecoder('utf-8', {fatal: true});
 const binary = forge.util.binary.raw;
-const refused = (code = 'database_open_failed'): ApiResult<never> => ({ok: false, status: 503, code, retryAfterMs: 0});
+type Failure = Extract<ApiResult<never>,{ok:false}>;
+const refused = (code = 'database_open_failed'): Failure => ({ok: false, status: 503, code, retryAfterMs: 0});
 
-function writer(handle: SyncFile) {
-  let offset = 0;
+function writer(handle: SyncFile, offset = 0) {
   return (chunk: Uint8Array) => {
     while (chunk.length) {
       const count = handle.write(chunk, {at: offset});
@@ -126,31 +126,121 @@ async function extractDatabase(handle: SyncFile, cipher: ReturnType<typeof forge
   } finally { await input.close(); }
 }
 
-async function openDatabase({venueId, pointId, csrfToken, attempt}: DatabaseDownloadRequest): Promise<ApiResult<undefined>> {
-  const body = {venueId, pointId};
-  const manifest = await accountRequest<Blob>('/backups/download-manifest', body, undefined, csrfToken);
-  if (!manifest.ok) return manifest;
-  const {archiveManifestVersion, archiveSha256} = JSON.parse(await manifest.value.text());
-  if (archiveManifestVersion !== 1 || typeof archiveSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(archiveSha256)) return refused();
-  const key = await accountRequest<Blob>('/backups/download-key', body, undefined, csrfToken);
-  if (!key.ok) return key;
-  const passphrase = await key.value.text();
-  if (!/^[A-Za-z0-9_-]{43}\n$/.test(passphrase)) return refused();
-  const archive = await accountRequest<Response>('/backups/download', body, undefined, csrfToken);
-  if (!archive.ok) return archive;
-  const response = archive.value, length = Number(response.headers.get('content-length'));
-  if (!response.body || !Number.isSafeInteger(length) || length <= frameBytes || length > archiveLimit) {
-    await response.body?.cancel();
-    return refused(length > archiveLimit ? 'download_too_large' : undefined);
+type RangeBatch = Omit<DatabaseDownloadRequest,'kind'> & {kind:'batch';stage:BackupRangeStage;offset:number;end:number};
+type BatchResult = {offset:number;failure?:Failure};
+
+async function downloadDirectory(attempt:string,create:boolean){
+ const root=await navigator.storage.getDirectory();
+ const parent=await root.getDirectoryHandle(backupDownloadDirectory,{create});
+ return parent.getDirectoryHandle(attempt,{create});
+}
+
+async function readBatch({venueId,pointId,csrfToken,attempt,stage,end,offset}:RangeBatch):Promise<BatchResult>{
+ const file=await openFile(await downloadDirectory(attempt,false),'archive.wbk');
+ const write=writer(file,offset);
+ try{
+  for(;offset<end;offset+=backupRangeBytes){
+   const reply=await accountRequest<Response>('/backups/download-range/read',{venueId,pointId,attemptId:stage.attemptId,offset:String(offset)},undefined,csrfToken);
+   if(!reply.ok)return {offset,failure:reply};
+   const {body,headers}=reply.value,length=Math.min(backupRangeBytes,stage.size-offset);
+   if(!body||headers.get('content-range')!==`bytes ${offset}-${offset+length-1}/${stage.size}`||
+      headers.get('content-length')!==String(length)||headers.has('content-encoding')){
+    await body?.cancel().catch(()=>{});
+    return {offset,failure:refused()};
+   }
+   const input=readBytes(body,length,downloadInterrupted);
+   try{if(!await input.take(length,write)||await input.take(1,()=>{}))throw downloadInterrupted;}
+   finally{await input.close();}
   }
+  return {offset:Math.min(offset,stage.size)};
+ }finally{file.close();}
+}
+
+async function stageRanges(request:DatabaseDownloadRequest,stage:BackupRangeStage):Promise<ApiResult<undefined>>{
+ let offset=0;
+ while(offset<stage.size){
+  const end=Math.min(stage.size,offset+4*backupRangeBytes),worker=new Worker('/backup-download-worker.js');
+  let reply:BatchResult;
+  try{
+   reply=await new Promise<BatchResult>((resolve,reject)=>{
+    worker.onmessage=event=>resolve(event.data);
+    worker.onerror=event=>reject(new Error(event.message));
+    worker.postMessage({...request,kind:'batch',stage,offset,end} satisfies RangeBatch);
+   });
+  }finally{worker.terminate();}
+  if(reply.failure){
+   if(reply.failure.code!=='proof_required')return reply.failure;
+   const renewed=new Promise<boolean>(resolve=>self.addEventListener('message',event=>resolve(event.data?.kind==='proof'&&event.data.ok===true),{once:true}));
+   self.postMessage({kind:'proof'});
+   if(!await renewed)return reply.failure;
+  }else if(reply.offset!==end)throw downloadInterrupted;
+  offset=reply.offset;
+ }
+ return {ok:true,value:undefined};
+}
+
+function stagedStream(file:SyncFile){
+ let offset=0;
+ return new ReadableStream<Uint8Array>({pull(controller){
+  const bytes=new Uint8Array(64*1024),count=file.read(bytes,{at:offset});
+  if(count){offset+=count;controller.enqueue(bytes.subarray(0,count));}
+  else controller.close();
+ }});
+}
+
+async function openDatabase(request:DatabaseDownloadRequest):Promise<ApiResult<undefined>>{
+  const {venueId,pointId,csrfToken,attempt,kind}=request;
+  const body={venueId,pointId};
+  const archive=kind==='archive'?undefined:await accountRequest<Response>('/backups/download',body,undefined,csrfToken);
+  if(archive&&!archive.ok&&archive.status!==413)return archive;
+  const response=archive?.ok?archive.value:undefined;
+  let stage:BackupRangeStage|undefined;
   let root: FileSystemDirectoryHandle | undefined;
+  async function release(){
+   if(!stage)return;
+   const attemptId=stage.attemptId;stage=undefined;
+   await accountRequest('/backups/download-range/release',{...body,attemptId},AbortSignal.timeout(5000),csrfToken);
+   self.postMessage({kind:'released'});
+  }
   try {
+    if(!response){
+      const start=await accountRequest<BackupRangeStage>('/backups/download-range/start',body,undefined,csrfToken);
+      if(!start.ok)return start.status===404?refused('download_too_large'):start;
+      stage=start.value;self.postMessage({kind:'stage',attemptId:stage.attemptId});
+    }
+    const length=stage?.size??Number(response?.headers.get('content-length'));
+    if(!Number.isSafeInteger(length)||length<=frameBytes||!stage&&(!response?.body||length>archiveLimit)){
+      return refused(length>archiveLimit?'download_too_large':undefined);
+    }
+    const manifest=await accountRequest<Blob>('/backups/download-manifest',body,undefined,csrfToken);
+    if(!manifest.ok)return manifest;
+    const {archiveManifestVersion,archiveSha256}=JSON.parse(await manifest.value.text());
+    if(archiveManifestVersion!==1||typeof archiveSha256!=='string'||!/^[a-f0-9]{64}$/.test(archiveSha256))return refused();
+    let passphrase='';
+    if(kind!=='archive'){
+      const key=await accountRequest<Blob>('/backups/download-key',body,undefined,csrfToken);
+      if(!key.ok)return key;
+      passphrase=await key.value.text();
+      if(!/^[A-Za-z0-9_-]{43}\n$/.test(passphrase))return refused();
+    }
     root = await navigator.storage.getDirectory();
-    const stage = await root.getDirectoryHandle(backupDownloadDirectory, {create: true});
-    const directory = await stage.getDirectoryHandle(attempt, {create: true});
+    const directory=await downloadDirectory(attempt,true);
+    if(stage){
+      const transferred=await stageRanges(request,stage);
+      if(!transferred.ok){await removeDatabaseDownload(root);return transferred;}
+      await release();
+    }
     const staging = await openFile(directory, 'archive.wbk');
     try {
-      const cipher = await authenticate(response.body, length, passphrase.slice(0, -1), archiveSha256, writer(staging));
+      if(kind==='archive'){
+        const input=readBytes(stagedStream(staging),length),digest=sha256.create();
+        try{
+          if(!await input.take(length,bytes=>digest.update(bytes))||await input.take(1,()=>{})||bytesToHex(digest.digest())!==archiveSha256)throw downloadInterrupted;
+        }finally{await input.close();}
+        return {ok:true,value:undefined};
+      }
+      const cipher=await authenticate(response?.body??stagedStream(staging),length,passphrase.slice(0,-1),archiveSha256,
+        response?writer(staging):()=>{});
       const output = await openFile(directory, 'venue.db');
       try { await extractDatabase(staging, cipher, writer(output)); }
       finally { output.close(); }
@@ -160,10 +250,16 @@ async function openDatabase({venueId, pointId, csrfToken, attempt}: DatabaseDown
   } catch (error) {
     if (root) await removeDatabaseDownload(root);
     throw error;
-  } finally { await response.body.cancel().catch(() => {}); }
+  } finally { await release();await response?.body?.cancel().catch(() => {}); }
 }
 
-self.addEventListener('message', (event: MessageEvent<DatabaseDownloadRequest>) => {
+self.addEventListener('message', (event: MessageEvent<DatabaseDownloadRequest|RangeBatch>) => {
+  if(event.data.kind==='batch'){
+    const offset=event.data.offset;
+    void readBatch(event.data).then(result=>self.postMessage(result),error=>self.postMessage({offset,
+      failure:refused(error===downloadInterrupted?'network_error':databaseStorageRefusal(error))}));
+    return;
+  }
   void openDatabase(event.data).then(result => self.postMessage(result), error => {
     self.postMessage(refused(error === databaseTooLarge ? 'download_too_large'
       : error === downloadInterrupted ? 'network_error' : databaseStorageRefusal(error)));

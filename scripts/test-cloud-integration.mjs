@@ -266,7 +266,7 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-async function saveExitDatabase({origin, port, session, pointId}) {
+async function saveExitFile({origin, port, session, pointId, rangeSize, archive = false}) {
   const {chromium} = createRequire(new URL('../apps/portal/package.json', import.meta.url))('playwright');
   const {hostname} = new URL(origin);
   const browser = await chromium.launch({args: [`--host-resolver-rules=MAP ${hostname} 127.0.0.1:${port}`, '--no-proxy-server']});
@@ -284,16 +284,37 @@ async function saveExitDatabase({origin, port, session, pointId}) {
     assert.equal(response.status(), 200, 'integration.exit_portal');
     await page.getByRole('button', {name: 'View snapshots', exact: true}).click();
     await page.locator('#snapshot-choice').selectOption(pointId);
+    const starts = [], reads = [];
+    if (rangeSize) page.on('response', response => {
+      const route = new URL(response.url()).pathname;
+      if (route.endsWith('/download-range/start')) starts.push(response);
+      if (route.endsWith('/download-range/read')) reads.push(response);
+    });
+    const clickedAt = performance.now();
     const [download] = await Promise.all([page.waitForEvent('download', {timeout: 60_000}),
-      page.getByRole('button', {name: 'Download database', exact: true}).click()]);
-    assert.equal(download.suggestedFilename(), `waitron-backup-${pointId}.venue.db`);
+      page.getByRole('button', {name: archive ? 'Download backup' : 'Download database', exact: true}).click()]);
+    const downloadMs = performance.now() - clickedAt;
+    assert.equal(download.suggestedFilename(), `waitron-backup-${pointId}.${archive ? 'backup.enc' : 'venue.db'}`);
+    let rangeTransfer;
+    if (rangeSize) {
+      assert.deepEqual(starts.map(response => response.status()), [200]);
+      assert.deepEqual(reads.map(response => response.status()), Array(Math.ceil(rangeSize / (4 * 1024 ** 2))).fill(206));
+      const timings = await Promise.all([starts[0], ...reads].map(async response => {
+        assert.equal(await response.finished(), null);
+        return response.request().timing();
+      }));
+      const [stage, ...replies] = timings;
+      rangeTransfer = {stageMs: stage.responseEnd, longestReplyMs: Math.max(...replies.map(reply => reply.responseEnd)),
+        transferMs: replies.at(-1).startTime - stage.startTime + replies.at(-1).responseEnd, downloadMs};
+    }
     const filename = await download.path();
+    if (archive) return {bytes: await readFile(filename), rangeTransfer};
     const {DatabaseSync} = await import('node:sqlite');
     const database = new DatabaseSync(filename, {readOnly: true});
     try {
       const [{integrity_check: sqliteIntegrity}] = database.prepare('PRAGMA integrity_check').all();
       const bytes = await readFile(filename);
-      return {sqliteIntegrity, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex')};
+      return {sqliteIntegrity, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), ...(rangeTransfer && {rangeTransfer})};
     } finally { database.close(); }
   } finally { await browser.close(); }
 }
@@ -320,15 +341,21 @@ function offlineExitDatabaseDigest(archive, secret) {
   assert.fail('integration.exit_offline_database_missing');
 }
 
-async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online, origin, port}) {
+async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online, origin, port, ranged = false}) {
   const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
   const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
   const {venueId, pointId, archive, backupKey} = request;
   const body = {venueId, pointId};
   const archivePath = join(directory, 'exit.backup.enc'), keyPath = join(directory, 'exit.key');
   const manifestPath = join(directory, 'exit.manifest.json');
+  const browserFile = {origin, port, session: browser, pointId, rangeSize: ranged ? archive.bytes : undefined};
+  const archiveSave = ranged ? await saveExitFile({...browserFile, archive: true}) : undefined;
+  if (archiveSave) {
+    assert.equal((await api('/api/account/backups/download', body, browser)).status, 413);
+    await writeFile(archivePath, archiveSave.bytes, {mode: 0o600});
+  }
   for (const [path, saveTo, type] of [
-    ['download', archivePath, 'application/octet-stream'], ['download-key', keyPath, 'text/plain; charset=utf-8'],
+    ...(ranged ? [] : [['download', archivePath, 'application/octet-stream']]), ['download-key', keyPath, 'text/plain; charset=utf-8'],
     ['download-manifest', manifestPath, 'application/json'],
   ]) {
     const response = await api('/api/account/backups/' + path, body, browser);
@@ -355,10 +382,10 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
   assert.equal(result.activation, 'not_attempted');
   assert.equal(receipt.cleanupConfirmed, true);
   assert.deepEqual(await verifierChildren(controllerScope), [], 'integration.exit_verifier_child_remains');
-  const database = await saveExitDatabase({origin, port, session: browser, pointId});
+  const database = await saveExitFile(browserFile);
   assert.equal(database.sha256, offlineExitDatabaseDigest(saved, secret), 'integration.exit_browser_matches_verified_database');
   await online();
-  return {sha256, bytes: saved.length, offline: true, boxOnline: true, database};
+  return {sha256, bytes: saved.length, offline: true, boxOnline: true, database, ...(archiveSave && {rangeTransfer: archiveSave.rangeTransfer})};
 }
 
 export async function captureInboxWitness(readInbox, signal) {
@@ -533,12 +560,14 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
   let exitScratch;
   if (paidExitDownload) {
     const volume = process.env.TEST_CLOUD_EXIT_VERIFIER_VOLUME ?? '', stage = process.env.TEST_CLOUD_EXIT_STAGE ?? '';
+    const accountStage = process.env.TEST_CLOUD_EXIT_ACCOUNT_STAGE ?? '';
     assert.match(volume, /^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,63}$/, 'integration.exit_scratch_volume');
     const [info] = parseIntegrationJson(await docker(['volume', 'inspect', volume]));
     const path = info.Options?.device ?? '';
     assert.equal(info.Labels?.['cloud.backup-verifier.scratch'], 'waitron-cloud-test-backup', 'integration.exit_scratch_owner');
-    for (const directory of [path, stage]) assert.match(directory, /^\/[\w./-]+$/, 'integration.exit_scratch_path');
-    exitScratch = {volume, path, stage};
+    for (const directory of [path, stage, accountStage]) assert.match(directory, /^\/[\w./-]+$/, 'integration.exit_scratch_path');
+    assert.equal(new Set([path, stage, accountStage]).size, 3, 'integration.exit_scratch_shared');
+    exitScratch = {volume, path, stage, accountStage};
   }
   // Initial inventory can refuse before owned cleanup begins, so allocate no host scratch yet.
   const before = await inventory();
@@ -655,7 +684,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       const factorPolicy = JSON.stringify({loginLifetimeMs: 300000, pendingLifetimeMs: 300000,
         challengeAttempts: 5, enrolmentAttempts: 5, loginAccount: limit, completeIp: limit, completeAccount: limit,
         completeChallenge: limit, manageIp: limit, manageAccount: limit});
-      await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n${paidExitDownload ? `      CLOUD_FACTOR_POLICY: '${factorPolicy}'\n` : ''}  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
+      await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n${paidExitDownload ? `      CLOUD_FACTOR_POLICY: '${factorPolicy}'\n      CLOUD_EXIT_STAGE_ROOT: /run/backup-stage\n      CLOUD_EXIT_RANGE_DOWNLOADS: \"1\"\n    volumes:\n      - type: bind\n        source: ${exitScratch.accountStage}\n        target: /run/backup-stage\n        bind:\n          create_host_path: false\n` : ''}  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
       const ownership = join(directory, 'ownership.json');
       const rendered = parseIntegrationJson(await compose(['--profile', '*', 'config', '--format', 'json']));
       await writeFile(ownership, JSON.stringify(integrationOwnershipOverride(rendered, runId)), {mode: 0o600});
@@ -771,6 +800,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
         ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
         ...(captureSnapshot ? ['--env', 'CLOUD_TEST_BACKUP_STATE=1'] : []),
+        ...(paidExitDownload && plan === 'paid' ? ['--env', 'CLOUD_INTEGRATION_LARGE_EXIT=1'] : []),
         ...(paidStream && plan === 'paid' ? ['--env', 'CLOUD_TEST_STREAM=1', '--env', 'SSL_CERT_FILE=/proof/ca.pem'] : []),
         '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem', clientImage], '', 'client-create');
       owned.push(id); record('container', id);
@@ -927,6 +957,18 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
               assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
             }});
+            journeyStage = 'exit-large-download';
+            const large = await control(id, 'snapshot-large');
+            await verify(large);
+            const largeRequest = parseIntegrationJson(await accountPhase('inspect-exit-download', {...large, image:verifierImage, revision, nativeTarget}));
+            const largeDirectory = await mkdtemp(join(directory, 'large-'));
+            publishedSnapshot.largeExitDownload = await proveExitDownload({api, browser, request: largeRequest, directory: largeDirectory,
+              waitronImage, origin, port, ranged: true, scratchVolume: exitScratch.volume, verifierChildren,
+              onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
+                await control(id, 'ready');
+                assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
+                assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
+              }});
             journeyStage = 'exit-recovery-window';
             const window = parseIntegrationJson(await accountPhase('end-exit-download'));
             checkSnapshotGrantRefusal(await control(id, 'snapshot-refusal'));

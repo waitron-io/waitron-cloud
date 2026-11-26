@@ -1,4 +1,4 @@
-import {browserCsrfToken, type ApiResult} from './api.ts';
+import {accountRequest,browserCsrfToken, type ApiResult} from './api.ts';
 import {backupDownloadDirectory, databaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
 
 const refused = (code = 'database_open_failed'): ApiResult<never> => ({ok: false, status: 503, code, retryAfterMs: 0});
@@ -49,12 +49,22 @@ export async function clearAbandonedDatabaseDownload() {
   } catch { /* Storage can be unavailable before any download is requested. */ }
 }
 
-async function openInWorker(request: DatabaseDownloadRequest, signal: AbortSignal) {
+async function openInWorker(request: DatabaseDownloadRequest, signal: AbortSignal, renewProof?:()=>Promise<boolean>) {
   const worker = new Worker('/backup-download-worker.js');
   let cancel: (() => void) | undefined;
+  let attemptId: string | undefined;
   try {
     return await new Promise<ApiResult<undefined>>(resolve => {
-      worker.onmessage = event => resolve(event.data);
+      worker.onmessage = async ({data}) => {
+        if(data.kind==='stage'){attemptId=data.attemptId;return;}
+        if(data.kind==='released'){attemptId=undefined;return;}
+        if(data.kind==='proof'){
+          const ok=await (renewProof?.()??Promise.resolve(false)).catch(()=>false);
+          if(!signal.aborted)worker.postMessage({kind:'proof',ok});
+          return;
+        }
+        resolve(data);
+      };
       worker.onerror = () => resolve(refused());
       cancel = () => { worker.terminate(); resolve(refused()); };
       signal.addEventListener('abort', cancel, {once: true});
@@ -63,10 +73,13 @@ async function openInWorker(request: DatabaseDownloadRequest, signal: AbortSigna
   } finally {
     if (cancel) signal.removeEventListener('abort', cancel);
     worker.terminate();
+    if(attemptId)await accountRequest('/backups/download-range/release',
+      {venueId:request.venueId,pointId:request.pointId,attemptId},AbortSignal.timeout(5000),request.csrfToken);
   }
 }
 
-export async function downloadDatabase(venueId: string, pointId: string, signal: AbortSignal): Promise<ApiResult<undefined>> {
+export async function downloadDatabase(venueId: string, pointId: string, signal: AbortSignal,
+    {kind,renewProof}: {kind?:'archive';renewProof?:()=>Promise<boolean>} = {}): Promise<ApiResult<undefined>> {
   if (!navigator.locks || !navigator.storage?.getDirectory) return refused('database_storage_unavailable');
   try {
     return await navigator.locks.request(backupDownloadDirectory, {signal}, async () => {
@@ -78,17 +91,17 @@ export async function downloadDatabase(venueId: string, pointId: string, signal:
       let releaseLiveSave: (() => void) | undefined;
       try {
         signal.throwIfAborted();
-        const result = await openInWorker({venueId, pointId, attempt, csrfToken: browserCsrfToken()}, signal);
+        const result = await openInWorker({venueId, pointId, attempt, csrfToken: browserCsrfToken(),kind}, signal, renewProof);
         if (!result.ok) return result;
         const staging = await root.getDirectoryHandle(backupDownloadDirectory);
         const directory = await staging.getDirectoryHandle(attempt);
-        const file = await (await directory.getFileHandle('venue.db')).getFile();
+        const file = await (await directory.getFileHandle(kind==='archive'?'archive.wbk':'venue.db')).getFile();
         releaseLiveSave = await holdLiveSave(attempt);
         signal.throwIfAborted();
         const url = URL.createObjectURL(file);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `waitron-backup-${pointId}.venue.db`;
+        link.download = `waitron-backup-${pointId}.${kind==='archive'?'backup.enc':'venue.db'}`;
         link.click();
         const timer = setTimeout(() => {
           revokeSavedFile?.();
