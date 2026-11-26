@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { text } from "node:stream/consumers";
 import { setTimeout as delay } from "node:timers/promises";
 import { after, before, test } from "node:test";
 import {
@@ -86,6 +87,19 @@ test("buffer objects preserve an immutable receipt and replay their bytes", asyn
   });
   assert.deepEqual(await digest(object.open()), object.receipt);
   await object.dispose();
+});
+
+test("a staged archive replays just the requested bytes without changing its receipt", async () => {
+  const staged = await stageReadable(Readable.from([Buffer.from("0123456789")]), 10, { temporaryRoot: root });
+  try {
+    assert.equal(await text(staged.open({ offset: 4, length: 4 })), "4567");
+    assert.equal(await text(staged.open({ offset: 8, length: 2 })), "89");
+    assert.equal(await text(staged.open({ offset: 4, length: 4 })), "4567");
+    assert.throws(() => staged.open({ offset: 8, length: 3 }), /backup\.invalid_range/);
+    assert.deepEqual(await digest(staged.open()), staged.receipt);
+  } finally {
+    await staged.dispose();
+  }
 });
 
 test("staging rejects a truncated body and removes its partial file", async () => {
