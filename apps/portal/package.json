@@ -10,7 +10,7 @@
   "dependencies": {
     "@noble/hashes": "2.4.0",
     "@simplewebauthn/browser": "14.0.0",
-    "@waitron-io/ui-core": "0.2.45",
+    "@waitron-io/ui-core": "0.2.46",
     "lit": "3.3.3",
     "node-forge": "1.4.0",
     "pdf-lib": "1.17.1",
