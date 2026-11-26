@@ -171,14 +171,17 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
      headers:{'content-range':`bytes ${offset}-${end-1}/${largeArchive.length}`,'content-length':String(end-offset)}});
    });
    await page.route('**/api/account/backups/download-range/release',async route=>{
-    if(releases++===0)assert.equal(await page.evaluate(async()=>{
-     const root=await navigator.storage.getDirectory(), parent=await root.getDirectoryHandle('waitron-backup-download');
-     for await(const folder of parent.values())if(folder.kind==='directory'){
-      for await(const name of (folder as FileSystemDirectoryHandle).keys())if(name==='venue.db')return true;
-     }
-     return false;
-    }),false);
-    await route.fulfill({status:204});
+    if(releases++===0){
+     assert.equal(await page.evaluate(async()=>{
+      const root=await navigator.storage.getDirectory(), parent=await root.getDirectoryHandle('waitron-backup-download');
+      for await(const folder of parent.values())if(folder.kind==='directory'){
+       for await(const name of (folder as FileSystemDirectoryHandle).keys())if(name==='venue.db')return true;
+      }
+      return false;
+     }),false);
+     return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+    }
+    return route.fulfill({status:204});
    });
    await saveDatabase.click();
    await page.locator('#action-proof-heading').waitFor();
@@ -189,7 +192,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    assert.deepEqual(await readFile((await resumed.path())!),largeDatabase);
    const [encrypted]=await Promise.all([page.waitForEvent('download',{timeout:15000}),saveArchive.click()]);
    assert.deepEqual(await readFile((await encrypted.path())!),largeArchive);
-   assert.deepEqual(offsets,[0,piece,piece,0,piece]);assert.equal(releases,2);
+   assert.deepEqual(offsets,[0,piece,piece,0,piece]);assert.equal(releases,3);
   }
   expired=true;
   await page.getByRole('button',{name:refresh,exact:true}).click();

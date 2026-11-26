@@ -78,11 +78,11 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         const session = await page.context().newCDPSession(page);
         await session.send('Storage.overrideQuotaForOrigin', {origin, quotaSize: 1024 ** 2});
       }
-      const result = await page.evaluate(async ({interrupted,encrypted}) => {
+      const result = await page.evaluate(async ({interrupted,encrypted,ranged}) => {
         const worker = new Worker(interrupted ? '/worker-probe.js' : '/backup-download-worker.js');
         let released = false;
         const reply = await new Promise<{ok:boolean;code?:string;written?:boolean}>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('No worker result')), 7000);
+          const timeout = setTimeout(() => reject(new Error('No worker result')), ranged ? 15_000 : 7000);
           worker.onmessage = ({data}) => {
             if(data.kind==='proof'){worker.postMessage({kind:'proof',ok:true});return;}
             if(data.kind==='released'){released=true;return;}
@@ -104,7 +104,7 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         const file=await saved?.getFile();
         const sha256=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):undefined;
         return {ok:reply.ok, code:reply.code, files, sha256, released, bytes: file&&file.size<2**20 ? Array.from(new Uint8Array(await file.arrayBuffer())) : []};
-      },{interrupted:scenario === 'interrupted staging',encrypted:['encrypted ranges','bad encrypted digest'].includes(scenario)});
+      },{interrupted:scenario === 'interrupted staging',encrypted:['encrypted ranges','bad encrypted digest'].includes(scenario),ranged});
       if (scenario === 'interrupted staging') {
         await page.close();
         const inspector = await context.newPage();

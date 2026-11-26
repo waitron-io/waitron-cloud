@@ -52,7 +52,10 @@ export class BackupController {
   try{
    let result=await (action==='download-database'?downloadDatabase(venueId,pointId,transfer.signal,{renewProof})
     :this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal));
-   if(action==='download'&&!result.ok&&result.status===413)result=await downloadDatabase(venueId,pointId,transfer.signal,{kind:'archive',renewProof});
+   if(action==='download'&&!result.ok&&result.status===413){
+    const ranged=await downloadDatabase(venueId,pointId,transfer.signal,{kind:'archive',renewProof});
+    if(ranged.ok||ranged.code!=='database_storage_unavailable')result=ranged;
+   }
    if(transfer.signal.aborted)return;
    if(result.ok){
     if(action==='download-database'||!result.value)return;

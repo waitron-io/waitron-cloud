@@ -115,8 +115,17 @@ test('canceling the browser worker releases its server stage',async t=>{
   [['/api/account/backups/download-range/release',{venueId,pointId,attemptId}]]);
 });
 
-test('a restricted browser keeps the encrypted archive size refusal',async t=>{
+for(const disk of ['absent','refused'])test(`a browser with disk storage ${disk} keeps the encrypted archive size refusal`,async t=>{
  const f=fixture(t);
+ if(disk==='refused'){
+  const stub={locks:{async request(_name:string,_options:unknown,run:()=>Promise<unknown>){return run();}},
+   storage:{async getDirectory(){throw new DOMException('Disk refused','SecurityError');}}};
+  for(const [name,value] of Object.entries(stub)){
+   const previous=Object.getOwnPropertyDescriptor(navigator,name);
+   Object.defineProperty(navigator,name,{configurable:true,value});
+   t.after(()=>{if(previous)Object.defineProperty(navigator,name,previous);else Reflect.deleteProperty(navigator,name);});
+  }
+ }
  f.replies.push({body:{...page,exitDownloadAvailable:true}});
  await f.controller.open(venueId);
  f.replies.push({status:413,body:{error:'download_too_large'}});
