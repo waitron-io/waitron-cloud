@@ -1,7 +1,7 @@
 import {TranslationError,type TranslationErrorCode} from './errors.ts';
 function fail(code:TranslationErrorCode):never{throw new TranslationError(code);}
 import {maxJobItems} from './submit-proof.ts';
-export const translationKinds=['product','variant','option_list','option_label','extra_list','menu','section','included_menu','unit'] as const;
+export const translationKinds=['product','variant','option_list','option_label','extra_list','menu','section','included_menu','unit','course'] as const;
 export type TranslationKind=typeof translationKinds[number];
 export interface JobItem {ref:string;kind:TranslationKind;family:string;category:string|null;staffName:string;existing:Record<string,string>;missing:string[]}
 export interface HouseStyleName {kind:TranslationKind;staffName:string;names:Record<string,string>}

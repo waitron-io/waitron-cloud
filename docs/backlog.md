@@ -638,7 +638,8 @@ are complete; preserve the approved cap, admission, consent and paging rules in 
 The separately scoped [owner's demo-menu trial](../packages/translation/README.md#try-the-owners-demo-menu)
 still needs the server-only key, its live provider result and the joint Waitron handoff;
 ordinary-client refusal and public privacy, supplier and release work remain open. Waitron still needs to
-send the signed abandon action and verify recovery after a lost submit reply against Cloud.
+send the signed abandon action, verify recovery after a lost submit reply against Cloud, and include
+set-menu course names in its Translate all jobs using the `course` kind.
 
 ## Initial focus
 

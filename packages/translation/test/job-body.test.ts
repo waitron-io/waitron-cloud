@@ -6,6 +6,15 @@ const valid={version:1,country:'ES',languages:{default:'ca',enabled:['ca','es','
  houseStyle:[{kind:'product',staffName:'CARAJILLO',names:{ca:'Cigaló',es:'Carajillo'}}]};
 const refused=(e:unknown)=>e instanceof TranslationError&&e.code==='invalid_request';
 test('the contract example parses',()=>{assert.equal(parseJob(JSON.stringify(valid)).items[0]!.ref,'variant:812');});
+test('a set-menu course name can be submitted for translation',()=>{
+ const course={ref:'course:12',kind:'course',family:'course:12',category:null,staffName:'POSTRES',
+  existing:{es:'Postres'},missing:['ca','en']};
+ const style={kind:'course',staffName:'ENTRANTES',names:{en:'Starters'}};
+ const job=parseJob(JSON.stringify({...valid,items:[course],houseStyle:[style]}));
+ assert.deepEqual(writtenItems(job),[course]);
+ assert.deepEqual(job.houseStyle,[style]);
+ assert.throws(()=>parseJob(JSON.stringify({...valid,items:[{...course,category:'SET MENU'}]})),refused);
+});
 test('every broken field is an invalid request',()=>{
  const bad=[
   {...valid,version:2},{...valid,country:'Spain'},{...valid,country:'ZZ'},{...valid,extra:1},{...valid,languages:{default:'fr',enabled:['ca']}},
