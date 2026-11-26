@@ -1340,8 +1340,7 @@ length. A job that breaks any rule below is refused with 400 `invalid_request`.
 - `ref` is the box's own identifier for the item, 1 to 128 characters, unique in the job, opaque to
   Cloud.
 - `kind` is one of `product`, `variant`, `option_list`, `option_label`, `extra_list`, `menu`,
-  `section`, `included_menu`, `unit` or `course`. Send `course` for a set-menu course name,
-  with `family` equal to `ref`.
+  `section`, `included_menu`, `unit` or `course`. Send `course` for a set-menu course name.
 - `family`, 1 to 128 characters, names the item a variant, options label or menu section belongs
   to; it equals `ref` for an item that heads its own family. The box lists a family's head before
   its members.
