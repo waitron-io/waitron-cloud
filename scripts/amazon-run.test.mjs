@@ -498,11 +498,16 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
       if (binary === 'wc') return '1303994368 images.tar';
       if (binary === 'scp' && args.at(-2).endsWith('images.tar') && scenario === 'failed bundle upload') throw Error('upload failed');
       if (binary === 'tar') {
-        if (args[0] === '-tf') return ['index.json','manifest.json',...(scenario === 'incomplete archive' ? ['b','c'] : ['a','b','c']).map(n => 'blobs/sha256/' + n.repeat(64))].join('\n');
+        const blobs = scenario === 'incomplete archive' ? ['b', 'c'] : ['a', 'b', 'c'];
+        if (dryRun) blobs.push('d', 'e');
+        if (args[0] === '-tf') return ['index.json', 'manifest.json', ...blobs.map(n => 'blobs/sha256/' + n.repeat(64))].join('\n');
         if (args.at(-1) === 'index.json') return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.index.v1+json',manifests:savedTags.map(tag => ({
-          annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},digest:'sha256:' + 'b'.repeat(64)}))});
+          annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},
+          digest:'sha256:' + (dryRun && tag.endsWith(':waitron') ? 'e' : 'b').repeat(64)}))});
+        if (dryRun && args.at(-1) === 'blobs/sha256/' + 'e'.repeat(64)) return JSON.stringify({schemaVersion:2,
+          mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + 'd'.repeat(64)},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
         if (args.at(-1) === 'blobs/sha256/' + 'b'.repeat(64)) return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + hashes},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
-        if (args.at(-1) === 'blobs/sha256/' + hashes) return JSON.stringify({os:'linux',architecture:'amd64'});
+        if (args.at(-1) === 'blobs/sha256/' + hashes || (dryRun && args.at(-1) === 'blobs/sha256/' + 'd'.repeat(64))) return JSON.stringify({os:'linux',architecture:'amd64'});
         return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + imageHash(tag),RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
       }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
