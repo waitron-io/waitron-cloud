@@ -591,14 +591,14 @@ test('the venue records a dropped reserve and keeps reply bodies private', async
 test('after a full restart the last acknowledged backup is read before restoring a different capture', async () => {
   const {measureOutsideColdBackup} = await load();
   const original = {pointId: 'last-acknowledged', workerVerification: {attemptId: 'verified-before'}};
-  for (const scenario of ['complete', 'same capture', 'same restore', 'missing old bytes']) {
+  for (const scenario of ['complete', 'same capture', 'same restore', 'missing old bytes', 'record missing old bytes']) {
     const calls = [];
     const run = measureOutsideColdBackup({
-      original,
+      original, recordFailures: scenario === 'record missing old bytes',
       inspect: async point => {
         assert.equal(point, original);
         calls.push('old backup');
-        return {retainedSnapshotUnchanged: scenario !== 'missing old bytes'};
+        return {retainedSnapshotUnchanged: !scenario.endsWith('missing old bytes')};
       },
       capture: async () => {
         calls.push('capture');
@@ -614,6 +614,12 @@ test('after a full restart the last acknowledged backup is read before restoring
       const result = await run;
       assert.deepEqual(calls, ['old backup', 'capture', 'restore']);
       assert.deepEqual([result.retainedPointId, result.pointId, result.attemptId], ['last-acknowledged', 'new-capture', 'new-attempt']);
+    } else if (scenario === 'record missing old bytes') {
+      const result = await run;
+      assert.deepEqual(calls, ['old backup', 'capture', 'restore']);
+      assert.equal(result.retainedPointId, undefined);
+      assert.equal(result.pointId, 'new-capture');
+      assert.deepEqual(result.failures.map(({check}) => check), ['integration.cold_backup_retained']);
     } else {
       await assert.rejects(run, /integration.cold_backup/);
       assert.equal(calls.includes('restore'), scenario === 'same restore');

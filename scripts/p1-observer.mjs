@@ -1,20 +1,40 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 
+export async function measureP1Check(failures, signal, check, work) {
+  try {return await work();}
+  catch (error) {
+    signal?.throwIfAborted();
+    if (!failures) throw error;
+    failures.push({check, count: 1});
+  }
+}
+
 // Use the observer's clock so transport and stop delays count against recovery.
-export async function observeP1({probes, ready, stopped, replacement, reconcile, signal, holdMs,
+export async function observeP1({probes, ready, stopped, replacement, reconcile, signal, holdMs, recordFailures = false,
   now = () => performance.now(), sleep = ms => delay(ms, undefined, {signal})}) {
   const names = ['session', 'remote', 'login', 'backup', 'signup'];
   const finalBackupAfter = holdMs === undefined ? 900_000 : holdMs - 60_000;
   const samples = [], states = Object.fromEntries(names.map(name => [name, {next: 0, count: 0}]));
+  const failures = new Map();
+  const fail = (check, error = Error(check)) => {
+    if (!recordFailures) throw error;
+    failures.set(check, (failures.get(check) ?? 0) + 1);
+  };
   for (const name of names.filter(name => name !== 'signup')) {
-    await probes[name](signal, false);
-    states[name].lastSuccess = now(); states[name].baselineAt = now();
+    try {
+      await probes[name](signal, false);
+      states[name].lastSuccess = now(); states[name].baselineAt = now();
+    } catch (error) {
+      signal?.throwIfAborted();
+      fail('p1.' + name + '_baseline', error);
+    }
   }
   signal?.throwIfAborted();
   const faultAt = now();
   ready();
   let stoppedAt, replacementReady = false, signalFailure, repair;
+  const repairController = recordFailures && new AbortController();
   Promise.resolve().then(stopped).then(confirmedAt => {
     stoppedAt = confirmedAt ?? now();
     process.stderr.write('P1 timing observer stopped-received ' + (stoppedAt - faultAt) + '\n');
@@ -36,11 +56,14 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
       signal?.throwIfAborted();
       if (signalFailure) throw signalFailure;
       const at = now();
-      if (reconcile && stoppedAt !== undefined && replacementReady && !repair) {
+      const holdEnded = recordFailures && at >= stoppedAt + holdMs;
+      if (reconcile && stoppedAt !== undefined && replacementReady && !repair && !holdEnded) {
         repair = {};
-        Promise.resolve().then(() => reconcile(signal)).then(result => {repair.result = result; repair.done = true;}, error => {
+        const repairSignal = repairController ? AbortSignal.any([repairController.signal, ...[signal].filter(Boolean)]) : signal;
+        Promise.resolve().then(() => reconcile(repairSignal)).then(result => {repair.result = result; repair.done = true;}, error => {
           process.stderr.write('P1 reconciliation failed ' + JSON.stringify({samples: samples.slice(-10)}) + '\n');
-          signalFailure = error;
+          if (recordFailures) {fail('p1.reconciliation', error); repair.done = true;}
+          else signalFailure = error;
         });
       }
       assert.ok(at - faultAt < 2100000, 'p1.leg_timeout');
@@ -51,17 +74,22 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
         const deadline = name === 'backup' ? 300000 : name === 'signup' ? 90000 : 5000;
         const afterRecovery = 'p1.' + name + '_after_recovery';
         const deadlineMessage = durationMs => `${afterRecovery}: probe took ${Math.round(durationMs)} ms (limit ${deadline} ms)`;
-        if (pending && !pending.ended && at - pending.at >= deadline) {
+        const recoveryTimeout = elapsed => {
+          if (elapsed <= (name === 'backup' ? 300000 : 90000) || state.recoveryMissed) return;
+          fail('p1.' + name + '_recovery_timeout');
+          state.recoveryMissed = true;
+        };
+        if (pending && !pending.ended && !pending.expired && at - pending.at >= deadline) {
           pending.expired = true; pending.controller.abort();
-          if (state.recovered) throw Error(deadlineMessage(at - pending.at));
+          if (state.recovered) fail(afterRecovery, Error(deadlineMessage(at - pending.at)));
         }
         if (pending?.ended) {
           const ok = pending.ok && !pending.expired && pending.endedAt - pending.at <= deadline;
           const durationMs = (pending.endedAt ?? at) - pending.at;
           samples.push({name, startedMs: pending.at - faultAt, durationMs, ok: Boolean(ok)});
           state.pending = undefined;
-          if (!ok && state.recovered) {
-            throw Error(durationMs > deadline ? deadlineMessage(durationMs) : afterRecovery, {cause: pending.error});
+          if (!ok && state.recovered && !pending.expired) {
+            fail(afterRecovery, Error(durationMs > deadline ? deadlineMessage(durationMs) : afterRecovery, {cause: pending.error}));
           }
           if (ok) {
             state.longestGapMs = Math.max(state.longestGapMs ?? 0, pending.endedAt - state.lastSuccess || 0);
@@ -69,7 +97,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
             // Backup probes only start fresh verification once the stop is confirmed.
             if (pending.afterStop && pending.at >= stoppedAt) {
               if (!state.recovered) {
-                assert.ok(pending.endedAt - faultAt <= (name === 'backup' ? 300000 : 90000), 'p1.' + name + '_recovery_timeout');
+                recoveryTimeout(pending.endedAt - faultAt);
                 state.withinMs = pending.endedAt - faultAt;
                 state.result = pending.result;
                 state.longestGapMs = Math.max(state.longestGapMs, pending.endedAt - (state.baselineAt ?? faultAt));
@@ -80,18 +108,25 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
           }
           state.next = pending.at + (name === 'session' || name === 'remote' ? 5000 : name === 'login' && state.recovered ? 60000 : 15000);
         }
-        if (!state.recovered && stoppedAt !== undefined) {
-          assert.ok(at - faultAt <= (name === 'backup' ? 300000 : 90000), 'p1.' + name + '_recovery_timeout');
-        }
+        if (!state.recovered && stoppedAt !== undefined) recoveryTimeout(at - faultAt);
+        if (holdEnded && state.pending) fail('p1.' + name + '_hold_pending');
+        if (holdEnded) continue;
         if ((stoppedAt === undefined && name === 'signup') || state.pending || at < state.next) continue;
+        if (recordFailures && stoppedAt !== undefined && name !== 'backup' && name !== 'signup' &&
+            at + deadline >= stoppedAt + holdMs) continue;
         if (name === 'signup' && state.recovered) continue;
         if (name === 'backup' && state.recovered && (state.finalBackup || at < stoppedAt + finalBackupAfter)) continue;
         launch(name);
       }
-      if (replacementReady && (!reconcile || repair?.done) && states.backup.finalBackup && at >= stoppedAt + (holdMs ?? 0) &&
-          names.every(name => states[name].recovered && !states[name].pending)) {
-        return {samples, backupsAfterStop: states.backup.count, reconciliation: reconcile ? repair.result : 'unavailable',
+      if (holdEnded) {
+        if (!states.backup.finalBackup && !states.backup.pending) fail('p1.backup_final');
+        if (reconcile && !repair?.done) fail('p1.reconciliation_hold_pending');
+      }
+      if (holdEnded || (replacementReady && (!reconcile || repair?.done) && states.backup.finalBackup && at >= stoppedAt + (holdMs ?? 0) &&
+          names.every(name => states[name].recovered && !states[name].pending))) {
+        return {samples, backupsAfterStop: states.backup.count, reconciliation: reconcile ? repair?.result : 'unavailable',
           stoppedMs: stoppedAt - faultAt, offMs: at - stoppedAt,
+          ...(recordFailures && {failures: [...failures].map(([check, count]) => ({check, count}))}),
           recovery: Object.fromEntries(names.map(name => {
             const {withinMs, longestGapMs, result} = states[name];
             return [name, {withinMs, longestGapMs, ...(holdMs !== undefined && {result})}];
@@ -100,6 +135,7 @@ export async function observeP1({probes, ready, stopped, replacement, reconcile,
       await sleep(1000);
     }
   } finally {
+    repairController && repairController.abort();
     for (const state of Object.values(states)) state.pending?.controller.abort();
   }
 }

@@ -18,6 +18,49 @@ import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
 import * as servicesScript from './kubernetes-services.mjs';
 const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
 
+test('Stockholm records a writer sample gap and selects a controller again on the next read', async () => {
+  let selections = 0;
+  const sql = 'SELECT pg_postmaster_start_time()';
+  const pod = {metadata: {name: 'cloud-db-2', uid: 'synthetic-uid'}, spec: {nodeName: 'node-b'},
+    status: {containerStatuses: [{name: 'postgres', restartCount: 2, lastState: {terminated: {reason: 'Error'}}}]}};
+  const bindKube = async () => {
+    if (++selections === 1) throw Object.assign(Error('controller offline'), {code: 'ETIMEDOUT'});
+    return async args => {
+      if (args.includes('cluster')) return JSON.stringify({status: {currentPrimary: 'cloud-db-2'}});
+      if (args.includes('get')) return JSON.stringify(pod);
+      assert.deepEqual(args, ['-n', servicesNamespace, 'exec', 'cloud-db-2', '-c', 'postgres', '--', 'psql', '-U', 'postgres', '-Atqc', sql]);
+      return '2026-11-26 20:00:00.123456+00';
+    };
+  };
+  const signal = new AbortController().signal;
+  const {at: gapAt, ...gap} = await servicesScript.readStockholmWriter(bindKube, signal);
+  const {at: sampleAt, ...sample} = await servicesScript.readStockholmWriter(bindKube, signal);
+  assert.ok(Number.isFinite(Date.parse(gapAt)) && Number.isFinite(Date.parse(sampleAt)));
+  assert.deepEqual(gap, {gap: 'ETIMEDOUT'});
+  assert.deepEqual(sample, {pod: 'cloud-db-2', uid: 'synthetic-uid', node: 'node-b', restartCount: 2,
+    lastExitReason: 'Error', postmasterStart: '2026-11-26 20:00:00.123456+00'});
+});
+
+test('Stockholm diagnostics keep the previous database shutdown code and omit log messages', async () => {
+  const at = '2026-11-26T20:00:00Z';
+  const signal = new AbortController().signal;
+  const reads = [];
+  const kube = async args => {
+    reads.push(args);
+    if (args.includes('events')) return JSON.stringify({items: [{lastTimestamp: at, reason: 'Killing',
+      involvedObject: {namespace: servicesNamespace}, source: {component: 'kubelet'}, message: 'private event message'},
+    {lastTimestamp: at, reason: 'NodeNotReady', involvedObject: {kind: 'Node'}, source: {component: 'kubelet'}}]});
+    if (args.includes('cnpg-system')) return '{"level":"info","msg":"private-untimestamped-message"}';
+    if (!args.includes('--previous')) return `${at} {"level":"info","msg":"private operator message"}`;
+    return `${at} {"level":"error","record":{"sql_state_code":"57P01","message":"private PostgreSQL message","query":"SELECT private data"}}`;
+  };
+  const diagnostic = await servicesScript.readStockholmDiagnostics(async () => kube, signal);
+  assert.equal(reads.length, 5);
+  assert.deepEqual(diagnostic.postgresPrevious, [{at, level: 'error', sqlstate: '57P01'}]);
+  assert.doesNotMatch(JSON.stringify(diagnostic), /private|SELECT/);
+  assert.deepEqual(diagnostic.events, [{at, reason: 'Killing', component: 'kubelet'}, {at, reason: 'NodeNotReady', component: 'kubelet'}]);
+});
+
 test('only the outside account proxy identifies itself on session replies, including its own errors', async () => {
   const source = await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8');
   const legacy = source.replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
@@ -59,7 +102,7 @@ test('measured stops cover all three machines and the live roles before returnin
         const reconciliation = await reconcile();
         return {recovery: {signup: {result: {worker: overrides.mail ?? reconciliation.primary}},
           backup: {result: {controllerScope: 'verifier', attemptId: 'attempt', retained: overrides.retained ?? true}}},
-          reconciliation};
+          reconciliation, ...(overrides.failures && {failures: overrides.failures})};
       },
       reconcile: async (_node, _before, survivors) => ({primary: survivors[0], outsideStore: true,
         publication, flux: {appliedRevision: 'a'.repeat(40)}}),
@@ -86,6 +129,41 @@ test('measured stops cover all three machines and the live roles before returnin
     throw Error('synthetic probe failed during stop');
   }}}), /synthetic probe failed during stop/);
   assert.equal(request.aborted, true);
+
+  await t.test('Stockholm retains failed checks across stops, after verifying each rejoin', async () => {
+    changes.length = 0;
+    const legs = await run('b', undefined, {mail: '', failures: [{check: 'p1.session_after_recovery', count: 1}], context: {recordFailures: true,
+      probes: {async sessionActivity() {throw Error('session unavailable');}},
+    }});
+    assert.deepEqual(legs.map(leg => leg.stopped), ['b', 'c', 'a']);
+    assert.deepEqual(changes, ['off:b', 'return:b', 'off:c', 'return:c', 'off:a', 'return:a']);
+    assert.deepEqual(legs[0].rejoin, {storeRepairedOn: 'b'});
+    assert.deepEqual(legs[0].failures.map(({check}) => check),
+      ['services.stop_session_activity', 'p1.session_after_recovery', 'services.stop_mail_worker', 'services.stop_publication']);
+  });
+
+  await t.test('Stockholm stops if a returning machine cannot be verified', async () => {
+    changes.length = 0;
+    await assert.rejects(run('b', publication, {mail: '', context: {recordFailures: true,
+      async healthy() {throw Error('database did not rejoin');},
+    }}), /database did not rejoin/);
+    assert.deepEqual(changes, ['off:b', 'return:b']);
+  });
+
+  await t.test('Stockholm starts sampling before the observer clock and captures diagnostics after service rejoin', async t => {
+    const stages = [];
+    t.mock.method(process.stderr, 'write', line => {
+      if (line.startsWith('D621 database ')) {
+        const {stage, point} = JSON.parse(line.slice(line.indexOf('{')));
+        if (stage === 'stop:b') stages.push(point ?? 'sample');
+      }
+      return true;
+    });
+    await run('b', publication, {stages, context: {signal: new AbortController().signal, recordFailures: true,
+      bindEvidenceKube: async () => {throw Object.assign(Error('offline'), {code: 'ETIMEDOUT'});},
+    }});
+    assert.deepEqual(stages.slice(0, 6), ['inventory', 'sample', 'observe', 'hold', 'healthy:b', 'rejoined']);
+  });
 
   await t.test('the inbox witness is captured before each stop and read during it', async () => {
     changes.length = 0;
@@ -158,9 +236,10 @@ const coldRoles = {primary: 'b', gateway: 'a', operator: 'c', fluxSource: 'b', f
 const coldSession = {status: 200, expiresAt: '2026-11-25T22:30:00.000Z'};
 const lookupCommandError = fields => Object.assign(Error('synthetic command output'), fields);
 const kindLookupError = fields => Error('inventory command failed', {cause: lookupCommandError(fields)});
-for (const [name, routeStillResponding, placement, reason] of [
+for (const [name, routeStillResponding, placement, reason, recordFailures] of [
   ['the full restart requires healthy routes, fresh transport failures and recovery before restoring a backup'],
   ['the full restart rejects a responding public route', 'public'],
+  ['the Stockholm full restart records a responding public route and still restores a backup', 'public', undefined, undefined, true],
   ['the full restart rejects an expired certificate as evidence of network loss', 'bad certificate'],
   ['the full restart reports unavailable placement and still stops', undefined,
     kindLookupError({code: 'EHOSTUNREACH'}), 'EHOSTUNREACH'],
@@ -182,7 +261,7 @@ for (const [name, routeStillResponding, placement, reason] of [
       throw Object.assign(Error('unreachable'), {code: 'ECONNREFUSED'});
     };
     const run = servicesScript.measureServiceRestart({
-      signal, checkStore: async () => {seen.push('store');},
+      signal, recordFailures, checkStore: async () => {seen.push('store');},
       async inventory(limit) {
         assert.equal(limit, signal);
         if (placement === 'cancelled') controller.abort(cancelled);
@@ -207,7 +286,8 @@ for (const [name, routeStillResponding, placement, reason] of [
         backupAfterRestart: async () => {
           assert.equal(inspectionChecks, 2, 'the backup requires a ready inspector');
           seen.push('backup');
-          return {retainedPointId: 'original', pointId: 'new'};
+          return {retainedPointId: 'original', pointId: 'new',
+            ...(recordFailures && {failures: [{check: 'integration.cold_backup_retained', count: 1}]})};
         },
       },
       async restartAll(outage) {
@@ -226,6 +306,13 @@ for (const [name, routeStillResponding, placement, reason] of [
     if (placement === 'cancelled') {
       await assert.rejects(run, error => error === cancelled);
       assert.ok(!seen.includes('stopped'));
+    } else if (recordFailures) {
+      const result = await run;
+      assert.deepEqual(result.failures.map(({check}) => check), ['services.cold_outage:public', 'integration.cold_backup_retained']);
+      assert.equal(result.outage.public, undefined);
+      assert.equal(result.outage.staff, 'ECONNREFUSED');
+      assert.equal(result.backup.retainedPointId, 'original');
+      assert.ok(seen.indexOf('restarted') < seen.indexOf('backup'));
     } else if (routeStillResponding) {
       await assert.rejects(run, /services.cold_transport/);
       assert.ok(!seen.includes('restarted'));
