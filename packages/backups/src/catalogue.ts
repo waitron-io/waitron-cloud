@@ -331,7 +331,7 @@ export class BackupCatalogue {
     return {storage, selected};
   }
   async #stageExit(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal, rangeOwner?: ExitDownloadOwner) {
-    const deadline = new PublicationDeadline(Date.now() + 10_000);
+    const deadline = new PublicationDeadline(Date.now() + (rangeOwner ? 25_000 : 10_000));
     const signal = AbortSignal.any([deadline.signal, requestSignal]);
     const maxBytes = rangeOwner ? MAX_OBJECT_BYTES : exitDownloadMaxBytes;
     const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence, deadline, maxBytes));
