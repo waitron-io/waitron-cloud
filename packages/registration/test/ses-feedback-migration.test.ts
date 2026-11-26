@@ -34,7 +34,7 @@ test('SES upgrade appends empty feedback records and preserves every old row and
   const f=await fixture();try {
     await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
     const ledger=(await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows;
-    assert.equal(ledger.length,87,'SES persistence and handoff mapping append their own migrations');
+    assert.equal(ledger.length,88,'SES persistence and handoff mapping append their own migrations');
     assert.equal(ledger[48].row.name,'049_ses_feedback.sql');
     assert.deepEqual(ledger.slice(0,48),f.before.schema_migrations);
     for(const [name,rows] of Object.entries(f.before))if(name!=='schema_migrations')

@@ -37,23 +37,21 @@ judges Cloud's sending account by every bounce (see *Abuse limits* below).
 
 ## Set up the sending domain
 
-In the Connected and Hosted test setup, open **Remote access** for your venue to
-set the reply address for staff email. Use **Use standard sender** to clear it.
-An accepted ownership transfer also clears it. The Mailpit test covers the venue’s
-name and reply address on a Waitron message and the standard sender after downgrade.
-The saved address applies again on a return to Connected or Hosted.
+In the Connected and Hosted test setup, open **Remote access** for your venue.
+Set `CLOUD_VENUE_MAIL_DNS_SUFFIX` to a test DNS suffix in the account server to
+enable **Your domain**. You can save your sending address and copy each DNS
+value or download the same email and remote-access records as a PDF to forward.
+**Refresh status** checks whether the aliases point to the requested names.
+Staff email uses a Waitron address and replies go to your sending address unless
+you save a separate reply address. Use **Use standard sender** to clear both.
+An accepted ownership transfer clears both settings in the transferred business.
 
-The design puts the email and remote access records on one page in the Cloud
-portal. Whoever runs the venue's domain will be able to copy each value or
-download the same list as a PDF to forward. Cloud will send from a Waitron
-address while it checks the records, with replies going to the venue's mailbox.
-It will switch to the venue's address once all the records check out and fall
-back with a notice if a record disappears.
-
-First verify whether Amazon SES accepts a signing key held by Waitron behind
-one DNS record. If SES refuses, use its standard three-record setup. Instructions
-specific to each domain company, one-click setup and add-only records come
-later. See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).
+The Stockholm sandbox verified one signing alias in one zone. Qualification
+still needs a separate venue DNS zone and a delivered message with a valid
+signature. The later build will send from the venue’s domain and restore the
+Waitron sender with a notice if a required record disappears. Instructions for
+individual domain companies, one-click setup and add-only records come later.
+See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).
 
 ## Abuse limits
 

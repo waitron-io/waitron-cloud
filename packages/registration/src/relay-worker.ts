@@ -172,8 +172,8 @@ export class RelayWorker {
    }
    let sender:RelaySender|undefined;
    if(this.#planMode==='test-venue-levels'){
-    const saved=(await c.query<{id:string;display_name:string|null;reply_to:string}>(`SELECT v.id,v.display_name,v.waitron_mail_reply_to AS reply_to
-     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 AND v.waitron_mail_reply_to IS NOT NULL`,[row.installation_id])).rows[0];
+    const saved=(await c.query<{id:string;display_name:string|null;reply_to:string}>(`SELECT v.id,v.display_name,COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to
+     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,[row.installation_id])).rows[0];
     if(saved){
      // Grant reservation already holds venue policy through handoff.
      const {level}=await readVenuePermissions(c,saved.id,this.#planMode);

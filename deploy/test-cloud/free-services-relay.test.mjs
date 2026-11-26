@@ -208,20 +208,24 @@ test('Mailpit gets the venue sender and reply address until downgrade', async t 
       value: {level, connectedFrom: null, lapsedOn: null, scheduledLevel: null, scheduledOn: null}});
   };
   await level('connected');
-  const app = createAccountApp({pool: f.pool, outbox: {}, planMode: mode,
+  const app = createAccountApp({pool: f.pool, outbox: {}, planMode: mode, venueMailDnsSuffix: 'cloud.example.test',
     config: {portalOrigin: origin, production: false, rateKey: 'ab'.repeat(32), trustedProxyIps: []}});
-  const save = await app.request(origin + '/api/account/venue-email/save', {
+  const save = (action, body) => app.request(origin + '/api/account/venue-email/' + action, {
     method: 'POST', headers: {origin, 'content-type': 'application/json', cookie: `cloud_session=${venue.session.token}`,
       'x-csrf-token': venue.session.csrfToken},
-    body: JSON.stringify({installationId: venue.installation, replyTo: 'office@example.test'}),
+    body: JSON.stringify({installationId: venue.installation, ...body}),
   }, {incoming: {socket: {remoteAddress: '192.0.2.20'}}});
-  assert.equal(save.status, 200);
+  assert.equal((await save('save-domain', {address: 'bookings@cafe.example.test'})).status, 200);
   const worker = new RelayWorker(f.pool, f.config, mode);
   async function deliver(message) {
     assert.equal(await worker.runOnce(), true);
     assert.equal((await f.row(message.messageId)).state, 'accepted');
     return capturedMail(process.env.MAILPIT_TEST_URL, 'Reset your Waitron password', message.recipient);
   }
+  const defaultReply = await deliver(await venue.submit({locale: 'en'}));
+  assert.deepEqual([defaultReply.From.Name, defaultReply.From.Address], ['Café del Sol', 'relay@example.test']);
+  assert.deepEqual(defaultReply.ReplyTo.map(address => address.Address), ['bookings@cafe.example.test']);
+  assert.equal((await save('save', {replyTo: 'office@example.test'})).status, 200);
   const paid = await deliver(await venue.submit({locale: 'en'}));
   assert.deepEqual([paid.From.Name, paid.From.Address], ['Café del Sol', 'relay@example.test']);
   assert.deepEqual(paid.ReplyTo.map(address => address.Address), ['office@example.test']);
@@ -231,6 +235,11 @@ test('Mailpit gets the venue sender and reply address until downgrade', async t 
   assert.deepEqual([unnamed.From.Name, unnamed.From.Address], ['Waitron', 'relay@example.test']);
   assert.deepEqual(unnamed.ReplyTo.map(address => address.Address), ['office@example.test']);
   await f.pool.query('UPDATE venues SET display_name=$2 WHERE id=$1', [venueId, 'Café del Sol']);
+  assert.equal((await save('save', {replyTo: ''})).status, 200);
+  const cleared = await deliver(await venue.submit({locale: 'en'}));
+  assert.deepEqual([cleared.From.Name, cleared.From.Address], ['Waitron', 'relay@example.test']);
+  assert.equal(cleared.ReplyTo?.length ?? 0, 0);
+  assert.equal((await save('save', {replyTo: 'office@example.test'})).status, 200);
   const queued = await venue.submit({locale: 'en'});
   await level('registered');
   const free = await deliver(queued);

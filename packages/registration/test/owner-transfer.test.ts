@@ -165,17 +165,20 @@ test('accept revokes the former owner’s grants and consent without changing ma
  const back=await store.create(recipient.token,recipient.csrfToken,sender.organisationId,sender.email);await store.decide(sender.token,sender.csrfToken,back.id,'accept');
  assert.ok((await db.pool.query('SELECT revoked_at FROM support_grants WHERE id=$1',[grant])).rows[0].revoked_at,'handover back never revives an old approval');
 });
-test('acceptance clears only the transferred business’s Waitron reply addresses',async()=>{
+test('acceptance clears only the transferred business’s saved sender and reply address',async()=>{
  const sender=await signedAccount(),recipient=await signedAccount(),v=await venueFor(sender),other=await venueFor(recipient);
- const store=new OwnerTransferStore(db.pool,db.outbox);
- await db.pool.query('UPDATE venues SET waitron_mail_reply_to=$2 WHERE id=$1',[v.venueId,'owner@example.test']);
- await db.pool.query('UPDATE venues SET waitron_mail_reply_to=$2 WHERE id=$1',[other.venueId,'other@example.test']);
+ const store=new OwnerTransferStore(db.pool,db.outbox),token=randomUUID(),otherToken=randomUUID();
+ const settings=async(venueId:string,reply:string,from:string,selector:string)=>db.pool.query(`UPDATE venues
+  SET waitron_mail_reply_to=$2,waitron_mail_from=$3,waitron_mail_dns_token=$4 WHERE id=$1`,[venueId,reply,from,selector]);
+ await settings(v.venueId,'owner@example.test','office@cafe.example.test',token);
+ await settings(other.venueId,'other@example.test','office@bistro.example.test',otherToken);
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
- const address=async(venueId:string)=>(await db.pool.query('SELECT waitron_mail_reply_to FROM venues WHERE id=$1',[venueId])).rows[0].waitron_mail_reply_to;
- assert.equal(await address(v.venueId),'owner@example.test');
+ const address=async(venueId:string)=>(await db.pool.query(`SELECT waitron_mail_reply_to AS reply,waitron_mail_from AS sender,
+  waitron_mail_dns_token AS token FROM venues WHERE id=$1`,[venueId])).rows[0];
+ assert.deepEqual(await address(v.venueId),{reply:'owner@example.test',sender:'office@cafe.example.test',token});
  assert.equal((await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept')).state,'accepted');
- assert.equal(await address(v.venueId),null);
- assert.equal(await address(other.venueId),'other@example.test');
+ assert.deepEqual(await address(v.venueId),{reply:null,sender:null,token:null});
+ assert.deepEqual(await address(other.venueId),{reply:'other@example.test',sender:'office@bistro.example.test',token:otherToken});
 });
 for(const state of ['pending','restored','unfinished replacement'] as const)test(`handover refuses ${state} recovery until the owner closes it`,async()=>{
  const sender=await signedAccount(),recipient=await signedAccount(),v=await venueFor(sender),store=new OwnerTransferStore(db.pool,db.outbox),point=randomUUID(),recovery=randomUUID();

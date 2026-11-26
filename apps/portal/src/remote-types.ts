@@ -6,7 +6,8 @@ export type ForwardCause='upstream_non_200'|'upstream_timeout'|'upstream_respons
 export interface PublicForwardView {category:ForwardCause|null;observedAt:string;expiresAt:string}
 export interface GuestMenuView {version:1;venueId:string;live?:true;url:string|null;revision:number;state:'off'|'current'|'blocked';publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};}
 interface RemoteName {assigned:string;current:string;recordMoved?:boolean;}
-export interface VenueEmailSettings {replyTo:string|null}
+export interface VenueDnsAlias {type:'CNAME';name:string;value:string;status?:'verified'|'unverified'|'unknown'}
+export interface VenueEmailSettings {replyTo:string|null;domain?:{address:string|null;records:VenueDnsAlias[]}}
 export interface RemoteView {venueEmail?:VenueEmailSettings;guestMenu?:GuestMenuView;publicForward?:PublicForwardView|null;connectedRequired?:true;installationId:string;revision:number;revoked:boolean;names:Record<RemoteKind,RemoteName>|null;service:{state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';observedAt:string|null;validUntil:string|null};}
 export interface RemoteDns {installationId:string;kind:RemoteKind;hostname:string;records:[RemoteDnsRecord];}
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -35,7 +36,14 @@ function validRemoteName(v:unknown):v is RemoteName{
   &&(v.recordMoved!==true||v.current!==v.assigned);
 }
 export function validVenueEmail(v:unknown):v is VenueEmailSettings{
- return object(v)&&(v.replyTo===null||typeof v.replyTo==='string'&&validEmail(v.replyTo));
+ if(!object(v)||!(v.replyTo===null||typeof v.replyTo==='string'&&validEmail(v.replyTo)))return false;
+ const domain=v.domain;
+ const dnsName=(value:unknown)=>typeof value==='string'&&value.length<=253&&value.includes('.')
+  &&value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+ return domain===undefined||object(domain)&&(domain.address===null||typeof domain.address==='string'&&validEmail(domain.address))
+  &&Array.isArray(domain.records)&&domain.records.length<=3&&domain.records.every(record=>object(record)&&record.type==='CNAME'
+   &&typeof record.name==='string'&&record.name.length<=253&&dnsName(record.name.replace('._domainkey.','.'))&&dnsName(record.value)
+   &&(record.status===undefined||record.status==='verified'||record.status==='unverified'||record.status==='unknown'));
 }
 export function validRemoteView(v:unknown):v is RemoteView{
  if(!object(v)||(v.venueEmail!==undefined&&!validVenueEmail(v.venueEmail))||(v.guestMenu!==undefined&&!validGuestMenuView(v.guestMenu))||!validForward(v.publicForward)||(v.publicForward!=null&&(v.revoked===true||v.names===null))||!id(v.installationId)||!Number.isSafeInteger(v.revision)||(v.revision as number)<0||typeof v.revoked!=='boolean'||!object(v.service))return false;

@@ -61,3 +61,12 @@ test('the existing payment policy and Turnstile can share the request document',
  assert.ok(billing.includes('https://gateway.sumup.com'));
  assert.ok(!billing.includes(origin));
 });
+
+test('the portal serves the DNS PDF module as same-origin JavaScript',async()=>{
+ const path='/venue-dns-pdf.js',module='export const makeDnsPdf = () => {};';
+ const response=portalResponse(new Request('http://localhost'+path),new Map([...assets,[path,{body:Buffer.from(module),contentType:'text/javascript'}]]));
+ assert.equal(response.status,200);
+ assert.equal(response.headers.get('content-type'),'text/javascript');
+ assert.match(policy(response),/script-src 'self'/);
+ assert.equal(await response.text(),module);
+});

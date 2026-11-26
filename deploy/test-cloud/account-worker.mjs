@@ -87,7 +87,7 @@ try {
       guestAuthority=await startGuestMenuAuthority({connectionString:process.env.DATABASE_URL},ephemeral?'127.0.0.1':'10.79.0.3',ephemeral?0:3445);
     }
     const addressLookup=addressLookupOptionsFromEnv(process.env);
-    running = await startAccountServer({guestOrigin,liveGuestMenu,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({guestOrigin,liveGuestMenu,venueMailDnsSuffix:process.env.CLOUD_VENUE_MAIL_DNS_SUFFIX||undefined,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();

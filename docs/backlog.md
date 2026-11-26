@@ -438,10 +438,12 @@ Route53, production keys and multi-gateway coordination remain production gates.
 on 23 November 2026, for release soon after go-live. A venue’s own mail server
 always wins. Without one, the free relay pilot covers staff account emails and
 five staff notices. The paid design covers every email the box sends, from the
-venue’s own domain or a Waitron address. The local Mailpit test covers the
-Waitron sender name and reply address on existing staff email. The sandbox check
-waits for scoped access. It will determine whether Amazon SES accepts the
-one-record domain setup.
+venue’s own domain or a Waitron address. In test setup you can save your sending
+address, check the DNS aliases and copy or download the list. Mailpit checks
+replies to the sending address or a saved reply address while staff email uses
+the Waitron sender. The sandbox verified one signing alias in one zone. A
+separate venue zone, delivered signatures and sending from the venue domain
+still need qualification.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
 [Decisions and open work](backlog/venue-email.md).
 

@@ -110,7 +110,7 @@ test('populated release37 upgrades concurrently preserving retained rows and dig
       action_proved_at:null,action_proof_method:null,action_credential_fingerprint:null,action_security_revision:0}}));
     const connectionDefaults=(rows:typeof expectedSessions)=>rows.map(({value})=>({value:{...value,cloud_session_id:null,cloud_security_revision:null}}));
     const expectedVenues=(before.venues as {value:Record<string,unknown>}[]).map(({value})=>{
-      const {local_venue_id,...retained}=value;return {value:{...retained,display_name:null,setup_address:null,waitron_mail_reply_to:null}};
+      const {local_venue_id,...retained}=value;return {value:{...retained,display_name:null,setup_address:null,waitron_mail_reply_to:null,waitron_mail_from:null,waitron_mail_dns_token:null}};
     });
     const expectedInstallations=(before.installations as {value:Record<string,unknown>}[]).map(({value})=>({
       value:{...value,portal_removed_at:null,setup_pairing_account_id:null},

@@ -48,7 +48,7 @@ test('044 upgrades preserve retained rows and digests while v2 invalidates old r
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
   const migrationEnd = (await f.pool.query('SELECT clock_timestamp() AS at')).rows[0].at.getTime();
   const expected={...before,cloud_accounts:(before.cloud_accounts as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,recovery_organisation_id:null}})),legal_businesses:(before.legal_businesses as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,billing_address:null,tax_number:null}})),connection_requests:[],pairing_requests:[],venues:(before.venues as {row:Record<string,unknown>}[]).map(({row})=>{
-   const {local_venue_id,...retained}=row;return {row:{...retained,display_name:null,setup_address:null,waitron_mail_reply_to:null}};
+   const {local_venue_id,...retained}=row;return {row:{...retained,display_name:null,setup_address:null,waitron_mail_reply_to:null,waitron_mail_from:null,waitron_mail_dns_token:null}};
   }),installations:(before.installations as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,portal_removed_at:null,setup_pairing_account_id:null}}))};
   const actual = await rows(f.pool, Object.keys(before));
   const memberships = (actual.organisation_memberships as {row: Record<string, unknown>}[])

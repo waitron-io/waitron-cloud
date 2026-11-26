@@ -70,7 +70,7 @@ try {
     captures=captureRuntime(process.env);
     if (translation) await sweepTranslationJobs(pool);
     const addressLookup=addressLookupOptionsFromEnv(process.env);
-    running = await startAccountServer({operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,guestOrigin:guestOptions?.origin,localMetrics,planMode,allowances,billingAccount,billingMethods,addressLookup,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({venueMailDnsSuffix:process.env.CLOUD_VENUE_MAIL_DNS_SUFFIX||undefined,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,guestOrigin:guestOptions?.origin,localMetrics,planMode,allowances,billingAccount,billingMethods,addressLookup,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     if(guestOptions&&!stopRequested)guest=await startGuestMenuServer({...guestOptions,pool,rateKey:config.rateKey,planMode});
