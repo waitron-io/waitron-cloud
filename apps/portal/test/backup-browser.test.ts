@@ -183,7 +183,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
     }
     return route.fulfill({status:204});
    });
-   await saveDatabase.click();
+   await Promise.all([page.waitForResponse(response=>response.url().endsWith('/download-range/read')&&response.status()===403),
+    saveDatabase.click()]);
    await page.locator('#action-proof-heading').waitFor();
    assert.deepEqual(offsets,[0,piece]);
    await page.locator('wt-input[name=actionProofCode] input').fill('1'.repeat(32));
