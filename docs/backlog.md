@@ -948,10 +948,11 @@ implementation or production evidence.
     the handshake before routing fresh connections. The 26 November Stockholm
     timeout still needs a trace that identifies where that request waited.
   - The [Account connection budget](superpowers/plans/2026-11-26-d621-account-connection-budget.md)
-    gives a stalled PostgreSQL connection two seconds. The real-database proxy test shows
-    the session read returns HTTP 503 with `Retry-After` before the client's five-second
+    gives Account two seconds to acquire a PostgreSQL connection. In the real-database proxy
+    test, the session read returns HTTP 503 with `Retry-After` before the client's five-second
     deadline and the same session recovers when the database answers again. Confirm the
-    timings of the actual database failover and session recovery in Stockholm.
+    database failover and session recovery timings in Stockholm, including whether an
+    established connection stops answering.
   - In the 25 November free Kind rehearsal the returning store answered on the Docker bridge
     while its WireGuard metrics request timed out. Kind now logs one sample after bridge repair
     and records the filter and route if it fails. Repeat all three stops, repairs and the
