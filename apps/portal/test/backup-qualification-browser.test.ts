@@ -33,8 +33,10 @@ for(const locale of ['en','es'] as const)test(`${locale} current snapshot eviden
   await history.goto(f.origin+'/account/venues');await history.locator('.venue-details summary').click();
   await history.getByRole('button',{name:c.viewSnapshots,exact:true}).click();
   const refresh=async()=>{
+   const refreshed=page.waitForResponse(response=>response.url().endsWith('/api/account/backups/list'));
    await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
    await history.getByRole('button',{name:c.latestSnapshots,exact:true}).click();
+   return await (await refreshed).json();
   };
   await history.getByText(c.snapshotPending,{exact:true}).waitFor();await history.getByText(c.snapshotFallback,{exact:true}).waitFor();
   await page.getByText(c.recoveryNoCheckedSnapshots,{exact:true}).waitFor();
@@ -50,7 +52,7 @@ for(const locale of ['en','es'] as const)test(`${locale} current snapshot eviden
   await history.getByText(checked,{exact:true}).waitFor();await page.getByText(c.recoverySnapshotLoss,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isEnabled(),false);
   for(const scheme of ['light','dark'] as const)for(const width of [390,1280]){await page.emulateMedia({colorScheme:scheme});await page.setViewportSize({width,height:900});await page.screenshot({path:new URL(`../dist/qualification-verified-${locale}-${scheme}-${width}.png`,import.meta.url).pathname,fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
   await admitPointFixture(f.db.pool,point.id,'unavailable','unexpected');assert.equal((await f.db.pool.query('SELECT reason FROM backup_verification_attempts WHERE id=(SELECT last_attempt_id FROM backup_points WHERE id=$1)',[point.id])).rows[0].reason,'unexpected');await refresh();await history.getByText(unavailable,{exact:true}).waitFor();await page.getByText(c.recoveryNoCheckedSnapshots,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),0);await history.getByText(c.snapshotFallback,{exact:true}).waitFor();
-  await admitPointFixture(f.db.pool,point.id,'invalid','archive_invalid');await refresh();await history.getByText(c.snapshotFailed,{exact:true}).waitFor();
+  await admitPointFixture(f.db.pool,point.id,'invalid','archive_invalid');assert.equal((await refresh()).points[0].verification,'failed');await history.getByText(c.snapshotFailed,{exact:true}).waitFor();
   await history.getByText(locale==='en'?'The data integrity check failed. Keep your older copies.':'Ha fallado la comprobación de integridad de los datos. Conserva las copias anteriores.',{exact:true}).waitFor();await page.getByText(c.recoveryNoCheckedSnapshots,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),0);
   for(const scheme of ['light','dark'] as const)for(const width of [390,1280]){await page.emulateMedia({colorScheme:scheme});await page.setViewportSize({width,height:900});await page.screenshot({path:new URL(`../dist/qualification-invalid-${locale}-${scheme}-${width}.png`,import.meta.url).pathname,fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
   await page.goto(f.origin+'/account/venues');await page.locator('.venue-details summary').click();await page.getByText(c.noVerifiedSnapshot,{exact:true}).waitFor();

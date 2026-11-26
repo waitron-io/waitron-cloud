@@ -12,8 +12,7 @@ export function recoveryScreen(app:PortalApp){
  const selectionDisabled=disabled||installations.pending;
  const available=venues.some(i=>i.venueId===b.venueId);
  const continuous=b.page?.continuousRecovery,usingContinuous=r.source==='continuous';
- // The catalogue default covers older pages and never binds the box to that copy.
- const snapshotAvailable=!!b.page?.defaultPointId;
+ const snapshotAvailable=b.hasCheckedSnapshot;
  const sourceDisabled=selectionDisabled||b.pending;
  const ready=available&&b.page?.venueId===r.venueId&&(usingContinuous?!!continuous:r.source==='snapshot'&&snapshotAvailable);
  const selectingSnapshot=op?op.source.kind==='snapshot'&&op.pointId===null:!usingContinuous;
@@ -54,7 +53,8 @@ export function recoveryScreen(app:PortalApp){
     ${available?html`<section aria-label=${c.recoverySource}><h2>${c.recoverySource}</h2>
       ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}${permissionActions(app,b.error)}
       ${b.pending?html`<p role="status">${c.wait}</p>`:nothing}
-      ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}
+      ${b.waiting?html`<p role="status">${c.recoverySourceRetry}</p>`:nothing}
+      ${b.error?html`<wt-button .disabled=${sourceDisabled} @click=${()=>{void b.load();}}>${c.retry}</wt-button>`:nothing}
       ${b.page&&!snapshotAvailable?html`<p>${b.page.points.length?c.recoveryNoCheckedSnapshots:c.noSnapshots}</p>`:nothing}
       ${ready?html`
         ${continuous?html`<label class="disclosure"><input type="radio" name="recovery-source" .checked=${usingContinuous} ?disabled=${sourceDisabled} @change=${()=>b.selectContinuous()}> ${c.recoveryContinuous}</label>

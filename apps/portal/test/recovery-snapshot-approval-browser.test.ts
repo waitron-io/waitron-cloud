@@ -28,13 +28,14 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const page=await browser.newPage({locale,colorScheme:theme,timezoneId:'UTC',viewport:{width,height:900}});page.setDefaultTimeout(3000);
   await page.clock.install({time:new Date('2026-11-11T12:00:00Z')});
   const approvals:unknown[]=[];
-  let points:typeof point[]=[],defaultPointId:string|null=null;
+  let points:typeof point[]=[],defaultPointId:string|null=null,rejectList=true;
   await page.route('https://portal.test/**',route=>{
    const path=new URL(route.request().url()).pathname;
    const proof=mockActionProof(route,true);if(proof)return proof;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:expiry}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[installation]}});
    if(path.endsWith('/recovery/inspect'))return route.fulfill({json:pending});
+   if(path.endsWith('/backups/list')&&rejectList)return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
    if(path.endsWith('/backups/list'))return route.fulfill({json:{venueId:venue,points,nextCursor:defaultPointId?'next':null,defaultPointId,continuousRecovery:continuous}});
    if(path.endsWith('/recovery/approve')){approvals.push(route.request().postDataJSON());return route.fulfill({json:{...pending,state:'approved',operationId:request,operation:{id:request,venueId:venue,pointId:null,source:{kind:'snapshot',pointId:null},mode:'failure',status:'pending',expiresAt:expiry}}});}
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'unavailable'}});
@@ -47,6 +48,12 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.getByRole('button',{name:c.pairInspect,exact:true}).click();
   const venueChoice=page.getByLabel(c.recoveryVenue,{exact:true});
   const stream=page.getByRole('radio',{name:c.recoveryContinuous,exact:true}),snapshot=page.getByRole('radio',{name:c.recoverySnapshotFallback,exact:true});
+  await venueChoice.selectOption(venue);
+  const source=page.getByRole('region',{name:c.recoverySource,exact:true});
+  await source.getByRole('alert').waitFor();rejectList=false;
+  await source.getByRole('button',{name:c.retry,exact:true}).click();
+  await stream.waitFor();
+  await venueChoice.selectOption('');
   for(const unavailable of [[],[{...point,verification:'failed'}]]){
    points=unavailable;
    await venueChoice.selectOption(venue);
@@ -68,6 +75,15 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.getByRole('button',{name:c.olderSnapshots,exact:true}).count(),0);
   const loss=page.getByRole('checkbox',{name:locale==='en'?/losing.*changes.*snapshot/i:/perder.*cambios.*instantánea/i});
   assert.equal(await stopped.isChecked(),false);assert.equal(await loss.isChecked(),false);assert.equal(await approve.isEnabled(),false);
+  await stopped.check();await loss.check();defaultPointId=null;
+  await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
+  await snapshot.waitFor({state:'detached'});
+  assert.equal(await stream.isChecked(),true);
+  assert.equal(await stopped.isChecked(),false);
+  assert.equal(await page.getByRole('checkbox',{name:c.recoveryAcceptLoss,exact:true}).isChecked(),false);
+  defaultPointId=first;
+  await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
+  await snapshot.check();
   assert.match(await page.locator('p').filter({hasText:locale==='en'?/choose.*snapshot.*replacement server/i:/elige.*instantánea.*servidor de sustitución/i}).innerText(),locale==='en'?/changes.*lost/i:/se perderán.*cambios/i);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   if(process.env.RECOVERY_APPROVAL_RECEIPT_DIR){await mkdir(process.env.RECOVERY_APPROVAL_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_APPROVAL_RECEIPT_DIR}/${locale}-${theme}-${width}.png`,fullPage:true});}

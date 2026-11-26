@@ -26,7 +26,9 @@ export class BackupController {
  get error(){return this.downloadError??this.#listError;}
  get downloadable(){return this.page?.exitDownloadAvailable===true&&this.page.points.some(point=>point.id===this.selected&&point.verification==='verified');}
  selectContinuous(){if(this.page?.continuousRecovery){this.cancelDownload();this.selectedSource='continuous';this.#changed();}}
- selectSnapshot(){if(this.page){this.cancelDownload();this.selectedSource='snapshot';this.#changed();}}
+ // The catalogue default covers older pages without binding the recovery to a copy.
+ get hasCheckedSnapshot(){return !!this.page?.defaultPointId;}
+ selectSnapshot(){if(this.hasCheckedSnapshot){this.cancelDownload();this.selectedSource='snapshot';this.#changed();}}
  select(id:string){if(this.page?.points.some(p=>p.id===id)){
   if(this.selected!==id)this.cancelDownload();
   this.selected=id;this.selectedSource='snapshot';this.#changed();
