@@ -77,7 +77,7 @@ The package token stays in the Mac process. For each run, the helper reads `pnpm
 
 GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof stages both packages and exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence. Automatic CI retains its request-only transfer and existing job token.
 
-Before landing a private UI or signing-package adoption, publish its matched controller and host recipe through the [existing installer](#run-the-controller-from-the-ci-server), with lane I's operator. The installer drains work and takes its existing locks. Replace `VERSION` below with the reviewed UI release. Then run guest-tools, local-runtime and cancellation proofs against that release. A support-only capture qualifies archive seeding; use an adoption capture whose lockfile imports the contract to qualify actual frozen and offline installation before landing. Portable tests do not qualify an installed release. Never patch a frozen recipe in place.
+Before landing a private UI or signing-package adoption, publish its matched controller and host recipe through the [existing installer](#run-the-controller-from-the-ci-server), with lane I's operator. The installer drains work and takes its existing locks. Use the reviewed versions from the captured lockfile in both package paths below. Then run guest-tools, local-runtime and cancellation proofs against that release. A support-only capture qualifies archive seeding; use an adoption capture whose lockfile imports the contract to qualify actual frozen and offline installation before landing. Portable tests do not qualify an installed release. Never patch a frozen recipe in place.
 
 `guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
 
@@ -86,8 +86,8 @@ To run the complete private command-path proof, first prepare the snapshot and r
 ```sh
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-VERSION.tgz \
-  /tmp/cloud-private-packages/contract-0.2.16.tgz
+  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-UI_VERSION.tgz \
+  /tmp/cloud-private-packages/contract-CONTRACT_VERSION.tgz
 ```
 
 This opt-in proof runs 43 real PostgreSQL checks and deliberately returns exit 3. The controller reserves and starts a durable lease, constructs a bounded bundle, transfers it over the shared connection, prepares a fresh guest and preserves that status only after destruction and an independent absence readback. A duplicate request returns 75; a failed destruction or mismatched receipt quarantines the slot. The host checks the exact request and source digest and, when supplied, each supplied private package’s integrity. It never extracts candidate source onto the host. The root entry point imports only the named owning tests, never this runtime proof.
@@ -121,8 +121,8 @@ Run the opt-in Mac cancellation proof with the same source and package inputs as
 ```sh
 node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-VERSION.tgz \
-  /tmp/cloud-private-packages/contract-0.2.16.tgz
+  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-UI_VERSION.tgz \
+  /tmp/cloud-private-packages/contract-CONTRACT_VERSION.tgz
 ```
 
 Use a new absent private ledger path for each opt-in proof. Explicit bootstrap refuses a directory left by an earlier proof so it cannot forget an old lease.

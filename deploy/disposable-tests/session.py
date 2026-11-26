@@ -30,6 +30,7 @@ PACKAGE_SHA512 = {name: {base64.b64decode(value) for value in values} for name, 
         '1PhncKtXnoXOLDGoGNRlUuYkF5kHrorjEUxkO7c7ZKAD3uLYtwPA/no5wSBid+WGjTuZQz/pWmWYmqXLvHC6AQ==',
         '59/NOGjBOVcOoS6+/yR0c/5caZe3ZfC7lSfnFExs8fcmHMIXcJVRsbVmLNxAwB2Nn6IVzKI8jmeXi9aiSNXxgw==',
         'a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ==',
+        'MdUvSJXvgqnbIu5hhrnyH5PyMcpMgpar9xDsiMl19okYk7BEko+h4UjX81NT8q8q9NvpBgV3a7bN/ku0YPl6bQ==',
     ],
     'contract-0.2.9.tgz': ['L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g=='],
     'contract-0.2.14.tgz': ['bSvM7Sha3SPtWvqRrUzsLa7qijIIR3e984z6frGLZFHIG6yyH0l5JsPR6cJpyFcD3rqC2ogtMjm86D2kq4KyZQ=='],
@@ -39,6 +40,7 @@ PACKAGE_SHA512 = {name: {base64.b64decode(value) for value in values} for name, 
     'contract-0.2.37.tgz': ['5V7Yr/pXFFPIrLr0HmtWvEjr/QzNsq/BKXg1Ibmu+V0XLYPn+Lu5z/d6HOkPpPBoiBSXk0WpPXkwoyPW2RxmIQ=='],
     'contract-0.2.42.tgz': ['I8sbUouB8rxGntiyZwfD5Gaf0KqoPS9/nsNgIj7nEg6eFu7E7DuZ2CC8suzfU1e9iru8HPI9SLUMru/UiECXig=='],
     'contract-0.2.45.tgz': ['VK/eiYddQU3VfjsdgTxjmAQXcbjt33jBwp+8Flxc+dSQoXtlfXq9EApmPrppm28JiduYVM288efEBLTZ8qMTpQ=='],
+    'contract-0.2.55.tgz': ['8nC9w4l5pnZP/vBG1Whn+g+69pcY4UZrLb47ZtmrEOCMFabwlmct39s457S32habf2TqXwMheHmTX4H/U5w5SA=='],
 }.items()}
 CONTROL = host.ROOT/'control'
 OPERATIONS = host.ROOT/'operations'

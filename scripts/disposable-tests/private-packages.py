@@ -53,6 +53,10 @@ PACKAGES = [{
     'url': 'https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.45/5065de6d3dff095336b4c41d55b1ad69515393a2',
     'integrity': 'sha512-a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ=='
 }, {
+    'file': 'ui-core-0.2.55.tgz',
+    'url': 'https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.55/9cedf7a7dd65c043e60ef0eb7cd491ca189b103d',
+    'integrity': 'sha512-MdUvSJXvgqnbIu5hhrnyH5PyMcpMgpar9xDsiMl19okYk7BEko+h4UjX81NT8q8q9NvpBgV3a7bN/ku0YPl6bQ=='
+}, {
     'file': 'contract-0.2.9.tgz',
     'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.9/9a5a01d89bf30a5df255f2c22ca0116d99da5508',
     'integrity': 'sha512-L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g=='
@@ -84,6 +88,10 @@ PACKAGES = [{
     'file': 'contract-0.2.45.tgz',
     'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.45/d83cb1be7893bda753439a88177154538422c618',
     'integrity': 'sha512-VK/eiYddQU3VfjsdgTxjmAQXcbjt33jBwp+8Flxc+dSQoXtlfXq9EApmPrppm28JiduYVM288efEBLTZ8qMTpQ=='
+}, {
+    'file': 'contract-0.2.55.tgz',
+    'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.55/4f40697edf04c4fc4ec56b6dc6b355faa1b62d22',
+    'integrity': 'sha512-8nC9w4l5pnZP/vBG1Whn+g+69pcY4UZrLb47ZtmrEOCMFabwlmct39s457S32habf2TqXwMheHmTX4H/U5w5SA=='
 }]
 
 

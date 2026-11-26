@@ -24,8 +24,8 @@ importers:
         specifier: 14.0.0
         version: 14.0.0
       '@waitron-io/ui-core':
-        specifier: 0.2.45
-        version: 0.2.45(lit@3.3.3)
+        specifier: 0.2.55
+        version: 0.2.55(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -164,8 +164,8 @@ importers:
         specifier: workspace:*
         version: link:../identity
       '@waitron-io/contract':
-        specifier: 0.2.45
-        version: 0.2.45
+        specifier: 0.2.55
+        version: 0.2.55
       nodemailer:
         specifier: ^10.0.10
         version: 10.0.10
@@ -227,8 +227,8 @@ importers:
   packages/ui-smoke:
     dependencies:
       '@waitron-io/ui-core':
-        specifier: 0.2.45
-        version: 0.2.45(lit@3.3.3)
+        specifier: 0.2.55
+        version: 0.2.55(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -853,11 +853,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@waitron-io/contract@0.2.45':
-    resolution: {integrity: sha512-VK/eiYddQU3VfjsdgTxjmAQXcbjt33jBwp+8Flxc+dSQoXtlfXq9EApmPrppm28JiduYVM288efEBLTZ8qMTpQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.45/d83cb1be7893bda753439a88177154538422c618}
+  '@waitron-io/contract@0.2.55':
+    resolution: {integrity: sha512-8nC9w4l5pnZP/vBG1Whn+g+69pcY4UZrLb47ZtmrEOCMFabwlmct39s457S32habf2TqXwMheHmTX4H/U5w5SA==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.55/4f40697edf04c4fc4ec56b6dc6b355faa1b62d22}
 
-  '@waitron-io/ui-core@0.2.45':
-    resolution: {integrity: sha512-a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.45/5065de6d3dff095336b4c41d55b1ad69515393a2}
+  '@waitron-io/ui-core@0.2.55':
+    resolution: {integrity: sha512-MdUvSJXvgqnbIu5hhrnyH5PyMcpMgpar9xDsiMl19okYk7BEko+h4UjX81NT8q8q9NvpBgV3a7bN/ku0YPl6bQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.55/9cedf7a7dd65c043e60ef0eb7cd491ca189b103d}
     peerDependencies:
       lit: ^3.2.0
 
@@ -2021,9 +2021,9 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@waitron-io/contract@0.2.45': {}
+  '@waitron-io/contract@0.2.55': {}
 
-  '@waitron-io/ui-core@0.2.45(lit@3.3.3)':
+  '@waitron-io/ui-core@0.2.55(lit@3.3.3)':
     dependencies:
       lit: 3.3.3
 
