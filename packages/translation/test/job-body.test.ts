@@ -6,6 +6,14 @@ const valid={version:1,country:'ES',languages:{default:'ca',enabled:['ca','es','
  houseStyle:[{kind:'product',staffName:'CARAJILLO',names:{ca:'Cigaló',es:'Carajillo'}}]};
 const refused=(e:unknown)=>e instanceof TranslationError&&e.code==='invalid_request';
 test('the contract example parses',()=>{assert.equal(parseJob(JSON.stringify(valid)).items[0]!.ref,'variant:812');});
+test('a set-menu course name can be submitted for translation',()=>{
+ const course={ref:'course:12',kind:'course',family:'course:12',category:null,staffName:'POSTRES',
+  existing:{es:'Postres'},missing:['ca','en']};
+ const style={kind:'course',staffName:'ENTRANTES',names:{en:'Starters'}};
+ const job=parseJob(JSON.stringify({...valid,items:[course],houseStyle:[style]}));
+ assert.deepEqual(writtenItems(job),[course]);
+ assert.deepEqual(job.houseStyle,[style]);
+});
 test('every broken field is an invalid request',()=>{
  const bad=[
   {...valid,version:2},{...valid,country:'Spain'},{...valid,country:'ZZ'},{...valid,extra:1},{...valid,languages:{default:'fr',enabled:['ca']}},
@@ -85,7 +93,7 @@ test('opaque references and text keep exact length boundaries and contents',()=>
  assert.equal(parseJob(JSON.stringify({...valid,items:[{...entry,staffName}]})).items[0]!.staffName,staffName);
 });
 test('every non-product kind requires a null category',()=>{
- for(const kind of ['product','variant','option_list','option_label','extra_list','menu','section','included_menu','unit']){
+ for(const kind of ['product','variant','option_list','option_label','extra_list','menu','section','included_menu','unit','course']){
   const entry={...valid.items[0],kind,category:null};
   assert.equal(parseJob(JSON.stringify({...valid,items:[entry]})).items[0]!.kind,kind);
   if(kind!=='product'&&kind!=='variant')assert.throws(()=>parseJob(JSON.stringify({...valid,items:[{...entry,category:'A'}]})),refused);
