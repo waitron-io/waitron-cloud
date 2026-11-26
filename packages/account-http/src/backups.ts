@@ -1,5 +1,6 @@
+import {createHash} from 'node:crypto';
 import {Readable} from 'node:stream';
-import {organisationScopeSql} from '@waitron-cloud/identity';
+import {IdentityError,organisationScopeSql} from '@waitron-cloud/identity';
 import type {BackupCatalogue} from '@waitron-cloud/backups/catalogue';
 import {retentionExpirySql} from '@waitron-cloud/backups/retention';
 import type {Context} from 'hono';
@@ -11,6 +12,7 @@ import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
 import {securityHeaders} from './portal.ts';
 import type {RateRule} from './rate-limit.ts';
+export const exitDownloadSession = (token:string) => createHash('sha256').update(token).digest('hex');
 const uuid=(s:string)=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(s);
 function cursor(value:string|undefined,venueId:string):string|null{
  if(value===undefined)return null;
@@ -31,15 +33,24 @@ async function ownerVenue(client:PoolClient,venueId:string,accountId:string):Pro
 export async function backupResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;exitDownloads?:BackupCatalogue|undefined}):Promise<Response>{
  const {pool,origin,consume,exitDownloads}=options;
  const action=c.req.path.slice('/api/account/backups/'.length);
- if(action!=='list'&&(!exitDownloads||!['download','download-key','download-manifest'].includes(action)))throw new AccountHttpError(404,'not_found');
+ const range=exitDownloads?.exitRangesEnabled&&['download-range/start','download-range/read','download-range/release'].includes(action);
+ if(action!=='list'&&(!exitDownloads||!range&&!['download','download-key','download-manifest'].includes(action)))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrfToken=c.req.header('x-csrf-token')??'';
- const body=await readAccountBody(c.req.raw,action==='list'?['venueId']:['venueId','pointId'],action==='list'?['cursor']:[]),venueId=body.venueId!;
+ const fields=action==='list'?['venueId']:['venueId','pointId'];
+ if(action==='download-range/read')fields.push('attemptId','offset');
+ if(action==='download-range/release')fields.push('attemptId');
+ const body=await readAccountBody(c.req.raw,fields,action==='list'?['cursor']:[]),venueId=body.venueId!;
  if(!uuid(venueId))throw new AccountHttpError(400,'invalid_input');
  const after=action==='list'?cursor(body.cursor,venueId):null;
+ const attemptId=body.attemptId;
+ if(attemptId!==undefined&&!uuid(attemptId))throw new AccountHttpError(400,'invalid_input');
+ const rangeOwner=range?{session:exitDownloadSession(token),venueId,pointId:body.pointId!}:undefined;
+ try{
  const identity=await transaction(pool,client=>resolveSession(client,token,{csrfToken,touch:false}));
- await consume([{scope:'backup-account',subject:identity.accountId,limit:30,windowSeconds:60}]);
+ const rangeRead=action==='download-range/read';
+ await consume([{scope:rangeRead?'backup-exit-range':'backup-account',subject:identity.accountId,limit:rangeRead?180:30,windowSeconds:60}]);
  if(action!=='list'&&exitDownloads){
   const pointId=body.pointId!;
   if(!uuid(pointId))throw new AccountHttpError(400,'invalid_input');
@@ -48,7 +59,18 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
    if(await ownerVenue(client,venueId,proof.accountId)!=='test')throw new AccountHttpError(403,'permission_denied');
    if(!(await LifecycleStore.readExitRecovery(client,venueId)).allowed)throw new AccountHttpError(410,'unavailable');
   };
-  try{
+   if(rangeOwner){
+    if(action==='download-range/start')return Response.json(await exitDownloads.startExitRange(rangeOwner,fence,c.req.raw.signal),{headers:securityHeaders});
+    if(action==='download-range/release'){
+     await exitDownloads.releaseExitRange(rangeOwner,attemptId!);
+     return new Response(null,{status:204,headers:securityHeaders});
+    }
+    if(!/^\d{1,9}$/.test(body.offset!))throw new AccountHttpError(400,'invalid_input');
+    const offset=Number(body.offset);
+    const {stream,length,size}=await exitDownloads.readExitRange(rangeOwner,attemptId!,offset,fence,c.req.raw.signal);
+    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{status:206,headers:{...securityHeaders,
+     'content-type':'application/octet-stream','content-length':String(length),'content-range':`bytes ${offset}-${offset+length-1}/${size}`}});
+   }
    if(action==='download-manifest'){
     const manifest=await exitDownloads.exitArchiveManifest(venueId,pointId,fence);
     return Response.json(manifest,{headers:{...securityHeaders,
@@ -67,15 +89,22 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
      'content-type':'application/octet-stream','content-length':String(source.receipt.size),
      'content-disposition':`attachment; filename="waitron-backup-${pointId}.backup.enc"`}});
    }catch(error){await source.dispose();throw error;}
-  }catch(error){
-   switch(error instanceof Error?error.message:''){
-    case 'backup.unverified':throw new AccountHttpError(400,'unverified');
-    case 'backup.download_too_large':throw new AccountHttpError(413,'download_too_large');
-    case 'backup.local_integration_only':throw new AccountHttpError(403,'permission_denied');
-    case 'backup.unavailable':throw new AccountHttpError(410,'unavailable');
-    case 'backup.cancelled':case 'backup.key_unavailable':case 'backup.object_invalid':throw new AccountHttpError(503,'temporarily_unavailable',1);
-    default:throw error;
-   }
+ }
+ }catch(error){
+  const reason=error instanceof Error?error.message:'';
+  if(rangeOwner&&attemptId&&exitDownloads&&(
+   error instanceof IdentityError&&['session_unavailable','session_expired','enrollment_required','credentials_invalid'].includes(error.code)||
+   error instanceof AccountHttpError&&['permission_denied','unavailable'].includes(reason)||
+   ['backup.unavailable','backup.unverified','backup.download_too_large'].includes(reason)
+  ))await exitDownloads.releaseExitRange(rangeOwner,attemptId).catch(()=>{});
+  switch(reason){
+   case 'backup.invalid_range':throw new AccountHttpError(400,'invalid_input');
+   case 'backup.unverified':throw new AccountHttpError(400,'unverified');
+   case 'backup.download_too_large':throw new AccountHttpError(413,'download_too_large');
+   case 'backup.local_integration_only':throw new AccountHttpError(403,'permission_denied');
+   case 'backup.unavailable':throw new AccountHttpError(410,'unavailable');
+   case 'backup.exit_busy':case 'backup.cancelled':case 'backup.key_unavailable':case 'backup.object_invalid':throw new AccountHttpError(503,'temporarily_unavailable',1);
+   default:throw error;
   }
  }
  return c.json(await transaction(pool,async client=>{

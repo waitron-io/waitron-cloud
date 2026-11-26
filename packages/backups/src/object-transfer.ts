@@ -14,9 +14,14 @@ export interface ObjectReceipt {
   size: number;
 }
 
+interface ObjectRange {
+  offset: number;
+  length: number;
+}
+
 export interface ReplayableObject {
   readonly receipt: ObjectReceipt;
-  open(): Readable;
+  open(range?: ObjectRange): Readable;
   dispose(): Promise<void>;
 }
 
@@ -34,12 +39,20 @@ export function receipt(bytes: Uint8Array): ObjectReceipt {
   };
 }
 
+function endOfRange({offset, length}: ObjectRange, size: number): number {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) ||
+      offset < 0 || length < 1 || length > size - offset) {
+    throw new Error("backup.invalid_range");
+  }
+  return offset + length;
+}
+
 export function bufferObject(bytes: Uint8Array): ReplayableObject {
   const stored = Buffer.from(bytes),
     expected = receipt(stored);
   return {
     receipt: expected,
-    open: () => Readable.from([stored]),
+    open: range => Readable.from([range ? stored.subarray(range.offset, endOfRange(range, stored.length)) : stored]),
     async dispose() {},
   };
 }
@@ -97,7 +110,7 @@ export async function stageReadable(
   return {
     path,
     receipt: { digest: hash.digest("hex"), size },
-    open: () => createReadStream(path),
+    open: range => createReadStream(path, range && {start: range.offset, end: endOfRange(range, size) - 1}),
     async dispose() {
       if (disposed) return;
       disposed = true;

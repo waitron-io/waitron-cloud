@@ -1,4 +1,9 @@
 import {retentionExpirySql} from './retention.ts';
+import {randomUUID} from 'node:crypto';
+import {mkdir,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import type {Readable} from 'node:stream';
+import {finished} from 'node:stream/promises';
 import type { Pool, PoolClient } from "pg";
 import { readVenuePlan, readVenuePermissions, requireVenueService, type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
@@ -15,6 +20,20 @@ import type {DataRestoreVerifier,VerifiedChildOutput} from './container-verifier
 import {DISK_VERIFIER_CLEANUP_MS,type BackupVerificationReason} from './verification-protocol.ts';
 export type MutationFence = (client:PoolClient)=>Promise<void>;
 const exitDownloadMaxBytes = 16 * 1024 * 1024;
+const exitRangeBytes = 4 * 1024 * 1024;
+export interface ExitRangeOptions { stageRoot: string; enabled: boolean }
+interface ExitDownloadOwner { session: string; venueId: string; pointId: string }
+interface ExitStage {
+  directory: string;
+  id: string;
+  owner?: ExitDownloadOwner;
+  source?: ReplayableObject;
+  selected?: BackupPoint;
+  storage?: StorageLocation;
+  stream?: Readable;
+  timer?: ReturnType<typeof setTimeout>;
+  closing?: Promise<void>;
+}
 interface StreamingObjectStore {
   stage(
     key: string,
@@ -283,13 +302,18 @@ export class BackupCatalogue {
   readonly #pool: Pool;
   readonly #vault: BackupKeyVault;
   readonly #objects: ObjectFactory;
-  constructor(pool: Pool, vault: BackupKeyVault, objects: ObjectFactory, planMode: PlanMode = 'existing') {
+  readonly #exitRanges?: ExitRangeOptions;
+  #exitStage?: ExitStage;
+  constructor(pool: Pool, vault: BackupKeyVault, objects: ObjectFactory, planMode: PlanMode = 'existing', exitRanges?: ExitRangeOptions) {
     this.#planMode = planMode;
     this.#pool = pool;
     this.#vault = vault;
     this.#objects = objects;
+    this.#exitRanges = exitRanges;
   }
-  async #exitPoint(client: PoolClient, venueId: string, pointId: string, fence: MutationFence, deadline: PublicationDeadline) {
+  get exitRangesEnabled() { return this.#exitRanges?.enabled === true; }
+
+  async #exitPoint(client: PoolClient, venueId: string, pointId: string, fence: MutationFence, deadline: PublicationDeadline, maxBytes = exitDownloadMaxBytes) {
     if (this.#planMode !== 'test-free-paid' && this.#planMode !== 'test-venue-levels') backupFail('local_integration_only');
     // The database must release its locks even when the HTTP request times out first.
     await client.query("SELECT set_config('transaction_timeout',$1,true)",[`${deadline.remaining()}ms`]);
@@ -301,33 +325,136 @@ export class BackupCatalogue {
     if (!row) backupFail('unavailable');
     const selected = decodedPoint(row);
     if (selected.verification !== 'verified') backupFail('unverified');
-    if (selected.size > exitDownloadMaxBytes) backupFail('download_too_large');
+    if (selected.size > maxBytes) backupFail('download_too_large');
     await fence(client);
     return {storage, selected};
   }
-  async exitArchive(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal) {
+  async #stageExit(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal, rangeOwner?: ExitDownloadOwner) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     const signal = AbortSignal.any([deadline.signal, requestSignal]);
-    const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence, deadline));
+    const maxBytes = rangeOwner ? MAX_OBJECT_BYTES : exitDownloadMaxBytes;
+    const read = () => transaction(this.#pool, client => this.#exitPoint(client, venueId, pointId, fence, deadline, maxBytes));
     const first = await deadline.run(read);
     signal.throwIfAborted();
     const objects = this.#objects(first.storage);
     if (!('stage' in objects)) backupFail('unavailable');
-    const source = await deadline.run(() => objects.stage(first.selected.objectKey, undefined, {
-      maxBytes: exitDownloadMaxBytes, signal,
-    }), late => { void late.dispose().catch(() => {}); });
+    let slot: ExitStage | undefined, source: ReplayableObject | undefined;
     try {
-      const {selected, storage} = await deadline.run(read);
+      if (this.#exitRanges) slot = await this.#claimExitStage(this.#exitRanges.stageRoot);
+      const fetch = () => objects.stage(first.selected.objectKey, undefined, {maxBytes, signal,
+        ...(slot ? {temporaryRoot: slot.directory} : {})});
+      // A private slot stays occupied while the provider may still be writing into it.
+      source = slot ? await fetch() : await deadline.run(fetch, late => { void late.dispose().catch(() => {}); });
+      if (slot) slot.source = source;
+      const second = await deadline.run(read);
       signal.throwIfAborted();
-      // The same qualified encrypted bytes must still belong to the selected point and store.
-      if (source.receipt.digest !== selected.digest || source.receipt.size !== selected.size ||
-          first.selected.objectKey !== selected.objectKey || first.selected.keyVersion !== selected.keyVersion ||
-          JSON.stringify(first.storage) !== JSON.stringify(storage)) backupFail('unavailable');
-      return source;
+      this.#matchExitStage(source, first.selected, first.storage, second);
+      if (slot) Object.assign(slot, {owner: rangeOwner, selected: first.selected, storage: first.storage});
+      return {source, slot};
     } catch (error) {
-      await source.dispose();
+      if (slot) await this.#closeExitStage(slot);
+      else await source?.dispose();
       throw error;
     }
+  }
+
+  #matchExitStage(source: ReplayableObject, original: BackupPoint, location: StorageLocation,
+    {selected, storage}: {selected: BackupPoint; storage: StorageLocation}) {
+    // Only the same qualified bytes, location and key can reuse the staged copy.
+    if (source.receipt.digest !== selected.digest || source.receipt.size !== selected.size ||
+        original.objectKey !== selected.objectKey || original.keyVersion !== selected.keyVersion ||
+        JSON.stringify(location) !== JSON.stringify(storage)) backupFail('unavailable');
+  }
+
+  async #claimExitStage(root: string) {
+    const slot: ExitStage = {directory: join(root, 'exit-download'), id: randomUUID()};
+    try { await mkdir(slot.directory, {mode: 0o700}); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') backupFail('exit_busy');
+      throw error;
+    }
+    this.#exitStage = slot;
+    return slot;
+  }
+
+  #expireExitStage(slot: ExitStage, ms = 600_000) {
+    clearTimeout(slot.timer);
+    slot.timer = setTimeout(() => { void this.#closeExitStage(slot).catch(() => {}); }, ms).unref();
+  }
+
+  #closeExitStage(slot: ExitStage) {
+    if (this.#exitStage !== slot) return Promise.resolve();
+    return slot.closing ??= (async () => {
+      clearTimeout(slot.timer);
+      const stream = slot.stream;
+      if (stream && !stream.closed) {
+        const closed = finished(stream, {cleanup:true}).catch(() => {});
+        stream.destroy();
+        await closed;
+      }
+      await slot.source?.dispose();
+      await rm(slot.directory, {recursive: true, force: true});
+      if (this.#exitStage === slot) this.#exitStage = undefined;
+    })().catch(error => {
+      slot.closing = undefined;
+      this.#expireExitStage(slot, 1000);
+      throw error;
+    });
+  }
+
+  async exitArchive(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal) {
+    const {source, slot} = await this.#stageExit(venueId, pointId, fence, requestSignal);
+    if (!slot) return source;
+    return {receipt: source.receipt, open: () => slot.stream = source.open(), dispose: () => this.#closeExitStage(slot)};
+  }
+
+  async startExitRange(owner: ExitDownloadOwner, fence: MutationFence, signal: AbortSignal) {
+    if (!this.exitRangesEnabled) backupFail('unavailable');
+    const {source, slot} = await this.#stageExit(owner.venueId, owner.pointId, fence, signal, owner);
+    if (!slot) backupFail('unavailable');
+    this.#expireExitStage(slot);
+    return {attemptId: slot.id, size: source.receipt.size};
+  }
+
+  #ownedExitStage(owner: ExitDownloadOwner, attemptId: string) {
+    const slot = this.#exitStage, bound = slot?.owner;
+    if (slot?.id !== attemptId || !bound) return undefined;
+    return bound.session === owner.session && bound.venueId === owner.venueId && bound.pointId === owner.pointId ? slot : undefined;
+  }
+
+  async readExitRange(owner: ExitDownloadOwner, attemptId: string, offset: number, fence: MutationFence, signal: AbortSignal) {
+    const slot = this.#ownedExitStage(owner, attemptId);
+    if (!slot?.source || !slot.selected || !slot.storage || slot.closing) backupFail('unavailable');
+    const size = slot.source.receipt.size;
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset >= size || offset % exitRangeBytes) backupFail('invalid_range');
+    const deadline = new PublicationDeadline(Date.now() + 10_000);
+    const current = await deadline.run(() => transaction(this.#pool, client =>
+      this.#exitPoint(client, owner.venueId, owner.pointId, fence, deadline, MAX_OBJECT_BYTES)));
+    signal.throwIfAborted();
+    if (this.#exitStage !== slot || slot.closing) backupFail('unavailable');
+    this.#matchExitStage(slot.source, slot.selected, slot.storage, current);
+    if (slot.stream) backupFail('exit_busy');
+    const length = Math.min(size - offset, exitRangeBytes);
+    const stream = slot.stream = slot.source.open({offset, length});
+    const cancel = () => { stream.destroy(); void this.#closeExitStage(slot).catch(() => {}); };
+    signal.addEventListener('abort', cancel, {once: true});
+    stream.once('close', () => {
+      signal.removeEventListener('abort', cancel);
+      slot.stream = undefined;
+      if (!stream.readableEnded) void this.#closeExitStage(slot).catch(() => {});
+    });
+    this.#expireExitStage(slot);
+    return {stream, length, size};
+  }
+
+  async releaseExitRange(owner: ExitDownloadOwner, attemptId: string) {
+    const slot = this.#ownedExitStage(owner, attemptId);
+    if (slot) await this.#closeExitStage(slot);
+  }
+
+  async cancelExitSession(session: string) {
+    const slot = this.#exitStage;
+    if (slot?.owner?.session === session) await this.#closeExitStage(slot);
   }
   async exitArchiveKey(venueId: string, pointId: string, fence: MutationFence) {
     const deadline = new PublicationDeadline(Date.now() + 10_000);

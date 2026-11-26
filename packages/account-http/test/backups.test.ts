@@ -2,13 +2,18 @@ import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {Pool} from 'pg';
 import {BackupCatalogue} from '../../backups/src/catalogue.ts';
-import {bufferObject,receipt,type StageOptions} from '../../backups/src/object-transfer.ts';
+import {bufferObject,receipt,stageReadable,type StageOptions} from '../../backups/src/object-transfer.ts';
 import {recoveryFixture} from '../../backups/test/fixtures/recovery-v2.ts';
 import {verifyPointFixture} from '../../backups/test/fixtures/verification.ts';
 import {BackupKeyVault} from '../../backups/src/keys.ts';
 import type {HttpBindings} from '@hono/node-server';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
+import {mkdtemp,readdir,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {Readable} from 'node:stream';
+import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,beforeEach,test,type TestContext} from 'node:test';
 import {createLeaseIssuer,LifecycleStore,SignupStore,RegistrationStore,type PlanMode} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
@@ -143,16 +148,96 @@ function exitClockPool(t:TestContext){
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema},pg_catalog`});
  t.after(()=>pool.end());return pool;
 }
-function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:StageOptions|undefined)=>Promise<ReturnType<typeof bufferObject>>,pool=db.pool){
- const server=createAccountApp({pool,outbox:db.outbox,planMode,
+function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:StageOptions|undefined)=>Promise<ReturnType<typeof bufferObject>>,pool=db.pool,exitRanges?:{stageRoot:string;enabled:boolean}){
+ const server=createAccountApp({pool,outbox:db.outbox,planMode,exitRanges,
   config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
   leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),
   captures:{vault:f.vault,objects:()=>({stage:(key,_streamKey,options)=>stage(key,options),
   async putStaged(){throw Error('unexpected write');},async remove(){throw Error('unexpected delete');}}),
   async grant(){throw Error('unexpected grant');}}});
- return (path:string,pointId=f.point.id)=>server.request(origin+'/api/account/backups/'+path,{method:'POST',headers:{origin,'content-type':'application/json',
-  cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken},body:JSON.stringify({venueId:f.installed.venueId,...(path==='list'?{}:{pointId})})},bindings);
+ const headers={origin,'content-type':'application/json',cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken};
+ const send=(path:string,pointId=f.point.id,fields:Record<string,string>={})=>server.request(origin+'/api/account/backups/'+path,{method:'POST',headers,
+  body:JSON.stringify({venueId:f.installed.venueId,...(path==='list'?{}:{pointId}),...fields})},bindings);
+ return Object.assign(send,{endSession:()=>server.request(origin+'/api/account/logout',{method:'POST',headers,body:'{}'},bindings)});
 }
+
+test('the enabled exit route serves repeatable pieces from one qualified archive and shares its slot with full downloads',async t=>{
+ const f=await recoveryFixture(db),size=4*1024*1024;
+ const bytes=Buffer.concat([Buffer.alloc(size,0x61),Buffer.from('tail')]);
+ const capture=await f.catalogue.reserveCapture(f.installed.installationId,randomUUID());
+ f.objects.set(capture.incomingKey,bytes);
+ const point=await f.catalogue.publish(f.installed.installationId,capture.id,{...receipt(bytes),capturedAt:new Date().toISOString(),
+  retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});
+ await verifyPointFixture(db.pool,f.catalogue,point.id);
+ let reads=0,disposals=0;
+ const stage=async(key:string,options?:StageOptions)=>{
+  reads++;
+  const archive=f.objects.get(key)!;
+  const staged=await stageReadable(Readable.from([archive]),archive.length,options);
+  return {...staged,async dispose(){await staged.dispose();disposals++;}};
+ };
+ const stageRoot=await mkdtemp(join(tmpdir(),'cloud-exit-test-'));
+ t.after(()=>rm(stageRoot,{recursive:true,force:true}));
+ const off=exitDownload(f,'test-venue-levels',stage,db.pool,{stageRoot,enabled:false});
+ assert.equal((await off('download-range/start',point.id)).status,404);
+ const send=exitDownload(f,'test-venue-levels',stage,db.pool,{stageRoot,enabled:true});
+ const start=await send('download-range/start',point.id);
+ assert.equal(start.status,200);
+ const {attemptId,size:archiveSize}=await start.json();
+ assert.equal(archiveSize,4194308);
+ const busy=await send('download');
+ assert.equal(busy.status,503);
+ assert.ok(busy.headers.get('retry-after'));
+ assert.equal((await send('download-range/start',point.id)).status,503);
+ assert.equal((await send('download-range/read',f.point.id,{attemptId,offset:'0'})).status,410);
+ assert.equal((await send('download-range/read',point.id,{attemptId,offset:'1'})).status,400);
+ const first=await send('download-range/read',point.id,{attemptId,offset:'0'});
+ assert.equal(first.status,206);
+ assert.equal(first.headers.get('content-range'),'bytes 0-4194303/4194308');
+ await delay(100);
+ const overlap=await send('download-range/read',point.id,{attemptId,offset:'4194304'});
+ assert.equal(overlap.status,503);
+ assert.deepEqual(Buffer.from(await first.arrayBuffer()),bytes.subarray(0,size));
+ for(let repeat=0;repeat<32;repeat++){
+  const last=await send('download-range/read',point.id,{attemptId,offset:'4194304'});
+  assert.equal(last.status,206);
+  assert.equal(last.headers.get('content-range'),'bytes 4194304-4194307/4194308');
+  assert.equal(await last.text(),'tail');
+ }
+ assert.equal(reads,1);
+ assert.equal((await send('download-range/release',point.id,{attemptId})).status,204);
+ assert.equal(disposals,1);
+ assert.deepEqual(await readdir(stageRoot),[]);
+ const small=await send('download');
+ assert.equal(small.status,200);
+ assert.deepEqual(Buffer.from(await small.arrayBuffer()),f.objects.get(f.point.objectKey));
+ const next=await send('download-range/start',point.id);
+ assert.equal(next.status,200);
+ const outstanding=await send('download-range/read',point.id,{attemptId:(await next.json()).attemptId,offset:'0'});
+ assert.equal(outstanding.status,206);
+ await outstanding.body!.cancel();
+ await t.waitFor(async()=>assert.deepEqual(await readdir(stageRoot),[]),{timeout:2000});
+});
+
+test('a ranged download keeps its copy through a proof refresh and clears it when the owner signs out',async t=>{
+ const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;
+ const stageRoot=await mkdtemp(join(tmpdir(),'cloud-exit-test-'));
+ t.after(()=>rm(stageRoot,{recursive:true,force:true}));
+ const send=exitDownload(f,'test-venue-levels',async()=>bufferObject(bytes),db.pool,{stageRoot,enabled:true});
+ const start=await send('download-range/start');
+ assert.equal(start.status,200);
+ const {attemptId}=await start.json();
+ await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes' WHERE account_id=$1",[f.owner.accountId]);
+ const read=()=>send('download-range/read',f.point.id,{attemptId,offset:'0'});
+ assert.deepEqual(await (await read()).json(),{error:'proof_required'});
+ await db.pool.query('UPDATE cloud_sessions SET action_proved_at=clock_timestamp() WHERE account_id=$1',[f.owner.accountId]);
+ const refreshed=await read();
+ assert.equal(refreshed.status,206);
+ assert.deepEqual(Buffer.from(await refreshed.arrayBuffer()),bytes);
+ assert.equal((await send.endSession()).status,204);
+ assert.deepEqual(await readdir(stageRoot),[]);
+ assert.equal((await read()).status,401);
+});
 test('exit download returns the verified archive and its matching key while the installation stays active',async()=>{
  const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;
  let disposals=0;

@@ -42,12 +42,12 @@ import {recoveryResponse} from './recovery.ts';
 import {remoteAccessResponse,type RemoteResolver} from './remote-access.ts';
 import {venueEmailResponse} from './venue-email.ts';
 import {BackupCaptures,type CaptureOptions} from '@waitron-cloud/backups/captures';
-import {BackupCatalogue} from '@waitron-cloud/backups/catalogue';
+import {BackupCatalogue,type ExitRangeOptions} from '@waitron-cloud/backups/catalogue';
 import {captureResponse} from './captures.ts';
 import {ManagedStreamMachines,managedStreamResponse} from './managed-streams.ts';
 import {alertPreferencesResponse} from './alerts.ts';
 import {translationConsentResponse} from './translation-consent.ts';
-import {backupResponse} from './backups.ts';
+import {backupResponse,exitDownloadSession} from './backups.ts';
 import {sentReportsResponse} from './sent-reports.ts';
 import {installationResponse} from './installations.ts';
 import {InstallationError,SecurityAuditError,UsageError,migrationNames,type LeaseIssuer} from '@waitron-cloud/registration';
@@ -107,7 +107,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;liveGuestMenu?:boolean;venueMailDnsSuffix?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;liveGuestMenu?:boolean;venueMailDnsSuffix?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;exitRanges?:ExitRangeOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
   const venueMailDnsSuffix=options.venueMailDnsSuffix;
@@ -139,7 +139,7 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,{...options.captures,planMode:options.planMode},options.leaseTrust):undefined;
   const exitDownloads=options.captures&&(options.planMode==='test-free-paid'||options.planMode==='test-venue-levels')
-    ?new BackupCatalogue(pool,options.captures.vault,options.captures.objects,options.planMode):undefined;
+    ?new BackupCatalogue(pool,options.captures.vault,options.captures.objects,options.planMode,options.exitRanges):undefined;
   const translation=options.translation&&options.leaseIssuer?(options.translationMachine??new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,undefined,options.planMode,allowances)):undefined;
   const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,options.planMode):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
@@ -311,6 +311,7 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
       } catch (error) {
         if (!(error instanceof IdentityError) || !['session_unavailable', 'session_expired'].includes(error.code)) throw error;
       }
+      await exitDownloads?.cancelExitSession(exitDownloadSession(token)).catch(()=>{});
       writeSessionCookies(c, secure); return c.body(null, 204);
     } finally {if (padReply) await delay(Math.max(0, 300 - (performance.now() - started)));}
   });
