@@ -1,6 +1,6 @@
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
-import type {VenueEmailSettings} from './remote-types.ts';
+import {sameVenueDnsRecords,type VenueEmailSettings} from './remote-types.ts';
 
 export function venueEmailScreen(app:PortalApp,settings:VenueEmailSettings,disabled:boolean){
  const c=app.copy,r=app.remote,result=r.venueEmailField==='replyTo'?r.venueEmailResult:undefined;
@@ -76,12 +76,12 @@ function dnsRecords(app:PortalApp,domain:NonNullable<VenueEmailSettings['domain'
   catch{report(status,c.venueDnsCopyFailed);}
  };
  const download=async(event:Event)=>{
-  const status=feedback(event);
+  const status=feedback(event),id=app.remote.installationId;
   try{
    const asset='/venue-dns-pdf.js';
    const {makeDnsPdf}=await import(asset) as typeof import('./venue-dns-pdf.ts');
    const bytes=Uint8Array.from(await makeDnsPdf(domain.records,c));
-   if(app.remote.view?.venueEmail?.domain!==domain)return;
+   if(app.remote.installationId!==id||!sameVenueDnsRecords(domain.records,app.remote.view?.venueEmail?.domain?.records))return;
    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})),link=document.createElement('a');
    try{link.href=url;link.download='waitron-dns.pdf';link.click();}finally{URL.revokeObjectURL(url);}
   }catch{report(status,c.venueDnsPdfFailed);}

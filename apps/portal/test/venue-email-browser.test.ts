@@ -16,6 +16,12 @@ const csrf='A'.repeat(43),id='12345678-1234-4234-8234-123456789abc',url='https:/
 const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies go to',defaultReply:'Replies go to your sending address by default.',saved:'Reply address saved.',reset:'Use standard sender',cleared:'Standard sender restored.',refresh:'Refresh status',address:'Sending address',saveDomain:'Save sending address',records:'DNS records',recordName:'Name',recordValue:'Target',copy:'Copy target',pdf:'Download DNS records',verified:'Verified',unknown:'Unknown'},
  es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',defaultReply:'Por defecto, las respuestas van a tu dirección de envío.',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.',refresh:'Actualizar estado',address:'Dirección de envío',saveDomain:'Guardar dirección de envío',records:'Registros DNS',recordName:'Nombre',recordValue:'Destino',copy:'Copiar destino',pdf:'Descargar registros DNS',verified:'Verificado',unknown:'Desconocido'}};
 
+function deferred(){
+ let resolve!:()=>void;
+ const promise=new Promise<void>(done=>{resolve=done;});
+ return {promise,resolve};
+}
+
 test('a venue owner can save a reply address from Remote access',async t=>{
  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const receipts=process.env.VENUE_EMAIL_RECEIPT_DIR;
@@ -27,12 +33,16 @@ test('a venue owner can save a reply address from Remote access',async t=>{
   try{
    const c=labels[locale],requests:unknown[]=[],tokens:(string|null)[]=[],clears:unknown[]=[];
    let savedReplyTo:string|null=null,address:string|null=null,pdfLoads=0,dnsLimited=false;
+   let delayedDns:ReturnType<typeof deferred>|undefined;
+   const releasePdf=deferred(),dnsStarted=deferred();
    const emailAlias={type:'CNAME',name:`${id}._domainkey.cafe.example.test`,value:`${id}.mail.cloud.example.test`};
    const remoteAlias={type:'CNAME',name:'staff.cafe.example.test',value:'staff.venue.example.test'};
    const domain=()=>({address,records:address?[emailAlias,remoteAlias]:[remoteAlias]});
    await page.context().grantPermissions(['clipboard-read','clipboard-write']);
    await page.route('**/venue-dns-pdf.js',async route=>{
     pdfLoads++;
+    delayedDns?.resolve();
+    await releasePdf.promise;
     await route.fulfill({contentType:'text/javascript',body:await readFile(new URL('../dist/venue-dns-pdf.js',import.meta.url))});
    });
    await page.route(url,route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
@@ -47,6 +57,7 @@ test('a venue owner can save a reply address from Remote access',async t=>{
      service:{state:'unconfigured',health:'unknown',observedAt:null,validUntil:null},venueEmail:{replyTo:savedReplyTo,domain:domain()}}});
     if(endpoint==='/venue-email/check-dns'){
      if(dnsLimited)return route.fulfill({status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});
+     if(delayedDns){dnsStarted.resolve();await delayedDns.promise;}
      return route.fulfill({json:{replyTo:savedReplyTo,domain:{...domain(),records:domain().records.map(record=>({...record,status:'verified'}))}}});
     }
     if(endpoint==='/venue-email/save-domain'){
@@ -112,8 +123,14 @@ test('a venue owner can save a reply address from Remote access',async t=>{
     assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),alias.value);
    }
    assert.equal(pdfLoads,0);
+   delayedDns=deferred();
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await dnsStarted.promise;
    const pendingDownload=page.waitForEvent('download',{timeout:5000});
    await list.getByRole('button',{name:c.pdf,exact:true}).click();
+   await t.waitFor(async()=>assert.equal(await list.getByText(c.verified,{exact:true}).count(),2),{timeout:3000});
+   delayedDns=undefined;
+   releasePdf.resolve();
    const pdf=await readFile(await (await pendingDownload).path());
    assert.equal(pdfLoads,1);
    const streams=[...pdf.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)];

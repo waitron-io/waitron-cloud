@@ -2,7 +2,7 @@ import {bodyRefusal} from './body-refusal.ts';
 import {validEmail} from './email.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
-import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,validVenueEmail,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
+import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,validVenueEmail,sameVenueDnsRecords,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:[]|RemoteDns['records']}|undefined;
  venueEmailDraft='';venueDomainDraft='';
@@ -91,8 +91,7 @@ export class RemoteController {
   const result=await this.#request<VenueEmailSettings>('/venue-email/check-dns',{installationId:id});
   if(!this.view||this.view.venueEmail!==email)return;
   const checked=result.ok&&validVenueEmail(result.value)?result.value.domain:undefined;
-  const matches=checked&&checked.address===domain.address&&checked.records.length===domain.records.length
-   &&checked.records.every((record,index)=>record.name===domain.records[index]!.name&&record.value===domain.records[index]!.value);
+  const matches=checked&&checked.address===domain.address&&sameVenueDnsRecords(domain.records,checked.records);
   const records=matches?checked.records:domain.records.map(record=>({...record,status:'unknown' as const}));
   this.view={...this.view,venueEmail:{...email,domain:{...domain,records}}};
   this.#changed();

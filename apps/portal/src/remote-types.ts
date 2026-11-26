@@ -35,6 +35,10 @@ function validRemoteName(v:unknown):v is RemoteName{
   &&(v.recordMoved===undefined||typeof v.recordMoved==='boolean')
   &&(v.recordMoved!==true||v.current!==v.assigned);
 }
+export function sameVenueDnsRecords(expected:VenueDnsAlias[],current?:VenueDnsAlias[]):boolean{
+ return current?.length===expected.length&&expected.every((record,index)=>
+  record.name===current[index]!.name&&record.value===current[index]!.value);
+}
 export function validVenueEmail(v:unknown):v is VenueEmailSettings{
  if(!object(v)||!(v.replyTo===null||typeof v.replyTo==='string'&&validEmail(v.replyTo)))return false;
  const domain=v.domain;
