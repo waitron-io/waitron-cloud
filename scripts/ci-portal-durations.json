@@ -154,7 +154,7 @@
   "recovery-scope-server-browser.test.ts": 30131.335247,
   "recovery-select-browser.test.ts": 29987.641218,
   "recovery-session-browser.test.ts": 16414.790405,
-  "recovery-snapshot-pagination-browser.test.ts": 12030.824741,
+  "recovery-snapshot-approval-browser.test.ts": 12030.824741,
   "recovery-test-only-browser.test.ts": 6420.720706,
   "recovery-test-only.test.ts": 96.494904,
   "recovery-transport-boundary.test.ts": 73.010149,

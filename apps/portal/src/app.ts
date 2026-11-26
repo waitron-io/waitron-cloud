@@ -143,9 +143,9 @@ export class PortalApp {
     this.recovery.open(this.link.recoveryId ?? returned?.recoveryId);
     void clearAbandonedDatabaseDownload();
     this.backups = new BackupController(() => {
-      const venue=this.backups.page?.venueId;
-      if(this.backups.selectedSource==='continuous')this.recovery.chooseContinuous(venue);
-      else this.recovery.choose(venue);
+      const {page,selectedSource}=this.backups;
+      if(page?.continuousRecovery&&(selectedSource==='continuous'||!page.defaultPointId))this.recovery.chooseContinuous(page.venueId);
+      else this.recovery.choose(page?.defaultPointId?page.venueId:undefined);
       this.draw();
     });
     this.sentReports = new SentReportsController(() => this.draw());

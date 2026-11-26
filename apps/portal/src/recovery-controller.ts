@@ -41,6 +41,7 @@ export class RecoveryController {
   const result=await this.#request<RecoveryView>('/recovery/'+action,body);if(generation!==this.#generation)return;this.pending=false;
   this.recoveryExpiresAt=result.ok?undefined:result.recoveryExpiresAt;
   // A confirmed or uncertain approval consumes its confirmations before another authorisation.
+  // The box can select a copy after the last inspection of a venue-only approval.
   const returned=result.ok?result.value.operation:null;
   if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(returned.pointId===point||source==='snapshot'&&point===null)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.nodeId===replacement.nodeId))){if(action==='approve'||returned?.id!==operation?.id){this.stopped=false;this.acceptLoss=false;}this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
   else{

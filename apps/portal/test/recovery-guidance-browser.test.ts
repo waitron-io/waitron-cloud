@@ -62,7 +62,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     const c=translations[locale];await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill('00123456');await page.getByRole('button',{name:c.pairInspect,exact:true}).click();
     if(scenario.action==='approve'){
      stage='recovery source and approval';
-     await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venueId);await page.getByLabel(c.recoveryStopped,{exact:true}).check();await page.getByLabel(c.recoveryAcceptLoss,{exact:true}).check();
+     await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venueId);await page.getByLabel(c.recoveryStopped,{exact:true}).check();await page.getByLabel(c.recoveryAcceptSnapshotLoss,{exact:true}).check();
      await page.getByRole('button',{name:c.recoveryApprove,exact:true}).click();
     }else if(scenario.action==='replace'){
      stage='recovery replacement confirmation';

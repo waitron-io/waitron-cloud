@@ -29,7 +29,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto('https://portal.test/recover#request='+id);await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill('12345678');await page.getByRole('button',{name:c.pairInspect,exact:true}).click();
-  await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venueId);await page.getByLabel(c.recoveryStopped,{exact:true}).check();await page.getByLabel(c.recoveryAcceptLoss,{exact:true}).check();
+  await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venueId);await page.getByLabel(c.recoveryStopped,{exact:true}).check();await page.getByLabel(c.recoveryAcceptSnapshotLoss,{exact:true}).check();
   const approve=page.getByRole('button',{name:c.recoveryApprove,exact:true});await approve.click();await page.waitForLoadState('networkidle');
   assert.equal(approvals,0,'an unenrolled session never queues recovery approval');await page.getByText(c.pairEnrollment,{exact:true}).waitFor();
   const capture=async(state:string)=>{await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));if(process.env.RECOVERY_PROOF_RECEIPT_DIR){await mkdir(process.env.RECOVERY_PROOF_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_PROOF_RECEIPT_DIR}/${locale}-${theme}-${width}-${state}.png`,fullPage:true});}};

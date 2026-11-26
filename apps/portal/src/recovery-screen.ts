@@ -12,8 +12,10 @@ export function recoveryScreen(app:PortalApp){
  const selectionDisabled=disabled||installations.pending;
  const available=venues.some(i=>i.venueId===b.venueId);
  const continuous=b.page?.continuousRecovery,usingContinuous=r.source==='continuous';
+ // The catalogue default covers older pages and never binds the box to that copy.
+ const snapshotAvailable=!!b.page?.defaultPointId;
  const sourceDisabled=selectionDisabled||b.pending;
- const ready=available&&b.page?.venueId===r.venueId&&!!r.source;
+ const ready=available&&b.page?.venueId===r.venueId&&(usingContinuous?!!continuous:r.source==='snapshot'&&snapshotAvailable);
  const selectingSnapshot=op?op.source.kind==='snapshot'&&op.pointId===null:!usingContinuous;
  const proofRequested=app.actionProof.loaded||app.actionProof.pending||['pairEnrollment','actionProofUnavailable','recoveryProofRequired'].includes(r.error??'');
  const errorMessage=r.error==='recoveryActive'&&r.recoveryExpiresAt
@@ -46,17 +48,18 @@ export function recoveryScreen(app:PortalApp){
    </section>`:nothing}
   ${r.view&&!op&&!expired?html`
     ${installations.error?html`<p role="alert">${c[installations.error]}</p>`:nothing}
-    <wt-button .disabled=${selectionDisabled} @click=${()=>{void installations.load();}}>${c.refreshStatus}</wt-button>
+    <wt-button .disabled=${selectionDisabled} @click=${()=>{void installations.load();void b.load();}}>${c.refreshStatus}</wt-button>
     ${installations.organisations.length>1?html`<label class="business-choice">${c.recoveryOrganisation}<select aria-label=${c.recoveryOrganisation} ?disabled=${selectionDisabled} @change=${(e:Event)=>{installations.selectOrganisation((e.target as HTMLSelectElement).value);}}>${installations.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===installations.selectedOrganisation}>${o.name}</option>`)}</select></label>`:nothing}
     <label class="business-choice">${c.recoveryVenue}<select aria-label=${c.recoveryVenue} ?disabled=${selectionDisabled} @change=${(e:Event)=>{const value=(e.target as HTMLSelectElement).value;if(value)void b.open(value);else{b.close();r.choose(undefined);app.draw();}}}><option value="" .selected=${!b.venueId}>${c.recoveryChooseVenue}</option>${venues.map(i=>html`<option value=${i.venueId} .selected=${i.venueId===b.venueId}>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId}</option>`)}</select></label>
     ${available?html`<section aria-label=${c.recoverySource}><h2>${c.recoverySource}</h2>
       ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}${permissionActions(app,b.error)}
       ${b.pending?html`<p role="status">${c.wait}</p>`:nothing}
-      ${b.error?html`<wt-button .disabled=${sourceDisabled} @click=${()=>{void b.load();}}>${c.retry}</wt-button>`:nothing}
+      ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}
+      ${b.page&&!snapshotAvailable?html`<p>${b.page.points.length?c.recoveryNoCheckedSnapshots:c.noSnapshots}</p>`:nothing}
       ${ready?html`
         ${continuous?html`<label class="disclosure"><input type="radio" name="recovery-source" .checked=${usingContinuous} ?disabled=${sourceDisabled} @change=${()=>b.selectContinuous()}> ${c.recoveryContinuous}</label>
           <dl><dt>${c.recoveryRecoverable}</dt><dd><time datetime=${continuous.recoverableAt}>${formatDateTime(continuous.recoverableAt,app.locale)}</time></dd><dt>${c.recoveryChecked}</dt><dd><time datetime=${continuous.checkedAt}>${formatDateTime(continuous.checkedAt,app.locale)}</time></dd></dl>`:nothing}
-        <label class="disclosure"><input type="radio" name="recovery-source" .checked=${!usingContinuous} ?disabled=${sourceDisabled} @change=${()=>b.selectSnapshot()}> ${c.recoverySnapshotFallback}</label>
+        ${snapshotAvailable?html`<label class="disclosure"><input type="radio" name="recovery-source" .checked=${!usingContinuous} ?disabled=${sourceDisabled} @change=${()=>b.selectSnapshot()}> ${c.recoverySnapshotFallback}</label>`:nothing}
         <p><strong>${usingContinuous&&continuous?`${c.recoveryLoss} ${formatDateTime(continuous.recoverableAt,app.locale)}`:c.recoverySnapshotLoss}</strong></p>
         ${approval}`:nothing}
       </section>`:nothing}`:nothing}

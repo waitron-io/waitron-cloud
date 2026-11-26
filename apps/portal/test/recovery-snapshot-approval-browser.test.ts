@@ -11,7 +11,7 @@ const stamp='2026-11-10T09:05:09.000Z',expiry='2026-12-10T09:05:09.000Z';
 const installation={installationId:venue,venueId:venue,organisationId:venue,legalBusinessId:venue,environment:'test',revision:0,revokedAt:null,lastContactAt:stamp,leaseExpiresAt:expiry,canRevoke:true,
  overview:{organisationName:'Sol SL',businessName:'Café Sol',countryCode:'ES',latestSnapshotAt:stamp,verifiedSnapshotAt:stamp},
  services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'ready',health:'healthy',failure:null,observedAt:stamp}))};
-const point={id:first,capturedAt:stamp,verification:'verified',retention:'daily',expiresAt:expiry,protection:'fallback'};
+const point={id:'20000000-0000-4000-8000-000000000003',capturedAt:stamp,verification:'verified',retention:'daily',expiresAt:expiry,protection:'fallback'};
 const continuous={recoverableAt:'2026-11-11T09:05:09.000Z',checkedAt:'2026-11-11T09:05:30.000Z',sourceNodeId:venue};
 const pending={requestId:request,state:'awaiting_owner',expiresAt:expiry,operationId:null,operation:null};
 const bundle=await build({stdin:{contents:`
@@ -28,13 +28,14 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const page=await browser.newPage({locale,colorScheme:theme,timezoneId:'UTC',viewport:{width,height:900}});page.setDefaultTimeout(3000);
   await page.clock.install({time:new Date('2026-11-11T12:00:00Z')});
   const approvals:unknown[]=[];
+  let points:typeof point[]=[],defaultPointId:string|null=null;
   await page.route('https://portal.test/**',route=>{
    const path=new URL(route.request().url()).pathname;
    const proof=mockActionProof(route,true);if(proof)return proof;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:expiry}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[installation]}});
    if(path.endsWith('/recovery/inspect'))return route.fulfill({json:pending});
-   if(path.endsWith('/backups/list'))return route.fulfill({json:{venueId:venue,points:[point],nextCursor:'next',defaultPointId:first,continuousRecovery:continuous}});
+   if(path.endsWith('/backups/list'))return route.fulfill({json:{venueId:venue,points,nextCursor:defaultPointId?'next':null,defaultPointId,continuousRecovery:continuous}});
    if(path.endsWith('/recovery/approve')){approvals.push(route.request().postDataJSON());return route.fulfill({json:{...pending,state:'approved',operationId:request,operation:{id:request,venueId:venue,pointId:null,source:{kind:'snapshot',pointId:null},mode:'failure',status:'pending',expiresAt:expiry}}});}
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'unavailable'}});
    return route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
@@ -44,9 +45,22 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.waitForFunction(()=>(window as any).app.installations.loaded);
   await page.locator('wt-input[name="recoveryCode"] input').fill('00123456');
   await page.getByRole('button',{name:c.pairInspect,exact:true}).click();
-  await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venue);
+  const venueChoice=page.getByLabel(c.recoveryVenue,{exact:true});
   const stream=page.getByRole('radio',{name:c.recoveryContinuous,exact:true}),snapshot=page.getByRole('radio',{name:c.recoverySnapshotFallback,exact:true});
+  for(const unavailable of [[],[{...point,verification:'failed'}]]){
+   points=unavailable;
+   await venueChoice.selectOption(venue);
+   await stream.waitFor();
+   assert.equal(await stream.isChecked(),true);
+   assert.equal(await snapshot.count(),0);
+   await venueChoice.selectOption('');
+  }
+  // The newest checked copy can be beyond the first catalogue page.
+  await venueChoice.selectOption(venue);
   await stream.waitFor();assert.equal(await stream.isChecked(),true);
+  defaultPointId=first;
+  await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
+  await snapshot.waitFor();
   const stopped=page.getByRole('checkbox',{name:c.recoveryStopped,exact:true}),approve=page.getByRole('button',{name:c.recoveryApprove,exact:true});
   await stopped.check();await page.getByRole('checkbox',{name:c.recoveryAcceptLoss,exact:true}).check();
   await snapshot.check();

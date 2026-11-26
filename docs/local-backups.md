@@ -401,7 +401,8 @@ Open its Cloud link, sign in as an owner and enter the eight-digit code shown on
 replacement. The link identifies the request; it deliberately excludes the code.
 Choose your organisation and venue. Cloud selects the latest continuous recovery
 point when one is available. Check the recoverable time before accepting the loss
-of later changes. For a retained copy, authorise snapshot recovery for the venue.
+of later changes. When a checked snapshot is available, you can authorise snapshot
+recovery for the venue.
 Confirm that the old server and any surviving server with newer data are stopped
 or permanently unavailable.
 
