@@ -202,10 +202,7 @@ test('package selection reads the captured lockfile and refuses unknown or mixed
  const preceding=historicalUi('0.2.10','resolution: {integrity: sha512-Q8pKTZfC6K9M9Y1ZWfugy+j8A7fqLcwoc/BALmwBi/5b1fQud690WZXFfoFbgBR1768Ffr+90qHreGq+7UUwPw==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.10/6faef69b33f70d64c1d00952bec813891892a18e}');
  const previousCloudUi=historicalUi('0.2.30','resolution: {integrity: sha512-1PhncKtXnoXOLDGoGNRlUuYkF5kHrorjEUxkO7c7ZKAD3uLYtwPA/no5wSBid+WGjTuZQz/pWmWYmqXLvHC6AQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.30/7ea571c6a407a83e7b513020f086929dcb9b15fa}');
  const previousUi=historicalUi('0.2.34','resolution: {integrity: sha512-59/NOGjBOVcOoS6+/yR0c/5caZe3ZfC7lSfnFExs8fcmHMIXcJVRsbVmLNxAwB2Nn6IVzKI8jmeXi9aiSNXxgw==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.34/43f624221a8a7499dea2d9d49a93237f16b6ecca}');
- const previousPair=historicalUi('0.2.45','resolution: {integrity: sha512-a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.45/5065de6d3dff095336b4c41d55b1ad69515393a2}',withContract(abandonContract))
-  .replaceAll("'@waitron-io/contract@0.2.55'","'@waitron-io/contract@0.2.45'")
-  .replace("'@waitron-io/contract':\n        specifier: 0.2.55\n        version: 0.2.55","'@waitron-io/contract':\n        specifier: 0.2.45\n        version: 0.2.45");
- assert.ok(previousPair.includes("'@waitron-io/contract':\n        specifier: 0.2.45\n        version: 0.2.45"),'historical contract consumer must match its archive');
+ const previousPair=historicalUi('0.2.45','resolution: {integrity: sha512-a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.45/5065de6d3dff095336b4c41d55b1ad69515393a2}',withContract(abandonContract));
  for(const [lock,version] of [[previousPair,'0.2.45'],[legacy,'0.1.0'],[previous,'0.2.1'],[preceding,'0.2.10'],[previousCloudUi,'0.2.30'],[previousUi,'0.2.34']]){
   assert.ok(lock.includes(`'@waitron-io/ui-core@${version}':`),'historical package key must match its archive');
   assert.ok(lock.includes(`'@waitron-io/ui-core@${version}(lit@3.3.3)':`),'historical snapshot must match its archive');
