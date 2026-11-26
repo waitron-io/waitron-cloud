@@ -10,7 +10,9 @@ publication window. The [release guide](../../shared-ui-release.md) owns the pro
 - Both archives match the SHA512 digests in #1429 and #1428 and name Waitron
   source `42945494674d75787f28fa0110e38cd913636a3f`. The only changed files inside
   either archive are its README and manifest. The shipped JavaScript, declarations
-  and licence files match 0.2.45. Waitron changed two UI test dependencies.
+  and licence files match 0.2.45. Waitron published these packages from #4070,
+  which updates the UI test tools axe-core and Playwright. GitHub lists no separate
+  release notes for either package. The shared signing code is byte-identical.
   [Source PR #4070](https://github.com/clintongormley/waitron/pull/4070) ·
   [Publication run](https://github.com/clintongormley/waitron/actions/runs/45058107117)
 - Use the bot pins in `apps/portal/package.json`, `packages/ui-smoke/package.json`,
@@ -18,29 +20,32 @@ publication window. The [release guide](../../shared-ui-release.md) owns the pro
   Add both verified archives to `scripts/disposable-tests/private-packages.py`
   and the corresponding digests to `deploy/disposable-tests/session.py`.
   Keep all historical pins, the exact digest checks and the `ui.tgz` transfer name.
-- The existing `scripts/disposable-tests/dependencies.test.mjs` cases each failed
-  twice on the respective bot head. Update the current contract fixture and keep
-  0.2.45 historical selection for both packages. The exact source assertion in
-  `packages/ui-smoke/test.mjs` also failed on #1429. Update its expected source
-  to the verified commit and keep the browser assertions. Point the guest proof
-  in `deploy/disposable-tests/guest-tools.test.py` at both new archives.
+- The root job failed two cases on each bot head in
+  `scripts/disposable-tests/dependencies.test.mjs`. Both heads lack runner pins.
+  The contract fixture on #1428 still expects 0.2.45. Make the current and repeated
+  contract cases accept 0.2.46. Keep historical selection of the full 0.2.45 pair
+  and refuse a capture with both versions of either package. Keep existing refusal cases.
+- The UI smoke job on #1429 also failed the source assertion in `packages/ui-smoke/test.mjs`.
+  Set its expected source to the verified commit and keep the browser assertions.
+  Point all three archive references in `deploy/disposable-tests/guest-tools.test.py`
+  at the new versions. Each PR's summary reported its failed jobs.
 - Re-run the selection file, `python3 -B deploy/disposable-tests/session.test.py`,
-  the Chromium UI smoke case and `pnpm typecheck`. Compare Cloud's UUID, public-key
-  decoding and key-ID rules with the shared signing format. Run registration's
-  `pairing-proof.test.ts`, `pairing-action-proof.test.ts` and `installation-proof.test.ts`
-  against the new pin. These cover wire bytes, invalid proofs and Cloud's trust checks.
-- Expect about 25 edited package, lockfile and runner lines and 10 edited test
-  lines. Record the new releases in `docs/shared-ui-release.md`,
-  `docs/backlog/shared-ui.md` and the existing D579 entry in `docs/backlog.md`.
+  the Chromium UI smoke case and `pnpm typecheck`. CI runs registration's wire
+  vectors and Cloud trust checks with the new pin.
+- Expect about 25 edited package, lockfile and runner lines and 10 to 15 test lines.
+  In `docs/shared-ui-release.md`, update the pins and publication source, verify
+  licences against that source, and credit the translation abandon action to 0.2.45.
+  Update the release pointer in `docs/backlog/shared-ui.md`.
 
 ## Qualify the runner and land
 
-Run both Claude whole-branch reviews for the package boundary. Coordinate the
-existing installer with the watcher and Lane I's operator. Read back the installed
-controller and host recipe. Use a capture of this adoption and both verified archives
-for the guest-tools, local-runtime and cancellation proofs in the
+The CI lag check allows 0.2.45 through 29 November 18:59:52 UTC and 0.2.46 through
+30 November 16:11:38 UTC. If the operator window threatens the planned update,
+take the registry dates and the remaining CI work to the watcher. Run both Claude
+whole-branch reviews for the package boundary. Coordinate the existing installer
+with the watcher and Lane I's operator. Use a capture of this adoption and both
+verified archives for installed pin readback and the three proofs in the
 [disposable runner guide](../../../deploy/disposable-tests/README.md#run-the-controller-from-the-ci-server).
-Check frozen and offline installs, the PostgreSQL job's exit 3, cancellation's exit
-143 and guest removal. Verify routing is restored after the window. Finish the
-signed-off pull request with current-head CI and list the changed test checks.
-Land it, read back exact-merge CI and close #1429 and #1428 with the replacement link.
+Sign off each Lane J commit with `git commit -s`. List changed test checks in the
+pull request and verify current-head CI before landing. Preserve sign-off on the
+squash commit, read back exact-merge CI and link #1429 and #1428 to the replacement.
