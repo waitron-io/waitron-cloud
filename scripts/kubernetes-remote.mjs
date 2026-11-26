@@ -178,14 +178,14 @@ export async function startRemoteRelay({cluster, nodes, run, tag, outside, servi
   const relayId = await run('docker', ['create', '--pull=never', '--network', cluster, '--label', 'cloud.kind.node-loss=' + cluster,
     '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs',
     primary, '31820', '51820', '0.0.0.0', '30443', ...standbys,
-    ...(services ? ['--tcp=3000:3000', '--tcp=9000:30900'] : [])]);
+    ...(services ? ['--tcp=3000:3000:tls', '--tcp=9000:30900'] : [])]);
   assert.match(relayId, /^[a-f0-9]{64}$/);
   const close = async () => {
     const options = {signal: null, timeout: 5_000};
     const [state, exit] = (await run('docker', ['inspect', '--format',
       '{{.State.Status}} {{.State.ExitCode}}', relayId], options).catch(() => '')).split(' ');
-    if (state === 'exited') {
-      process.stderr.write('D621 relay exit code ' + exit + '\n');
+    if (state === 'exited') process.stderr.write('D621 relay exit code ' + exit + '\n');
+    if (state === 'exited' || services) {
       const log = await run('sh', ['-c', 'exec docker logs --tail 20 "$1" 2>&1', 'relay logs', relayId], options).catch(() => '');
       if (log) process.stderr.write(log + '\n');
     }
