@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readFile, stat} from 'node:fs/promises';
+import {readFile, realpath, stat} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {existsSync} from 'node:fs';
 const api = await import('./amazon-run.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
@@ -304,7 +304,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
     assert.equal(result.status, 0, result.stderr?.toString());
     return result.stdout;
   };
-  const imageHash = tag => scenario === 'baseline measured stops' && tag.endsWith(':cloud') ? 'd'.repeat(64) : hashes;
+  const imageHash = tag => (scenario === 'baseline measured stops' && tag.endsWith(':cloud')) || (dryRun && tag.endsWith(':waitron')) ? 'd'.repeat(64) : hashes;
   const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false, tunnelCloseAttempts = 0;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -461,7 +461,9 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
       }
       if (binary === 'uname') return 'x86_64';
       if (binary === 'git' && args[0] === 'rev-parse') return '1'.repeat(40);
-      if (checksSource && binary === process.execPath) return underPrivateUmask(binary, args).toString().trim();
+      if (checksSource && binary === process.execPath) {
+        return underPrivateUmask(binary, [...args.slice(0, -1), await realpath(args.at(-1))]).toString().trim();
+      }
       if (checksSource && binary === 'git' && args.includes('archive')) {
         assert.equal(sourceArchive, undefined, 'write the source archive once');
         sourceArchive = args[args.indexOf('-o') + 1];
@@ -591,7 +593,9 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
     assert.equal(result.dryRun, true);
     assert.equal(result.revision, '1'.repeat(40));
     assert.deepEqual(Object.keys(result.images), savedTags);
-    assert.equal(result.images[savedTags[1]], rehearsedWaitronImage);
+    assert.equal(result.images[savedTags[1]], 'sha256:' + 'd'.repeat(64));
+    assert.deepEqual(calls.find(row => row[0] === 'docker' && row[1] === 'tag' && row[3] === savedTags[1]),
+      ['docker', 'tag', rehearsedWaitronImage, savedTags[1]]);
     assert.ok(calls.some(([binary, arg]) => binary === 'kubectl' && arg === 'version'));
     assert.ok(calls.some(([binary, arg]) => binary === 'wg' && arg === 'pubkey'));
     assert.ok(calls.some(row => row[0] === process.execPath && row.at(-1) === join(dirname(sourceArchive), 'source', 'scripts', 'kubernetes-data.mjs')));

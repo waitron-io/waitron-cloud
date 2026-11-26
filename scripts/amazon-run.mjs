@@ -240,9 +240,10 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
     await mkdir(sourceDirectory, {mode: 0o700});
     await run('tar', ['-xpf', sourceArchive, '-C', sourceDirectory]);
     if (config.measuredStops) {
+      // The remote installer uses argv[1] to distinguish its CLI from an import.
       await run(process.execPath, ['--input-type=module', '-e',
-        "import {pathToFileURL} from 'node:url'; await import(pathToFileURL(process.argv[1]));",
-        join(sourceDirectory, 'scripts', 'kubernetes-data.mjs')]);
+        "import {pathToFileURL} from 'node:url'; await import(pathToFileURL(process.argv[2]));",
+        'import-only', join(sourceDirectory, 'scripts', 'kubernetes-data.mjs')]);
     }
     ownedImages.push(cloud);
     await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',
