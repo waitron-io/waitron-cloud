@@ -52,11 +52,16 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    const app=(window as any).app;app.path='/recover';app.recovery.open(request);app.recovery.code='12345678';
    app.recovery.view={requestId:request,state:'awaiting_owner',expiresAt:expiry,operationId:null,operation:null};app.draw();
   },{request,expiry});
+  await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venue);
   for(const source of ['snapshot','continuous'] as const){
    await page.getByRole('radio',{name:source==='snapshot'?c.recoverySnapshotFallback:c.recoveryContinuous,exact:true}).check();
-   const loss=page.locator('strong').filter({hasText:c.recoveryLoss});assert.match((await loss.textContent())!.slice(c.recoveryLoss.length).trim(),expected);
+   const datedLoss=page.locator('strong').filter({hasText:c.recoveryLoss});
+   if(source==='snapshot'){
+    assert.equal(await datedLoss.count(),0);
+    assert.match((await page.getByText(c.recoverySnapshotLoss,{exact:true}).textContent())!,locale==='en'?/checked snapshot.*changes.*lost/i:/instantánea verificada.*se perderán.*cambios/i);
+   }else assert.match((await datedLoss.textContent())!.slice(c.recoveryLoss.length).trim(),expected);
    assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isEnabled(),false);
-   await assertTimes(source==='snapshot'?5:3);
+   await assertTimes(3);
    if(process.env.DATES_RECEIPT_DIR)await page.screenshot({path:`${process.env.DATES_RECEIPT_DIR}/${locale}-${theme}-${width}-${source}.png`,fullPage:true});
   }
   await page.evaluate(approved=>{const app=(window as any).app;app.recovery.view=approved;app.draw();},approved);
