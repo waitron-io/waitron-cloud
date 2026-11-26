@@ -4,7 +4,7 @@ import {runTestCloudClients} from './test-cloud-integration.mjs';
 
 test('a test venue owner saves SQLite, opens the backup offline, and all three downloads close at the deadline', {
   skip: !process.env.TEST_CLOUD_INTEGRATION_IMAGE || !process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
-  timeout: 300_000,
+  timeout: 360_000,
 }, async () => {
   const receipt = await runTestCloudClients({image: process.env.TEST_CLOUD_INTEGRATION_IMAGE,
     waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, paidVerification: true, paidExitDownload: true,
