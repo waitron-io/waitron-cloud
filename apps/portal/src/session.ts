@@ -2,6 +2,7 @@ import {bodyRefusal} from './body-refusal.ts';
 import { accountRequest, enrollmentRequiredEvent, type ApiResult } from './api.ts';
 type Session = {accountId: string; expiresAt: string; billingTrialAvailable?: true; enrollmentRequired?: true};
 export type SessionState = {kind: 'checking' | 'unavailable'} | {kind: 'anonymous'; expired?: true} | ({kind: 'authenticated'} & Session);
+const sessionCheckMs = 15_000;
 export class PortalSession {
   state: SessionState = {kind: 'checking'};
   logoutCause: ReturnType<typeof bodyRefusal>;
@@ -17,6 +18,7 @@ export class PortalSession {
   #expiry: ReturnType<typeof setTimeout> | undefined;
   #lastActivity = -Infinity;
   #disposed = false;
+  #disposal = new AbortController();
   #enrollmentRequired = () => { void this.check({fresh: true}); };
   #visible = () => { if (document.visibilityState === 'visible') void this.check(); };
   constructor(changed: (state: SessionState) => void) {
@@ -41,11 +43,34 @@ export class PortalSession {
     this.#set(result.ok ? {kind: 'authenticated', ...result.value}
       : result.status === 401 ? {kind: 'anonymous', ...(result.code === 'session_expired' ? {expired: true as const} : {})} : {kind: 'unavailable'});
   }
+  async #readSession(generation: number): Promise<ApiResult<Session>> {
+    if (typeof AbortSignal.any !== 'function') return accountRequest<Session>('/session');
+    const deadline = performance.now() + sessionCheckMs;
+    const timeout = AbortSignal.timeout(sessionCheckMs);
+    const signal = AbortSignal.any([this.#disposal.signal, timeout]);
+    // The generation check drops an old first reply. Disposal cancels the retry.
+    let result = await accountRequest<Session>('/session', undefined, timeout);
+    if (!result.ok && result.status === 503 && result.code === 'temporarily_unavailable'
+      && result.retryAfterMs > 0 && performance.now() + result.retryAfterMs < deadline
+      && !signal.aborted && generation === this.#generation) {
+      const wait = Math.ceil(result.retryAfterMs);
+      await new Promise<void>(resolve => {
+        const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
+        const timer = setTimeout(done, wait);
+        signal.addEventListener('abort', done, {once: true});
+      });
+      if (!signal.aborted && generation === this.#generation && performance.now() < deadline) {
+        result = await accountRequest<Session>('/session', undefined, signal);
+      }
+    }
+    return performance.now() < deadline && !signal.aborted ? result
+      : {ok: false, status: 0, code: 'network_error', retryAfterMs: 0};
+  }
   check({fresh = false}: {fresh?: boolean} = {}): Promise<void> {
     if (this.#disposed || this.waiting) return Promise.resolve();
     if (this.#pending && !fresh) return this.#pending;
     const generation = this.#generation; const sequence = ++this.#sequence;
-    const pending = accountRequest<Session>('/session').then(result => {
+    const pending = this.#readSession(generation).then(result => {
       if (generation === this.#generation) this.#accept(result, sequence);
     }).finally(() => { if (this.#pending === pending) this.#pending = undefined; });
     this.#pending = pending;
@@ -74,6 +99,7 @@ export class PortalSession {
   }
   dispose() {
     this.#disposed = true; this.#generation++; clearTimeout(this.#expiry);
+    this.#disposal.abort();
     document.removeEventListener('visibilitychange', this.#visible);
     document.removeEventListener(enrollmentRequiredEvent, this.#enrollmentRequired);
   }
