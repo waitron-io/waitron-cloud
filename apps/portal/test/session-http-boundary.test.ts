@@ -194,12 +194,23 @@ for (const [label, reply, elapsed, kind] of [
   t.mock.timers.tick(1);
   await settle();
   t.mock.timers.tick(elapsed);
-  await check;
+  await settle();
   assert.deepEqual(requests.map(({url, init}) => [url, init.method, init.credentials]), [
     ['/api/account/session', 'GET', 'same-origin'], ['/api/account/session', 'GET', 'same-origin'],
   ]);
   assert.deepEqual(changes, [kind === 'authenticated' ? {kind, ...owner} : {kind}]);
   assert.equal(session.waiting, label === 'stops after the second 503' ? 1 : 0);
+  await check;
+});
+
+test('a different 503 code keeps its manual cooldown', async t => {
+  const {session, replies, requests} = fixture(t);
+  replies.push({status: 503, body: {error: 'rate_limited'}, retry: '1'});
+  void session.check();
+  await settle();
+  assert.equal(session.state.kind, 'unavailable');
+  assert.equal(session.waiting, 1);
+  assert.equal(requests.length, 1);
 });
 
 test('disposing the portal aborts a passive check during the retry wait', async t => {

@@ -35,7 +35,8 @@ test('measured session logs interruptions and retries over HTTPS', {concurrency:
       if (retry) {
         await session();
         await session();
-        await session(retry === 'already aborted' ? AbortSignal.abort() : undefined);
+        if (retry === 'activity 503') await session.activity();
+        else await session(retry === 'already aborted' ? AbortSignal.abort() : undefined);
       } else {
         const healthy = async () => true;
         await observeP1({probes: {session, remote: healthy, login: healthy, backup: healthy, signup: healthy},
@@ -103,12 +104,13 @@ test('measured session logs interruptions and retries over HTTPS', {concurrency:
       await new Promise(resolve => server.close(resolve));
     }
   })));
-  await Promise.all(['recovers', 'second 503', 'changed expiry', 'late success', 'already aborted'].map(mode => t.test(mode, async () => {
+  await Promise.all(['recovers', 'second 503', 'changed expiry', 'late success', 'already aborted', 'activity 503'].map(mode => t.test(mode, async () => {
     let calls = 0, firstRefusalAt = 0, retryAt = 0;
     const expiry = '2026-11-25T22:30:00.000Z';
     const server = createServer({key, cert}, (req, res) => {
-      assert.equal(req.method, 'GET');
-      assert.equal(req.url, '/api/account/session');
+      const activity = calls >= 2 && mode === 'activity 503';
+      assert.equal(req.method, activity ? 'POST' : 'GET');
+      assert.equal(req.url, activity ? '/api/account/session/activity' : '/api/account/session');
       assert.equal(req.headers.cookie, 'fixture-cookie-private');
       const refuse = () => res.writeHead(503, {'Retry-After': '1'}).end('{"error":"temporarily_unavailable"}');
       if (++calls <= 2) res.end(JSON.stringify({expiresAt: expiry}));
@@ -137,9 +139,12 @@ test('measured session logs interruptions and retries over HTTPS', {concurrency:
       const lines = result.stderr.split('\n').filter(line => line.startsWith('D621 session probe '));
       assert.equal(lines.length, 1, result.stderr);
       const {firstStatus, retryAfter, status, elapsedMs, error, expiresAt} = JSON.parse(lines[0].slice('D621 session probe '.length));
-      if (mode === 'already aborted') {
-        assert.equal(calls, 2, 'the aborted check sends no HTTP request');
-        assert.deepEqual({firstStatus, status, error}, {firstStatus: undefined, status: null, error: 'AbortError'});
+      if (mode === 'already aborted' || mode === 'activity 503') {
+        const activity = mode === 'activity 503';
+        assert.equal(calls, activity ? 3 : 2, 'cancellation sends no request and activity sends just one');
+        assert.deepEqual({firstStatus, status, error}, {
+          firstStatus: undefined, status: activity ? 503 : null, error: activity ? 'AssertionError' : 'AbortError',
+        });
         return;
       }
       assert.equal(calls, 4, result.stderr);
