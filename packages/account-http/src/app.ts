@@ -193,7 +193,8 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
         return installed.rows[0]?.count===migrationNames.length?c.json({status:'ready'}):c.json({status:'unavailable'},503);
       }catch{return c.json({status:'unavailable'},503);}
     }
-    await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    const rangeRead=exitDownloads?.exitRangesEnabled&&c.req.method==='POST'&&c.req.path==='/api/account/backups/download-range/read';
+    await consume([{scope:rangeRead?'backup-exit-range-ip':'all-ip',subject:ip,limit:rangeRead?240:120,windowSeconds:60}]);
     if(c.req.path.startsWith('/api/account/owner-recovery/')||['/api/installations/owner-recovery-read','/api/installations/owner-recovery-approve','/api/installations/owner-recovery-refuse'].includes(c.req.path))return ownerRecoveryResponse(c,{store:ownerRecovery,origin:config.portalOrigin,secure,ip,consume});
     if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
     if(['/api/installations/guest-menu-publish','/api/installations/guest-menu-status','/api/installations/guest-menu-withdraw'].includes(c.req.path))return guestMenuDeliveryResponse(c,guestMenus);

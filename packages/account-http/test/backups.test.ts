@@ -158,7 +158,10 @@ function exitDownload(f:ExitFixture,planMode:PlanMode,stage:(key:string,options:
  const headers={origin,'content-type':'application/json',cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken};
  const send=(path:string,pointId=f.point.id,fields:Record<string,string>={})=>server.request(origin+'/api/account/backups/'+path,{method:'POST',headers,
   body:JSON.stringify({venueId:f.installed.venueId,...(path==='list'?{}:{pointId}),...fields})},bindings);
- return Object.assign(send,{endSession:()=>server.request(origin+'/api/account/logout',{method:'POST',headers,body:'{}'},bindings)});
+ return Object.assign(send,{
+  endSession:()=>server.request(origin+'/api/account/logout',{method:'POST',headers,body:'{}'},bindings),
+  boxRequest:()=>server.request(origin+'/api/installations/billing-display',{method:'POST',headers:{'content-type':'application/json'},body:'{}'},bindings)
+ });
 }
 
 test('the enabled exit route serves repeatable pieces from one qualified archive and shares its slot with full downloads',async t=>{
@@ -198,12 +201,14 @@ test('the enabled exit route serves repeatable pieces from one qualified archive
  const overlap=await send('download-range/read',point.id,{attemptId,offset:'4194304'});
  assert.equal(overlap.status,503);
  assert.deepEqual(Buffer.from(await first.arrayBuffer()),bytes.subarray(0,size));
- for(let repeat=0;repeat<32;repeat++){
+ for(let repeat=0;repeat<127;repeat++){
   const last=await send('download-range/read',point.id,{attemptId,offset:'4194304'});
   assert.equal(last.status,206);
   assert.equal(last.headers.get('content-range'),'bytes 4194304-4194307/4194308');
   assert.equal(await last.text(),'tail');
  }
+ // The test has no billing machine. This is its normal answer to a box request from the same address.
+ assert.equal((await send.boxRequest()).status,503);
  assert.equal(reads,1);
  assert.equal((await send('download-range/release',point.id,{attemptId})).status,204);
  assert.equal(disposals,1);
@@ -216,6 +221,15 @@ test('the enabled exit route serves repeatable pieces from one qualified archive
  const outstanding=await send('download-range/read',point.id,{attemptId:(await next.json()).attemptId,offset:'0'});
  assert.equal(outstanding.status,206);
  await outstanding.body!.cancel();
+ await t.waitFor(async()=>assert.deepEqual(await readdir(stageRoot),[]),{timeout:2000});
+
+ t.mock.timers.enable({apis:['setTimeout']});
+ try{
+  const stalled=await send('download',point.id);
+  assert.equal(stalled.status,200);
+  assert.equal((await send('download-range/start',point.id)).status,503);
+  t.mock.timers.tick(600_000);
+ }finally{t.mock.timers.reset();}
  await t.waitFor(async()=>assert.deepEqual(await readdir(stageRoot),[]),{timeout:2000});
 });
 
@@ -237,6 +251,26 @@ test('a ranged download keeps its copy through a proof refresh and clears it whe
  assert.equal((await send.endSession()).status,204);
  assert.deepEqual(await readdir(stageRoot),[]);
  assert.equal((await read()).status,401);
+});
+
+test('failed deletion blocks more reads while keeping the slot occupied',async t=>{
+ const f=await recoveryFixture(db),stageRoot=await mkdtemp(join(tmpdir(),'cloud-exit-test-'));
+ t.after(()=>rm(stageRoot,{recursive:true,force:true}));
+ let refuseCleanup=true;
+ const send=exitDownload(f,'test-venue-levels',async()=>({
+  ...bufferObject(f.objects.get(f.point.objectKey)!),
+  async dispose(){if(refuseCleanup)throw Error('controlled stage cleanup failure');}
+ }),db.pool,{stageRoot,enabled:true});
+ const start=await send('download-range/start');
+ assert.equal(start.status,200);
+ const {attemptId}=await start.json();
+ const release=()=>send('download-range/release',f.point.id,{attemptId});
+ try{
+  assert.equal((await release()).status,503);
+  assert.equal((await send('download-range/start')).status,503);
+  assert.equal((await send('download-range/read',f.point.id,{attemptId,offset:'0'})).status,410);
+ }finally{refuseCleanup=false;await release();}
+ assert.deepEqual(await readdir(stageRoot),[]);
 });
 test('exit download returns the verified archive and its matching key while the installation stays active',async()=>{
  const f=await recoveryFixture(db),bytes=f.objects.get(f.point.objectKey)!;

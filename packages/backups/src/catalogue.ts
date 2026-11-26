@@ -33,6 +33,7 @@ interface ExitStage {
   stream?: Readable;
   timer?: ReturnType<typeof setTimeout>;
   closing?: Promise<void>;
+  cleanupFailed?: boolean;
 }
 interface StreamingObjectStore {
   stage(
@@ -396,6 +397,8 @@ export class BackupCatalogue {
       await rm(slot.directory, {recursive: true, force: true});
       if (this.#exitStage === slot) this.#exitStage = undefined;
     })().catch(error => {
+      if (!slot.cleanupFailed) console.error('Could not clear the private exit download stage');
+      slot.cleanupFailed = true;
       slot.closing = undefined;
       this.#expireExitStage(slot, 1000);
       throw error;
@@ -405,6 +408,7 @@ export class BackupCatalogue {
   async exitArchive(venueId: string, pointId: string, fence: MutationFence, requestSignal: AbortSignal) {
     const {source, slot} = await this.#stageExit(venueId, pointId, fence, requestSignal);
     if (!slot) return source;
+    this.#expireExitStage(slot);
     return {receipt: source.receipt, open: () => slot.stream = source.open(), dispose: () => this.#closeExitStage(slot)};
   }
 
@@ -424,14 +428,14 @@ export class BackupCatalogue {
 
   async readExitRange(owner: ExitDownloadOwner, attemptId: string, offset: number, fence: MutationFence, signal: AbortSignal) {
     const slot = this.#ownedExitStage(owner, attemptId);
-    if (!slot?.source || !slot.selected || !slot.storage || slot.closing) backupFail('unavailable');
+    if (!slot?.source || !slot.selected || !slot.storage || slot.closing || slot.cleanupFailed) backupFail('unavailable');
     const size = slot.source.receipt.size;
     if (!Number.isSafeInteger(offset) || offset < 0 || offset >= size || offset % exitRangeBytes) backupFail('invalid_range');
     const deadline = new PublicationDeadline(Date.now() + 10_000);
     const current = await deadline.run(() => transaction(this.#pool, client =>
       this.#exitPoint(client, owner.venueId, owner.pointId, fence, deadline, MAX_OBJECT_BYTES)));
     signal.throwIfAborted();
-    if (this.#exitStage !== slot || slot.closing) backupFail('unavailable');
+    if (this.#exitStage !== slot || slot.closing || slot.cleanupFailed) backupFail('unavailable');
     this.#matchExitStage(slot.source, slot.selected, slot.storage, current);
     if (slot.stream) backupFail('exit_busy');
     const length = Math.min(size - offset, exitRangeBytes);
