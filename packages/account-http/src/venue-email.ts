@@ -19,8 +19,8 @@ const under=(name:string,suffix:string)=>name===suffix||name.endsWith('.'+suffix
 export async function readVenueEmailSettings(client:PoolClient,venueId:string,installationId:string,suffix?:string):Promise<VenueEmailSettings>{
  const row=(await client.query<VenueEmailRow>(`SELECT waitron_mail_reply_to,waitron_mail_from,waitron_mail_dns_token
   FROM venues WHERE id=$1`,[venueId])).rows[0]!;
+ if(!suffix)return {replyTo:row.waitron_mail_reply_to??row.waitron_mail_from};
  const settings={replyTo:row.waitron_mail_reply_to};
- if(!suffix)return settings;
  const address=row.waitron_mail_from,token=row.waitron_mail_dns_token,records:DnsAlias[]=[];
  if(address&&token)records.push({type:'CNAME',name:`${token}._domainkey.${domainOf(address)}`,value:`${token}.mail.${suffix}`});
  const aliases=(await client.query<{hostname:string;assigned_hostname:string}>(`SELECT h.hostname,h.assigned_hostname
@@ -41,7 +41,7 @@ async function checkAlias(record:DnsAlias,resolve?:ResolveCname){
 
 export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:string;secure:boolean;ip:string;suffix?:string;resolve?:ResolveCname;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response>{
  const {pool,origin,secure,ip,consume,suffix,resolve}=options,action=c.req.path.slice('/api/account/venue-email/'.length);
- if(action!=='save'&&(!suffix||(action!=='save-domain'&&action!=='check-dns')))throw new AccountHttpError(404,'not_found');
+ if(action!=='save'&&action!=='clear-reply'&&(!suffix||(action!=='save-domain'&&action!=='check-dns')))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
  await consume([{scope:'venue-email-ip',subject:ip,limit:60,windowSeconds:60}]);
@@ -89,6 +89,8 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
    }
    await client.query(`UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=
     CASE WHEN split_part(waitron_mail_from,'@',2)=$3 THEN waitron_mail_dns_token ELSE $4 END WHERE id=$1`,[venueId,address,domain,randomUUID()]);
+  }else if(action==='clear-reply'){
+   await client.query('UPDATE venues SET waitron_mail_reply_to=NULL WHERE id=$1',[venueId]);
   }else if(replyTo===null){
    await client.query(`UPDATE venues SET waitron_mail_reply_to=NULL,waitron_mail_from=NULL,waitron_mail_dns_token=NULL
     WHERE id=$1`,[venueId]);

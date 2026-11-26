@@ -106,7 +106,7 @@ test('venue relay new mode preserves its account allowance at registered level',
 function venueEmailSettings(f:Awaited<ReturnType<typeof setup>>,options:Partial<Parameters<typeof createAccountApp>[0]>={}) {
  const origin='http://localhost';
  const app=createAccountApp({pool:f.pool,outbox:{} as any,config:{portalOrigin:origin,production:false,rateKey:'ab'.repeat(32),trustedProxyIps:[]},planMode:mode,...options});
- return (action:'status'|'save'|'save-domain'|'check-dns',session:typeof f.v.session,body:Record<string,string>)=>app.request(origin+(action==='status'?'/api/account/remote-access/status':`/api/account/venue-email/${action}`),{
+ return (action:'status'|'save'|'clear-reply'|'save-domain'|'check-dns',session:typeof f.v.session,body:Record<string,string>)=>app.request(origin+(action==='status'?'/api/account/remote-access/status':`/api/account/venue-email/${action}`),{
   method:'POST',headers:{origin,'content-type':'application/json',cookie:`cloud_session=${session.token}`,'x-csrf-token':session.csrfToken},body:JSON.stringify(body),
  },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as any);
 }
@@ -170,9 +170,27 @@ test('a test owner keeps a DNS alias for mailbox edits and replaces it for domai
  assert.notEqual(current.domain.records[0].value,alias.value);
  const status=await request('status',f.v.session,{installationId});
  assert.deepEqual((await status.json()).venueEmail,current);
+ assert.equal((await request('save',f.v.session,{installationId,replyTo:'replies@example.test'})).status,200);
+ const defaultReply=await request('clear-reply',f.v.session,{installationId});
+ assert.equal(defaultReply.status,200);
+ assert.deepEqual(await defaultReply.json(),{replyTo:null,domain:current.domain});
  const cleared=await request('save',f.v.session,{installationId,replyTo:''});
  assert.equal(cleared.status,200);
  assert.deepEqual(await cleared.json(),{replyTo:null,domain:{address:null,records:[]}});
+});
+
+test('an owner can see and clear the active reply address after domain setup is disabled',async t=>{
+ const f=await setup(t);await f.set('connected');
+ const installationId=f.v.installation,address='bookings@cafe.example.test';
+ const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test'});
+ const replyOnly=venueEmailSettings(f);
+ assert.equal((await request('save-domain',f.v.session,{installationId,address})).status,200);
+ const status=await replyOnly('status',f.v.session,{installationId});
+ assert.equal(status.status,200);
+ assert.deepEqual((await status.json()).venueEmail,{replyTo:address});
+ const clear=await replyOnly('save',f.v.session,{installationId,replyTo:''});
+ assert.equal(clear.status,200);assert.deepEqual(await clear.json(),{replyTo:null});
+ assert.deepEqual((await (await request('status',f.v.session,{installationId})).json()).venueEmail,{replyTo:null,domain:{address:null,records:[]}});
 });
 
 test('venue domain setup rejects ineligible requests before resolving DNS',async t=>{
@@ -185,7 +203,12 @@ test('venue domain setup rejects ineligible requests before resolving DNS',async
  assert.equal((await request('save-domain',other.session,body)).status,403);
  assert.equal((await request('check-dns',other.session,{installationId})).status,403);
  assert.equal((await request('save-domain',{...f.v.session,csrfToken:other.session.csrfToken},body)).status,403);
- assert.equal((await request('save-domain',f.v.session,{installationId,address:'office@child.cloud.example.test'})).status,400);
+ await f.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) VALUES('ES','test','country.example.test')");
+ await f.pool.query(`INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint)
+  VALUES($1,'ES','aws','test','cell.example.test',7,'fixture-key','gateway.example.test:51820')`,[randomUUID()]);
+ for(const domain of ['child.cloud.example.test','child.waitron.io','child.waitron.cloud','child.country.example.test','child.cell.example.test']){
+  assert.equal((await request('save-domain',f.v.session,{installationId,address:`office@${domain}`})).status,400,domain);
+ }
  await f.set('registered');
  assert.equal((await request('save-domain',f.v.session,body)).status,403);
  await f.set('hosted');

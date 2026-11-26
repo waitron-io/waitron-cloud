@@ -43,8 +43,12 @@ enable **Your domain**. You can save your sending address and copy each DNS
 value or download the same email and remote-access records as a PDF to forward.
 **Refresh status** checks whether the aliases point to the requested names.
 Staff email uses a Waitron address and replies go to your sending address unless
-you save a separate reply address. Use **Use standard sender** to clear both.
-An accepted ownership transfer clears both settings in the transferred business.
+you save a separate reply address. Save an empty reply address to go back to
+your sending address and keep your DNS setup. Choose **Use standard sender**
+to clear both addresses.
+If domain setup is disabled, **Replies go to** still shows the active address
+so you can change or clear it. An accepted ownership transfer clears both
+settings in the transferred business.
 
 The Stockholm sandbox verified one signing alias in one zone. Qualification
 still needs a separate venue DNS zone and a delivered message with a valid

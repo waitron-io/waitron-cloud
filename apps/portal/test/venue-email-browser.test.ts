@@ -13,8 +13,8 @@ const bundle=await build({stdin:{contents:`
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 const csrf='A'.repeat(43),id='12345678-1234-4234-8234-123456789abc',url='https://portal.test/account/remote-access';
-const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies go to',saved:'Reply address saved.',reset:'Use standard sender',cleared:'Standard sender restored.',refresh:'Refresh status',address:'Sending address',saveDomain:'Save sending address',records:'DNS records',recordName:'Name',recordValue:'Target',copy:'Copy target',pdf:'Download DNS records',verified:'Verified'},
- es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.',refresh:'Actualizar estado',address:'Dirección de envío',saveDomain:'Guardar dirección de envío',records:'Registros DNS',recordName:'Nombre',recordValue:'Destino',copy:'Copiar destino',pdf:'Descargar registros DNS',verified:'Verificado'}};
+const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies go to',defaultReply:'Replies go to your sending address by default.',saved:'Reply address saved.',reset:'Use standard sender',cleared:'Standard sender restored.',refresh:'Refresh status',address:'Sending address',saveDomain:'Save sending address',records:'DNS records',recordName:'Name',recordValue:'Target',copy:'Copy target',pdf:'Download DNS records',verified:'Verified',unknown:'Unknown'},
+ es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',defaultReply:'Por defecto, las respuestas van a tu dirección de envío.',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.',refresh:'Actualizar estado',address:'Dirección de envío',saveDomain:'Guardar dirección de envío',records:'Registros DNS',recordName:'Nombre',recordValue:'Destino',copy:'Copiar destino',pdf:'Descargar registros DNS',verified:'Verificado',unknown:'Desconocido'}};
 
 test('a venue owner can save a reply address from Remote access',async t=>{
  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
@@ -25,8 +25,8 @@ test('a venue owner can save a reply address from Remote access',async t=>{
   page.setDefaultTimeout(3500);
   await page.context().addCookies([{name:'__Host-cloud_csrf',value:csrf,url:'https://portal.test',secure:true}]);
   try{
-   const c=labels[locale],requests:unknown[]=[],tokens:(string|null)[]=[];
-   let savedReplyTo:string|null=null,address:string|null=null,pdfLoads=0;
+   const c=labels[locale],requests:unknown[]=[],tokens:(string|null)[]=[],clears:unknown[]=[];
+   let savedReplyTo:string|null=null,address:string|null=null,pdfLoads=0,dnsLimited=false;
    const emailAlias={type:'CNAME',name:`${id}._domainkey.cafe.example.test`,value:`${id}.mail.cloud.example.test`};
    const remoteAlias={type:'CNAME',name:'staff.cafe.example.test',value:'staff.venue.example.test'};
    const domain=()=>({address,records:address?[emailAlias,remoteAlias]:[remoteAlias]});
@@ -45,11 +45,19 @@ test('a venue owner can save a reply address from Remote access',async t=>{
      services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))}]}});
     if(endpoint==='/remote-access/status')return route.fulfill({json:{installationId:id,revision:1,revoked:false,names:null,
      service:{state:'unconfigured',health:'unknown',observedAt:null,validUntil:null},venueEmail:{replyTo:savedReplyTo,domain:domain()}}});
-    if(endpoint==='/venue-email/check-dns')return route.fulfill({json:{replyTo:savedReplyTo,domain:{...domain(),records:domain().records.map(record=>({...record,status:'verified'}))}}});
+    if(endpoint==='/venue-email/check-dns'){
+     if(dnsLimited)return route.fulfill({status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});
+     return route.fulfill({json:{replyTo:savedReplyTo,domain:{...domain(),records:domain().records.map(record=>({...record,status:'verified'}))}}});
+    }
     if(endpoint==='/venue-email/save-domain'){
      assert.deepEqual(request.postDataJSON(),{installationId:id,address:'bookings@cafe.example.test'});
      assert.equal(await request.headerValue('x-csrf-token'),csrf);
      address='bookings@cafe.example.test';
+     return route.fulfill({json:{replyTo:savedReplyTo,domain:domain()}});
+    }
+    if(endpoint==='/venue-email/clear-reply'){
+     clears.push(request.postDataJSON());
+     savedReplyTo=null;
      return route.fulfill({json:{replyTo:savedReplyTo,domain:domain()}});
     }
     if(endpoint==='/venue-email/save'){
@@ -97,6 +105,7 @@ test('a venue owner can save a reply address from Remote access',async t=>{
    const list=sender.getByRole('region',{name:c.records,exact:true});
    await list.getByText(emailAlias.name,{exact:true}).waitFor();
    await t.waitFor(async()=>assert.equal(await list.getByText(c.verified,{exact:true}).count(),2),{timeout:3000});
+   assert.equal(await sender.getByText(c.defaultReply,{exact:true}).isVisible(),true);
    const rows=[emailAlias,remoteAlias];
    for(const [i,alias] of rows.entries()){
     await list.getByRole('button',{name:c.copy,exact:true}).nth(i).click();
@@ -116,6 +125,17 @@ test('a venue owner can save a reply address from Remote access',async t=>{
     await list.evaluate(element=>element.scrollIntoView({block:'center'}));
     await page.screenshot({path:`${receipts}/dns-${locale}-${colorScheme}-${width}.png`,fullPage:true});
    }
+   dnsLimited=true;
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await list.getByText(c.unknown,{exact:true}).first().waitFor();
+   await reply.fill('desk@example.test');await reply.press('Enter');
+   await confirmation.waitFor();
+   assert.deepEqual(requests.at(-1),{installationId:id,replyTo:'desk@example.test'});
+   dnsLimited=false;
+   await reply.fill('');await reply.press('Enter');
+   await sender.getByText(c.defaultReply,{exact:true}).waitFor();
+   assert.deepEqual(clears,[{installationId:id}]);
+   assert.equal(await list.getByText(emailAlias.name,{exact:true}).isVisible(),true);
   }finally{await page.close();}
  }
 });

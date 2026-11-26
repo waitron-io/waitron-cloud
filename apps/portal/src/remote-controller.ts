@@ -2,7 +2,7 @@ import {bodyRefusal} from './body-refusal.ts';
 import {validEmail} from './email.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
-import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
+import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,validVenueEmail,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind,type VenueEmailSettings} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:[]|RemoteDns['records']}|undefined;
  venueEmailDraft='';venueDomainDraft='';
@@ -22,21 +22,23 @@ export class RemoteController {
   else{this.view=undefined;this.error='unavailable';}
   this.#changed();
  }
- async saveVenueEmail(value:string,field:'replyTo'|'address'='replyTo'){
+ async saveVenueEmail(value:string,field:'replyTo'|'address'|'reset'='replyTo'){
   const id=this.installationId;
   if(!this.#account||!id||!this.view?.venueEmail||this.pending||this.waiting)return;
-  this.venueEmailField=field;
+  this.venueEmailField=field==='reset'?'replyTo':field;
   if((value!==''||field==='address')&&!validEmail(value)){this.venueEmailResult='invalid';this.#changed();return;}
   const generation=this.#generation;
   this.pending=true;this.error=undefined;this.venueEmailResult=undefined;this.#changed();
-  const result=await this.#request<VenueEmailSettings>(field==='replyTo'?'/venue-email/save':'/venue-email/save-domain',{installationId:id,[field]:value});
+  const action=field==='address'?'save-domain':field==='replyTo'&&value===''?'clear-reply':'save';
+  const body=field==='address'?{installationId:id,address:value}:action==='clear-reply'?{installationId:id}:{installationId:id,replyTo:value};
+  const result=await this.#request<VenueEmailSettings>(`/venue-email/${action}`,body);
   if(generation!==this.#generation)return;
   this.pending=false;
   if(result.ok&&this.view){
    this.view={...this.view,venueEmail:result.value};
    this.venueEmailDraft=result.value.replyTo??'';
    this.venueDomainDraft=result.value.domain?.address??'';
-   this.venueEmailResult=value===''?'cleared':'saved';
+   this.venueEmailResult=field==='reset'?'cleared':'saved';
   }else if(!result.ok){
    if(result.status===401||result.status===403||result.status===429)this.#failure(result);
    else{
@@ -84,21 +86,15 @@ export class RemoteController {
   return this.view;
  }
  async #checkVenueDns(){
-  const id=this.installationId,domain=this.view?.venueEmail?.domain;
-  if(!id||!domain?.records.length||this.pending||this.waiting)return;
-  const generation=this.#generation;
-  this.pending=true;this.#changed();
+  const id=this.installationId,email=this.view?.venueEmail,domain=email?.domain;
+  if(!id||!email||!domain?.records.length)return;
   const result=await this.#request<VenueEmailSettings>('/venue-email/check-dns',{installationId:id});
-  if(generation!==this.#generation)return;
-  this.pending=false;
-  if(result.ok&&this.view&&result.value.domain){
-   const current=result.value.domain;
-   if(current.address===domain.address&&current.records.length===domain.records.length
-    &&current.records.every((record,i)=>record.name===domain.records[i]!.name&&record.value===domain.records[i]!.value)){
-    this.view={...this.view,venueEmail:result.value};
-   }else this.error='remoteConflict';
-  }else if(!result.ok)this.#failure(result);
-  else this.error='unavailable';
+  if(!this.view||this.view.venueEmail!==email)return;
+  const checked=result.ok&&validVenueEmail(result.value)?result.value.domain:undefined;
+  const matches=checked&&checked.address===domain.address&&checked.records.length===domain.records.length
+   &&checked.records.every((record,index)=>record.name===domain.records[index]!.name&&record.value===domain.records[index]!.value);
+  const records=matches?checked.records:domain.records.map(record=>({...record,status:'unknown' as const}));
+  this.view={...this.view,venueEmail:{...email,domain:{...domain,records}}};
   this.#changed();
  }
  async recheck(kind:RemoteKind){

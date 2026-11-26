@@ -28,11 +28,7 @@ export function turnstilePortalAssets(assets: PortalAssets, siteKey: string) {
 export async function loadPortalAssets(directory: string): Promise<PortalAssets> {
   const assets = new Map<string, {body: Uint8Array; contentType: string}>();
   for (const [name, contentType] of [['index.html', 'text/html'], ['app.js', 'text/javascript'], ['app.css', 'text/css'], ['backup-download-worker.js', 'text/javascript'], ['venue-dns-pdf.js', 'text/javascript']] as const) {
-    const body = await readFile(join(directory, name)).catch((error:NodeJS.ErrnoException)=>{
-      if(name==='venue-dns-pdf.js'&&error.code==='ENOENT')return null;
-      throw error;
-    });
-    if(!body)continue;
+    const body = await readFile(join(directory, name));
     if (!body.length || body.length > 4 * 1024 * 1024) throw new Error('Invalid portal build');
     assets.set(`/${name}`, {body, contentType: `${contentType}; charset=utf-8`});
   }

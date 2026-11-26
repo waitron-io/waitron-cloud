@@ -4,8 +4,10 @@ import type {VenueEmailSettings} from './remote-types.ts';
 
 export function venueEmailScreen(app:PortalApp,settings:VenueEmailSettings,disabled:boolean){
  const c=app.copy,r=app.remote,result=r.venueEmailField==='replyTo'?r.venueEmailResult:undefined;
- const persist=async(form:HTMLFormElement,replyTo:string)=>{
-  await app.remote.saveVenueEmail(replyTo);
+ const defaultReply=!settings.replyTo&&!!settings.domain?.address;
+ const replyDescription=result==='invalid'?'venue-email-refusal':defaultReply?'venue-email-reply-default':nothing;
+ const persist=async(form:HTMLFormElement,replyTo:string,field:'replyTo'|'reset'='replyTo')=>{
+  await app.remote.saveVenueEmail(replyTo,field);
   if(form.isConnected&&document.activeElement===document.body)form.querySelector('input')?.focus();
  };
  const save=(event:SubmitEvent)=>{
@@ -17,24 +19,27 @@ export function venueEmailScreen(app:PortalApp,settings:VenueEmailSettings,disab
   <h5 id="venue-email-title">${c.venueEmailTitle}</h5>
   <div class="venue-email-options">
    <div><h6>${c.venueEmailOwn}</h6><p class="help">${c.venueEmailOwnHelp}</p></div>
-   <form class="business-choice" method="post" action="/api/account/venue-email/save" aria-labelledby="venue-email-waitron" @submit=${save}>
-    <h6 id="venue-email-waitron">${c.venueEmailWaitron}</h6><p class="help">${c.venueEmailWaitronHelp}</p>
-    <label for="venue-email-reply">${c.venueEmailReply}</label>
-    <input id="venue-email-reply" name="replyTo" type="email" autocomplete="email" required maxlength="254"
-     autocapitalize="none" autocorrect="off" spellcheck="false" .value=${app.remote.venueEmailDraft} ?readonly=${disabled}
-     aria-invalid=${result==='invalid'?'true':nothing} aria-describedby=${result==='invalid'?'venue-email-refusal':nothing}
-     @input=${(event:Event)=>app.remote.editVenueEmail((event.currentTarget as HTMLInputElement).value)}>
-    <wt-form-actions>
-     <wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}>
-      ${c.venueEmailSave}</wt-button>
-     ${settings.replyTo||settings.domain?.address?html`<wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>{
-      const form=(event.currentTarget as HTMLElement).closest('form');if(form)void persist(form,'');
-     }}>${c.venueEmailReset}</wt-button>`:nothing}
-    </wt-form-actions>
-    <p role="status">${result==='saved'?c.venueEmailSaved:result==='cleared'?c.venueEmailCleared:nothing}</p>
-    ${result==='invalid'||result==='failed'?html`<p id="venue-email-refusal" role="alert">${result==='invalid'?c.venueEmailInvalid:c.venueEmailFailed}</p>`:nothing}
-   </form>
-   ${settings.domain?domainForm(app,disabled):nothing}
+   <div>
+    <form class="business-choice" method="post" action="/api/account/venue-email/save" aria-labelledby="venue-email-waitron" @submit=${save}>
+     <h6 id="venue-email-waitron">${c.venueEmailWaitron}</h6><p class="help">${c.venueEmailWaitronHelp}</p>
+     <label for="venue-email-reply">${c.venueEmailReply}</label>
+     ${defaultReply?html`<p class="help" id="venue-email-reply-default">${c.venueEmailReplyDefault}</p>`:nothing}
+     <input id="venue-email-reply" name="replyTo" type="email" autocomplete="email" maxlength="254"
+      autocapitalize="none" autocorrect="off" spellcheck="false" .value=${app.remote.venueEmailDraft} ?readonly=${disabled}
+      aria-invalid=${result==='invalid'?'true':nothing} aria-describedby=${replyDescription}
+      @input=${(event:Event)=>app.remote.editVenueEmail((event.currentTarget as HTMLInputElement).value)}>
+     <wt-form-actions>
+      <wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}>
+       ${c.venueEmailSave}</wt-button>
+      ${settings.replyTo||settings.domain?.address?html`<wt-button .disabled=${disabled} @click=${(event:MouseEvent)=>{
+       const form=(event.currentTarget as HTMLElement).closest('form');if(form)void persist(form,'','reset');
+      }}>${c.venueEmailReset}</wt-button>`:nothing}
+     </wt-form-actions>
+     <p role="status">${result==='saved'?c.venueEmailSaved:result==='cleared'?c.venueEmailCleared:nothing}</p>
+     ${result==='invalid'||result==='failed'?html`<p id="venue-email-refusal" role="alert">${result==='invalid'?c.venueEmailInvalid:c.venueEmailFailed}</p>`:nothing}
+    </form>
+    ${settings.domain?domainForm(app,disabled):nothing}
+   </div>
   </div>
   ${settings.domain?.records.length?dnsRecords(app,settings.domain,disabled):nothing}
  </section>`;

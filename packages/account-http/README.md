@@ -62,8 +62,8 @@ pnpm mail:worker
 Open [Mailpit](http://localhost:8125) to read messages. Use `pnpm mail:status` to inspect
 queue counts. To open email links in the portal, run `pnpm portal:build`, set
 `CLOUD_PORTAL_ASSETS_DIR=apps/portal/dist` and restart `pnpm account:serve`. The server
-loads `index.html`, `app.js`, `app.css` and `backup-download-worker.js` at startup. Missing configured
-assets prevent startup; omitting the setting retains the API-only server.
+loads `index.html`, `app.js`, `app.css`, `backup-download-worker.js` and `venue-dns-pdf.js` at startup.
+Use the complete build directory. You can omit the setting to run the API on its own.
 
 The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
 and `/account` for sign-in settings. From Account, choose Venues (`/account/venues`),
