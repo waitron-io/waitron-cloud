@@ -32,12 +32,13 @@ test('a venue owner can save a reply address from Remote access',async t=>{
   await page.context().addCookies([{name:'__Host-cloud_csrf',value:csrf,url:'https://portal.test',secure:true}]);
   try{
    const c=labels[locale],requests:unknown[]=[],tokens:(string|null)[]=[],clears:unknown[]=[];
-   let savedReplyTo:string|null=null,address:string|null=null,pdfLoads=0,dnsLimited=false;
+   let savedReplyTo:string|null=null,address:string|null=null,pdfLoads=0,dnsLimited=false,domainEnabled=true;
    let delayedDns:ReturnType<typeof deferred>|undefined;
    const releasePdf=deferred(),dnsStarted=deferred();
    const emailAlias={type:'CNAME',name:`${id}._domainkey.cafe.example.test`,value:`${id}.mail.cloud.example.test`};
    const remoteAlias={type:'CNAME',name:'staff.cafe.example.test',value:'staff.venue.example.test'};
    const domain=()=>({address,records:address?[emailAlias,remoteAlias]:[remoteAlias]});
+   const settings=()=>domainEnabled?{replyTo:savedReplyTo,domain:domain()}:{replyTo:savedReplyTo??address};
    await page.context().grantPermissions(['clipboard-read','clipboard-write']);
    await page.route('**/venue-dns-pdf.js',async route=>{
     pdfLoads++;
@@ -54,7 +55,7 @@ test('a venue owner can save a reply address from Remote access',async t=>{
      environment:'test',revision:1,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
      services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))}]}});
     if(endpoint==='/remote-access/status')return route.fulfill({json:{installationId:id,revision:1,revoked:false,names:null,
-     service:{state:'unconfigured',health:'unknown',observedAt:null,validUntil:null},venueEmail:{replyTo:savedReplyTo,domain:domain()}}});
+     service:{state:'unconfigured',health:'unknown',observedAt:null,validUntil:null},venueEmail:settings()}});
     if(endpoint==='/venue-email/check-dns'){
      if(dnsLimited)return route.fulfill({status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});
      if(delayedDns){dnsStarted.resolve();await delayedDns.promise;}
@@ -77,7 +78,8 @@ test('a venue owner can save a reply address from Remote access',async t=>{
      const replyTo=request.postDataJSON().replyTo;
      if(replyTo==='unsaved@example.test')return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
      savedReplyTo=replyTo||null;
-     return route.fulfill({json:{replyTo:savedReplyTo,domain:domain()}});
+     if(replyTo==='')address=null;
+     return route.fulfill({json:settings()});
     }
     return route.fulfill({status:503,json:{error:'unavailable'}});
    });
@@ -153,6 +155,13 @@ test('a venue owner can save a reply address from Remote access',async t=>{
    await sender.getByText(c.defaultReply,{exact:true}).waitFor();
    assert.deepEqual(clears,[{installationId:id}]);
    assert.equal(await list.getByText(emailAlias.name,{exact:true}).isVisible(),true);
+   domainEnabled=false;
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await t.waitFor(async()=>assert.equal(await reply.inputValue(),'bookings@cafe.example.test'),{timeout:3000});
+   await reply.fill('');await reply.press('Enter');
+   await sender.getByRole('status').filter({hasText:c.cleared}).waitFor();
+   assert.deepEqual(requests.at(-1),{installationId:id,replyTo:''});
+   assert.equal(await reply.inputValue(),'');
   }finally{await page.close();}
  }
 });

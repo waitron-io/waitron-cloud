@@ -29,7 +29,8 @@ export class RemoteController {
   if((value!==''||field==='address')&&!validEmail(value)){this.venueEmailResult='invalid';this.#changed();return;}
   const generation=this.#generation;
   this.pending=true;this.error=undefined;this.venueEmailResult=undefined;this.#changed();
-  const action=field==='address'?'save-domain':field==='replyTo'&&value===''?'clear-reply':'save';
+  const useDomainReply=field==='replyTo'&&value===''&&!!this.view.venueEmail.domain?.address;
+  const action=field==='address'?'save-domain':useDomainReply?'clear-reply':'save';
   const body=field==='address'?{installationId:id,address:value}:action==='clear-reply'?{installationId:id}:{installationId:id,replyTo:value};
   const result=await this.#request<VenueEmailSettings>(`/venue-email/${action}`,body);
   if(generation!==this.#generation)return;
@@ -38,7 +39,7 @@ export class RemoteController {
    this.view={...this.view,venueEmail:result.value};
    this.venueEmailDraft=result.value.replyTo??'';
    this.venueDomainDraft=result.value.domain?.address??'';
-   this.venueEmailResult=field==='reset'?'cleared':'saved';
+   this.venueEmailResult=action==='save'&&value===''?'cleared':'saved';
   }else if(!result.ok){
    if(result.status===401||result.status===403||result.status===429)this.#failure(result);
    else{
