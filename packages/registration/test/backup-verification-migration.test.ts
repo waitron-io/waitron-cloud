@@ -137,6 +137,8 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
       entry.row.display_name=null;
       entry.row.setup_address=null;
       entry.row.waitron_mail_reply_to=null;
+      entry.row.waitron_mail_from=null;
+      entry.row.waitron_mail_dns_token=null;
     }
     for(const entry of allBefore.installations as {row:Record<string,unknown>}[]){
       entry.row.portal_removed_at=null;

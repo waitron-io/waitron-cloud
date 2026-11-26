@@ -1,3 +1,4 @@
+import {isHostname} from '@waitron-cloud/remote-access/manifest';
 import {AccountBusinessStore} from '@waitron-cloud/registration';
 import {accountBusinessPaths, accountBusinessResponse} from './account-businesses.ts';
 import {ownerRecoveryResponse} from './owner-recovery.ts';
@@ -106,9 +107,11 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;liveGuestMenu?:boolean;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {operatorAccountId?:string;operatorVenues?:boolean;guestOrigin?:string;liveGuestMenu?:boolean;venueMailDnsSuffix?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;turnstileFetch?:typeof fetch;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
+  const venueMailDnsSuffix=options.venueMailDnsSuffix;
+  if(venueMailDnsSuffix!==undefined&&(config.production||options.planMode!=='test-venue-levels'||!isHostname(venueMailDnsSuffix)||venueMailDnsSuffix.length>211))throw Error('venue_mail_dns.test_suffix_required');
   const operatorVenues=options.operatorVenues===true;
   if(operatorVenues&&config.production)throw Error('operator_venues.unavailable_in_production');
   if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
@@ -218,8 +221,8 @@ export function createAccountApp(options: {operatorAccountId?:string;operatorVen
     if(['/api/installations/staff-certificate-submit','/api/installations/staff-certificate-status'].includes(c.req.path))return staffCertificateResponse(c,{exchange:staffExchange,ip,consume});
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume,startedAt});
     if(['/api/installations/backup-stream-configure','/api/installations/backup-stream-observe'].includes(c.req.path))return managedStreamResponse(c,{streams,ip,consume});
-    if(options.planMode==='test-venue-levels'&&c.req.path==='/api/account/venue-email/save')return venueEmailResponse(c,{pool,origin:config.portalOrigin,secure,ip,consume});
-    if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode,guestOrigin:options.guestOrigin,liveGuestMenu:options.liveGuestMenu});
+    if(options.planMode==='test-venue-levels'&&c.req.path.startsWith('/api/account/venue-email/'))return venueEmailResponse(c,{pool,origin:config.portalOrigin,secure,ip,consume,suffix:venueMailDnsSuffix,resolve:options.remoteResolve});
+    if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode,guestOrigin:options.guestOrigin,liveGuestMenu:options.liveGuestMenu,venueMailDnsSuffix});
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(['/api/account/billing/method/start','/api/account/billing/method/verify'].includes(c.req.path))return billingMethodsResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methods:billingMethods});
     if(billingAccountPaths.includes(c.req.path))return billingAccountResponse(c,{pool,origin:config.portalOrigin,consume,billing:billingAccount,methodsEnabled:!!billingMethods});

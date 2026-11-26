@@ -241,10 +241,10 @@ for(const context of ['()','(peer)','(peer@1.0)','(peer@)'])test(`resolved graph
 
 test('current lock matches independently recorded importer closure counts',()=>{
   const lock=parseLock(readFileSync(new URL('../pnpm-lock.yaml',import.meta.url),'utf8'));
-  assert.equal(Object.keys(lock.packages).length,230);
-  assert.equal(Object.keys(lock.snapshots).length,230);
+  assert.equal(Object.keys(lock.packages).length,234);
+  assert.equal(Object.keys(lock.snapshots).length,234);
   assert.deepEqual(Object.fromEntries(Object.entries(lock.closures).map(([id,closure])=>[id,closure.snapshots.length])),{
-    '.':23,'apps/portal':209,'packages/account-http':141,'packages/backups':105,
+    '.':23,'apps/portal':213,'packages/account-http':141,'packages/backups':105,
     'packages/identity':20,'packages/operations':17,
     'packages/registration':84,'packages/remote-access':117,'packages/translation':84,'packages/ui-smoke':36,
   });

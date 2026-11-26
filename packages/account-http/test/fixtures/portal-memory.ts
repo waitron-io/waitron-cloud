@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +18,8 @@ try {
   await writeFile(join(directory, 'app.css'), 'body{}');
   await writeFile(join(directory, 'app.js'), Buffer.alloc(size, 97));
   await writeFile(join(directory, 'backup-download-worker.js'), '/* database worker */');
+  await assert.rejects(loadPortalAssets(directory), {code: 'ENOENT', path: join(directory, 'venue-dns-pdf.js')});
+  await writeFile(join(directory, 'venue-dns-pdf.js'), '/* DNS records PDF */');
   const assets = await loadPortalAssets(directory);
   const worker = portalResponse(new Request('http://localhost/backup-download-worker.js'), assets, true);
   global.gc!(); const before = process.memoryUsage().arrayBuffers;

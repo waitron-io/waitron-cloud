@@ -7,6 +7,7 @@ import {BillingStore,RelayMessages,RelayWorker,RelayControl,type BillingLevel} f
 import {RelayGrantStore} from '../src/relay-grants.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 import {fixture} from './fixtures/relay-worker.ts';
+import {deferred} from './fixtures/relay-stop-barrier.ts';
 import {transaction} from '../src/transaction.ts';
 const mode='test-venue-levels';
 const api={RelayGrantStore,RelayMessages,RelayWorker} as any;
@@ -102,10 +103,10 @@ test('venue relay new mode preserves its account allowance at registered level',
  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
 });
 
-function venueEmailSettings(f:Awaited<ReturnType<typeof setup>>) {
+function venueEmailSettings(f:Awaited<ReturnType<typeof setup>>,options:Partial<Parameters<typeof createAccountApp>[0]>={}) {
  const origin='http://localhost';
- const app=createAccountApp({pool:f.pool,outbox:{} as any,config:{portalOrigin:origin,production:false,rateKey:'ab'.repeat(32),trustedProxyIps:[]},planMode:mode});
- return (action:'status'|'save',session:typeof f.v.session,body:Record<string,string>)=>app.request(origin+(action==='save'?'/api/account/venue-email/save':'/api/account/remote-access/status'),{
+ const app=createAccountApp({pool:f.pool,outbox:{} as any,config:{portalOrigin:origin,production:false,rateKey:'ab'.repeat(32),trustedProxyIps:[]},planMode:mode,...options});
+ return (action:'status'|'save'|'clear-reply'|'save-domain'|'check-dns',session:typeof f.v.session,body:Record<string,string>)=>app.request(origin+(action==='status'?'/api/account/remote-access/status':`/api/account/venue-email/${action}`),{
   method:'POST',headers:{origin,'content-type':'application/json',cookie:`cloud_session=${session.token}`,'x-csrf-token':session.csrfToken},body:JSON.stringify(body),
  },{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as any);
 }
@@ -146,4 +147,103 @@ test('a Connected owner can clear the Waitron reply address',async t=>{
  assert.equal(clear.status,200);assert.deepEqual(await clear.json(),{replyTo:null});
  const read=await request('status',f.v.session,{installationId});
  assert.equal(read.status,200);assert.deepEqual((await read.json()).venueEmail,{replyTo:null});
+});
+
+test('a test owner keeps a DNS alias for mailbox edits and replaces it for domain changes',async t=>{
+ const f=await setup(t);await f.set('connected');
+ const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test'}),installationId=f.v.installation;
+ const save=(address:string)=>request('save-domain',f.v.session,{installationId,address});
+ const response=await save('Bookings@Cafe.Example.Test');
+ assert.equal(response.status,200);
+ const saved=await response.json(),[alias]=saved.domain.records;
+ const selector=alias.name.split('.')[0];
+ assert.match(selector,/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+ assert.deepEqual(saved,{replyTo:null,domain:{address:'bookings@cafe.example.test',records:[{
+  type:'CNAME',name:`${selector}._domainkey.cafe.example.test`,value:`${selector}.mail.cloud.example.test`,
+ }]}});
+ const mailbox=await save('office@cafe.example.test');
+ assert.equal(mailbox.status,200);
+ assert.deepEqual((await mailbox.json()).domain,{address:'office@cafe.example.test',records:[alias]});
+ const moved=await save('office@bistro.example.test');
+ assert.equal(moved.status,200);
+ const current=await moved.json();
+ assert.notEqual(current.domain.records[0].value,alias.value);
+ const status=await request('status',f.v.session,{installationId});
+ assert.deepEqual((await status.json()).venueEmail,current);
+ assert.equal((await request('save',f.v.session,{installationId,replyTo:'replies@example.test'})).status,200);
+ const defaultReply=await request('clear-reply',f.v.session,{installationId});
+ assert.equal(defaultReply.status,200);
+ assert.deepEqual(await defaultReply.json(),{replyTo:null,domain:current.domain});
+ const cleared=await request('save',f.v.session,{installationId,replyTo:''});
+ assert.equal(cleared.status,200);
+ assert.deepEqual(await cleared.json(),{replyTo:null,domain:{address:null,records:[]}});
+});
+
+test('an owner can see and clear the active reply address after domain setup is disabled',async t=>{
+ const f=await setup(t);await f.set('connected');
+ const installationId=f.v.installation,address='bookings@cafe.example.test';
+ const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test'});
+ const replyOnly=venueEmailSettings(f);
+ assert.equal((await request('save-domain',f.v.session,{installationId,address})).status,200);
+ const status=await replyOnly('status',f.v.session,{installationId});
+ assert.equal(status.status,200);
+ assert.deepEqual((await status.json()).venueEmail,{replyTo:address});
+ const clear=await replyOnly('save',f.v.session,{installationId,replyTo:''});
+ assert.equal(clear.status,200);assert.deepEqual(await clear.json(),{replyTo:null});
+ assert.deepEqual((await (await request('status',f.v.session,{installationId})).json()).venueEmail,{replyTo:null,domain:{address:null,records:[]}});
+});
+
+test('venue domain setup rejects ineligible requests before resolving DNS',async t=>{
+ const f=await setup(t),other=await f.venue(),installationId=f.v.installation;
+ const body={installationId,address:'office@cafe.example.test'};
+ let lookups=0;
+ const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test',remoteResolve:async()=>{lookups++;return [];}});
+ await f.set('connected');
+ assert.equal((await venueEmailSettings(f)('save-domain',f.v.session,body)).status,404);
+ assert.equal((await request('save-domain',other.session,body)).status,403);
+ assert.equal((await request('check-dns',other.session,{installationId})).status,403);
+ assert.equal((await request('save-domain',{...f.v.session,csrfToken:other.session.csrfToken},body)).status,403);
+ await f.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) VALUES('ES','test','country.example.test')");
+ await f.pool.query(`INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint)
+  VALUES($1,'ES','aws','test','cell.example.test',7,'fixture-key','gateway.example.test:51820')`,[randomUUID()]);
+ for(const domain of ['child.cloud.example.test','child.waitron.io','child.waitron.cloud','child.country.example.test','child.cell.example.test']){
+  assert.equal((await request('save-domain',f.v.session,{installationId,address:`office@${domain}`})).status,400,domain);
+ }
+ await f.set('registered');
+ assert.equal((await request('save-domain',f.v.session,body)).status,403);
+ await f.set('hosted');
+ await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[installationId]);
+ assert.equal((await request('save-domain',f.v.session,body)).status,403);
+ assert.equal((await request('check-dns',f.v.session,{installationId})).status,403);
+ assert.equal(lookups,0);
+});
+
+test('venue DNS checks distinguish answers, failures, and a changed alias',async t=>{
+ const f=await setup(t);await f.set('connected');
+ const installationId=f.v.installation;
+ let resolve:(name:string)=>Promise<string[]>=async()=>[];
+ const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test',remoteResolve:name=>resolve(name)});
+ const save=(address:string)=>request('save-domain',f.v.session,{installationId,address});
+ const check=async()=>request('check-dns',f.v.session,{installationId});
+ const saved=await save('office@cafe.example.test');
+ assert.equal(saved.status,200);
+ const {domain:{records:[alias]}}=await saved.json();
+ for(const [answer,status] of [[[alias.value.toUpperCase()+'.'],'verified'],[['wrong.example.test'],'unverified'],['ENOTFOUND','unverified'],['ENODATA','unverified'],['ETIMEOUT','unknown']] as const){
+  resolve=async name=>{
+   assert.equal(name,alias.name);
+   if(typeof answer==='string')throw Object.assign(new Error(answer),{code:answer});
+   return [...answer];
+  };
+  const response=await check();
+  assert.equal(response.status,200);
+  assert.deepEqual((await response.json()).domain.records,[{...alias,status}]);
+ }
+ const entered=deferred(),released=deferred();
+ resolve=async()=>{entered.resolve();await released.promise;return [alias.value];};
+ const checking=check();
+ try{
+  await Promise.race([entered.promise,checking.then(()=>assert.fail('Check did not reach the resolver'))]);
+  assert.equal((await save('office@bistro.example.test')).status,200);
+ }finally{released.resolve();}
+ assert.equal((await checking).status,409);
 });
