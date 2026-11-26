@@ -1157,9 +1157,12 @@ Keep the matching key private so you can open the encrypted archive later. The
 manifest gives the capture time
 and SHA-256 checksum of the encrypted file. Later changes may be missing. After
 service ends, Backups reminds you to keep your fiscal records and check your copies
-while the downloads are open. This test download accepts archives up to 16 MiB
-and databases up to 512 MiB after opening. Your browser keeps a temporary
-database copy for ten minutes while the portal stays open. It clears the copy
+while the downloads are open. The ordinary test portal accepts verified archives
+up to 16 MiB. Set `CLOUD_EXIT_RANGE_DOWNLOADS=1` with the
+[private LAN stage](local-backups.md#use-disk-stages-for-the-local-publication-trial)
+to save verified archives up to 512 MiB in a LAN test account. In either case
+the browser saves SQLite databases up to 512 MiB after opening. Your browser
+keeps a temporary copy for ten minutes while the portal stays open. It clears the copy
 sooner if you save another database, sign out or change accounts. If the page
 closes before clearing the file, opening the portal clears it. Opening another
 portal tab leaves a save in an open tab alone.
@@ -1169,30 +1172,35 @@ On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's p
 first value in the output with `archiveSha256` in the manifest to check the saved file.
 
 Use the disposable Cloud image and a verifier built from Waitron revision
-`44dc45af7a64d399037747499ba633594a63f84d`. This client uses the pairing proof
+`71daa2410af1c50c3a23429596ae0fb0ef62f552`. This client uses the pairing proof
 format the Cloud account service expects.
 On your disposable Docker host, give the verifier a private 1 GiB ext4 volume
 using the [Amazon scratch settings](#rehearse-backup-on-the-amazon-test-cloud).
-Use a unique volume name and a separate empty directory for the worker to stage
-the encrypted archive. The worker and the saved-file check use the volume in turn.
+Use a unique volume name and separate private disk directories for the worker and
+the account. The worker stages the archive for verification. The account stages
+the verified copy for the browser. The worker and the saved-file check use the
+verifier volume in turn.
 Load `postgres:18-alpine` and `axllent/mailpit:v1.31.1` in Docker first because
 the rehearsal starts with image pulls disabled. Install Chromium for the browser step
 with `pnpm --dir apps/portal exec playwright install --with-deps chromium`.
 
 ```sh
 TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
-TEST_CLOUD_INTEGRATION_WAITRON_REVISION=44dc45af7a64d399037747499ba633594a63f84d \
+TEST_CLOUD_INTEGRATION_WAITRON_REVISION=71daa2410af1c50c3a23429596ae0fb0ef62f552 \
 TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=<local-verifier-image-id> \
 TEST_CLOUD_EXIT_VERIFIER_VOLUME=<private-verifier-volume> \
-TEST_CLOUD_EXIT_STAGE=<absolute-private-staging-directory> \
+TEST_CLOUD_EXIT_STAGE=<private-worker-staging-directory> \
+TEST_CLOUD_EXIT_ACCOUNT_STAGE=<private-account-staging-directory> \
   node --test scripts/test-cloud-exit-download.test.mjs
 ```
 
-The test compares the saved archive with the stored and downloaded checksums and opens it in a
-verifier with networking disabled. It also saves the selected SQLite database
-in Chromium, checks its integrity and compares its bytes with the independently
-opened archive. It checks the original box is
-still serving with the same installation after both downloads. It then ends
+The test compares the saved archives with the stored and downloaded checksums and
+opens them in a verifier with networking disabled. Chromium saves the SQLite
+database for a small archive and for a second archive of about 20 MiB. The test
+checks SQLite integrity and compares each file with the independently opened
+archive. It records the larger file's staging and transfer times apart from
+local opening. It checks that the original box still serves with the same
+installation after the downloads. It then ends
 service for that same synthetic venue and records a fixed cutoff 90 days later.
 The fixture sets the end in the past so the cutoff is about 90 seconds away.
 All three files match the saved copies before the cutoff. After the cutoff, all three
