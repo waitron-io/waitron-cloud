@@ -35,6 +35,7 @@ for (const abort of [false, true]) test('Stockholm writes recorded failures befo
   const summary = calls.findIndex(line => line.startsWith('D621 failure summary '));
   assert.ok(summary >= 0 && summary < calls.indexOf('delete'));
   assert.match(calls[summary], /p1\.session_after_recovery/);
+  assert.equal(JSON.parse(calls[summary].slice('D621 failure summary '.length)).measurements?.restored, abort ? undefined : true);
   assert.equal(calls.includes('final-restore'), !abort);
   assert.equal(calls.at(-2), 'deleted');
 });
@@ -363,6 +364,8 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
       }
       if (scenario === 'baseline measured stops') {
         const kubeEvidence = await context.bindEvidenceKube(context.signal);
+        await context.bindEvidenceKube(context.signal);
+        assert.equal(transports.filter(row => row.args.at(-1).includes('--request-timeout=250ms')).length, 2);
         await kubeEvidence(['get', 'cluster', 'cloud-db', '-o', 'name'], {signal: context.signal});
         assert.deepEqual(transports.at(-1).args.slice(-2), ['admin@203.0.113.2',
           "'sudo' 'kubectl' '--kubeconfig=/etc/kubernetes/admin.conf' '--context' '" + context.cluster +

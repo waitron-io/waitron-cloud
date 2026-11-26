@@ -927,9 +927,9 @@ implementation or production evidence.
   a restore after the all-machine restart; paid Stockholm qualification remains open:
 
   - Run the [launch-host dry run](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
-    before each paid run. It checks the local tools, imports and image bundle. The measured
-    launcher records the database writer's process start time and checks that each machine
-    rejoins before the next stop. The next [evidence rehearsal](superpowers/plans/2026-11-26-d621-stockholm-evidence.md)
+    before each paid run. It checks the local tools, imports and image bundle. Synthetic
+    launcher checks cover recording the database writer's process start time and keeping
+    failed measurements through a restart and restore. The next [evidence rehearsal](superpowers/plans/2026-11-26-d621-stockholm-evidence.md)
     still needs Stockholm results from the three stops, restart and restore.
   - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
     [Amazon verifier pin](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).

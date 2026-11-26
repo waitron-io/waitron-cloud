@@ -47,14 +47,21 @@ export async function stopAmazonRehearsalNode({instance, node, aws, kube, whileS
 }
 
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry, evidence} = {}) {
-  const report = outcome => process.stderr.write('D621 failure summary ' + JSON.stringify({outcome, evidence}) + '\n');
+  let reported = false;
+  const report = (outcome, measurements) => {
+    process.stderr.write('D621 failure summary ' + JSON.stringify({outcome, evidence, measurements}) + '\n');
+    reported = true;
+  };
   try {
     await operations.create();
     await operations.prepare();
     if (operations.baseline) {
       const baseline = await operations.baseline();
-      if (evidence?.some(stage => stage.failures.length)) throw Error('amazon.qualification_failed');
-      if (evidence) report('passed');
+      if (evidence?.some(stage => stage.failures.length)) {
+        report('failed', baseline);
+        throw Error('amazon.qualification_failed');
+      }
+      if (evidence) report('checks_passed');
       await waitExpiry();
       await operations.waitDeleted();
       return {baseline, removed: true};
@@ -75,7 +82,7 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
     await operations.waitDeleted();
     return {...(journeys ? {journeys} : {observation}), removed: true};
   } catch (error) {
-    if (evidence) report(error.message === 'amazon.qualification_failed' ? 'failed' : 'aborted');
+    if (evidence && !reported) report('aborted');
     try {
       process.stderr.write('Amazon early deletion requested\n');
       await operations.deleteStack();
@@ -449,7 +456,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', 'verifier-scratch', phase],
           undefined, 30_000, request);
         for (const index of [0, 1, 2]) await scratch(index, config.measuredStops ? 'boot' : 'once', limit);
-        let controller = 0, evidenceController = 0, unavailable;
+        let controller = 0, evidenceController, unavailable;
         const preferred = first => [first, ...[0, 1, 2].filter(index => index !== first)].filter(index => index !== unavailable);
         const controlPlaneSelection = {calls: 0, totalMs: 0, longestMs: 0};
         const controlPlane = async request => {
@@ -468,10 +475,18 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
         };
         const outsideKube = async (args, options) => kubeOn(await controlPlane(options?.signal), args, options);
         const bindEvidenceKube = async signal => {
-          const index = await selectSurvivingNode(preferred(evidenceController), (candidate, request) =>
-            kubeOn(candidate, ['--request-timeout=250ms', 'get', '--raw=/readyz'], {signal: request, timeout: 300, quiet: true}), signal);
-          evidenceController = index;
-          return (args, options) => kubeOn(index, args, {signal, ...options, quiet: true});
+          if (evidenceController === undefined || evidenceController === unavailable) {
+            evidenceController = await selectSurvivingNode(preferred(controller), (candidate, request) =>
+              kubeOn(candidate, ['--request-timeout=250ms', 'get', '--raw=/readyz'], {signal: request, timeout: 300, quiet: true}), signal);
+          }
+          const index = evidenceController;
+          return async (args, options) => {
+            try {return await kubeOn(index, args, {signal, ...options, quiet: true});}
+            catch (error) {
+              if (evidenceController === index) evidenceController = undefined;
+              throw error;
+            }
+          };
         };
         async function stopNode(node, {whileStopped, afterRestart}) {
           assert.ok(now() < singleStopDeadline, 'amazon.measured_stops_expiry');

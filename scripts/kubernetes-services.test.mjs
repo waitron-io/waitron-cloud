@@ -119,7 +119,7 @@ test('measured stops cover all three machines and the live roles before returnin
         const reconciliation = await reconcile();
         return {recovery: {signup: {result: {worker: overrides.mail ?? reconciliation.primary}},
           backup: {result: {controllerScope: 'verifier', attemptId: 'attempt', retained: overrides.retained ?? true}}},
-          reconciliation};
+          reconciliation, ...(overrides.failures && {failures: overrides.failures})};
       },
       reconcile: async (_node, _before, survivors) => ({primary: survivors[0], outsideStore: true,
         publication, flux: {appliedRevision: 'a'.repeat(40)}}),
@@ -149,14 +149,14 @@ test('measured stops cover all three machines and the live roles before returnin
 
   await t.test('Stockholm retains failed checks across stops, after verifying each rejoin', async () => {
     changes.length = 0;
-    const legs = await run('b', undefined, {mail: '', context: {recordFailures: true,
+    const legs = await run('b', undefined, {mail: '', failures: [{check: 'p1.session_after_recovery', count: 1}], context: {recordFailures: true,
       probes: {async sessionActivity() {throw Error('session unavailable');}},
     }});
     assert.deepEqual(legs.map(leg => leg.stopped), ['b', 'c', 'a']);
     assert.deepEqual(changes, ['off:b', 'return:b', 'off:c', 'return:c', 'off:a', 'return:a']);
     assert.deepEqual(legs[0].rejoin, {storeRepairedOn: 'b'});
     assert.deepEqual(legs[0].failures.map(({check}) => check),
-      ['services.stop_session_activity', 'services.stop_mail_worker', 'services.stop_publication']);
+      ['services.stop_session_activity', 'p1.session_after_recovery', 'services.stop_mail_worker', 'services.stop_publication']);
   });
 
   await t.test('Stockholm stops if a returning machine cannot be verified', async () => {
@@ -169,7 +169,7 @@ test('measured stops cover all three machines and the live roles before returnin
 
   await t.test('Stockholm starts sampling before the observer clock and captures diagnostics after service rejoin', async t => {
     const stages = [];
-    const log = t.mock.method(process.stderr, 'write', line => {
+    t.mock.method(process.stderr, 'write', line => {
       if (line.startsWith('D621 database ')) {
         const {stage, point} = JSON.parse(line.slice(line.indexOf('{')));
         if (stage === 'stop:b') stages.push(point ?? 'sample');
@@ -179,10 +179,7 @@ test('measured stops cover all three machines and the live roles before returnin
     await run('b', publication, {stages, context: {signal: new AbortController().signal, recordFailures: true,
       bindEvidenceKube: async () => {throw Object.assign(Error('offline'), {code: 'ETIMEDOUT'});},
     }});
-    assert.ok(log.mock.callCount() > 0);
-    assert.ok(stages.indexOf('sample') < stages.indexOf('observe'));
-    assert.ok(stages.indexOf('hold') < stages.indexOf('healthy:b'));
-    assert.ok(stages.indexOf('healthy:b') < stages.indexOf('rejoined'));
+    assert.deepEqual(stages.slice(0, 6), ['inventory', 'sample', 'observe', 'hold', 'healthy:b', 'rejoined']);
   });
 
   await t.test('the inbox witness is captured before each stop and read during it', async () => {
@@ -306,7 +303,8 @@ for (const [name, routeStillResponding, placement, reason, recordFailures] of [
         backupAfterRestart: async () => {
           assert.equal(inspectionChecks, 2, 'the backup requires a ready inspector');
           seen.push('backup');
-          return {retainedPointId: 'original', pointId: 'new'};
+          return {retainedPointId: 'original', pointId: 'new',
+            ...(recordFailures && {failures: [{check: 'integration.cold_backup_retained', count: 1}]})};
         },
       },
       async restartAll(outage) {
@@ -327,7 +325,7 @@ for (const [name, routeStillResponding, placement, reason, recordFailures] of [
       assert.ok(!seen.includes('stopped'));
     } else if (recordFailures) {
       const result = await run;
-      assert.deepEqual(result.failures.map(({check}) => check), ['services.cold_outage:public']);
+      assert.deepEqual(result.failures.map(({check}) => check), ['services.cold_outage:public', 'integration.cold_backup_retained']);
       assert.equal(result.outage.public, undefined);
       assert.equal(result.outage.staff, 'ECONNREFUSED');
       assert.equal(result.backup.retainedPointId, 'original');

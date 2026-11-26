@@ -5,15 +5,17 @@ const api = await import('./p1-observer.mjs').catch(error => {if (error.code !==
 
 test('Stockholm records a failed session baseline and still observes the full hold', async () => {
   let clock = 0, ready = false;
+  const sessionStarts = [];
   const ok = async () => ({verified: true});
   const result = await api.observeP1({recordFailures: true, holdMs: 360_000, now: () => clock,
     sleep: async ms => {clock += ms; await new Promise(setImmediate);},
-    probes: {session: async () => {if (!ready) throw Error('account unavailable'); return true;},
+    probes: {session: async () => {if (!ready) throw Object.assign(Error('account unavailable'), {code: 'ETIMEDOUT'}); sessionStarts.push(clock); return true;},
       remote: ok, login: ok, backup: ok, signup: ok},
     ready: () => {ready = true;}, stopped: async () => {}, replacement: async () => {}});
   assert.equal(result.offMs, 360_000);
-  assert.ok(result.failures.some(({check}) => check === 'p1.session_baseline'));
+  assert.ok(result.failures.some(({check, reason}) => check === 'p1.session_baseline' && reason === 'ETIMEDOUT'));
   assert.ok(result.recovery.session.withinMs <= 5_000);
+  assert.ok(sessionStarts.at(-1) + 5_000 < result.stoppedMs + result.offMs, 'a session read needs its full deadline before the hold ends');
 });
 
 test('Stockholm records the sign-in recovery deadline and keeps sampling other services', async () => {
