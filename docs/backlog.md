@@ -316,9 +316,9 @@ record the research for the specialist to confirm. The
 covers a verified backup, key, checksum manifest and a browser save of the venue’s
 SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
 [Downloads above 16 MiB](superpowers/plans/2026-11-25-d642-ranged-download.md)
-still need the private disk mount, browser support and an HTTPS rehearsal that checks browser
-memory. The server can serve 4 MiB replies from a single verified copy when the range route is
-enabled. The route stays off in the test deployments while the rest is built.
+still need browser support and an HTTPS rehearsal that checks browser memory. The
+[private LAN disk](local-backups.md#use-disk-stages-for-the-local-publication-trial) can hold a
+single verified copy for the server's 4 MiB replies. The ranged route stays off in test deployments.
 The pinned LAN checker verified a 512 MiB synthetic archive following the
 [local qualification](superpowers/plans/2026-11-26-d642-large-download-qualification.md#verify-a-512-mib-backup-on-the-lan-worker).
 Real venue exit still needs the

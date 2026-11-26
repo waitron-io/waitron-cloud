@@ -7,7 +7,7 @@ ARG SEAWEED_ARM64_SHA256
 ARG TARGETARCH
 
 COPY scripts/fixtures/storage-archive-download.mjs /tmp/storage-archive-download.mjs
-RUN apk add --no-cache ca-certificates curl docker-cli haproxy iproute2 iptables openssl tar wireguard-tools \
+RUN apk add --no-cache ca-certificates curl docker-cli flock haproxy iproute2 iptables openssl tar wireguard-tools \
  && case "$TARGETARCH" in \
       amd64) archive=linux_amd64.tar.gz; digest="$SEAWEED_AMD64_SHA256" ;; \
       arm64) archive=linux_arm64.tar.gz; digest="$SEAWEED_ARM64_SHA256" ;; \

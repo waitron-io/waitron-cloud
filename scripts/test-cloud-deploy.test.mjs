@@ -63,6 +63,38 @@ test('up refuses rendered port or build drift before creating containers',async(
  assert.equal(validateDeployment({name:'waitron-cloud-test',services},{image}).ready,true);
  for(const altered of [{...services,account:{...services.account,ports:[{host_ip:'127.0.0.1',published:'3000',target:3000}]}},{...services,account:{...services.account,ports:[{host_ip:'0.0.0.0',published:'3000',target:3000}]}},{...services,proxy:{...services.proxy,build:{context:'.'}}},{...services,proxy:{...services.proxy,ports:[{host_ip:'0.0.0.0',published:'3000',target:3000}]}}])assert.throws(()=>validateDeployment({name:'waitron-cloud-test',services:altered},{image}),/test_cloud.rendered/);
 });
+test('LAN up forwards exactly one explicitly selected private exit mount',async()=>{
+ const {deploy,validateDeployment}=await api(),exitStageSource='/private/cloud-exit-stage',target='/run/backup-stage';
+ const port=(host_ip,published,inside)=>({host_ip,published,target:inside});
+ const small={image,mem_limit:64*1024*1024};
+ const mount={type:'bind',source:exitStageSource,target,bind:{create_host_path:false}};
+ const value={name:'waitron-cloud-test',services:{
+  account:{...small,environment:{CLOUD_EXIT_STAGE_ROOT:target},volumes:[mount]},
+  proxy:{...small,ports:[port('192.168.10.10','3000',3000)]},
+  postgres:{...small,ports:[port('127.0.0.1','55432',5432)]},
+  mailpit:{...small,ports:[port('127.0.0.1','1125',1025),port('127.0.0.1','8125',8025)]}
+ }};
+ assert.equal(validateDeployment(value,{image,exitStageSource}).ready,true);
+ assert.throws(()=>validateDeployment(value,{image}),/test_cloud.rendered/);
+ assert.throws(()=>validateDeployment(value,{image,exitStageSource:'/other'}),/test_cloud.rendered/);
+ for(const changed of [{...mount,read_only:true},{...mount,bind:{create_host_path:true}}]){
+  const copy=structuredClone(value);copy.services.account.volumes=[changed];
+  assert.throws(()=>validateDeployment(copy,{image,exitStageSource}),/test_cloud.rendered/);
+ }
+ const mountsElsewhere=structuredClone(value);mountsElsewhere.services.proxy.volumes=[mount];
+ assert.throws(()=>validateDeployment(mountsElsewhere,{image,exitStageSource}),/test_cloud.rendered/);
+ const calls=[];
+ await deploy('up',{image,exitStageSource,settledSamples:0,inventory:async()=>good,execute:async(_command,args,options)=>{
+  if(args.includes('inspect'))return JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'});
+  calls.push([args,options.environment]);
+  return args.includes('config')?JSON.stringify(value):'';
+ }});
+ for(const [args,env] of calls){
+  assert.ok(args.includes('deploy/test-cloud/compose.exit-stage.yaml'));
+  assert.equal(env.TEST_CLOUD_ACCOUNT_BACKUP_STAGE,exitStageSource);
+ }
+ assert.equal(calls.length,2);
+});
 test('read-only inventory handles host/none networks without inspecting private container environment',async()=>{
  const {inventory}=await api();assert.equal(typeof inventory,'function');
  const value=await inventory(async(command,args)=>{

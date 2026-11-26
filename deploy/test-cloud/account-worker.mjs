@@ -1,6 +1,7 @@
 import {cloudActionDemoEnabled} from '../../packages/registration/src/cloud-action-worker.ts';
 import {startCloudActionDemo} from './cloud-action-demo.mjs';
 import {openTestCaptureRuntime} from './service-runtime.mjs';
+import {openExitStage} from './runtime.mjs';
 import {openTestRelayRuntime} from './relay-runtime.mjs';
 import {createRequire} from 'node:module';
 import {readFile} from 'node:fs/promises';
@@ -68,6 +69,7 @@ try {
     const uploadOrigin=process.env.CLOUD_TEST_AMAZON_BACKUPS==='1'?config.portalOrigin:undefined;
     if(uploadOrigin!==undefined&&(planMode!=='test-venue-levels'||process.env.NODE_ENV==='production'))throw Error('test_cloud.amazon_backups');
     captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory,uploadOrigin}):undefined;
+    const exitRanges=await openExitStage(process.env.CLOUD_EXIT_STAGE_ROOT,process.env.CLOUD_EXIT_STAGE_LOCKED);
     let relay;
     try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode,
       setupExpiresAt:process.env.CLOUD_TEST_RELAY_SETUP_EXPIRES_AT || undefined});}
@@ -87,7 +89,7 @@ try {
       guestAuthority=await startGuestMenuAuthority({connectionString:process.env.DATABASE_URL},ephemeral?'127.0.0.1':'10.79.0.3',ephemeral?0:3445);
     }
     const addressLookup=addressLookupOptionsFromEnv(process.env);
-    running = await startAccountServer({guestOrigin,liveGuestMenu,venueMailDnsSuffix:process.env.CLOUD_VENUE_MAIL_DNS_SUFFIX||undefined,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({guestOrigin,liveGuestMenu,venueMailDnsSuffix:process.env.CLOUD_VENUE_MAIL_DNS_SUFFIX||undefined,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,operatorVenues,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,addressLookup,tunnelProvision,captures:captures?.options,exitRanges,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();

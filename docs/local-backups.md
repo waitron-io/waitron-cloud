@@ -87,6 +87,17 @@ account and its storage service. The 5 GiB account stage fits one near-2 GiB
 publication at a time in the raised-ceiling trial. After the trial, stop the services using the mounts before
 unmounting the two filesystems. Remove only the stage directory you created.
 
+In either test account mode, the account disk also holds the verified exit copy. Keep
+the account mount private so only its worker can use it. At startup the worker locks
+the directory before clearing any abandoned `exit-download` stage inside it. A second
+worker using the same disk refuses to start. The ranged route stays off while its
+browser and HTTPS checks are still pending.
+
+With the LAN deployment driver, set `TEST_CLOUD_ACCOUNT_BACKUP_STAGE` to the absolute
+account stage path when you run `node scripts/test-cloud-deploy.mjs up <image-id> lan`.
+The driver mounts that directory on the account service only. Use the Compose overlay
+above when you also want to stage backup worker traffic on its separate disk.
+
 Run the signed TLS publication and retry proof.
 
 ```sh

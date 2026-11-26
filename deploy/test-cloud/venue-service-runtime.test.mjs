@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {once} from 'node:events';
+import {mkdir,mkdtemp,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
@@ -50,4 +51,43 @@ test('test account receives its mounted backup disk only in venue-level mode',as
  assert.equal(testRuntimeEnvironment('account',config,{...settings,CLOUD_VENUE_SERVICE_LEVELS:'test'}).CLOUD_BACKUP_STAGE_ROOT,settings.CLOUD_BACKUP_STAGE_ROOT);
  assert.equal(testRuntimeEnvironment('account',config,{...settings,CLOUD_TEST_SERVICE_PLANS:'1'}).CLOUD_BACKUP_STAGE_ROOT,undefined);
  assert.equal(testRuntimeEnvironment('backup',config,{...settings,CLOUD_VENUE_SERVICE_LEVELS:'test'}).CLOUD_BACKUP_STAGE_ROOT,undefined);
+});
+
+test('only opted-in LAN account modes receive the private exit stage',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'cloud-exit-runtime-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const config=await bootstrap(directory),root='/run/backup-stage';
+ for(const flags of [{CLOUD_TEST_SERVICE_PLANS:'1'},{CLOUD_VENUE_SERVICE_LEVELS:'test'}]){
+  const environment={...flags,CLOUD_EXIT_STAGE_ROOT:root};
+  assert.equal(testRuntimeEnvironment('account',config,environment).CLOUD_EXIT_STAGE_ROOT,root);
+  assert.equal(testRuntimeEnvironment('backup',config,environment).CLOUD_EXIT_STAGE_ROOT,undefined);
+  assert.throws(()=>testRuntimeEnvironment('account',config,{...environment,CLOUD_EXIT_STAGE_ROOT:'/other'}),/test_cloud.exit_stage/);
+  assert.throws(()=>testRuntimeEnvironment('account',config,{...environment,TEST_CLOUD_AMAZON:'1'}),/test_cloud.exit_stage/);
+ }
+ assert.equal(testRuntimeEnvironment('account',config,{CLOUD_EXIT_STAGE_ROOT:root}).CLOUD_EXIT_STAGE_ROOT,undefined);
+});
+
+test('the exit worker clears only its abandoned stage after acquiring the mount', {skip:process.platform!=='linux',timeout:8000},async t=>{
+ const {spawnExitWorker,openExitStage}=await import('./runtime.mjs');
+ const root=await mkdtemp(join(tmpdir(),'cloud-exit-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const stale=join(root,'exit-download'),other=join(root,'other-work');
+ await mkdir(stale);await mkdir(other);
+ await assert.rejects(openExitStage(root),/test_cloud.exit_stage/);
+ const options={stdio:'pipe',env:{PATH:process.env.PATH}};
+ const owner=await spawnExitWorker(root,['-e','console.log("held");process.stdin.resume()'],options);
+ const ownerExit=once(owner,'exit');t.after(async()=>{owner.stdin.end();await ownerExit;});
+ assert.equal(await Promise.race([once(owner.stdout,'data').then(([chunk])=>String(chunk).trim()),ownerExit.then(()=>null)]),'held');
+ const script=`import {openExitStage} from ${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)};
+ const stage = await openExitStage(process.argv[1],process.env.CLOUD_EXIT_STAGE_LOCKED);
+ console.log(JSON.stringify(stage));`;
+ const start=async()=>{
+  const child=await spawnExitWorker(root,['--input-type=module','-e',script,root],options);
+  const exit=once(child,'exit');let stdout='';for await(const chunk of child.stdout)stdout+=chunk;
+  return {code:(await exit)[0],stdout};
+ };
+ assert.deepEqual(await start(),{code:1,stdout:''});
+ assert.ok((await stat(stale)).isDirectory());
+ owner.stdin.end();assert.equal((await ownerExit)[0],0);
+ const next=await start();assert.equal(next.code,0);assert.deepEqual(JSON.parse(next.stdout),{stageRoot:root,enabled:false});
+ await assert.rejects(stat(stale),{code:'ENOENT'});
+ assert.ok((await stat(other)).isDirectory());
 });

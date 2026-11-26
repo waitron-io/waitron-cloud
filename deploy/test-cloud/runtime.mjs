@@ -1,4 +1,6 @@
 import {spawn} from 'node:child_process';
+import {lstat,rm} from 'node:fs/promises';
+import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {loadRuntime,runtimeEnvironment,checkConsumerDatabase,canonicalHttpsOrigin} from '../local-stack/runtime.mjs';
 import {cloudActionDemoEnabled} from '../../packages/registration/src/cloud-action-worker.ts';
@@ -23,6 +25,10 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(['account','action-demo'].includes(role)&&demo){result.CLOUD_ACTION_DEMO='1';result.CLOUD_ACTION_DEMO_DIR=environment.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo';}
  if(role==='account'&&demo&&environment.TEST_CLOUD_AMAZON==='1')result.TEST_CLOUD_AMAZON='1';
  if(role==='account'){delete result.CLOUD_LOCAL_REQUEST_METRICS;result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
+ if(role==='account'&&enabled&&environment.CLOUD_EXIT_STAGE_ROOT!==undefined){
+  if(environment.NODE_ENV==='production'||environment.TEST_CLOUD_AMAZON==='1'||environment.CLOUD_EXIT_STAGE_ROOT!=='/run/backup-stage')throw Error('test_cloud.exit_stage');
+  result.CLOUD_EXIT_STAGE_ROOT=environment.CLOUD_EXIT_STAGE_ROOT;
+ }
  if(role==='account'&&environment.NODE_ENV!=='production'&&environment.CLOUD_ADDRESS_LOOKUP_SETTINGS&&environment.GOOGLE_MAPS_SERVER_KEY){
   result.CLOUD_ADDRESS_LOOKUP_SETTINGS=environment.CLOUD_ADDRESS_LOOKUP_SETTINGS;
   result.GOOGLE_MAPS_SERVER_KEY=environment.GOOGLE_MAPS_SERVER_KEY;
@@ -72,6 +78,22 @@ export function testRuntimeEnvironment(role,config,environment={}){
  }
  return result;
 }
+export async function spawnExitWorker(directory,args,options){
+ const info=await lstat(directory);
+ if(!info.isDirectory()||(info.mode&0o077))throw Error('test_cloud.exit_stage');
+ // A directory lock survives exec and belongs to the worker until the process exits.
+ return spawn('flock',['--nonblock','--no-fork','--',directory,process.execPath,...args],{
+  ...options,env:{...options.env,CLOUD_EXIT_STAGE_LOCKED:'1'}
+ });
+}
+
+export async function openExitStage(directory,locked){
+ if(directory===undefined)return undefined;
+ if(locked!=='1')throw Error('test_cloud.exit_stage');
+ await rm(join(directory,'exit-download'),{force:true,recursive:true});
+ return {stageRoot:directory,enabled:false};
+}
+
 export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',demoCommand='--fail'){
  const config=await loadRuntime(directory),environment=testRuntimeEnvironment(role,config,process.env),command=testRuntimeCommand(role);
  if(role!=='migrate'&&environment.DATABASE_URL)await checkConsumerDatabase(environment.DATABASE_URL,'/app');
@@ -82,7 +104,10 @@ export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_C
   process.chdir('/app');
   return process.execve(process.execPath,[process.execPath,command,...args],childEnvironment);
  }
- const child=spawn(process.execPath,[command,...args],{cwd:'/app',stdio:'inherit',env:childEnvironment});
+ const options={cwd:'/app',stdio:'inherit',env:childEnvironment};
+ const child=environment.CLOUD_EXIT_STAGE_ROOT
+  ?await spawnExitWorker(environment.CLOUD_EXIT_STAGE_ROOT,[command,...args],options)
+  :spawn(process.execPath,[command,...args],options);
  const forward=signal=>child.kill(signal);process.once('SIGINT',forward);process.once('SIGTERM',forward);
  try{return await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});}
  finally{process.removeListener('SIGINT',forward);process.removeListener('SIGTERM',forward);}
