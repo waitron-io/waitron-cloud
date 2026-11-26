@@ -220,7 +220,7 @@ test('disposing the portal aborts a passive check during the retry wait', async 
   const check = session.check().then(() => {finished = true;});
   await settle();
   session.dispose();
-  assert.equal(requests[0]!.init.signal?.aborted, true);
+  assert.equal(requests[0]!.init.signal?.aborted, false, 'disposal leaves the first read to finish');
   await settle();
   assert.equal(finished, true, 'disposal releases callers without advancing the retry timer');
   t.mock.timers.tick(1000);

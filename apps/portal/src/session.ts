@@ -46,8 +46,10 @@ export class PortalSession {
   async #readSession(generation: number): Promise<ApiResult<Session>> {
     if (typeof AbortSignal.any !== 'function') return accountRequest<Session>('/session');
     const deadline = performance.now() + sessionCheckMs;
-    const signal = AbortSignal.any([this.#disposal.signal, AbortSignal.timeout(sessionCheckMs)]);
-    let result = await accountRequest<Session>('/session', undefined, signal);
+    const timeout = AbortSignal.timeout(sessionCheckMs);
+    const signal = AbortSignal.any([this.#disposal.signal, timeout]);
+    // The generation check drops an old first reply. Disposal cancels the retry.
+    let result = await accountRequest<Session>('/session', undefined, timeout);
     if (!result.ok && result.status === 503 && result.code === 'temporarily_unavailable'
       && result.retryAfterMs > 0 && performance.now() + result.retryAfterMs < deadline
       && !signal.aborted && generation === this.#generation) {
