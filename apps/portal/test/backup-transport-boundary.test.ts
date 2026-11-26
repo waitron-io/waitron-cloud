@@ -115,6 +115,15 @@ test('canceling the browser worker releases its server stage',async t=>{
   [['/api/account/backups/download-range/release',{venueId,pointId,attemptId}]]);
 });
 
+test('a restricted browser keeps the encrypted archive size refusal',async t=>{
+ const f=fixture(t);
+ f.replies.push({body:{...page,exitDownloadAvailable:true}});
+ await f.controller.open(venueId);
+ f.replies.push({status:413,body:{error:'download_too_large'}});
+ await f.controller.download('download');
+ assert.equal(f.controller.error,'snapshotDownloadTooLarge');
+});
+
 test('backup download preserves the account enrollment event and distinguishes CSRF from loss of ownership',async t=>{
   const f=fixture(t);
   const downloadable={...page,exitDownloadAvailable:true};

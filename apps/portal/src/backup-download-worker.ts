@@ -157,7 +157,7 @@ async function readBatch({venueId,pointId,csrfToken,attempt,stage,end,offset}:Ra
 }
 
 async function stageRanges(request:DatabaseDownloadRequest,stage:BackupRangeStage):Promise<ApiResult<undefined>>{
- let offset=0;
+ let offset=0, renewedAt:number|undefined;
  while(offset<stage.size){
   const end=Math.min(stage.size,offset+4*backupRangeBytes),worker=new Worker('/backup-download-worker.js');
   let reply:BatchResult;
@@ -169,7 +169,8 @@ async function stageRanges(request:DatabaseDownloadRequest,stage:BackupRangeStag
    });
   }finally{worker.terminate();}
   if(reply.failure){
-   if(reply.failure.code!=='proof_required')return reply.failure;
+   if(reply.failure.code!=='proof_required'||renewedAt===reply.offset)return reply.failure;
+   renewedAt=reply.offset;
    const renewed=new Promise<boolean>(resolve=>self.addEventListener('message',event=>resolve(event.data?.kind==='proof'&&event.data.ok===true),{once:true}));
    self.postMessage({kind:'proof'});
    if(!await renewed)return reply.failure;
@@ -191,27 +192,16 @@ function stagedStream(file:SyncFile){
 async function openDatabase(request:DatabaseDownloadRequest):Promise<ApiResult<undefined>>{
   const {venueId,pointId,csrfToken,attempt,kind}=request;
   const body={venueId,pointId};
-  const archive=kind==='archive'?undefined:await accountRequest<Response>('/backups/download',body,undefined,csrfToken);
-  if(archive&&!archive.ok&&archive.status!==413)return archive;
-  const response=archive?.ok?archive.value:undefined;
+  let response:Response|undefined;
   let stage:BackupRangeStage|undefined;
   let root: FileSystemDirectoryHandle | undefined;
   async function release(){
    if(!stage)return;
    const attemptId=stage.attemptId;stage=undefined;
-   await accountRequest('/backups/download-range/release',{...body,attemptId},AbortSignal.timeout(5000),csrfToken);
-   self.postMessage({kind:'released'});
+   const reply=await accountRequest('/backups/download-range/release',{...body,attemptId},AbortSignal.timeout(5000),csrfToken);
+   if(reply.ok)self.postMessage({kind:'released'});
   }
   try {
-    if(!response){
-      const start=await accountRequest<BackupRangeStage>('/backups/download-range/start',body,undefined,csrfToken);
-      if(!start.ok)return start.status===404?refused('download_too_large'):start;
-      stage=start.value;self.postMessage({kind:'stage',attemptId:stage.attemptId});
-    }
-    const length=stage?.size??Number(response?.headers.get('content-length'));
-    if(!Number.isSafeInteger(length)||length<=frameBytes||!stage&&(!response?.body||length>archiveLimit)){
-      return refused(length>archiveLimit?'download_too_large':undefined);
-    }
     const manifest=await accountRequest<Blob>('/backups/download-manifest',body,undefined,csrfToken);
     if(!manifest.ok)return manifest;
     const {archiveManifestVersion,archiveSha256}=JSON.parse(await manifest.value.text());
@@ -222,6 +212,20 @@ async function openDatabase(request:DatabaseDownloadRequest):Promise<ApiResult<u
       if(!key.ok)return key;
       passphrase=await key.value.text();
       if(!/^[A-Za-z0-9_-]{43}\n$/.test(passphrase))return refused();
+    }
+    if(kind!=='archive'){
+      const archive=await accountRequest<Response>('/backups/download',body,undefined,csrfToken);
+      if(!archive.ok&&archive.status!==413)return archive;
+      if(archive.ok)response=archive.value;
+    }
+    if(!response){
+      const start=await accountRequest<BackupRangeStage>('/backups/download-range/start',body,undefined,csrfToken);
+      if(!start.ok)return start.status===404?refused('download_too_large'):start;
+      stage=start.value;self.postMessage({kind:'stage',attemptId:stage.attemptId});
+    }
+    const length=stage?.size??Number(response?.headers.get('content-length'));
+    if(!Number.isSafeInteger(length)||length<=frameBytes||!stage&&(!response?.body||length>archiveLimit)){
+      return refused(length>archiveLimit?'download_too_large':undefined);
     }
     root = await navigator.storage.getDirectory();
     const directory=await downloadDirectory(attempt,true);

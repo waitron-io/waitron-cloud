@@ -80,7 +80,7 @@ async function openInWorker(request: DatabaseDownloadRequest, signal: AbortSigna
 
 export async function downloadDatabase(venueId: string, pointId: string, signal: AbortSignal,
     {kind,renewProof}: {kind?:'archive';renewProof?:()=>Promise<boolean>} = {}): Promise<ApiResult<undefined>> {
-  if (!navigator.locks || !navigator.storage?.getDirectory) return refused('database_storage_unavailable');
+  if (!navigator.locks || !navigator.storage?.getDirectory) return refused(kind==='archive'?'download_too_large':'database_storage_unavailable');
   try {
     return await navigator.locks.request(backupDownloadDirectory, {signal}, async () => {
       revokeSavedFile?.();
