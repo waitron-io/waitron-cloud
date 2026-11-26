@@ -10,14 +10,15 @@ export class OwnerTransferController {
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.changed=changed;this.request=request;}
  get pending(){return this.#operation!==undefined;}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
- account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.#generation++;this.data={organisations:[],offers:[]};this.email='';this.organisationId='';this.#operation=undefined;this.#refreshAfterTransfer=false;this.loadAttempted=false;this.error=undefined;}
- async #read(generation:number){
+ account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.#generation++;this.data={organisations:[],offers:[]};this.email='';this.organisationId='';this.#operation=undefined;this.loadAttempted=false;this.error=undefined;}
+ async #read(generation:number,reportError=true){
   const result=await this.request<OwnerTransferList>('/owner-transfers');if(generation!==this.#generation)return false;
   if(result.ok){this.data=result.value;if(!this.data.organisations.some(o=>o.id===this.organisationId))this.organisationId=this.data.organisations[0]?.id??'';return true;}
-  this.#failure(result);if(result.status===401||result.status===403)this.data={organisations:[],offers:[]};return false;
+  this.#failure(result,reportError);if(result.status===401||result.status===403)this.data={organisations:[],offers:[]};return false;
  }
- #failure(result:Extract<Awaited<ReturnType<typeof accountRequest>>,{ok:false}>){
+ #failure(result:Extract<Awaited<ReturnType<typeof accountRequest>>,{ok:false}>,reportError=true){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+  if(!reportError)return;
   this.error=result.code==='proof_required'?'actionProofUnavailable':result.code==='enrollment_required'?'pairEnrollment':result.code==='recovery_in_progress'?'transferRecovery':result.code==='transfer_pending'?'transferPendingHelp':result.status===429?'limited':result.status===403?'forbidden':result.status===404?'transferUnavailable':'transferUncertain';
  }
  async load(){
@@ -37,6 +38,7 @@ export class OwnerTransferController {
   const result=await this.request(`/owner-transfers/${action}`,action==='create'?{organisationId,email,locale}:{id});
   if(generation!==this.#generation)return false;
   if(!result.ok)this.#failure(result);
+  // This read covers any rename that finished before it started.
   this.#refreshAfterTransfer=false;
   const listed=await this.#read(generation);if(generation!==this.#generation)return false;
   const saved=this.data.offers.find(offer=>action==='create'?offer.organisationId===organisationId&&offer.recipientEmail===email&&offer.state==='pending':offer.id===id);
@@ -44,13 +46,12 @@ export class OwnerTransferController {
   if(settled&&(result.ok||!result.ok&&result.status===0))this.error=undefined;
   if(result.ok&&!listed)this.error='transferUncertain';
   if(result.ok&&action==='create')this.email='';
-  // The result check settles the transfer. A rename during that read still needs a fresh list.
+  // The result check settles the transfer. A later refresh can only update the list.
   while(this.#refreshAfterTransfer&&!this.waiting){
    this.#refreshAfterTransfer=false;
-   await this.#read(generation);
+   await this.#read(generation,false);
    if(generation!==this.#generation)return false;
   }
-  this.#refreshAfterTransfer=false;
   this.#operation=undefined;this.changed();return result.ok||settled;
  }
 }

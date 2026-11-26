@@ -48,33 +48,40 @@ for (const newerFirst of [true, false]) {
   });
 }
 
-test('a rename refresh is kept while a transfer is checking its result', async () => {
-  const transferRead = deferred<OwnerTransferList>();
-  const transferReadStarted = deferred<void>();
-  let phase: 'initial' | 'transfer' | 'renamed' = 'initial';
-  const controller = new OwnerTransferController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
-    if (path === '/owner-transfers/create') {
-      phase = 'transfer';
-      return {ok: true, value: {status: 'accepted'} as T};
-    }
-    assert.equal(path, '/owner-transfers');
-    if (phase === 'transfer') {
-      transferReadStarted.resolve();
-      return {ok: true, value: await transferRead.promise as T};
-    }
-    return {ok: true, value: list(phase === 'renamed' ? 'Renamed Group' : 'Original Group') as T};
+for (const refreshSucceeds of [true, false]) {
+  test(refreshSucceeds ? 'a rename refresh is kept while a transfer is checking its result'
+    : 'a failed rename refresh does not turn a confirmed transfer into an uncertain one', async () => {
+    const transferRead = deferred<OwnerTransferList>();
+    const transferReadStarted = deferred<void>();
+    let phase: 'initial' | 'transfer' | 'renamed' = 'initial';
+    const controller = new OwnerTransferController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
+      if (path === '/owner-transfers/create') {
+        phase = 'transfer';
+        return {ok: true, value: {status: 'accepted'} as T};
+      }
+      assert.equal(path, '/owner-transfers');
+      if (phase === 'transfer') {
+        transferReadStarted.resolve();
+        return {ok: true, value: await transferRead.promise as T};
+      }
+      if (phase === 'renamed' && !refreshSucceeds) {
+        return {ok: false, status: 500, code: 'unavailable', retryAfterMs: 0};
+      }
+      return {ok: true, value: list(phase === 'renamed' ? 'Renamed Group' : 'Original Group') as T};
+    });
+    controller.account('owner');
+    await controller.load();
+    controller.email = 'recipient@example.test';
+
+    const transfer = controller.act('create', 'en');
+    await transferReadStarted.promise;
+    phase = 'renamed';
+    await controller.load();
+    transferRead.resolve(list('Original Group'));
+
+    assert.equal(await transfer, true);
+    assert.equal(controller.data.organisations[0]?.name, refreshSucceeds ? 'Renamed Group' : 'Original Group');
+    assert.equal(controller.error, undefined);
+    assert.equal(controller.pending, false);
   });
-  controller.account('owner');
-  await controller.load();
-  controller.email = 'recipient@example.test';
-
-  const transfer = controller.act('create', 'en');
-  await transferReadStarted.promise;
-  phase = 'renamed';
-  await controller.load();
-  transferRead.resolve(list('Original Group'));
-
-  assert.equal(await transfer, true);
-  assert.equal(controller.data.organisations[0]?.name, 'Renamed Group');
-  assert.equal(controller.pending, false);
-});
+}
