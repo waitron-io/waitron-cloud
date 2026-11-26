@@ -391,7 +391,7 @@ test('outside relay keeps the client-facing address and uses only the three mesh
 });
 
 test('the outside service relay binds account and store separately from the gateway', async t => {
-  const calls = [], output = [];
+  const calls = [], output = [], relayId = 'a'.repeat(64);
   const picked = '{"event":"remote.relay_account_target","target":"10.77.0.1"}';
   const lost = '{"event":"remote.relay_account_target","target":null}';
   t.mock.method(process.stderr, 'write', line => {output.push(String(line)); return true;});
@@ -399,12 +399,12 @@ test('the outside service relay binds account and store separately from the gate
     outside: true, services: true, nodes: ['a', 'b', 'c'].map(name => ({name})),
     run: async (_binary, args) => {
       calls.push(args);
-      if (args[0] === 'create') return 'a'.repeat(64);
+      if (args[0] === 'create') return relayId;
       if (args[0] === 'inspect') return args[2].includes('.State.ExitCode') ? 'running 0' : 'true 172.30.250.8';
       if (args[0] === '-c') {
         const docker = [
           'docker() {',
-          '  if [ "$1" != logs ] || [ "$#" -ne 2 ]; then return 1; fi',
+          '  if [ "$1" != logs ] || [ "$2" != ' + relayId + ' ] || [ "$#" -ne 2 ]; then return 1; fi',
           "  printf '%s\\n' '" + picked + "' '" + lost + "'",
           '  for i in ' + 'x '.repeat(30) + '; do echo remote.relay_endpoint_unavailable; done',
           '}',
@@ -435,11 +435,13 @@ for (const exitsBeforeInspect of [true, false]) test(
           if (args[2].includes('.State.ExitCode')) return 'exited 1';
           return exitsBeforeInspect ? 'false 172.30.250.8' : 'true 172.30.250.8';
         }
-        if (args[1]?.includes('docker logs')) return 'MODULE_NOT_FOUND';
+        if (args[2] === 'relay account targets') throw Error('synthetic relay log read failure');
+        if (args[2] === 'relay logs') return 'MODULE_NOT_FOUND';
       }});
     if (exitsBeforeInspect) await assert.rejects(relay, /remote\.relay_stopped/);
     else await (await relay).close();
-    assert.deepEqual(calls.slice(-4), [
+    assert.deepEqual(calls.slice(-5), [
+      ['stderr', 'D621 relay account target trace unavailable\n'],
       ['stderr', 'D621 relay exit code 1\n'], ['-c', 'exec docker logs --tail 20 "$1" 2>&1', 'relay logs', id],
       ['stderr', 'MODULE_NOT_FOUND\n'], ['rm', '-f', id],
     ]);
@@ -578,7 +580,9 @@ test('a fresh account read reaches the standby when the current relay target sta
     exited.then(() => assert.fail('relay exited before listening'))]);
   const [relayPort] = JSON.parse(line).services;
   const targetEvents = [];
-  lines.on('line', line => targetEvents.push(JSON.parse(line)));
+  lines.on('line', line => {
+    if (line.startsWith('{"event":"remote.relay_account_target",')) targetEvents.push(JSON.parse(line));
+  });
   const readSession = (port, ms = 5000) => new Promise((resolve, reject) => {
     get({host: local, port, servername: name, ca: cert, agent: false, path: '/api/account/session',
       headers: {cookie: 'session=synthetic'}, signal: AbortSignal.any([t.signal, AbortSignal.timeout(ms)])}, response => {
