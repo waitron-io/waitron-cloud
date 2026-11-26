@@ -205,6 +205,7 @@ test('package selection reads the captured lockfile and refuses unknown or mixed
  const previousPair=historicalUi('0.2.45','resolution: {integrity: sha512-a3Y06SKZ3ImEvyEdi4vGV5KNVLpU14j6o/t4Bi9NnJCMftmR3SGW2SqupEmpbymrz5Rgq2dka5HBxQbwIvDjXQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.45/5065de6d3dff095336b4c41d55b1ad69515393a2}',withContract(abandonContract))
   .replaceAll("'@waitron-io/contract@0.2.55'","'@waitron-io/contract@0.2.45'")
   .replace("'@waitron-io/contract':\n        specifier: 0.2.55\n        version: 0.2.55","'@waitron-io/contract':\n        specifier: 0.2.45\n        version: 0.2.45");
+ assert.ok(previousPair.includes("'@waitron-io/contract':\n        specifier: 0.2.45\n        version: 0.2.45"),'historical contract consumer must match its archive');
  for(const [lock,version] of [[previousPair,'0.2.45'],[legacy,'0.1.0'],[previous,'0.2.1'],[preceding,'0.2.10'],[previousCloudUi,'0.2.30'],[previousUi,'0.2.34']]){
   assert.ok(lock.includes(`'@waitron-io/ui-core@${version}':`),'historical package key must match its archive');
   assert.ok(lock.includes(`'@waitron-io/ui-core@${version}(lit@3.3.3)':`),'historical snapshot must match its archive');
