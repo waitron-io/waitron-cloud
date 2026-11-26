@@ -26,7 +26,7 @@ import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/in
 import {selectIntegrationVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {checkSnapshotGrantRefusal} from '../deploy/test-cloud/test-fixtures/integration-snapshot-exposure.mjs';
 import {servicesOrigin, servicesNamespace, servicesStoreHost} from '../deploy/kubernetes/services.mjs';
-import {createP1Budget} from './p1-observer.mjs';
+import {createP1Budget, measureP1Check} from './p1-observer.mjs';
 import {untilRemote} from './kubernetes-remote.mjs';
 import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride} from './test-cloud-cleanup.mjs';
 export {completeCleanup};
@@ -472,15 +472,22 @@ export function checkSignedBackupReservations(replies) {
   return {uploadMethod: 'signed-put', reserves: replies.length, reserve503s};
 }
 
-export async function measureOutsideColdBackup({original, capture, verify, inspect}, signal) {
-  assert.deepEqual(await readOutsideRetainedBackup(() => inspect(original), signal), {retainedSnapshotUnchanged: true},
-    'integration.cold_backup_retained');
-  const point = await capture();
-  assert.notEqual(point.pointId, original.pointId, 'integration.cold_backup_not_new');
-  const evidence = await verify(point);
-  assert.ok(evidence.status === 'passed' && evidence.childAbsent && evidence.attemptId &&
-    evidence.attemptId !== original.workerVerification.attemptId, 'integration.cold_backup_restore');
-  return {...evidence, retainedPointId: original.pointId, pointId: point.pointId};
+export async function measureOutsideColdBackup({original, capture, verify, inspect, recordFailures = false}, signal) {
+  const failures = recordFailures ? [] : undefined;
+  const retainedPointId = await measureP1Check(failures, signal, 'integration.cold_backup_retained', async () => {
+    assert.deepEqual(await readOutsideRetainedBackup(() => inspect(original), signal), {retainedSnapshotUnchanged: true},
+      'integration.cold_backup_retained');
+    return original.pointId;
+  });
+  const restored = await measureP1Check(failures, signal, 'integration.cold_backup_restore', async () => {
+    const point = await capture();
+    assert.notEqual(point.pointId, original.pointId, 'integration.cold_backup_not_new');
+    const evidence = await verify(point);
+    assert.ok(evidence.status === 'passed' && evidence.childAbsent && evidence.attemptId &&
+      evidence.attemptId !== original.workerVerification.attemptId, 'integration.cold_backup_restore');
+    return {...evidence, pointId: point.pointId};
+  });
+  return {...restored, ...(retainedPointId && {retainedPointId}), ...(failures && {failures})};
 }
 
 export async function runTestCloudClients(options = {}) {
@@ -1093,7 +1100,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                 const coldRestart = kubernetes.restartServices && await kubernetes.restartServices({...probes, session, sessionActivity, inboxWitness, remote: cold.healthy,
                   outage: {...cold.outage, account: signal => api('/api/account/session', undefined, browser, ca, cloudHostname, signal, true)},
                   backupAfterRestart: signal => withLimit(signal, () => measureOutsideColdBackup({
-                    ...backupOperations, original: lastAcknowledged,
+                    ...backupOperations, original: lastAcknowledged, recordFailures: kubernetes.amazon?.measuredStops === true,
                   }, signal)),
                 });
                 return {serviceStops, ...(coldRestart && {coldRestart})};

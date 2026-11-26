@@ -46,12 +46,15 @@ export async function stopAmazonRehearsalNode({instance, node, aws, kube, whileS
   return {...result, stopped: node, offMs};
 }
 
-export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
+export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry, evidence} = {}) {
+  const report = outcome => process.stderr.write('D621 failure summary ' + JSON.stringify({outcome, evidence}) + '\n');
   try {
     await operations.create();
     await operations.prepare();
     if (operations.baseline) {
       const baseline = await operations.baseline();
+      if (evidence?.some(stage => stage.failures.length)) throw Error('amazon.qualification_failed');
+      if (evidence) report('passed');
       await waitExpiry();
       await operations.waitDeleted();
       return {baseline, removed: true};
@@ -72,6 +75,7 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
     await operations.waitDeleted();
     return {...(journeys ? {journeys} : {observation}), removed: true};
   } catch (error) {
+    if (evidence) report(error.message === 'amazon.qualification_failed' ? 'failed' : 'aborted');
     try {
       process.stderr.write('Amazon early deletion requested\n');
       await operations.deleteStack();
@@ -221,6 +225,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
   const sourceArchive = join(directory, 'source.tar'), sourceDirectory = join(directory, 'source');
   const cloud = name + ':cloud', waitron = name + ':waitron', store = name + ':store';
   let hosts, mesh, networkId, failure;
+  const evidence = config.measuredStops ? [] : undefined;
   const closeHost = async () => {
     let failure;
     try {
@@ -311,10 +316,10 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
     const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
     const kubeArgs = ['kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name];
-    const kubeOn = (index, args, {input, timeout, signal: request} = {}) => {
+    const kubeOn = (index, args, {input, timeout, signal: request, quiet = false} = {}) => {
       // kubectl validation errors can quote the submitted Secret.
       const privateManifest = args.includes('-f') && /"kind"\s*:\s*"Secret"/.test(input ?? '');
-      return ssh(index, ['sudo', ...kubeArgs, ...args], input, timeout, request, privateManifest);
+      return ssh(index, ['sudo', ...kubeArgs, ...args], input, timeout, request, quiet || privateManifest);
     };
     const kube = (args, options) => kubeOn(0, args, options);
     const local = (binary, args, {input, signal: request = signal, timeout} = {}) =>
@@ -444,13 +449,13 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', 'verifier-scratch', phase],
           undefined, 30_000, request);
         for (const index of [0, 1, 2]) await scratch(index, config.measuredStops ? 'boot' : 'once', limit);
-        let controller = 0, unavailable;
+        let controller = 0, evidenceController = 0, unavailable;
+        const preferred = first => [first, ...[0, 1, 2].filter(index => index !== first)].filter(index => index !== unavailable);
         const controlPlaneSelection = {calls: 0, totalMs: 0, longestMs: 0};
         const controlPlane = async request => {
-          const preference = [controller, ...[0, 1, 2].filter(index => index !== controller)].filter(index => index !== unavailable);
           const started = performance.now();
           try {
-            controller = await selectSurvivingNode(preference, (index, probeSignal) =>
+            controller = await selectSurvivingNode(preferred(controller), (index, probeSignal) =>
               ssh(index, ['sudo', ...kubeArgs, '--request-timeout=3s', 'get', '--raw=/readyz'], undefined, 5000, probeSignal),
             request === null ? null : request ?? limit);
             return controller;
@@ -462,6 +467,12 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           }
         };
         const outsideKube = async (args, options) => kubeOn(await controlPlane(options?.signal), args, options);
+        const bindEvidenceKube = async signal => {
+          const index = await selectSurvivingNode(preferred(evidenceController), (candidate, request) =>
+            kubeOn(candidate, ['--request-timeout=250ms', 'get', '--raw=/readyz'], {signal: request, timeout: 300, quiet: true}), signal);
+          evidenceController = index;
+          return (args, options) => kubeOn(index, args, {signal, ...options, quiet: true});
+        };
         async function stopNode(node, {whileStopped, afterRestart}) {
           assert.ok(now() < singleStopDeadline, 'amazon.measured_stops_expiry');
           stopSignal.throwIfAborted();
@@ -583,7 +594,8 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
           image: localIds[cloud], waitronImage: localIds[waitron], verifierImage: archiveIds[waitron],
           signal: limit, verificationTarget, amazon: {...target, phase: 'baseline', ...(config.measuredStops && {measuredStops: true})},
           baseline: true, databasePrepared: true,
-          ...(config.measuredStops && {stopServiceNodes: true, stopNode, stopSignal, restartAll, holdMs: stockholmHoldMs})};
+          ...(config.measuredStops && {stopServiceNodes: true, stopNode, stopSignal, restartAll, holdMs: stockholmHoldMs,
+            bindEvidenceKube, recordEvidence: (stage, failures) => evidence.push({stage, failures})})};
         const execute = (binary, args, input, cleanup, request) =>
           run(binary, args, input, cleanup, undefined, request ?? limit);
         const prepareOutside = () => outsidePublication({...context, run: execute, mesh,
@@ -628,7 +640,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       networkId = id;
     }
     if (config.dryRun) return {dryRun: true, revision: await run('git', ['rev-parse', 'HEAD']), images: archiveIds};
-    const outcome = await runAmazonExperiment(operations, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
+    const outcome = await runAmazonExperiment(operations, {sleep, evidence, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
   } catch (error) {
     failure = error;

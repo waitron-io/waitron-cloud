@@ -19,6 +19,26 @@ test('Amazon repeat waits for stopped C, fifteen minutes and replacement; succes
   assert.equal(result.removed, true);
 });
 
+for (const abort of [false, true]) test('Stockholm writes recorded failures before teardown ' + (abort ? 'on abort' : 'after all checks'), async t => {
+  const calls = [], evidence = [];
+  t.mock.method(process.stderr, 'write', value => {calls.push(value.trim()); return true;});
+  await assert.rejects(api.runAmazonExperiment({
+    create: async () => {}, prepare: async () => {},
+    baseline: async () => {
+      evidence.push({stage: 'first-stop', failures: [{check: 'p1.session_after_recovery', count: 1}]});
+      if (abort) throw Error('unsafe rejoin');
+      calls.push('final-restore');
+      return {restored: true};
+    },
+    deleteStack: async () => {calls.push('delete');}, waitDeleted: async () => {calls.push('deleted');},
+  }, {evidence, waitExpiry: async () => {calls.push('expiry');}}), abort ? /unsafe rejoin/ : /amazon.qualification_failed/);
+  const summary = calls.findIndex(line => line.startsWith('D621 failure summary '));
+  assert.ok(summary >= 0 && summary < calls.indexOf('delete'));
+  assert.match(calls[summary], /p1\.session_after_recovery/);
+  assert.equal(calls.includes('final-restore'), !abort);
+  assert.equal(calls.at(-2), 'deleted');
+});
+
 for (const failure of ['create', 'prepare', 'before', 'stop', 'stopped', 'replace', 'after', 'still-stopped', 'expiry', 'deleted']) {
   test('Amazon teardown runs and failure survives at ' + failure, async t => {
     assert.equal(typeof api.runAmazonExperiment, 'function');
@@ -340,6 +360,13 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
           ['admin@203.0.113.2', 'admin@203.0.113.3']);
         assert.ok(transports.findIndex(row => row.args.at(-1).includes("'release-staging'")) <
           transports.findIndex(row => row.args.at(-1).includes("'join'")));
+      }
+      if (scenario === 'baseline measured stops') {
+        const kubeEvidence = await context.bindEvidenceKube(context.signal);
+        await kubeEvidence(['get', 'cluster', 'cloud-db', '-o', 'name'], {signal: context.signal});
+        assert.deepEqual(transports.at(-1).args.slice(-2), ['admin@203.0.113.2',
+          "'sudo' 'kubectl' '--kubeconfig=/etc/kubernetes/admin.conf' '--context' '" + context.cluster +
+          "' 'get' 'cluster' 'cloud-db' '-o' 'name' 2>/dev/null"]);
       }
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: 'synthetic-migration'});
       await context.kube(['-n', 'd621-data', 'create', '-f', '-'], {input: '{"kind": "Secret"}'});

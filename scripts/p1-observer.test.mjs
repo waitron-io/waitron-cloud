@@ -3,6 +3,51 @@ import test from 'node:test';
 import * as remote from '../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs';
 const api = await import('./p1-observer.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
 
+test('Stockholm records a failed session baseline and still observes the full hold', async () => {
+  let clock = 0, ready = false;
+  const ok = async () => ({verified: true});
+  const result = await api.observeP1({recordFailures: true, holdMs: 360_000, now: () => clock,
+    sleep: async ms => {clock += ms; await new Promise(setImmediate);},
+    probes: {session: async () => {if (!ready) throw Error('account unavailable'); return true;},
+      remote: ok, login: ok, backup: ok, signup: ok},
+    ready: () => {ready = true;}, stopped: async () => {}, replacement: async () => {}});
+  assert.equal(result.offMs, 360_000);
+  assert.ok(result.failures.some(({check}) => check === 'p1.session_baseline'));
+  assert.ok(result.recovery.session.withinMs <= 5_000);
+});
+
+test('Stockholm records the sign-in recovery deadline and keeps sampling other services', async () => {
+  let clock = 0;
+  const ok = async () => true;
+  const result = await api.observeP1({recordFailures: true, holdMs: 360_000, now: () => clock,
+    sleep: async ms => {clock += ms; await new Promise(setImmediate);},
+    probes: {session: ok, remote: ok, login: async (_signal, fresh) => {if (fresh) throw Error('inbox unavailable');},
+      backup: ok, signup: ok}, ready: () => {}, stopped: async () => {}, replacement: async () => {}});
+  assert.equal(result.offMs, 360_000);
+  assert.ok(result.failures.some(({check}) => check === 'p1.login_recovery_timeout'));
+  assert.equal(result.backupsAfterStop, 2);
+});
+
+test('Stockholm ends the hold on time and records and cancels the outstanding retained read', async () => {
+  let clock = 0, pendingSignal;
+  const ok = async () => true;
+  const result = await api.observeP1({recordFailures: true, holdMs: 360_000, now: () => clock,
+    sleep: async ms => {
+      clock += ms;
+      assert.ok(clock <= 360_000, 'a pending retained read held up the machine restart');
+      await new Promise(setImmediate);
+    },
+    probes: {session: ok, remote: ok, login: ok, signup: ok, backup: async signal => {
+      if (clock < 300_000) return true;
+      pendingSignal = signal;
+      await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
+    }}, ready: () => {}, stopped: async () => {}, replacement: async () => {}});
+  assert.equal(result.offMs, 360_000);
+  assert.equal(result.backupsAfterStop, 1);
+  assert.ok(result.failures.some(({check}) => check === 'p1.backup_hold_pending'));
+  assert.equal(pendingSignal.aborted, true);
+});
+
 // Counting an in-flight pre-stop reply as recovery would hide the entire outage.
 test('same clients are sampled through confirmed stop and the second backup after fifteen minutes', async () => {
   assert.equal(typeof api.observeP1, 'function');
