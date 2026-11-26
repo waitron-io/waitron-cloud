@@ -98,12 +98,13 @@ existing package access and authenticated install and image build paths.
 ## Prepare private signing packages for disposable tests
 
 The signing package is published from Waitron as `@waitron-io/contract`. Cloud's
-registration package pins `0.2.45` and re-exports its signing functions. The
+registration package pins `0.2.55` and re-exports its signing functions. The
 disposable-test adapter recognizes the reviewed archive alongside the UI package.
 Historical captures continue to select their own approved releases.
-The package records Waitron source `ff647911ac88a15be1e167ea4cb336acaf9f2b7a`,
-matching [publication run 44991563432](https://github.com/clintongormley/waitron/actions/runs/44991563432).
-It adds the signed translation abandon action and accepts pairing proof versions 3, 4 and 5.
+Version `0.2.55` records Waitron source `eaba6448d0373d64f110bd8b7c614c57cbd05cc0`,
+matching [publication run 45807265421](https://github.com/clintongormley/waitron/actions/runs/45807265421).
+The signing code and declarations match `0.2.45` byte for byte. Version `0.2.45`
+added the signed translation abandon action and accepts pairing proof versions 3, 4 and 5.
 
 For a future contract release, compare Cloud's retained `isPairingUuid`,
 base64url/SPKI public-key decoding and SHA-256 key-ID derivation with the new
@@ -156,7 +157,7 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-Cloud pins `@waitron-io/ui-core@0.2.45` and Lit `3.3.3` in `apps/portal`,
+Cloud pins `@waitron-io/ui-core@0.2.55` and Lit `3.3.3` in `apps/portal`,
 `packages/ui-smoke` and the workspace lockfile. Install from that lockfile,
 then run:
 
@@ -173,9 +174,9 @@ autocomplete, button interaction and light/dark tokens. Its declaration check ke
 `skipLibCheck` disabled. A local file dependency fails the version check. The normal
 `pnpm test` includes this fixture; it is test infrastructure, not an account screen.
 
-Version `0.2.45` records Waitron source
-`ff647911ac88a15be1e167ea4cb336acaf9f2b7a`, matching
-[publication run 44991563432](https://github.com/clintongormley/waitron/actions/runs/44991563432). Its installed `dist/LICENSE` and
+Version `0.2.55` records Waitron source
+`eaba6448d0373d64f110bd8b7c614c57cbd05cc0`, matching
+[publication run 45807265421](https://github.com/clintongormley/waitron/actions/runs/45807265421). Its installed `dist/LICENSE` and
 `dist/LICENSE-GRANTS.md` match that source commit byte for byte. The source
 package's own version remains `0.1.0`; publication assigns the registry version
 without changing the source manifest. The earlier `0.2.1` local qualification used the GitHub CLI
