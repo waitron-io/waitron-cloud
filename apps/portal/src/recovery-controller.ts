@@ -3,18 +3,18 @@ import {accountRequest} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {RecoveryView} from './recovery-types.ts';
 export class RecoveryController {
- requestId:string|undefined;code='';view:RecoveryView|undefined;venueId:string|undefined;pointId:string|undefined;source:'continuous'|'snapshot'|undefined;
+ requestId:string|undefined;code='';view:RecoveryView|undefined;venueId:string|undefined;source:'continuous'|'snapshot'|undefined;
  stopped=false;acceptLoss=false;uncertain=false;pending=false;error:keyof Copy|undefined;
  recoveryExpiresAt:string|undefined;
  #confirmedReplacement:string|undefined;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
- #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.pointId=undefined;this.source=undefined;this.stopped=false;this.acceptLoss=false;this.#confirmedReplacement=undefined;this.uncertain=false;this.pending=false;this.error=undefined;this.recoveryExpiresAt=undefined;}
+ #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.source=undefined;this.stopped=false;this.acceptLoss=false;this.#confirmedReplacement=undefined;this.uncertain=false;this.pending=false;this.error=undefined;this.recoveryExpiresAt=undefined;}
  open(id:string|undefined){if(id!==this.requestId){this.#clear();this.requestId=id;}}
  account(id:string|undefined){if(id!==this.#account){this.#clear();this.#account=id;}}
- choose(venueId:string|undefined,pointId:string|undefined){this.#choose(venueId,pointId?'snapshot':undefined,pointId);}
- chooseContinuous(venueId:string|undefined){this.#choose(venueId,venueId?'continuous':undefined,undefined);}
- #choose(venueId:string|undefined,source:'continuous'|'snapshot'|undefined,pointId:string|undefined){if(venueId!==this.venueId||pointId!==this.pointId||source!==this.source){this.venueId=venueId;this.pointId=pointId;this.source=source;this.stopped=false;this.acceptLoss=false;}}
+ choose(venueId:string|undefined){this.#choose(venueId,venueId?'snapshot':undefined);}
+ chooseContinuous(venueId:string|undefined){this.#choose(venueId,venueId?'continuous':undefined);}
+ #choose(venueId:string|undefined,source:'continuous'|'snapshot'|undefined){if(venueId!==this.venueId||source!==this.source){this.venueId=venueId;this.source=source;this.stopped=false;this.acceptLoss=false;}}
  // Relative server waits keep their deadline across wall-clock corrections and account changes.
  #retryUntil=0;
  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
@@ -30,19 +30,20 @@ export class RecoveryController {
   if(!this.#account||!this.requestId||this.pending||this.waiting)return;
   this.code=this.code.trim();
   if(!/^\d{8}$/.test(this.code)){this.error='pairCodeError';this.#changed();return;}
-  const operation=this.view?.operation,approvalVenue=operation?.venueId??this.venueId,approvalSource=operation?.source.kind??this.source,approvalPoint=operation?operation.pointId:this.pointId;
-  if(action==='approve'&&(this.uncertain||!this.view||(operation?operation.status!=='pending':this.view.state!=='awaiting_owner')||!approvalVenue||!approvalSource||(approvalSource==='snapshot'&&!approvalPoint)||!this.stopped||!this.acceptLoss||Date.parse(operation?.expiresAt??this.view.expiresAt)<=Date.now()))return;
+  const operation=this.view?.operation,approvalVenue=operation?.venueId??this.venueId,approvalSource=operation?.source.kind??this.source,approvalPoint=operation?.pointId??null;
+  if(action==='approve'&&(this.uncertain||!this.view||(operation?operation.status!=='pending':this.view.state!=='awaiting_owner')||!approvalVenue||!approvalSource||!this.stopped||!this.acceptLoss||Date.parse(operation?.expiresAt??this.view.expiresAt)<=Date.now()))return;
   if(action==='close'&&!this.view?.operation)return;
   const replacement=this.view?.replacement;
   if(action==='replace'&&(this.uncertain||!this.confirmReplacement||!replacement||replacement.state!=='awaiting_owner'||this.view?.operation?.status!=='restored'||Date.parse(replacement.expiresAt)<=Date.now()||Date.parse(this.view.operation.expiresAt)<=Date.now()))return;
-  const body:Record<string,string>={requestId:this.requestId,code:this.code};if(action==='approve')Object.assign(body,approvalSource==='continuous'?{source:'continuous',venueId:approvalVenue}:{source:'snapshot',pointId:approvalPoint},{oldServerUnavailable:'true',acceptDataLoss:'true'});
+  const body:Record<string,string>={requestId:this.requestId,code:this.code};if(action==='approve')Object.assign(body,approvalPoint?{source:'snapshot',pointId:approvalPoint}:{source:approvalSource,venueId:approvalVenue},{oldServerUnavailable:'true',acceptDataLoss:'true'});
   if(action==='replace')Object.assign(body,{oldInstallationId:replacement!.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
   const generation=this.#generation,point=approvalPoint,venue=approvalVenue,source=approvalSource,proposal=this.#proposal();this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<RecoveryView>('/recovery/'+action,body);if(generation!==this.#generation)return;this.pending=false;
   this.recoveryExpiresAt=result.ok?undefined:result.recoveryExpiresAt;
   // A confirmed or uncertain approval consumes its confirmations before another authorisation.
+  // The box can select a copy after the last inspection of a venue-only approval.
   const returned=result.ok?result.value.operation:null;
-  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(source==='continuous'?returned.pointId===null:returned.pointId===point)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.nodeId===replacement.nodeId))){if(action==='approve'||returned?.id!==operation?.id){this.stopped=false;this.acceptLoss=false;}this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
+  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(returned.pointId===point||source==='snapshot'&&point===null)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.nodeId===replacement.nodeId))){if(action==='approve'||returned?.id!==operation?.id){this.stopped=false;this.acceptLoss=false;}this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
   else{
    if(!result.ok){
     const refusals:Record<number,Record<string,keyof Copy>>={
@@ -53,7 +54,7 @@ export class RecoveryController {
     const cause=bodyRefusal(result);
     const proofRefusal=result.status===403&&(result.code==='proof_required'||result.code==='enrollment_required');
     this.error=proofRefusal?(result.code==='enrollment_required'?'pairEnrollment':'recoveryProofRequired'):cause?`${this.view?'recovery':'recoveryInspect'}Request${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
-    if(result.status===401||result.status===403&&!proofRefusal){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
+    if(result.status===401||result.status===403&&!proofRefusal){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined);}
    }
    else this.error='unavailable';
    if(action!=='inspect'&&(result.ok||result.status===0||result.status>=500||result.code==='unexpected_response')){if(action==='approve'){this.stopped=false;this.acceptLoss=false;}this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}

@@ -399,28 +399,26 @@ Callers own and close their object clients.
 Start with **Restore from Waitron Cloud** on the replacement server's setup screen.
 Open its Cloud link, sign in as an owner and enter the eight-digit code shown on the
 replacement. The link identifies the request; it deliberately excludes the code.
-Choose your organisation and venue. A fresh continuous copy is selected initially
-because it normally loses fewer changes. You can instead choose a verified snapshot
-when you need an archive point or the continuous source is missing. Check the displayed
-recoverable or capture time before accepting the loss of later changes. Confirm that
-the old server and any surviving server with newer data are stopped or permanently
-unavailable.
+Choose your organisation and venue. Cloud selects the latest continuous recovery
+point when one is available. Check the recoverable time before accepting the loss
+of later changes. When a checked snapshot is available, you can authorise snapshot
+recovery for the venue.
+Confirm that the old server and any surviving server with newer data are stopped
+or permanently unavailable.
 
-After you authorise the source, return to the replacement. Refresh its status, check
-the approved recovery time, then confirm the local restore. A snapshot downloads one
-encrypted object and passes it through Waitron's archive validation. A continuous
-restore receives one frozen recovery kit and follows Waitron's signed live pointer.
-Neither browser receives a recovery key or storage credentials. The recovery page's
-authorised status means download permission. It does not mean that restore has
-completed or trading is enabled.
+Return to the replacement after approval. For a snapshot, choose a checked copy
+in setup, review its capture time and confirm the restore. Refresh the list if
+the copy is no longer available. Waitron validates the encrypted archive after
+downloading it. For continuous recovery, check the approved recovery time and
+confirm the restore. Waitron uses one frozen recovery kit and follows its signed
+live pointer. Recovery keys and storage credentials go to the replacement server.
+The authorised status in Cloud means the replacement has permission to recover.
+Check the result in setup before you trade.
 
 An unapproved request lasts fifteen minutes and permits five incorrect codes. An
 approved operation lasts one hour and stays bound to its replacement key.
-The existing portal approves a named snapshot or a continuous generation. If
-your box offers the snapshot selector, choose a checked copy there before
-starting its download. Refresh the list if the copy is no longer available. If an approval reply is lost, the page checks the saved request
-instead of creating another operation. If you reload the page, reopen the link from
-the replacement and enter its code again.
+If an approval reply is lost, the page checks the saved request. If you reload
+the page, reopen the link from the replacement and enter its code again.
 
 If another recovery blocks approval, the refusal shows when it expires. You can
 close it sooner through its original link. Once it closes, start a fresh request

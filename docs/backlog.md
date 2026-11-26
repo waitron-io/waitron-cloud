@@ -1056,10 +1056,6 @@ and genuine restore or recovery. Native transport and elapsed retry checks pass;
 they grant no activation or stop-proof authority.
 See [the remaining checks](backlog/backup-recovery-http.md#backup-catalogue-qualification).
 
-D640's portal step waits for Waitron A1323 PR 6e. Once the box can choose a
-checked snapshot, switch the Cloud approval page to venue-only approval and
-keep the loss confirmation in both languages.
-
 ## Operations scale-test timeout
 
 **Open.** Find and fix what the scale case waited on in

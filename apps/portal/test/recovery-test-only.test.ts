@@ -15,14 +15,14 @@ for(const action of ['inspect','approve','close','replace'] as const)for(const c
  const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:false,status:403,code,retryAfterMs:0};});
  c.open(id);c.account('owner');c.code='00123456';
  c.view=action==='approve'?{requestId:id,state:'awaiting_owner',expiresAt,operationId:null,operation:null}:ready;
- c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
+ c.choose(venueId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
  await c[action]();
  assert.equal(c.error,code==='local_integration_only'?'recoveryTestOnly':'forbidden');
- assert.equal(c.view,undefined);assert.equal(c.venueId,undefined);assert.equal(c.pointId,undefined);assert.equal(c.source,undefined);
+ assert.equal(c.view,undefined);assert.equal(c.venueId,undefined);assert.equal(c.source,undefined);
  assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);assert.equal(c.confirmReplacement,false);assert.equal(c.uncertain,false);assert.equal(c.pending,false);
  assert.deepEqual(calls.map(call=>call.path),['/recovery/'+action]);
  assert.equal(calls[0]!.body?.code,'00123456');
- if(action==='approve')assert.deepEqual(calls[0]!.body,{requestId:id,code:'00123456',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'});
+ if(action==='approve')assert.deepEqual(calls[0]!.body,{requestId:id,code:'00123456',source:'snapshot',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'});
  if(action==='replace')assert.deepEqual(calls[0]!.body,{requestId:id,code:'00123456',oldInstallationId:ready.replacement!.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
 });
 

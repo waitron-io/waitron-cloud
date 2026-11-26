@@ -61,7 +61,7 @@ function harness(t: TestContext, action: Action) {
   const c = new RecoveryController(() => {changes++;});
   c.account('owner'); c.open(requestId); c.code = ' 01234567 ';
   function select() {
-    if (action === 'approve') {c.choose(venueId, pointId); c.stopped = true; c.acceptLoss = true;}
+    if (action === 'approve') {c.choose(venueId); c.stopped = true; c.acceptLoss = true;}
     if (action === 'replace') c.confirmReplacement = true;
   }
   function wire(index: number, expected: Action) {
@@ -72,7 +72,7 @@ function harness(t: TestContext, action: Action) {
     assert.equal(new Headers(call.init?.headers).get('X-CSRF-Token'), 'recovery-transport');
     assert.equal(new Headers(call.init?.headers).get('Content-Type'), 'application/json');
     const body: Record<string, string> = {requestId, code: '01234567'};
-    if (expected === 'approve') Object.assign(body, {source: 'snapshot', pointId,
+    if (expected === 'approve') Object.assign(body, {source: 'snapshot', venueId,
       oldServerUnavailable: 'true', acceptDataLoss: 'true'});
     if (expected === 'replace') Object.assign(body, {oldInstallationId,
       oldServerUnavailable: 'true', confirmReplacement: 'true'});
@@ -163,14 +163,14 @@ for (const reset of ['account', 'request'] as const) {
   test(`recovery HTTP retry wait survives ${reset} changes while clearing chosen recovery details`, async t => {
     const h = harness(t, 'approve'), {c} = h;
     await c.inspect(); h.select();
-    assert.equal(c.venueId, venueId); assert.equal(c.pointId, pointId);
+    assert.equal(c.venueId, venueId);
     assert.equal(c.source, 'snapshot'); assert.equal(c.stopped, true); assert.equal(c.acceptLoss, true);
     h.replies.approve = {body: {error: 'rate_limited'}, status: 429, retry: '2'};
     await c.approve();
     if (reset === 'account') c.account('other'); else c.open(otherId);
     assert.equal(c.code, '');
     assert.equal(c.view, undefined); assert.equal(c.confirmReplacement, false);
-    assert.equal(c.venueId, undefined); assert.equal(c.pointId, undefined); assert.equal(c.source, undefined);
+    assert.equal(c.venueId, undefined); assert.equal(c.source, undefined);
     assert.equal(c.stopped, false); assert.equal(c.acceptLoss, false);
     assert.equal(c.waiting, 2);
     c.code = '87654321';

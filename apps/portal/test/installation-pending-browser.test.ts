@@ -96,9 +96,9 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     for (const result of ['removed', 'retained', 'failed'] as const) await t.test(`recovery ${result}: selection and approval wait, then reflect the result`, async () => {
       await prepare('/recover');
       await page.getByLabel(c.recoveryVenue, {exact: true}).selectOption(second);
-      await page.getByLabel(c.chooseSnapshot, {exact: true}).waitFor();
+      await page.getByRole('radio', {name: c.recoverySnapshotFallback, exact: true}).check();
       await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check();
-      await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).check();
+      await page.getByRole('checkbox', {name: c.recoveryAcceptSnapshotLoss, exact: true}).check();
       const approve = page.getByRole('button', {name: c.recoveryApprove, exact: true});
       assert.equal(await approve.isEnabled(), true);
       const start = calls.length;
@@ -115,11 +115,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.deepEqual(approvals, []);
         assert.equal(await page.getByLabel(c.recoveryVenue, {exact: true}).isDisabled(), true);
         assert.equal(await page.getByLabel(c.recoveryOrganisation, {exact: true}).isDisabled(), true);
-        assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).isDisabled(), true);
+        assert.equal(await page.getByRole('radio', {name: c.recoverySnapshotFallback, exact: true}).isDisabled(), true);
         assert.equal(await page.getByRole('radio', {name: c.recoveryContinuous, exact: true}).isDisabled(), true);
         assert.equal(await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).isDisabled(), true);
-        assert.equal(await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).isDisabled(), true);
-        await disabled(page, [c.latestSnapshots, c.olderSnapshots]);
+        assert.equal(await page.getByRole('checkbox', {name: c.recoveryAcceptSnapshotLoss, exact: true}).isDisabled(), true);
+        assert.equal(await page.getByRole('button', {name: c.latestSnapshots, exact: true}).count(), 0);
+        assert.equal(await page.getByRole('button', {name: c.olderSnapshots, exact: true}).count(), 0);
         if (result === 'removed') await screenshot('recovery-pending');
       } finally {await settle();}
       assert.equal(await page.getByLabel(c.recoveryVenue, {exact: true}).isEnabled(), true);
@@ -129,7 +130,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       } else {
         assert.equal(await approve.isEnabled(), true);
         assert.equal(await page.getByLabel(c.recoveryVenue, {exact: true}).inputValue(), second);
-        assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).isEnabled(), true);
+        assert.equal(await page.getByRole('radio', {name: c.recoverySnapshotFallback, exact: true}).isEnabled(), true);
         if (result === 'failed') assert.equal(await page.getByRole('alert').filter({hasText: c.unavailable}).count(), 1);
       }
     });
