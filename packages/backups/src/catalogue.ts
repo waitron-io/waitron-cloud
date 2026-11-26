@@ -383,6 +383,14 @@ export class BackupCatalogue {
     slot.timer = setTimeout(() => { void this.#closeExitStage(slot).catch(() => {}); }, ms).unref();
   }
 
+  #trackExitStream(slot: ExitStage, stream: Readable) {
+    // Tracking progress must leave the response adapter in control of when the stream flows.
+    stream.pause().on('data', () => this.#expireExitStage(slot));
+    slot.stream = stream;
+    this.#expireExitStage(slot);
+    return stream;
+  }
+
   #closeExitStage(slot: ExitStage) {
     if (this.#exitStage !== slot) return Promise.resolve();
     return slot.closing ??= (async () => {
@@ -409,7 +417,7 @@ export class BackupCatalogue {
     const {source, slot} = await this.#stageExit(venueId, pointId, fence, requestSignal);
     if (!slot) return source;
     this.#expireExitStage(slot);
-    return {receipt: source.receipt, open: () => slot.stream = source.open(), dispose: () => this.#closeExitStage(slot)};
+    return {receipt: source.receipt, open: () => this.#trackExitStream(slot, source.open()), dispose: () => this.#closeExitStage(slot)};
   }
 
   async startExitRange(owner: ExitDownloadOwner, fence: MutationFence, signal: AbortSignal) {
@@ -439,7 +447,7 @@ export class BackupCatalogue {
     this.#matchExitStage(slot.source, slot.selected, slot.storage, current);
     if (slot.stream) backupFail('exit_busy');
     const length = Math.min(size - offset, exitRangeBytes);
-    const stream = slot.stream = slot.source.open({offset, length});
+    const stream = this.#trackExitStream(slot, slot.source.open({offset, length}));
     const cancel = () => { stream.destroy(); void this.#closeExitStage(slot).catch(() => {}); };
     signal.addEventListener('abort', cancel, {once: true});
     stream.once('close', () => {
@@ -447,7 +455,6 @@ export class BackupCatalogue {
       slot.stream = undefined;
       if (!stream.readableEnded) void this.#closeExitStage(slot).catch(() => {});
     });
-    this.#expireExitStage(slot);
     return {stream, length, size};
   }
 

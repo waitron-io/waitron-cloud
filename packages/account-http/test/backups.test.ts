@@ -228,6 +228,11 @@ test('the enabled exit route serves repeatable pieces from one qualified archive
   const stalled=await send('download',point.id);
   assert.equal(stalled.status,200);
   assert.equal((await send('download-range/start',point.id)).status,503);
+  const reader=stalled.body!.getReader();
+  t.mock.timers.tick(599_000);
+  for(let chunk=0;chunk<4;chunk++)assert.equal((await reader.read()).done,false);
+  t.mock.timers.tick(1_000);
+  assert.equal((await send('download-range/start',point.id)).status,503);
   t.mock.timers.tick(600_000);
  }finally{t.mock.timers.reset();}
  await t.waitFor(async()=>assert.deepEqual(await readdir(stageRoot),[]),{timeout:2000});
