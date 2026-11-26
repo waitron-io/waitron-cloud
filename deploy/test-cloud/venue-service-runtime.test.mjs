@@ -84,7 +84,7 @@ test('the exit worker clears only its abandoned stage after acquiring the mount'
   const exit=once(child,'exit');let stdout='';for await(const chunk of child.stdout)stdout+=chunk;
   return {code:(await exit)[0],stdout};
  };
- assert.deepEqual(await start(),{code:1,stdout:''});
+ assert.deepEqual(await start(),{code:73,stdout:''});
  assert.ok((await stat(stale)).isDirectory());
  owner.stdin.end();assert.equal((await ownerExit)[0],0);
  const next=await start();assert.equal(next.code,0);assert.deepEqual(JSON.parse(next.stdout),{stageRoot:root,enabled:false});

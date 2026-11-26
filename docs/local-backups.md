@@ -93,11 +93,6 @@ the directory before clearing any abandoned `exit-download` stage inside it. A s
 worker using the same disk refuses to start. The ranged route stays off while its
 browser and HTTPS checks are still pending.
 
-With the LAN deployment driver, set `TEST_CLOUD_ACCOUNT_BACKUP_STAGE` to the absolute
-account stage path when you run `node scripts/test-cloud-deploy.mjs up <image-id> lan`.
-The driver mounts that directory on the account service only. Use the Compose overlay
-above when you also want to stage backup worker traffic on its separate disk.
-
 Run the signed TLS publication and retry proof.
 
 ```sh

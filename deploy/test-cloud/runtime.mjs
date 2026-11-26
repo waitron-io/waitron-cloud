@@ -7,6 +7,7 @@ import {cloudActionDemoEnabled} from '../../packages/registration/src/cloud-acti
 import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
 import {allowanceOptionsFromEnv} from '../../packages/registration/src/billing-allowance-rules.ts';
 const commands={'action-demo':'packages/registration/src/cloud-action-cli.ts',migrate:'packages/registration/src/migrate-cli.ts',account:'deploy/test-cloud/account-worker.mjs',storage:'deploy/test-cloud/storage-worker.mjs',email:'deploy/test-cloud/email-worker.mjs',monitor:'packages/registration/src/monitor-cli.ts',usage:'packages/registration/src/usage-reconcile-cli.ts',probe:'packages/remote-access/src/probe-cli.ts',backup:'deploy/test-cloud/backup-worker.mjs',gateway:'packages/remote-access/src/gateway-cli.ts',manifest:'deploy/test-cloud/remote-worker.mjs',reconcile:'packages/remote-access/src/reconciler-cli.ts',translation:'packages/translation/src/worker-cli.ts'};
+const exitStageBusy=73;
 export function testRuntimeCommand(role){if(!Object.hasOwn(commands,role))throw new Error('test_cloud.role_invalid');return commands[role];}
 export function testRuntimeEnvironment(role,config,environment={}){
  testRuntimeCommand(role);
@@ -82,7 +83,7 @@ export async function spawnExitWorker(directory,args,options){
  const info=await lstat(directory);
  if(!info.isDirectory()||(info.mode&0o077))throw Error('test_cloud.exit_stage');
  // A directory lock survives exec and belongs to the worker until the process exits.
- return spawn('flock',['--nonblock','--no-fork','--',directory,process.execPath,...args],{
+ return spawn('flock',['--nonblock','--no-fork','--conflict-exit-code',String(exitStageBusy),'--',directory,process.execPath,...args],{
   ...options,env:{...options.env,CLOUD_EXIT_STAGE_LOCKED:'1'}
  });
 }
@@ -109,7 +110,10 @@ export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_C
   ?await spawnExitWorker(environment.CLOUD_EXIT_STAGE_ROOT,[command,...args],options)
   :spawn(process.execPath,[command,...args],options);
  const forward=signal=>child.kill(signal);process.once('SIGINT',forward);process.once('SIGTERM',forward);
- try{return await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});}
+ try{return await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>{
+  if(environment.CLOUD_EXIT_STAGE_ROOT&&code===exitStageBusy)console.error('Test Cloud exit stage is already in use');
+  resolve(code??1);
+ });});}
  finally{process.removeListener('SIGINT',forward);process.removeListener('SIGTERM',forward);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{process.exitCode=await launchTestRuntime(process.argv[2],undefined,process.argv[3]);}catch{console.error('Test Cloud runtime failed; check private configuration and schema');process.exitCode=1;}}
