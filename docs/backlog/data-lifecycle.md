@@ -26,9 +26,11 @@ activation.
   55-minute Linux slot (an estimate). At the measured growth a venue reaches the 4 GiB expanded
   limit after about 15–16 months; Cloud then reports capture failure and keeps the last copy.
   The pinned LAN checker verified an encrypted archive of exactly 512 MiB with a 1 GiB memory
-  limit and private disk scratch. The year-sized capture, preview and staging still need testing.
+  limit and private disk scratch in the
+  [local qualification](../superpowers/plans/2026-11-26-d642-large-download-qualification.md#verify-a-512-mib-backup-on-the-lan-worker).
+  The year-sized capture, preview and staging still need testing.
 - **Fiscal verification** passed on a small synthetic Spanish archive with the pinned LAN
-  checker. Qualification in the deployed service stays open.
+  checker in the same local run. Qualification in the deployed service stays open.
 - **Deployment measurements:** uplink bandwidth, spool volume, shutdown latency during copy and
   encryption, provider policies, transfer interruption, expiry and cancellation at scale, worker
   counts and scheduling for the real venue distribution. The

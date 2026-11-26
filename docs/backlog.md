@@ -316,8 +316,10 @@ record the research for the specialist to confirm. The
 covers a verified backup, key, checksum manifest and a browser save of the venue’s
 SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
 [Downloads above 16 MiB](superpowers/plans/2026-11-25-d642-ranged-download.md)
-still need the ranged route and its integrated HTTPS rehearsal. The pinned LAN checker verified
-a 512 MiB synthetic archive. Real venue exit still needs the
+still need the ranged route, its HTTPS rehearsal and a browser memory check on that route.
+The pinned LAN checker verified a 512 MiB synthetic archive in the
+[local qualification](superpowers/plans/2026-11-26-d642-large-download-qualification.md#verify-a-512-mib-backup-on-the-lan-worker).
+Real venue exit still needs the
 [support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
 and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).
 The remaining return work includes a service-end action and a
@@ -1022,8 +1024,9 @@ implementation or production evidence.
   implemented. Production custody, release
   qualification, provider isolation, capacity and lifecycle policies remain open.
   The venue-level test worker can use bounded disk scratch. Raising the 512 MiB
-  ceiling still needs year-sized recovery, and fiscal verification still needs
-  VERIFIER-CERT-OPEN. See [the requirements and deliberate limits](backlog/data-lifecycle.md).
+  ceiling still needs year-sized recovery. The pinned LAN checker verified a small
+  Spanish archive. Fiscal verification still needs qualification in the deployed
+  service. See [the requirements and deliberate limits](backlog/data-lifecycle.md).
 
 ## Backup catalogue qualification
 

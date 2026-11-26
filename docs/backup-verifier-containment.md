@@ -81,9 +81,11 @@ docker volume create --driver local --label cloud.backup-verifier.scratch=waitro
 
 Build the paired Waitron image with `node scripts/build-backup-verifier.mjs --streamed`.
 When you update the image, stop the worker and confirm that its verifier container has stopped
-and its scratch directory is empty. Start the new image with a fresh controller state directory
-and the matching policy below. A retained copy is unavailable for download until it passes the
-new check. Reset disposable venues with an incompatible schema and capture fresh backups.
+and its scratch directory is empty. Use the old image and its controller state to reclaim
+expired work before switching. Keep that state for rollback. Start the new image with a fresh
+controller state directory and the matching policy below. A retained copy is unavailable for
+download until it passes the new check. If `backup_point_qualification.last_reason` shows
+`target_incompatible`, reset the disposable venue and capture a fresh backup.
 Run the venue-level test worker as uid 1000 on the same Linux host as its database
 so the worker can clear scratch and both use the same clock. Put the pinned image ID in
 `CLOUD_VERIFIER_IMAGE`, its own controller state directory in `CLOUD_VERIFIER_STATE_DIR`,
@@ -124,7 +126,7 @@ The worker has six minutes to keep its claim on a job. Verification has five
 minutes, with the final 30 seconds reserved for cleanup and recording the result.
 The controller confirms the exact child is gone, restores write permission on any
 read-only scratch directories and removes their contents without following links.
-After a worker restart, use the same volume and controller state to reclaim expired
+When you restart the worker with the same image, use the same volume and controller state to reclaim expired
 work. If you reboot the host, remount the same filesystem at the same path before
 starting the worker. If the controller cannot confirm the child's removal or the
 volume's emptiness, it withholds the result.
