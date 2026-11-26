@@ -1,0 +1,10 @@
+# D621 verifier scratch disk after a full restart
+
+The Stockholm launcher can verify that the same scratch disk retained data across an all-machine hard stop while the backup verifier remains free to clear its work directory. In a Linux probe using the real verifier controller, the existing marker blocked startup in an idle work directory and was erased when an owned verifier child was removed. A control at the root of the same ext4 disk survived the identical cleanup. [D621 backlog](../../backlog.md#platform-work-to-scope) · [Full restart plan](2026-11-20-d621-stockholm-all-machine-restart.md)
+
+- In `deploy/kubernetes/bounded-amazon/bootstrap.test.mjs`, run the real bootstrap with disposable paths and add a failing case for `verifier-scratch witness-write <instance>` and `witness-read <instance>`. Check that the file is on the mounted ext4 root, outside the empty verifier work directory, and that the write flushes that filesystem. Refuse missing mounts, a missing or wrong marker and a failed flush.
+- In `deploy/kubernetes/bounded-amazon/bootstrap.sh`, reuse the existing mount checks for both witness actions. Store the instance marker beside `work` on the ext4 mount. Make the launcher wait for `sync -f` on that filesystem before the hard stop. Keep the boot and single-stop mount checks.
+- In `scripts/amazon-run.test.mjs`, retain the three-machine write-before-stop and same-machine read-after-restart assertions. Add a failed witness write that refuses the stop and still deletes the stack. In `scripts/amazon-run.mjs`, call the bootstrap actions through the existing SSH scratch helper.
+- Run `node --test deploy/kubernetes/bounded-amazon/bootstrap.test.mjs scripts/amazon-run.test.mjs`. Repeat the free Linux probe with the new marker location and verify it survives a remount and the real verifier's cleanup. Update `docs/backlog.md` with the local result and the open Stockholm restart and restore. No database probe changes, timing changes or paid launch in this pull request.
+
+Expected size is about 35 implementation lines and 65 test lines, including replacements, before the backlog update.
