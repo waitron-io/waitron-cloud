@@ -712,6 +712,9 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
     if (!expectedError) {
       assert.equal(result.removed, true);
       assert.deepEqual([...diskMarkers.values()].sort(), ids);
+      const witnesses = transports.map(row => row.args.at(-1)).filter(command => command.includes("'cold-scratch-witness'"));
+      assert.equal(witnesses.length, 6);
+      for (const command of witnesses) assert.match(command, /'cold-scratch-witness' '(write|read)' '\/var\/local\/d621-verifier\/mount' /);
       assert.deepEqual(transports.filter(row => row.args.at(-1).includes("'cold-scratch-witness' 'read'"))
         .map(row => row.args.at(-2)).sort(), publicAfter.map(ip => 'admin@' + ip));
       for (const ip of publicAfter) {

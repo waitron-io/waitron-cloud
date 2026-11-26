@@ -929,8 +929,12 @@ implementation or production evidence.
   - Run the [launch-host dry run](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
     before each paid run. It checks the local tools, imports and image bundle. Synthetic
     checks cover recording the database writer's process start time and keeping measurements
-    when a rehearsal fails. The next [evidence rehearsal](superpowers/plans/2026-11-26-d621-stockholm-evidence.md)
-    still needs Stockholm results from the three stops, restart and restore.
+    when a rehearsal fails. The 26 November [evidence rehearsal](superpowers/plans/2026-11-26-d621-stockholm-evidence.md)
+    completed all three stops and rejoins. All three machines came back after the full stop,
+    then the scratch marker check timed out before restore. A free Linux probe confirmed that
+    the [marker at the scratch disk root](superpowers/plans/2026-11-27-d621-scratch-witness.md)
+    remained readable after verifier startup and cleanup. Stockholm still needs to verify the
+    full restart and restore.
   - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
     [Amazon verifier pin](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
     After stopping the database primary, the first fresh reserve must return a
@@ -947,8 +951,9 @@ implementation or production evidence.
     [session trace](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
     records the session deadline, HTTP status and recognized public error code alongside the
     existing proxy and transport details. The rehearsal renews the original session once before
-    each stop. The cause of the earlier 401 and the outcomes of the third stop and full restart
-    still need Stockholm evidence from a separately approved run.
+    each stop. During the third stop, PostgreSQL restarted inside the same pod on a surviving
+    machine. The saved kubelet events omit the affected object and probe, so the trigger is
+    unknown. The cause of the earlier 401 also remains open.
     A loopback test also reproduced a five-second timeout when the account
     relay kept a target that accepted TCP but stalled TLS. The relay now checks
     the handshake before routing fresh connections. The 26 November Stockholm

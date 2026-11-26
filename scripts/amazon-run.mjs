@@ -4,7 +4,7 @@ import {fluxImages,prepareFluxBundle} from './kubernetes-git.mjs';
 import {installStockholmStore, storeBuildArgs} from './kubernetes-storage.mjs';
 import {meshNodeAddress, outsideNodePeer, outsidePublication, startOutsideMesh} from './kubernetes-outside.mjs';
 import {cleanUp} from './kubernetes-database.mjs';
-import {servicesNamespace, verifierScratchPath} from '../deploy/kubernetes/services.mjs';
+import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
 import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
 import {selectSurvivingNode, untilRemote} from './kubernetes-remote.mjs';
@@ -539,7 +539,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
               printf '%s\n' "$3" > "$marker"
             else
               test "$(cat "$marker")" = "$3"
-            fi`, 'cold-scratch-witness', phase, verifierScratchPath, target.instances[index]], undefined, 15_000, request);
+            fi`, 'cold-scratch-witness', phase, '/var/local/d621-verifier/mount', target.instances[index]], undefined, 15_000, request);
           const heartbeat = async (index, request) => Date.parse(JSON.parse(await kubeOn(index,
             ['-n', 'kube-node-lease', 'get', 'lease', target.nodes[index], '-o', 'json'], {signal: request})).spec.renewTime);
           const admit = () => assert.ok(now() <= singleStopDeadline, 'amazon.cold_restart_late');
