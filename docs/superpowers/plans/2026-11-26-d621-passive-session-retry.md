@@ -8,7 +8,7 @@ Use `accountRequest` in `apps/portal/src/session.ts`. It already parses the serv
 
 ## Rehearsal
 
-In `scripts/test-cloud-integration.mjs`, `createMeasuredSessionProbe` uses the same first-reply status, error name and server delay. Use the existing `requestIntegrationApi` with one five-second signal for both reads and the wait, plus the observer’s cancellation. The second response must be HTTP 200 on the original cookie and have a valid expiry equal to the last known expiry when one exists. Save the first HTTP status in `firstStatus` before the retry and record it with the final `status` and `elapsedMs` in the session probe log. Keep the activity POST as a single request and retain the existing failures for late, unauthorized and transport responses.
+In `scripts/test-cloud-integration.mjs`, `createMeasuredSessionProbe` uses the same first-reply status, error name and server delay. Use the existing `requestIntegrationApi` with one five-second signal for both reads and the wait, plus the observer’s cancellation. The second response must be HTTP 200 on the original cookie and have a valid expiry equal to the last known expiry when one exists. Log `firstStatus`, the server’s `Retry-After` value, the final `status` and `elapsedMs` on every retry, including success, as the watcher directed at 17:38. The loopback test checks that success line. Keep the activity POST as a single request and retain the existing failures for late, unauthorized and transport responses.
 
 ## Checks before building or spending
 

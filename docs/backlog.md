@@ -954,6 +954,10 @@ implementation or production evidence.
     deadline and the same session recovers when the database answers again. A query on an
     established connection that stops answering can still hit the 11-second query deadline.
     Confirm the database failover and session recovery timings in Stockholm.
+    A [single passive session retry](superpowers/plans/2026-11-26-d621-passive-session-retry.md)
+    lets the portal recover from a short interruption. The HTTPS loopback check
+    exercises the same-cookie retry within five seconds and records both HTTP statuses.
+    Stockholm still needs to confirm the original session through the second stop.
   - In the 25 November free Kind rehearsal the returning store answered on the Docker bridge
     while its WireGuard metrics request timed out. Kind now logs one sample after bridge repair
     and records the filter and route if it fails. Repeat all three stops, repairs and the

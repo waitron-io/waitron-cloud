@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {test, type TestContext} from 'node:test';
+import {setImmediate as settle} from 'node:timers/promises';
 import {PortalSession, type SessionState} from '../src/session.ts';
 
 const now = Date.parse('2030-01-01T12:00:00Z');
 const expiresAt = '2030-01-01T12:30:00Z';
 const owner = {accountId: 'current-owner', expiresAt};
-type Reply = {status?: number; body?: unknown; raw?: string; retry?: string} | 'network';
+type Reply = {status?: number; body?: unknown; raw?: string; retry?: string; delay?: number} | 'network';
 const activity = {isTrusted: true, type: 'keydown'} as Event;
 
 function fixture(t: TestContext) {
@@ -32,6 +33,7 @@ function fixture(t: TestContext) {
     assert.ok(replies.length, 'every request needs an explicit HTTP outcome');
     const reply = replies.shift()!;
     if (reply === 'network') throw new TypeError('Connection lost');
+    if (reply.delay) await new Promise<void>(resolve => setTimeout(resolve, reply.delay));
     return new Response(reply.status === 204 ? null : reply.raw ?? JSON.stringify(reply.body), {
       status: reply.status ?? 200, headers: reply.retry ? {'Retry-After': reply.retry} : {},
     });
@@ -160,6 +162,60 @@ test('an unavailable session preflight refuses logout before any cookie-changing
   assert.equal(session.retryAt, now + 30_000);
   assert.deepEqual(changes, [{kind: 'unavailable'}]);
   assert.deepEqual(requests.map(request => request.url), ['/api/account/session']);
+});
+
+const transient = {status: 503, body: {error: 'temporarily_unavailable'}, retry: '1'};
+
+for (const [label, reply, elapsed, kind] of [
+  ['recovers', {body: owner}, 0, 'authenticated'],
+  ['stops after the second 503', transient, 0, 'unavailable'],
+  ['ignores a late success', {body: owner, delay: 14_001}, 14_001, 'unavailable'],
+] as const) test(`passive session retry ${label}`, async t => {
+  const {session, replies, requests, changes} = fixture(t);
+  replies.push(transient, reply);
+  const check = session.check();
+  await settle();
+  assert.equal(session.check(), check, 'callers share the pending check during the retry wait');
+  t.mock.timers.tick(999);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(changes, []);
+  t.mock.timers.tick(1);
+  await settle();
+  t.mock.timers.tick(elapsed);
+  await check;
+  assert.deepEqual(requests.map(({url, init}) => [url, init.method, init.credentials]), [
+    ['/api/account/session', 'GET', 'same-origin'], ['/api/account/session', 'GET', 'same-origin'],
+  ]);
+  assert.deepEqual(changes, [kind === 'authenticated' ? {kind, ...owner} : {kind}]);
+  assert.equal(session.waiting, label === 'stops after the second 503' ? 1 : 0);
+});
+
+test('disposing the portal aborts a passive check during the retry wait', async t => {
+  const {session, replies, requests, changes} = fixture(t);
+  replies.push(transient);
+  const check = session.check();
+  await settle();
+  session.dispose();
+  assert.equal(requests[0]!.init.signal?.aborted, true);
+  await check;
+  t.mock.timers.tick(1000);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(changes, []);
+});
+
+test('logout keeps its pending preflight when a fresh session check starts', async t => {
+  const {session, replies, requests, changes} = fixture(t);
+  replies.push(transient, {body: owner, delay: 2000}, {body: owner}, {status: 204});
+  const logout = session.logout();
+  await settle();
+  const fresh = session.check({fresh: true});
+  t.mock.timers.tick(1000);
+  await settle();
+  assert.equal(await logout, true);
+  t.mock.timers.tick(1000);
+  await fresh;
+  assert.deepEqual(requests.map(({init}) => init.method), ['GET', 'GET', 'GET', 'POST']);
+  assert.deepEqual(changes, [{kind: 'authenticated', ...owner}, {kind: 'anonymous'}]);
 });
 
 for (const [label, protocol, cookie, token] of [

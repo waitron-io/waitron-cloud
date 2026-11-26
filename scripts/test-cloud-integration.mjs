@@ -72,10 +72,15 @@ export function createMeasuredSessionProbe(api, browser) {
   let expiresAt = null;
   const probe = async (signal, activity) => {
     const started = performance.now();
-    let status = null, node = 'unknown', publicCode = null;
-    try {
-      const path = activity ? '/api/account/session/activity' : '/api/account/session';
-      const reply = await api(path, activity ? {} : undefined, browser, undefined, undefined, signal, false, (code, headers) => {
+    const budget = 5000;
+    const probeSignal = AbortSignal.any([runSignal(), signal, AbortSignal.timeout(budget)].filter(Boolean));
+    let status = null, node = 'unknown', publicCode = null, receivedAt = 0;
+    let firstStatus = null, retryAfter = null, failure = null;
+    const path = activity ? '/api/account/session/activity' : '/api/account/session';
+    const read = async () => {
+      status = null; node = 'unknown'; publicCode = null;
+      const reply = await api(path, activity ? {} : undefined, browser, undefined, undefined, probeSignal, false, (code, headers) => {
+        receivedAt = performance.now();
         status = code;
         const value = headers['x-waitron-test-account-node'];
         if (typeof value === 'string' && value.length <= 253 &&
@@ -83,24 +88,48 @@ export function createMeasuredSessionProbe(api, browser) {
       });
       status = reply.status;
       if (publicSessionCodes.has(reply.body?.error)) publicCode = reply.body.error;
+      return reply;
+    };
+    try {
+      let reply = await read();
+      if (!activity && reply.status === 503 && reply.body?.error === 'temporarily_unavailable') {
+        const header = reply.headers?.['retry-after'] ?? '';
+        const seconds = /^\d+$/.test(header);
+        const retryDate = Date.parse(header), serverDate = Date.parse(reply.headers?.date ?? '');
+        const delayMs = seconds ? Number(header) * 1000 : retryDate - (Number.isFinite(serverDate) ? serverDate : Date.now());
+        const now = performance.now();
+        const wait = Math.ceil(delayMs - (now - receivedAt));
+        if (wait > 0 && now + wait < started + budget) {
+          await timerDelay(wait, undefined, {signal: probeSignal});
+          assert.ok(performance.now() < started + budget, 'p1.session_timeout');
+          firstStatus = reply.status;
+          retryAfter = seconds ? String(Number(header)) : new Date(retryDate).toUTCString();
+          reply = await read();
+        }
+      }
+      assert.ok(performance.now() < started + budget, 'p1.session_timeout');
       assert.equal(status, 200, activity ? 'p1.session_activity' : 'p1.session');
       const deadline = reply.body?.expiresAt;
       const timestamp = typeof deadline === 'string' ? Date.parse(deadline) : NaN;
       const reported = Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
       if (activity) assert.ok(reported, 'p1.session_deadline');
+      if (firstStatus) assert.ok(reported && (!expiresAt || reported === expiresAt), 'p1.session_deadline');
       expiresAt = reported ?? expiresAt;
       return {status, expiresAt: reported};
     } catch (error) {
       const code = error?.code;
-      const elapsedMs = Math.round(performance.now() - started);
-      let failure = 'Error';
+      failure = 'Error';
       if (code === 'ABORT_ERR') failure = error.cause?.name === 'TimeoutError' ? 'ETIMEDOUT' : 'AbortError';
       else if (error?.message === 'integration.api_timeout') failure = 'ETIMEDOUT';
       else if (error instanceof assert.AssertionError) failure = 'AssertionError';
       else if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)) failure = code;
-      process.stderr.write('D621 session probe ' + JSON.stringify({at: Date.now(), elapsedMs, status, node,
-        expiresAt, code: publicCode, error: failure}) + '\n');
       throw error;
+    } finally {
+      if (failure || firstStatus) {
+        const elapsedMs = Math.round(performance.now() - started);
+        process.stderr.write('D621 session probe ' + JSON.stringify({at: Date.now(), elapsedMs, status, node,
+          expiresAt, code: publicCode, error: failure, ...(firstStatus && {firstStatus, retryAfter})}) + '\n');
+      }
     }
   };
   const session = signal => probe(signal, false);

@@ -13,7 +13,7 @@ const load = () => import('./test-cloud-integration.mjs').catch(error => {
   throw error;
 });
 
-test('the measured session failure survives in stderr after recovery', {concurrency: true}, async t => {
+test('measured session logs interruptions and retries over HTTPS', {concurrency: true}, async t => {
   const execute = promisify(execFile);
   const directory = await mkdtemp(join(tmpdir(), 'cloud-session-test-'));
   t.after(() => rm(directory, {recursive: true, force: true}));
@@ -25,16 +25,22 @@ test('the measured session failure survives in stderr after recovery', {concurre
     import {readFileSync} from 'node:fs';
     import {createMeasuredSessionProbe, requestIntegrationApi} from './scripts/test-cloud-integration.mjs';
     import {observeP1} from './scripts/p1-observer.mjs';
-    const [port, certificate] = process.argv.slice(1);
+    const [port, certificate, retry] = process.argv.slice(1);
     const options = {hostname: '127.0.0.1', servername: 'localhost', port: Number(port), ca: readFileSync(certificate)};
     const browser = {cookie: 'fixture-cookie-private'};
     const api = (path, body, headers, _trust, _servername, signal, _fresh, onHeaders) =>
       requestIntegrationApi({...options, path, signal, headers}, body, false, onHeaders);
     const session = createMeasuredSessionProbe(api, browser);
     try {
-      const healthy = async () => true;
-      await observeP1({probes: {session, remote: healthy, login: healthy, backup: healthy, signup: healthy},
-        ready() {}, stopped() {}, replacement() {}});
+      if (retry) {
+        await session();
+        await session();
+        await session(retry === 'already aborted' ? AbortSignal.abort() : undefined);
+      } else {
+        const healthy = async () => true;
+        await observeP1({probes: {session, remote: healthy, login: healthy, backup: healthy, signup: healthy},
+          ready() {}, stopped() {}, replacement() {}});
+      }
     } catch (error) {
       console.error(error.message);
       process.exitCode = 1;
@@ -94,6 +100,62 @@ test('the measured session failure survives in stderr after recovery', {concurre
       assert.equal(calls, failure.error === 'EPROTO' ? 2 : 3);
     } finally {
       for (const socket of sockets) socket.destroy();
+      await new Promise(resolve => server.close(resolve));
+    }
+  })));
+  await Promise.all(['recovers', 'second 503', 'changed expiry', 'late success', 'already aborted'].map(mode => t.test(mode, async () => {
+    let calls = 0, firstRefusalAt = 0, retryAt = 0;
+    const expiry = '2026-11-25T22:30:00.000Z';
+    const server = createServer({key, cert}, (req, res) => {
+      assert.equal(req.method, 'GET');
+      assert.equal(req.url, '/api/account/session');
+      assert.equal(req.headers.cookie, 'fixture-cookie-private');
+      const refuse = () => res.writeHead(503, {'Retry-After': '1'}).end('{"error":"temporarily_unavailable"}');
+      if (++calls <= 2) res.end(JSON.stringify({expiresAt: expiry}));
+      else if (calls === 3) {
+        const reply = () => {firstRefusalAt = performance.now(); refuse();};
+        if (mode === 'late success') setTimeout(reply, 3500);
+        else reply();
+      } else {
+        retryAt = performance.now();
+        if (mode === 'second 503') refuse();
+        else {
+          const reply = () => res.end(JSON.stringify({expiresAt: mode === 'changed expiry' ? '2026-11-25T23:30:00.000Z' : expiry}));
+          if (mode === 'late success') {
+            const timer = setTimeout(reply, 1500);
+            res.once('close', () => clearTimeout(timer));
+          } else reply();
+        }
+      }
+    });
+    await once(server.listen(0, '127.0.0.1'), 'listening');
+    try {
+      const result = await execute(process.execPath,
+        ['--input-type=module', '-e', child, String(server.address().port), certFile, mode],
+        {cwd: new URL('../', import.meta.url), timeout: 8000}).catch(error => error);
+      assert.equal(result.code, mode === 'recovers' ? undefined : 1, result.stderr);
+      const lines = result.stderr.split('\n').filter(line => line.startsWith('D621 session probe '));
+      assert.equal(lines.length, 1, result.stderr);
+      const {firstStatus, retryAfter, status, elapsedMs, error, expiresAt} = JSON.parse(lines[0].slice('D621 session probe '.length));
+      if (mode === 'already aborted') {
+        assert.equal(calls, 2, 'the aborted check sends no HTTP request');
+        assert.deepEqual({firstStatus, status, error}, {firstStatus: undefined, status: null, error: 'AbortError'});
+        return;
+      }
+      assert.equal(calls, 4, result.stderr);
+      assert.ok(retryAt - firstRefusalAt >= 950, 'the same cookie waits for Retry-After');
+      assert.deepEqual({firstStatus, retryAfter, status, expiresAt}, {
+        firstStatus: 503, retryAfter: '1', status: mode === 'second 503' ? 503 : mode === 'late success' ? null : 200, expiresAt: expiry,
+      });
+      if (mode === 'late success') {
+        assert.equal(error, 'ETIMEDOUT');
+        assert.ok(elapsedMs >= 4900 && elapsedMs < 5750);
+      } else {
+        assert.equal(error, mode === 'recovers' ? null : 'AssertionError');
+        assert.ok(elapsedMs >= 950 && elapsedMs < 5000);
+      }
+      assert.doesNotMatch(result.stderr, /fixture-cookie-private/);
+    } finally {
       await new Promise(resolve => server.close(resolve));
     }
   })));

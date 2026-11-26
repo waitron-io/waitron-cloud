@@ -29,7 +29,7 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
       await page.clock.install({time: new Date('2026-10-24T12:00:01Z')});
       if (setupDelay) await delay(setupDelay);
       await page.clock.pauseAt(new Date('2026-10-25T12:00:01Z'));
-      let held!: Route, handlerEntered = false, requests = 0;
+      let held!: Route, retryRead: Route | undefined, handlerEntered = false, requests = 0;
       const unexpected: string[] = [];
       await page.route('https://portal.test/**', async route => {
         const endpoint = new URL(route.request().url()).pathname;
@@ -39,6 +39,10 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
             if (handler === 'delayed') await delay(100);
             held = route;
             if (handler !== 'missing') handlerEntered = true;
+            return;
+          }
+          if (failure === '503' && requests === 2) {
+            retryRead = route;
             return;
           }
           return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
@@ -77,21 +81,31 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
         await mkdir(process.env.SESSION_CHECKING_RECEIPT_DIR, {recursive: true});
         await page.screenshot({path: `${process.env.SESSION_CHECKING_RECEIPT_DIR}/${path.slice(1)}-${locale}-${theme}-${width}${setupDelay ? '-clock-delayed' : handler === 'delayed' ? '-delayed' : ''}.png`, fullPage: true});
       }
-      if (failure === '503') await held.fulfill({status: 503, headers: {'Retry-After': '2'}, json: {error: 'temporarily_unavailable'}});
-      else await held.abort('failed');
+      const refusal = {status: 503, headers: {'Retry-After': '2'}, json: {error: 'temporarily_unavailable'}};
+      if (failure === '503') {
+        await held.fulfill(refusal);
+        await t.waitFor(async () => {
+          await page.clock.runFor(100);
+          assert.ok(retryRead, 'the passive retry must reach the server');
+        }, {timeout: 3000});
+        assert.equal(await page.getByRole('status').textContent(), checking);
+        assert.equal(await retry.count(), 0);
+        await retryRead!.fulfill(refusal);
+      } else await held.abort('failed');
       await page.getByRole('status').filter({hasText: unavailable}).waitFor();
       assert.equal(await retry.count(), 1);
-      assert.equal(requests, 1);
+      const failedReads = failure === '503' ? 2 : 1;
+      assert.equal(requests, failedReads);
       if (failure === '503') {
         assert.equal(await retry.isDisabled(), true);
         await retry.evaluate(button => (button as HTMLElement).click());
-        assert.equal(requests, 1, 'cooldown cannot start another session request');
+        assert.equal(requests, failedReads, 'cooldown cannot start another session request');
         await page.clock.runFor(2000);
       }
       assert.equal(await retry.isEnabled(), true);
       await retry.click();
       await page.waitForURL('https://portal.test/login');
-      assert.equal(requests, 2, 'retry starts a fresh session check');
+      assert.equal(requests, failedReads + 1, 'retry starts a fresh session check');
       assert.deepEqual(unexpected, [], 'session checks never expose protected actions');
     } finally { await browser.close(); }
   });
