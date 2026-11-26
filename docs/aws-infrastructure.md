@@ -1137,10 +1137,13 @@ spending authority:
    in the account and region, with no shutdown-parameter condition. Install the
    updated grant and check both actions with the setup page's simulations before
    running the already-built single stops or the all-machine restart.
-6. For a separately approved outside-venue rehearsal, launch from a clean Cloud checkout
-   with `node scripts/amazon-run.mjs measured-stops`. Use the exact Cloud commit and
-   Waitron image from the passing Linux rehearsal. Save and load the image as
-   described in the [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
+6. Before each approved outside-venue rehearsal, run `node scripts/amazon-run.mjs measured-stops-dry-run`
+   on the launch host from the same clean, installed Cloud checkout and with the same private
+   `D618_CONFIG` you will use for the rehearsal. It checks local tools, imports, Docker networking
+   and the Linux image bundle without contacting AWS. Save its JSON receipt with the Cloud commit
+   and bundled image IDs. After it passes, use `node scripts/amazon-run.mjs measured-stops`.
+   Save and load the pinned Waitron image as described in the
+   [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
    For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
    Keep the JSON result and stderr privately. The launch line records the mode and Cloud commit.
    In `measured-stops`, the `Waitron rehearsal image` line gives the bundled image ID.

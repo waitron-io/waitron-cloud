@@ -926,6 +926,10 @@ implementation or production evidence.
   hold the detail. The full saved-image Linux rehearsal passed all three stops, the repairs and
   a restore after the all-machine restart; paid Stockholm qualification remains open:
 
+  - Run the [launch-host dry run](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
+    before each paid run. It checks the local tools, imports and image bundle. The next
+    [evidence rehearsal](superpowers/plans/2026-11-26-d621-stockholm-evidence.md) still needs
+    database records and qualifying results from the three stops, restart and restore.
   - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
     [Amazon verifier pin](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
     After stopping the database primary, the first fresh reserve must return a

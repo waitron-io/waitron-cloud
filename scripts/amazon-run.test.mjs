@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readFile, stat} from 'node:fs/promises';
+import {readFile, realpath, stat} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {existsSync} from 'node:fs';
 const api = await import('./amazon-run.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
@@ -108,6 +108,11 @@ test('launcher explains missing D618_CONFIG before starting or stopping', () => 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Set D618_CONFIG to your private run configuration JSON file\./);
   }
+});
+test('the Stockholm dry run refuses to run from outside its launch checkout root', () => {
+  const result = spawnSync(process.execPath, ['amazon-run.mjs', 'measured-stops-dry-run'], {cwd: 'scripts', encoding: 'utf8'});
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Run from the launcher checkout root/);
 });
 test('bootstrap refuses an unsupported phase before touching the host', () => {
   const result = spawnSync('bash', ['deploy/kubernetes/bounded-amazon/bootstrap.sh', 'unknown'], {encoding: 'utf8'});
@@ -280,7 +285,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
+for (const [scenario, expectedError] of [['measured stops dry run', null], ['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
   ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
@@ -290,7 +295,8 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
-  const checksSource = scenario === 'baseline measured stops';
+  const dryRun = scenario === 'measured stops dry run';
+  const checksSource = dryRun || scenario === 'baseline measured stops';
   const relayPath = 'deploy/kubernetes/remote-relay.mjs';
   let sourceArchive, sourceBytes;
   const underPrivateUmask = (binary, args) => {
@@ -298,7 +304,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.equal(result.status, 0, result.stderr?.toString());
     return result.stdout;
   };
-  const imageHash = tag => scenario === 'baseline measured stops' && tag.endsWith(':cloud') ? 'd'.repeat(64) : hashes;
+  const imageHash = tag => (scenario === 'baseline measured stops' && tag.endsWith(':cloud')) || (dryRun && tag.endsWith(':waitron')) ? 'd'.repeat(64) : hashes;
   const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false, tunnelCloseAttempts = 0;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -307,7 +313,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const cold = scenario.startsWith('baseline cold');
-  const measuredStops = cold || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
+  const measuredStops = dryRun || cold || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
   if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
     const timeout = AbortSignal.timeout;
@@ -317,7 +323,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   const diskMarkers = new Map();
   const publicAfter = ['203.0.113.11', '203.0.113.12', '203.0.113.13'];
   if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
-  const running = api.startAmazon({...config, baseline: scenario.startsWith('baseline'), measuredStops, rehearsedWaitronImage,
+  const running = api.startAmazon({...config, baseline: dryRun || scenario.startsWith('baseline'), measuredStops, dryRun, rehearsedWaitronImage,
     observer: scenario.startsWith('observer')}, {now: () => time, signal: stop.signal, sleep: async ms => {stop.signal.throwIfAborted(); time += ms;},
     prepareFlux: async (directory, _name, options) => {calls.push(['flux-prepare', options.node]);return directory+'/flux.json';},
     async runBaseline(context) {
@@ -398,6 +404,7 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       time += 900000; return {continuous: true};
     },
     aws: async (service, args, cleanup, request) => {
+      assert.equal(dryRun, false, 'a dry run must never reach the provider: ' + service);
       calls.push([service, ...args]);
       if (scenario === 'observer failed after stop') {
         if (args[0] === 'stop-instances') time += 12000;
@@ -453,6 +460,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
         transports.push({binary,args,input,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
       if (binary === 'uname') return 'x86_64';
+      if (binary === 'git' && args[0] === 'rev-parse') return '1'.repeat(40);
+      if (checksSource && binary === process.execPath) {
+        return underPrivateUmask(binary, [...args.slice(0, -1), await realpath(args.at(-1))]).toString().trim();
+      }
       if (checksSource && binary === 'git' && args.includes('archive')) {
         assert.equal(sourceArchive, undefined, 'write the source archive once');
         sourceArchive = args[args.indexOf('-o') + 1];
@@ -487,11 +498,16 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'wc') return '1303994368 images.tar';
       if (binary === 'scp' && args.at(-2).endsWith('images.tar') && scenario === 'failed bundle upload') throw Error('upload failed');
       if (binary === 'tar') {
-        if (args[0] === '-tf') return ['index.json','manifest.json',...(scenario === 'incomplete archive' ? ['b','c'] : ['a','b','c']).map(n => 'blobs/sha256/' + n.repeat(64))].join('\n');
+        const blobs = scenario === 'incomplete archive' ? ['b', 'c'] : ['a', 'b', 'c'];
+        if (dryRun) blobs.push('d', 'e');
+        if (args[0] === '-tf') return ['index.json', 'manifest.json', ...blobs.map(n => 'blobs/sha256/' + n.repeat(64))].join('\n');
         if (args.at(-1) === 'index.json') return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.index.v1+json',manifests:savedTags.map(tag => ({
-          annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},digest:'sha256:' + 'b'.repeat(64)}))});
+          annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},
+          digest:'sha256:' + (dryRun && tag.endsWith(':waitron') ? 'e' : 'b').repeat(64)}))});
+        if (dryRun && args.at(-1) === 'blobs/sha256/' + 'e'.repeat(64)) return JSON.stringify({schemaVersion:2,
+          mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + 'd'.repeat(64)},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
         if (args.at(-1) === 'blobs/sha256/' + 'b'.repeat(64)) return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + hashes},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
-        if (args.at(-1) === 'blobs/sha256/' + hashes) return JSON.stringify({os:'linux',architecture:'amd64'});
+        if (args.at(-1) === 'blobs/sha256/' + hashes || (dryRun && args.at(-1) === 'blobs/sha256/' + 'd'.repeat(64))) return JSON.stringify({os:'linux',architecture:'amd64'});
         return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + imageHash(tag),RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
       }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
@@ -578,6 +594,24 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
   }
   let result;
   if (expectedError) await assert.rejects(running, expectedError); else result = await running;
+  if (dryRun) {
+    assert.equal(result.dryRun, true);
+    assert.equal(result.revision, '1'.repeat(40));
+    assert.deepEqual(Object.keys(result.images), savedTags);
+    assert.equal(result.images[savedTags[1]], 'sha256:' + 'd'.repeat(64));
+    assert.deepEqual(calls.find(row => row[0] === 'docker' && row[1] === 'tag' && row[3] === savedTags[1]),
+      ['docker', 'tag', rehearsedWaitronImage, savedTags[1]]);
+    assert.ok(calls.some(([binary, arg]) => binary === 'kubectl' && arg === 'version'));
+    assert.ok(calls.some(([binary, arg]) => binary === 'wg' && arg === 'pubkey'));
+    assert.ok(calls.some(row => row[0] === process.execPath && row.at(-1) === join(dirname(sourceArchive), 'source', 'scripts', 'kubernetes-data.mjs')));
+    assert.ok(calls.some(row => row[0] === 'tar' && row[1] === '-tf'), 'archive checked before a successful receipt');
+    assert.deepEqual(calls.filter(row => row[0] === 'docker' && row[1] === 'network').map(row => row[2]), ['create', 'rm']);
+    assert.deepEqual(calls.filter(row => row[0] === 'docker' && row[1] === 'image' && row[2] === 'rm').map(row => row[3]),
+      savedTags.filter(tag => tag.startsWith('d618-')));
+    assert.deepEqual(transports, []);
+    assert.equal(existsSync(dirname(sourceArchive)), false);
+    return;
+  }
   if (scenario === 'baseline missing rehearsal image') {
     assert.equal(calls.some(row => row[1] === 'create-stack'), false);
     return;
