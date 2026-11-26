@@ -82,17 +82,18 @@ const services = args.filter(value => value.startsWith('--tcp=')).map(value => {
   const [listen, destination, probe] = value.slice('--tcp='.length).split(':');
   const port = Number(destination);
   const tlsProbe = probe === 'tls';
-  let active;
+  let active, checked = false;
   const server = tcpRelay(port, () => active?.address);
   server.listen(Number(listen), listenHost);
   return {server, async check(addresses) {
     const healthy = (await Promise.all(addresses.map(async row =>
       row.address && await reachable(row.address, port, tlsProbe) ? row : undefined))).filter(Boolean);
     const next = healthy.find(row => row.host === active?.host) ?? healthy[0];
-    if (tlsProbe && (next?.host !== active?.host || next?.address !== active?.address)) {
+    if (tlsProbe && (!checked || next?.host !== active?.host || next?.address !== active?.address)) {
       console.log(JSON.stringify({event: 'remote.relay_account_target', at: new Date().toISOString(),
         target: next?.host ?? null, address: next?.address ?? null}));
     }
+    checked = true;
     active = next;
   }};
 });

@@ -392,6 +392,8 @@ test('outside relay keeps the client-facing address and uses only the three mesh
 
 test('the outside service relay binds account and store separately from the gateway', async t => {
   const calls = [], output = [];
+  const picked = '{"event":"remote.relay_account_target","target":"10.77.0.1"}';
+  const lost = '{"event":"remote.relay_account_target","target":null}';
   t.mock.method(process.stderr, 'write', line => {output.push(String(line)); return true;});
   const relay = await remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof',
     outside: true, services: true, nodes: ['a', 'b', 'c'].map(name => ({name})),
@@ -399,11 +401,20 @@ test('the outside service relay binds account and store separately from the gate
       calls.push(args);
       if (args[0] === 'create') return 'a'.repeat(64);
       if (args[0] === 'inspect') return args[2].includes('.State.ExitCode') ? 'running 0' : 'true 172.30.250.8';
-      if (args[0] === '-c') return 'relay account target trace';
+      if (args[0] === '-c') {
+        const docker = [
+          'docker() {',
+          '  if [ "$1" != logs ] || [ "$#" -ne 2 ]; then return 1; fi',
+          "  printf '%s\\n' '" + picked + "' '" + lost + "'",
+          '  for i in ' + 'x '.repeat(30) + '; do echo remote.relay_endpoint_unavailable; done',
+          '}',
+        ].join('\n');
+        return execFileSync('sh', ['-c', docker + '\n' + args[1], ...args.slice(2)], {encoding: 'utf8'}).trim();
+      }
     }});
   assert.deepEqual(calls[0].slice(-4), ['10.77.0.2', '10.77.0.3', '--tcp=3000:3000:tls', '--tcp=9000:30900']);
   await relay.close();
-  assert.deepEqual(output, ['relay account target trace\n']);
+  assert.deepEqual(output, [picked + '\n' + lost + '\n']);
   assert.equal(calls.at(-1)[0], 'rm');
 });
 
@@ -544,6 +555,7 @@ test('a fresh account read reaches the standby when the current relay target sta
     return Object.assign(state, {port: listener.address().port});
   }
   const [primary, standby] = await Promise.all([backend('primary'), backend('standby')]);
+  primary.stalled = standby.stalled = true;
   const preload = `
     import net from 'node:net';
     const ports = {'192.0.2.1': ${primary.port}, '192.0.2.2': ${standby.port}};
@@ -567,7 +579,6 @@ test('a fresh account read reaches the standby when the current relay target sta
   const [relayPort] = JSON.parse(line).services;
   const targetEvents = [];
   lines.on('line', line => targetEvents.push(JSON.parse(line)));
-
   const readSession = (port, ms = 5000) => new Promise((resolve, reject) => {
     get({host: local, port, servername: name, ca: cert, agent: false, path: '/api/account/session',
       headers: {cookie: 'session=synthetic'}, signal: AbortSignal.any([t.signal, AbortSignal.timeout(ms)])}, response => {
@@ -576,6 +587,11 @@ test('a fresh account read reaches the standby when the current relay target sta
       response.on('end', () => resolve([response.statusCode, response.headers['x-fixture-node']]));
     }).on('error', reject);
   });
+  await remoteRehearsal.untilRemote(() => targetEvents.length,
+    2500, t.signal, 'initial_empty_account_target');
+  assert.equal(targetEvents[0].target, null);
+  await assert.rejects(readSession(relayPort), {code: 'ECONNRESET'});
+  primary.stalled = standby.stalled = false;
   await remoteRehearsal.untilRemote(async () => {
     assert.deepEqual(await readSession(relayPort, 250), [200, 'primary']);
     return true;
@@ -594,7 +610,7 @@ test('a fresh account read reaches the standby when the current relay target sta
   await remoteRehearsal.untilRemote(() => standby.accepts >= acceptsBeforeStandbyStall + 2,
     4000, t.signal, 'recheck_both_stalled_targets');
   await assert.rejects(readSession(relayPort), {code: 'ECONNRESET'});
-  assert.deepEqual(targetEvents.map(event => event.target), ['192.0.2.1', '192.0.2.2', null]);
+  assert.deepEqual(targetEvents.map(event => event.target), [null, '192.0.2.1', '192.0.2.2', null]);
   assert.ok(targetEvents.every(event => Number.isFinite(Date.parse(event.at))));
 });
 

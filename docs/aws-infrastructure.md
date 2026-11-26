@@ -1468,7 +1468,7 @@ at its five-second deadline. Read its final error alongside the trace.
 Compare the request time with the timestamped `remote.relay_account_target`
 lines printed during relay cleanup. The account relay selects a target after
 a TLS handshake completes. Each client still verifies its own TLS connection.
-A null target means the relay had no node that finished the handshake.
+A null target means the relay found no reachable node that finished the handshake.
 The launcher refreshes the outside peer’s route after each
 restart and reports how long control plane selection took. It then restarts
 the same three Stockholm instances, checks their boot IDs, volumes and

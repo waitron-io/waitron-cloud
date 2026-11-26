@@ -939,7 +939,7 @@ implementation or production evidence.
     existing proxy and transport details. The rehearsal renews the original session once before
     each stop. The cause of the earlier 401 and the outcomes of the third stop and full restart
     still need Stockholm evidence from a separately approved run.
-    A loopback rehearsal also reproduced a five-second timeout when the account
+    A loopback test also reproduced a five-second timeout when the account
     relay kept a target that accepted TCP but stalled TLS. The relay now checks
     the handshake before routing fresh connections. The 26 November Stockholm
     timeout still needs a trace that identifies where that request waited.
