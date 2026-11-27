@@ -87,14 +87,15 @@ test('backup trial schedule fixes the deadline once, even after the trial ends',
 });
 
 test('backup trial schedule refuses unavailable, foreign, unproved and changed confirmations',async()=>{
- const f=await backupTrial(),other=await owner(),body={venueId:f.venueId,trialEndsOn:f.endsOn};
- for(const [target,input,wanted] of [[app([f.accountId]),body,503],[f.target,{...body,venueId:other.venueId},403],
-  [f.target,{...body,trialEndsOn:'2000-01-01'},409]] as const){
+ const f=await backupTrial(),other=await backupTrial(),body={venueId:f.venueId,trialEndsOn:f.endsOn};
+ const changed=new Date(Date.parse(f.endsOn)+86_400_000).toISOString().slice(0,10);
+ for(const [target,input,wanted] of [[app([f.accountId]),body,503],[f.target,{venueId:other.venueId,trialEndsOn:other.endsOn},403],
+  [f.target,{...body,trialEndsOn:changed},409]] as const){
   assert.equal((await request(target,f.session,schedulePath,input)).status,wanted);
  }
  await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL WHERE account_id=$1',[f.accountId]);
  const reply=await f.confirm();assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:'proof_required'});
- assert.equal((await db.pool.query('SELECT 1 FROM data_lifecycle_operations WHERE venue_id=$1',[f.venueId])).rowCount,0);
+ assert.equal((await db.pool.query('SELECT 1 FROM data_lifecycle_operations WHERE venue_id IN ($1,$2)',[f.venueId,other.venueId])).rowCount,0);
 });
 
 test('backup trial schedule preserves an earlier exit instruction',async()=>{

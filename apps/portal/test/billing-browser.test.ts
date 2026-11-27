@@ -12,8 +12,11 @@ const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8')
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: account can start a trial without an installation`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
-  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
+  const page=await browser.newPage({locale,colorScheme:theme,timezoneId:'Europe/Madrid',viewport:{width,height:900}});page.setDefaultTimeout(4000);
   const c=translations[locale];let starts=0,reads=0,schedules=0;
+  const fresh='2099-01-01T00:00:00.000Z';
+  const needsProof=locale==='en'&&theme==='light'&&width===390;
+  let freshUntil:string|null=needsProof?null:fresh;
   const dates={effectiveEndAt:'2026-12-07T00:00:00.000Z',deadlineAt:'2027-03-07T00:00:00.000Z'};
   const hosted='33333333-3333-4333-8333-333333333333',usedTrial='44444444-4444-4444-8444-444444444444';
   const free='55555555-5555-4555-8555-555555555555';
@@ -31,7 +34,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
-   if(path.endsWith('/action-proof'))return route.fulfill({json:{methods:['passkey'],freshUntil:'2099-01-01T00:00:00.000Z'}});
+   if(path.endsWith('/action-proof'))return route.fulfill({json:{methods:['passkey','recovery'],freshUntil}});
+   if(path.endsWith('/action-proof/factor')){freshUntil=fresh;return route.fulfill({status:204});}
    if(path.endsWith('/billing/read')){reads++;return route.fulfill({json:{venues}});}
    if(path.endsWith('/billing/start-trial')){
     starts++;assert.deepEqual(route.request().postDataJSON(),{venueId:second});
@@ -78,9 +82,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const schedule=section.getByRole('button',{name:locale==='en'?'Schedule end of test backups':'Programar el fin de las copias de prueba',exact:true});
   await schedule.click();
   const confirm=section.getByRole('button',{name:locale==='en'?'Confirm schedule':'Confirmar fechas',exact:true});
+  if(needsProof){
+   const prompt=section.getByText(c.billingBackupProof,{exact:true});await prompt.waitFor();
+   assert.equal(await confirm.count(),0);
+   await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
+   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
+   await prompt.waitFor({state:'hidden'});assert.equal(schedules,0);
+   await schedule.click();
+  }
   await confirm.waitFor();assert.equal(schedules,0);
   for(const value of Object.values(dates))assert.match((await section.locator(`time[datetime="${value}"]`).textContent())??'',/\b0{1,2}:00 UTC$/);
-  if(process.env.BILLING_RECEIPT_DIR){await mkdir(process.env.BILLING_RECEIPT_DIR,{recursive:true});await section.screenshot({path:`${process.env.BILLING_RECEIPT_DIR}/${locale}-${theme}-${width}-confirm.png`});}
+  if(process.env.BILLING_RECEIPT_DIR){await mkdir(process.env.BILLING_RECEIPT_DIR,{recursive:true});await confirm.scrollIntoViewIfNeeded();await page.screenshot({path:`${process.env.BILLING_RECEIPT_DIR}/${locale}-${theme}-${width}-confirm.png`,fullPage:true});}
   await confirm.click();
   await section.getByText(locale==='en'?'End of test backups scheduled':'Fin de las copias de prueba programado',{exact:true}).waitFor();
   assert.equal(schedules,1);assert.equal(await schedule.count(),0);

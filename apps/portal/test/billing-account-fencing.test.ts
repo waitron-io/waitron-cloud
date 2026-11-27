@@ -20,6 +20,17 @@ test('an uncertain backup schedule reads saved dates without sending another con
  assert.deepEqual(calls,['/billing/read','/billing/schedule-test-backup-end','/billing/read']);
  assert.deepEqual(c.venue?.backupEnd,{...backupDates,scheduled:true});assert.equal(c.error,undefined);
 });
+test('a refused backup schedule refreshes the trial and reports the selected dates expired',async()=>{
+ const calls:string[]=[];
+ const c=await controller(async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);
+  if(path.endsWith('schedule-test-backup-end'))return {ok:false,status:409,code:'conflict',retryAfterMs:0};
+  return {ok:true,value:(calls.length===1?backupView:view) as T};
+ });
+ c.account('owner');await c.load();await c.confirmBackupEnd(c.venue!);
+ assert.deepEqual(calls,['/billing/read','/billing/schedule-test-backup-end','/billing/read']);
+ assert.equal(c.venue?.backupEnd,undefined);assert.equal(c.error,'billingBackupChanged');
+});
 for(const boundary of ['account','venue','page'] as const)test(`late backup schedule is ignored after changing ${boundary}`,async()=>{
  let finish!:(value:ApiResult<unknown>)=>void;
  const c=await controller(<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/read')?Promise.resolve({ok:true,value:backupView as T})
@@ -28,6 +39,43 @@ for(const boundary of ['account','venue','page'] as const)test(`late backup sche
  if(boundary==='account')c.account('other');else if(boundary==='venue')c.select(second);else c.fence();
  finish({ok:true,value:{venueId:first,...backupDates}});await pending;
  assert.equal(c.venues.find(venue=>venue.venueId===first)?.backupEnd?.scheduled,boundary==='account'?undefined:false);
+ assert.equal(c.error,undefined);assert.equal(c.pending,false);assert.equal(c.loadAttempted,false);
+});
+test('a backup schedule reply with different dates forces a fresh read',async()=>{
+ const calls:string[]=[];
+ const c=await controller(async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);
+  const value=path.endsWith('/read')?backupView:{venueId:first,...backupDates,deadlineAt:'2027-03-08T00:00:00.000Z'};
+  return {ok:true,value:value as T};
+ });
+ c.account('owner');await c.load();await c.confirmBackupEnd(c.venue!);
+ assert.deepEqual(calls,['/billing/read','/billing/schedule-test-backup-end','/billing/read']);
+ assert.equal(c.venue?.backupEnd?.scheduled,false);assert.equal(c.error,'billingBackupUncertain');
+});
+test('late backup schedule verification cannot reopen confirmation after two venue changes',async()=>{
+ let prove!:(value:undefined)=>void;
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>({ok:true,value:backupView as T}));
+ c.account('owner');await c.load();const pending=c.prepareBackupEnd(()=>new Promise(resolve=>{prove=resolve;}));
+ c.select(second);c.select(first);prove(undefined);await pending;
+ assert.equal(c.backupEndConfirmation,undefined);
+});
+test('selecting another venue closes an open backup schedule confirmation',async()=>{
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>({ok:true,value:backupView as T}));
+ c.account('owner');await c.load();await c.prepareBackupEnd(async()=>undefined);
+ assert.equal(c.backupEndConfirmation?.venueId,first);
+ c.select(second);c.select(first);
+ assert.equal(c.backupEndConfirmation,undefined);
+});
+test('late backup schedule reconciliation cannot set an error after leaving the page',async()=>{
+ let finish!:(value:ApiResult<unknown>)=>void,ready!:()=>void,reads=0;
+ const reading=new Promise<void>(resolve=>{ready=resolve;});
+ const c=await controller(<T>(path:string):Promise<ApiResult<T>>=>{
+  if(!path.endsWith('/read'))return Promise.resolve({ok:false,status:0,code:'network_error',retryAfterMs:0});
+  if(++reads===1)return Promise.resolve({ok:true,value:backupView as T});
+  return new Promise(resolve=>{finish=resolve as typeof finish;ready();});
+ });
+ c.account('owner');await c.load();const pending=c.confirmBackupEnd(c.venue!);await reading;
+ c.fence();finish({ok:true,value:backupView});await pending;
  assert.equal(c.error,undefined);
 });
 test('billing chooser loads without installations and starts only the selected eligible venue',async()=>{

@@ -67,7 +67,7 @@ export class BillingController{
    this.venues=this.venues.map(item=>item===venue?{...venue,backupEnd:undefined}:item);
    await this.load();
    if(generation!==this.#generation)return;
-   if(!this.error&&!this.venue?.backupEnd?.scheduled)this.error='billingBackupUncertain';
+   if(!this.error&&!this.venue?.backupEnd?.scheduled)this.error=!result.ok&&result.status===409?'billingBackupChanged':'billingBackupUncertain';
   }else this.#failure(result);
   this.#changed();
  }

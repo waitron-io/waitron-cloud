@@ -10,6 +10,8 @@ recorded time, both test plan modes refuse
 new snapshot reservations and publication, even while the venue's plan or service
 level still includes snapshots. Acting on a request to stop a venue server,
 export, restore or delete data requires separate authority.
+The disposable HTTPS rehearsal sets service end with a fixture. The Billing
+route test checks the two dates it records in the same journal.
 
 In both test plan modes, ordinary cleanup checks the recorded service end before
 selecting a snapshot for deletion and again before removing the stored copy. It
