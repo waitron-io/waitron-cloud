@@ -18,4 +18,4 @@ After the fix lands, run `node scripts/amazon-run.mjs measured-stops-dry-run` on
 
 ## Verification
 
-The Lane G `d621-hard-stop.5eQusYzy` receipt keeps `probe-candidate.py` and `vm-candidate-gnu-revised-1s.log`. The Debian 13 guest used GNU `sync` and ran the launcher’s generated write on loop-mounted ext4. Power was cut one second after the write completed. On a fresh boot, the launcher read the marker and the earlier control seed was still present. The probe exited zero.
+The Lane G `d621-hard-stop.5eQusYzy` receipt keeps `probe-candidate.py` and `vm-candidate-gnu-revised-1s.log`. The repeat used the generated write from candidate `60b4c45d4` on loop-mounted ext4 with Debian 13 GNU `sync`. Power was cut one second after the write completed. On a fresh boot, the generated read found the marker and the earlier control seed was still present. The probe exited zero. The receipt also records a run that stopped at the GNU binary path check before the write.
