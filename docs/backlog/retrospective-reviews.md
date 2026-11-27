@@ -1,7 +1,11 @@
 # Retrospective Cloud reviews (D535)
 
-The reviews stopped on 7 November 2026 at #417. The product repairs landed; these limits of the
-reviewed test fixtures remain.
+On 7 November 2026, reviews reached #417 and stopped after ten consecutive reviews
+found no real product defect, leaving twenty source pull requests and 147 test or
+maintenance pull requests unreviewed; receipts are in
+`~/waitron-campaign-j/receipts/d535/`.
+
+The product repairs landed; these limits of the reviewed test fixtures remain.
 
 - **Registry refusals.** A message holding both HTTP 403 and `unexpected EOF` follows the
   network-retry path. Reproduce a real recurrence before adding a retry classification.

@@ -68,29 +68,9 @@ See [the acquisition and cancellation record](backlog/storage-cache-fixture.md#e
 
 ## Admin listener shutdown and paced replay (D581)
 
-**Open; the historical causes are unknown.** The exhaustion fixture's listener shutdown is
-repaired ([limits](backlog/storage-cache-fixture.md#admin-owner-probe-draining-d581)).
-Replay shutdown now half-closes used storage sockets and waits for their peers inside the
-existing two-second budget, which repairs one measured ordering and explains none of the
-older CI traces. A request reusing a half-closed socket, the native LIST investigation and
-requests starting after the final drain remain open.
-
-Controlled official Litestream runs (0.5.17, and 0.5.18 in one comparison) show a
-snapshot-retention task still listing storage after a confirmed database stop, so a
-passive idle wait is not completion and a later LIST can be cancelled. Completing that
-retention sequence before stop passes as an ordering control only; waiting for the whole
-turn after stop reaches the three-request guard. Next: reproduce this boundary in the real
-smoke without treating a briefly idle transport as finished maintenance. The smoke's final
-sale and concurrent maintenance still need qualification. Do not copy replay's socket
-retirement into the smoke: all three native trials refuse at retry-sequence validation.
-
-Keep every acceptance guard, the two-second stop budget and the pins (cost experiments stay
-on 0.5.17). Real bucket-control billing stays unknown and cannot qualify because two
-transfer counters agree; generated archive and stream runs finish without a new measured
-receipt for that reason. Keep the assertion on PR1050's byte discrepancy of 742 instead of
--1 until the synthetic proof captures its exact cause. Controls:
-`node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
-scripts/cloud-cost/replay-stream.test.mjs scripts/cloud-cost/checkpoint-socket-diagnostics.test.mjs`.
+**Open; the historical causes are unknown.** A request reusing a half-closed socket, the native LIST
+investigation and requests starting after the final drain remain open. See [the replay and
+smoke shutdown limits](backlog/cost-conformance-fixtures.md#admin-listener-shutdown-and-paced-replay-d581).
 
 ## Cloud backup box identity (D451)
 
@@ -104,11 +84,7 @@ deployment enforcement off until the remaining integration and release gates pas
 
 ## Retrospective review qualification (D535)
 
-On 7 November 2026, reviews reached #417 and stopped after ten consecutive reviews
-found no real product defect, leaving twenty source pull requests and 147 test or
-maintenance pull requests unreviewed; receipts are in
-`~/waitron-campaign-j/receipts/d535/`, and
-[the qualification limits remain recorded](backlog/retrospective-reviews.md).
+See the [closed review campaign and remaining qualification limits](backlog/retrospective-reviews.md).
 
 ## Worker shutdown during polling and error reporting (D459)
 
@@ -136,7 +112,7 @@ Lane J's `receipts/d593/` inventory is no longer on disk, so this table is the r
 | D131, D583 | Conformance setup timeouts; a healthy source fetch retried. #957 repaired the fixture clock; the isolated replay early wake is open. | [detail](backlog/cost-setup-timeout.md) |
 | D152 | Isolation canary exit 1 in category `container-state`, and the gateway later exited 1. A name-lookup ordering defect is fixed; linking it to these is an inference. | [run 40041135283](https://github.com/waitron-io/waitron-cloud/actions/runs/40041135283/job/120712388129), [run 40054514898](https://github.com/waitron-io/waitron-cloud/actions/runs/40054514898/job/120754852118), [run 40062864377](https://github.com/waitron-io/waitron-cloud/actions/runs/40062864377/job/120780089952) |
 | D198 | Diagnostic revocation slower than 100 ms. Record connection, update, commit and read-release times; keep the lock-wait limit and the final 403. | [run 40089088819](https://github.com/waitron-io/waitron-cloud/actions/runs/40089088819/job/120857966430) |
-| D262 | Mail measurement refused at close | [rehearsal refusals](#platform-work-to-scope) |
+| D262 | Mail measurement refused at close | [rehearsal refusals](backlog/operating-cost.md#unexplained-rehearsal-refusals) |
 | D311 | Fixture archive downloads | [detail](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311) |
 | D335 | Verifier build | [detail](backlog/verifier-build.md) |
 | D349 | Empty generated JSON state. An interrupted write reproduces it and is fixed. | [run 41169033630](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790) |
@@ -641,8 +617,7 @@ are complete; preserve the approved cap, admission, consent and paging rules in 
 The separately scoped [owner's demo-menu trial](../packages/translation/README.md#try-the-owners-demo-menu)
 still needs the server-only key, its live provider result and the joint Waitron handoff;
 ordinary-client refusal and public privacy, supplier and release work remain open. Waitron still needs to
-send the signed abandon action, verify recovery after a lost submit reply against Cloud, and include
-set-menu course names in its Translate all jobs using the `course` kind.
+include set-menu course names in its Translate all jobs using the `course` kind.
 
 ## Initial focus
 
@@ -721,47 +696,7 @@ implementation or production evidence.
 - **LAN test Cloud with free and paid organisations.** The fixed project is
   `waitron-cloud-test`; protected Waitron containers are never adopted, and the existing
   Waitron venue is quarantined: use disposable venues and leave its containers and data alone.
-  The dormant proof runner and [evidence assembler](test-cloud.md#assemble-the-local-evidence-before-release-qualification)
-  are built; their Linux receipts keep their original source and do not qualify the current
-  release image. Publication remains `unqualified`, the complete-integration and shipping
-  flags stay false, snapshots stay unavailable, plan enforcement and deployed translation stay
-  off and address providers stay disabled. No image publication, account, provider resource
-  or spending is authorised here. The [test Cloud guide](test-cloud.md) keeps historical
-  failure diagnostics.
-
-  Open on the [Amazon test Cloud](superpowers/plans/2026-11-16-test-cloud-aws.md):
-
-  - Public test-venue HTTPS needs staging/production issuance and renewal qualification,
-    account renewal, pairing and the owner's mobile-data check
-    ([short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md)).
-  - Sustained OS, disk and CPU headroom, SES feedback composition, real email delivery and
-    joint box handoff. Stockholm's original restart cause and the joint box email trial.
-  - After Stockholm, [upgrade the Amazon test Cloud](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
-    The owner resets the test box to the pinned Waitron release before the fresh
-    [guided pairing and capture](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud).
-    Recovery approval remains off.
-  - Automatic remote access needs the same fresh pairing, the assigned Staff page on mobile
-    data, and confirmation that the box switch stops access.
-  - A phone check of how long a synthetic menu takes to reappear after sharing is enabled
-    (Juniper portal trial).
-
-  **Open:** the owner-authorised **Cloud/Waitron release driver**, after this dormant proof
-  branch finishes, owns published-image upgrade and rollback qualification. It must bind
-  immutable published Cloud and Waitron digests to their exact source, compiled verifier
-  target/module manifest and generated assets, name a supported old/new release pair, prove
-  its real schema upgrade and old-consumer refusal, then restore the matching database,
-  configuration, storage and gateway state and prove both original pairings still exchange.
-  The existing rehearsal refuses a target containing migration 064 because its seeds use the
-  retired local-id layout, so the driver needs a v2 seed. See the
-  [release-driver handoff](test-cloud.md#release-driver-handoff).
-
-  Other open maintenance: keep organisation writes in the plan setter, since shared policy
-  readers that update their organisation can deadlock while upgrading locks. Qualify a
-  consistent route view across the two export reads and production-scale processing before
-  promising uninterrupted movement or larger capacity. Qualify recovery from definitive
-  daemon rejection without clearing uncertain verifier journals. Same-CA in-volume renewal,
-  continuous box supervision and the coordinated image/schema and volume-to-volume rollback
-  path remain open.
+  See [open test deployment and release-driver qualifications](backlog/test-cloud.md).
 
 - **Local package validation must avoid concurrent full-package groups.** Overlapping groups
   once pushed the registration control CLI past its five-second bound; the cause of the
@@ -770,63 +705,9 @@ implementation or production evidence.
 - **Password-login recovery-row expiry.** [Run 39112504573](https://github.com/waitron-io/waitron-cloud/actions/runs/39112504573)'s
   ordering is unproved. If the assertion fails again, capture expiry and setup stages; do not
   extend its authority window or test deadline.
-- **Operating cost.** The [offline calculator](cloud-cost-calculator.html) and
-  [model](cloud-cost-model.md) compare the running platform and per-venue usage; the
-  [approved design](superpowers/specs/2026-10-14-cloud-cost-model-design.md) defines the
-  evidence boundary. The complete bill remains unknown: missing prices, minimums and blank
+- **Operating cost.** The complete bill remains unknown: missing prices, minimums and blank
   inputs stay named gaps, and neither a priced subtotal nor a passing command means a
-  complete or provider-validated budget. The accepted local samples
-  ([joined evidence](cost-model/local-driver-evidence.json)) keep their own source, clock and
-  limits; never add overlapping samples or substitute one's transfers for another's. Private
-  replay uses owned scratch and an internal network, and raw data stays on the Mac. No fiscal
-  allocation, hash-chain or golden rule is changed.
-
-  The [trial assessment](cost-model/live-check.json) stops before any AWS creation: its
-  illustrative high-cadence component alone projects 130,000 requests above the 10,000 cap,
-  an assumed sensitivity rather than a proved bound. No resources were created and no billing
-  read is due. Independent synthetic generation, an owned-resource runner and durable billing
-  execution are prerequisites if it is revisited.
-
-  Rebuild and verify with `node scripts/cloud-cost/cli.mjs build` and `… verify`;
-  `pnpm test:cloud-cost` runs the synthetic checks and `pnpm test:cloud-cost:conformance` the
-  generated-data checks.
-
-  **To complete the total:** missing inventory quantities and regional billing terms,
-  representative venue and public activity, complete retained-object forecasts,
-  recovery/alert/email frequencies and provider capacity/transfer mappings. Keep external
-  mail, fiscal API fees, GitHub charges, allowances, credits and tax separate from gross AWS
-  usage. Keep generated fixture data within each service's 64 MiB scratch limit, or make a
-  separate bounded capacity change. A generated restore-integrity failure reproduces on the
-  host-shared Docker folder and passes on container-native storage; its production relevance
-  is unproved, so prepare a consistent frozen copy before long replay. Earlier untraced refusals
-  and transient source-file changes are unattributed; later activity in a live source is not
-  proof that the isolated experiment wrote it.
-
-  **Unexplained rehearsal refusals.** Each now reports a fixed stage or category; capture that
-  on a recurrence, reproduce it with the pinned runtime and fix the cause. Passing repeats
-  explain nothing. Keep every accounting, ownership, isolation, restore, cleanup check and
-  deadline.
-
-  | Refusal | Evidence to start from |
-  | --- | --- |
-  | Streamed-day check at `private-replay` | [run 41003745800](https://github.com/waitron-io/waitron-cloud/actions/runs/41003745800/job/123893874129) |
-  | Stack start before archive assertions | [run 39743485615](https://github.com/waitron-io/waitron-cloud/actions/runs/39743485615/job/119706230844), and the older 39616174409 and 39627846860 |
-  | Paced replay, generic error | 39637622744, [39829272927](https://github.com/waitron-io/waitron-cloud/actions/runs/39829272927/job/120000877058) |
-  | Paced replay at `quiesce` | [40489223783](https://github.com/waitron-io/waitron-cloud/actions/runs/40489223783/job/122138753711) |
-  | Paced replay at `quiesce-checkpoint` | [40954158356](https://github.com/waitron-io/waitron-cloud/actions/runs/40954158356/job/123729967144), [41449381877](https://github.com/waitron-io/waitron-cloud/actions/runs/41449381877/job/125290693382) (`transfer-interrupted`) |
-  | Paced replay at `quiesce-idle` (D581) | [nightly 43207714335](https://github.com/waitron-io/waitron-cloud/actions/runs/43207714335) |
-  | Paced replay at `storage-cleanup` (D121) | [40144665901](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173) |
-  | Writer-deadline check during opening | [40259519210](https://github.com/waitron-io/waitron-cloud/actions/runs/40259519210/job/121368783695), [43971423269](https://github.com/waitron-io/waitron-cloud/actions/runs/43971423269) |
-  | Remote browser journey, mostly reconnect/takings | [39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728), [40004973526](https://github.com/waitron-io/waitron-cloud/actions/runs/40004973526/job/120590562266), [40092022379](https://github.com/waitron-io/waitron-cloud/actions/runs/40092022379/job/120866647453), [40122070386](https://github.com/waitron-io/waitron-cloud/actions/runs/40122070386/job/120955659784); [investigation](backlog/browser-reconnect.md) |
-  | Mail measurement close (D262, PR #467) | [job 121192744128](https://github.com/waitron-io/waitron-cloud/actions/runs/40201247616/job/121192744128). Read the close error's first reason and both counts: a timeout, a protocol failure and a disagreement after an accepted reply need different reproductions. |
-  | SIGINT cleanup before a worker was admitted (D502) | [run 41003177471](https://github.com/waitron-io/waitron-cloud/actions/runs/41003177471/job/123892097439). Read `local-command-refusal` first; controls in `scripts/cloud-cost/local-command-diagnostics.test.mjs`. |
-
-  The strict 4.01-second streamed-day control must refuse after its original deadline in
-  whichever phase it reaches, with the source unchanged, private state removed and every
-  started child collected and exited (owner, 24 October 2026).
-
-  The official Litestream shutdown also still needs qualification
-  ([scheduling investigation](backlog/cost-conformance-fixtures.md#replay-close-scheduling-d530)).
+  complete or provider-validated budget. See [remaining costs and rehearsal investigations](backlog/operating-cost.md).
 
 - **Future remote DNS lost-reply browser failures.** If the saved-name assertion fails again,
   use the bounded request/status events, injection stages and setup-screen diagnostics to

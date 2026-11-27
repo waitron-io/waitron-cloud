@@ -41,7 +41,7 @@ Remaining work:
   [command](../local-pairing.md#prove-translation-survives-interruptions)) passes all five
   synthetic faults. Keep bounded decoded reads and the wider release gate open, keep generation
   tags limited to the controlled single-runner restart, and give release-check callbacks
-  cancellation before adding long-running ones. Waitron still needs the signed abandon action.
+  cancellation before adding long-running ones.
 - **Owner quality trials.** Tasks 22–24 remain owner-only after **2026-11-02**, using their
   preserved commands: templated-prompt non-regression on both graded sets, house-style effects
   (offline preparation is built) and the other kinds of name. The external grading bridge is

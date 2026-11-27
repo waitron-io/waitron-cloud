@@ -59,3 +59,29 @@ diagnostics now keep the first refusal without private content. Still to attribu
 For D513, use `meter.snapshotRefusal`, `meter.firstInvalidation` and `meter.pendingAttempts` from
 the next `litestream-result` record; do not repeat the passing body-byte baseline without a new
 trigger.
+
+## Admin listener shutdown and paced replay (D581)
+
+**Open; the historical causes are unknown.** The exhaustion fixture's listener shutdown is
+repaired ([limits](storage-cache-fixture.md#admin-owner-probe-draining-d581)).
+Replay shutdown now half-closes used storage sockets and waits for their peers inside the
+existing two-second budget, which repairs one measured ordering and explains none of the
+older CI traces. A request reusing a half-closed socket, the native LIST investigation and
+requests starting after the final drain remain open.
+
+Controlled official Litestream runs (0.5.17, and 0.5.18 in one comparison) show a
+snapshot-retention task still listing storage after a confirmed database stop, so a
+passive idle wait is not completion and a later LIST can be cancelled. Completing that
+retention sequence before stop passes as an ordering control only; waiting for the whole
+turn after stop reaches the three-request guard. Next: reproduce this boundary in the real
+smoke without treating a briefly idle transport as finished maintenance. The smoke's final
+sale and concurrent maintenance still need qualification. Do not copy replay's socket
+retirement into the smoke: all three native trials refuse at retry-sequence validation.
+
+Keep every acceptance guard, the two-second stop budget and the pins (cost experiments stay
+on 0.5.17). Real bucket-control billing stays unknown and cannot qualify because two
+transfer counters agree; generated archive and stream runs finish without a new measured
+receipt for that reason. Keep the assertion on PR1050's byte discrepancy of 742 instead of
+-1 until the synthetic proof captures its exact cause. Controls:
+`node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
+scripts/cloud-cost/replay-stream.test.mjs scripts/cloud-cost/checkpoint-socket-diagnostics.test.mjs`.
