@@ -23,7 +23,9 @@ try{
   pool=new Pool({connectionString:env.DATABASE_URL,max:2,connectionTimeoutMillis:5000,statement_timeout:10000});
   ses=createSesSigningProvider({region});
   dns=createRoute53MailDnsProvider({zoneId,suffix});
-  console.log(await runVenueMailSigning(pool,venueId,{config:{suffix,zoneId,region,testDomains},ses,dns}));
+  const result=await runVenueMailSigning(pool,venueId,{config:{suffix,zoneId,region,testDomains},ses,dns});
+  console.log(result);
+  if(result==='held')console.error('Check the configured provider scope, the saved SES identity tag and the exact signing TXT record before retrying.');
  }
 }catch{
  console.error('Venue signing failed. Check the test configuration and rerun to read provider state.');

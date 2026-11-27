@@ -9,12 +9,16 @@ test('SES signing creates a tagged external identity and reads its exact status 
  const domain='venue.example.test', selector='11111111-1111-4111-8111-111111111111';
  const tag='22222222-2222-4222-8222-222222222222', privateKey='synthetic-private-key';
  const path='/v2/email/identities', calls:{method:string;url:string;input?:unknown}[]=[];
- let exists=false, failCreate=false;
+ let exists=false, createFailure=0;
  const server=createServer(async(req,res)=>{
   let body='';for await(const chunk of req)body+=chunk;
   calls.push({method:req.method!,url:req.url!,...(body?{input:JSON.parse(body)}:{})});
   res.setHeader('Content-Type','application/json');
-  if(req.method==='POST'&&failCreate){res.statusCode=500;res.end(JSON.stringify({message:'Provider did not confirm the write'}));return;}
+  if(req.method==='POST'&&createFailure){
+   res.statusCode=createFailure;
+   if(createFailure===400)res.setHeader('x-amzn-errortype','BadRequestException');
+   res.end(JSON.stringify({message:'Provider did not confirm the write'}));return;
+  }
   if(req.method==='POST')exists=true;
   if(req.method==='DELETE')exists=false;
   if(req.method==='GET'&&!exists){
@@ -41,7 +45,10 @@ test('SES signing creates a tagged external identity and reads its exact status 
  assert.deepEqual(calls.slice(2).map(({method,url})=>[method,url]),[
   ['GET',path+'/'+domain],['DELETE',path+'/'+domain],['GET',path+'/'+domain],
  ]);
- failCreate=true;
+ createFailure=500;
  await assert.rejects(ses.create(domain,selector,tag,privateKey));
  assert.equal(calls.filter(call=>call.method==='POST').length,2);
+ createFailure=400;
+ assert.equal(await ses.create(domain,selector,tag,privateKey),'refused');
+ assert.equal(calls.filter(call=>call.method==='POST').length,3);
 });

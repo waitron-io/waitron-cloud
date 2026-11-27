@@ -114,11 +114,92 @@ test('the signing command requires test mode and can inspect a production venue 
   CLOUD_VENUE_MAIL_SES_REGION:'eu-north-1',
   CLOUD_VENUE_MAIL_TEST_DOMAINS:domain,
  };
- const run=(extra:NodeJS.ProcessEnv)=>spawnSync(process.execPath,['src/venue-mail-signing-cli.ts',db.production],{
+ const run=(extra:NodeJS.ProcessEnv,venueId=db.production)=>spawnSync(process.execPath,['src/venue-mail-signing-cli.ts',venueId],{
   env:{...env,...extra},encoding:'utf8',timeout:5000,
  });
  const refused=run({});
  assert.equal(refused.status,1);assert.match(refused.stderr,/test venue levels/);
  const ineligible=run({CLOUD_VENUE_SERVICE_LEVELS:'test'});
  assert.equal(ineligible.status,0,ineligible.stderr);assert.equal(ineligible.stdout.trim(),'ineligible');
+
+ const testVenue=db.venues[0]!;
+ await db.pool.query(`INSERT INTO venue_mail_signing
+  (venue_id,organisation_id,domain,selector,public_key,ses_region,zone_id,dns_suffix,tag)
+  SELECT id,organisation_id,$2,$3,'key','eu-north-1','Z999',$4,$5 FROM venues WHERE id=$1`,
+ [testVenue,domain,randomUUID(),suffix,randomUUID()]);
+ const held=run({CLOUD_VENUE_SERVICE_LEVELS:'test'},testVenue);
+ assert.equal(held.status,0,held.stderr);assert.equal(held.stdout.trim(),'held');
+ assert.match(held.stderr,/Check the configured provider scope, the saved SES identity tag and the exact signing TXT record/);
+});
+
+test('a second invocation cannot leave the first accepted identity with an obsolete claim',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ await f.choose();
+ const create=f.options.ses.create;
+ const firstCreating=deferred(),secondCreating=deferred();
+ const releaseFirst=deferred(),releaseSecond=deferred();
+ let started=0;
+ f.options.ses.create=async(...args)=>{
+  if(++started===1){firstCreating.resolve();await releaseFirst.promise;}
+  else{secondCreating.resolve();await releaseSecond.promise;}
+  return create(...args);
+ };
+ const first=f.run();
+ await firstCreating.promise;
+ const second=f.run().catch(error=>error);
+ await Promise.race([secondCreating.promise,second]);
+ releaseFirst.resolve();
+ try{assert.equal(await first,'verified');}
+ finally{releaseSecond.resolve();await second;}
+ assert.equal(await f.run(),'verified','a later retry must match the identity the provider accepted');
+});
+
+test('a retry can recover an identity accepted after the first command timed out',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ await f.choose();
+ const create=f.options.ses.create;
+ const retryCreating=deferred(),releaseRetry=deferred();
+ let acceptTimedOutWrite:(()=>Promise<void>)|undefined;
+ f.options.ses.create=async(...args)=>{
+  if(!acceptTimedOutWrite){
+   acceptTimedOutWrite=async()=>{await create(...args);};
+   throw Error('SES client timed out');
+  }
+  retryCreating.resolve();
+  await releaseRetry.promise;
+  return create(...args);
+ };
+ await assert.rejects(f.run(),/SES client timed out/);
+ const retry=f.run().catch(error=>error);
+ await Promise.race([retryCreating.promise,retry]);
+ try{await acceptTimedOutWrite!();}
+ finally{releaseRetry.resolve();await retry;}
+ assert.equal(await f.run(),'verified','the accepted timed-out write must remain recognisable');
+});
+
+test('reset can retire a signing identity accepted after an earlier timeout',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ await f.choose();
+ const create=f.options.ses.create;
+ let acceptTimedOutWrite:(()=>Promise<void>)|undefined;
+ f.options.ses.create=async(...args)=>{
+  acceptTimedOutWrite=async()=>{await create(...args);};
+  throw Error('SES client timed out');
+ };
+ await assert.rejects(f.run(),/SES client timed out/);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[f.db.venues[0]]);
+ await f.run();
+ await acceptTimedOutWrite!();
+ assert.equal(await f.run(),'retired','the reset must still be able to find the late identity');
+ assert.equal(f.identities.size,0);
+});
+
+test('a definite refusal releases the claim for another signing attempt',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ await f.choose();
+ const create=f.options.ses.create;
+ f.options.ses.create=async()=> 'refused' as const;
+ await assert.rejects(f.run(),/ses_signing_create_refused/);
+ f.options.ses.create=create;
+ assert.equal(await f.run(),'verified');
 });

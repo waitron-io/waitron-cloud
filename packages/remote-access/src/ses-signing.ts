@@ -1,6 +1,6 @@
 import {
- CreateEmailIdentityCommand,DeleteEmailIdentityCommand,GetEmailIdentityCommand,
- NotFoundException,SESv2Client,type SESv2ClientConfig,
+ BadRequestException,CreateEmailIdentityCommand,DeleteEmailIdentityCommand,GetEmailIdentityCommand,
+ LimitExceededException,NotFoundException,SESv2Client,TooManyRequestsException,type SESv2ClientConfig,
 } from '@aws-sdk/client-sesv2';
 
 const claimTag='waitron-venue-mail';
@@ -24,12 +24,19 @@ export function createSesSigningProvider(config:SESv2ClientConfig){
     throw error;
    }
   },
-  async create(domain:string,selector:string,tag:string,privateKey:string){
-   await client.send(new CreateEmailIdentityCommand({
-    EmailIdentity:domain,
-    DkimSigningAttributes:{DomainSigningSelector:selector,DomainSigningPrivateKey:privateKey},
-    Tags:[{Key:claimTag,Value:tag}],
-   }),deadline());
+  async create(domain:string,selector:string,tag:string,privateKey:string):Promise<'accepted'|'refused'>{
+   try{
+    await client.send(new CreateEmailIdentityCommand({
+     EmailIdentity:domain,
+     DkimSigningAttributes:{DomainSigningSelector:selector,DomainSigningPrivateKey:privateKey},
+     Tags:[{Key:claimTag,Value:tag}],
+    }),deadline());
+    return 'accepted';
+   }catch(error){
+    if(error instanceof BadRequestException||error instanceof LimitExceededException||
+     error instanceof NotFoundException||error instanceof TooManyRequestsException)return 'refused';
+    throw error;
+   }
   },
   async remove(domain:string){
    await client.send(new DeleteEmailIdentityCommand({EmailIdentity:domain}),deadline());

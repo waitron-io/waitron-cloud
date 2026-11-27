@@ -58,8 +58,10 @@ For local proof with fake providers, enable test venue levels, set the
 `CLOUD_VENUE_MAIL_*` settings in `.env.example`, and run
 `pnpm --dir packages/remote-access venue-mail:signing <venue-id>`.
 Rerun once the alias points at the hosted key or after the owner resets the
-sender or transfers the business. The command is assumed to be the only
-writer for these test identities and records. A real provider run needs
+sender or transfers the business. A `held` result keeps the claim. Check the
+configured provider scope, the saved SES identity tag and the exact DNS TXT
+record before retrying. The command is assumed to be the only writer for these
+test identities and records. A real provider run needs
 separate approval. The portal tick still checks the alias. A later slice
 will use the venue’s From address and restore the Waitron sender with a
 notice if verification is lost.

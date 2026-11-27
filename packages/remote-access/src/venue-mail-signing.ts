@@ -42,22 +42,24 @@ const sameChoice=(before:Choice,after:Choice|undefined)=>after?.address===before
  after.organisation===before.organisation&&after.selector===before.selector;
 
 async function saveClaim(client:PoolClient,venueId:string,choice:Choice,config:VenueMailSigningConfig,
- publicKey:string,tag:string,old?:Claim):Promise<Claim|undefined>{
+ publicKey:string,tag:string):Promise<Claim|undefined>{
  if(!sameChoice(choice,await readChoice(client,venueId,config)))return;
- if(old){
-  return (await client.query<Claim>(`UPDATE venue_mail_signing SET public_key=$2,tag=$3
-   WHERE venue_id=$1 AND tag=$4 RETURNING *`,[venueId,publicKey,tag,old.tag])).rows[0];
- }
  return (await client.query<Claim>(`INSERT INTO venue_mail_signing
   (venue_id,organisation_id,domain,selector,public_key,ses_region,zone_id,dns_suffix,tag)
   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING RETURNING *`,
  [venueId,choice.organisation,choice.domain,choice.selector,publicKey,config.region,config.zoneId,config.suffix,tag])).rows[0];
 }
 
+async function releaseClaim(pool:Pool,venueId:string,tag:string){
+ return (await pool.query('DELETE FROM venue_mail_signing WHERE venue_id=$1 AND tag=$2',[venueId,tag])).rowCount;
+}
+
 async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:SigningOptions){
  await dns.checkZone();
  const target=venueMailTarget(claim.selector,claim.dns_suffix);
  const identity=await ses.read(claim.domain),record=await dns.read(target,claim.public_key);
+ // An absent record cannot settle a create that may still be accepted.
+ if(!identity&&record==='absent')return 'held';
  if(identity){
   if(identity.tag!==claim.tag)return 'held';
   await ses.remove(claim.domain);
@@ -65,8 +67,7 @@ async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:Signin
  }
  if(record==='matching')await dns.remove(target,claim.public_key);
  if(await dns.read(target,claim.public_key)!=='absent')return 'held';
- const released=await pool.query('DELETE FROM venue_mail_signing WHERE venue_id=$1 AND tag=$2',[venueId,claim.tag]);
- return released.rowCount?'retired':'held';
+ return await releaseClaim(pool,venueId,claim.tag)?'retired':'held';
 }
 
 export async function runVenueMailSigning(pool:Pool,venueId:string,options:SigningOptions){
@@ -90,16 +91,19 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
  await dns.checkZone();
  let identity=await ses.read(choice.domain);
  let record=claim?await dns.read(alias.value,claim.public_key):undefined;
- if(!claim||!identity){
-  if(identity||record&&record!=='absent')return 'held';
+ if(!claim){
+  if(identity)return 'held';
   const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048,
    publicKeyEncoding:{type:'spki',format:'der'},privateKeyEncoding:{type:'pkcs8',format:'der'}});
   const publicText=publicKey.toString('base64');
-  if(!claim&&await dns.read(alias.value,publicText)!=='absent')return 'held';
+  if(await dns.read(alias.value,publicText)!=='absent')return 'held';
   const tag=randomUUID();
-  claim=await transaction(pool,client=>saveClaim(client,venueId,choice,config,publicText,tag,claim));
+  claim=await transaction(pool,client=>saveClaim(client,venueId,choice,config,publicText,tag));
   if(!claim)return 'held';
-  await ses.create(claim.domain,claim.selector,claim.tag,privateKey.toString('base64'));
+  if(await ses.create(claim.domain,claim.selector,claim.tag,privateKey.toString('base64'))==='refused'){
+   await releaseClaim(pool,venueId,claim.tag);
+   throw new Error('ses_signing_create_refused');
+  }
   identity=await ses.read(claim.domain);
   record=await dns.read(alias.value,claim.public_key);
  }
