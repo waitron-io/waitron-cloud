@@ -28,6 +28,9 @@ test('a test venue owner saves SQLite, opens the backup offline, and all three d
   }
   const window = snapshot.exitRecovery;
   assert.ok(window?.retainedSnapshotUnchanged);
+  assert.equal(window.olderSnapshotRead, true);
+  const secondsLeft = (Date.parse(window.deadlineAt) - Date.parse(window.cleanupFinishedAt)) / 1000;
+  assert.ok(secondsLeft > 0 && secondsLeft <= 90, 'cleanup finished during the last 90 seconds');
   assert.equal(Date.parse(window.deadlineAt) - Date.parse(window.effectiveEndAt), 90 * 24 * 60 * 60 * 1000);
   assert.deepEqual(receipt.cleanup.remaining, []);
   assert.equal(receipt.protectedContainersUnchanged, true);

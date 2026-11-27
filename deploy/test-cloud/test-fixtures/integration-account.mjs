@@ -59,12 +59,20 @@ try {
       assert.ok(!services);
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
       const venueId = rows[0].venue_id, lifecycle = new LifecycleStore(pool);
-      const {rows: [{ended}]} = await pool.query("SELECT clock_timestamp()-interval '2160 hours'+interval '90 seconds' AS ended");
+      const shift = '2160 hours -90 seconds';
+      const {rows: [{ended}]} = await pool.query('SELECT clock_timestamp()-$1::interval AS ended', [shift]);
       await lifecycle.request({venueId, kind: 'cancel', expectedRevision: 0, operationId: randomUUID(),
         fingerprint: createHash('sha256').update('test exit ' + venueId).digest('hex'), effectiveEndAt: ended.toISOString()});
       assert.equal((await new OrganisationPlanStore(pool).show(organisationId)).plan, 'paid');
       const {effectiveEndAt, deadlineAt} = await lifecycle.read(venueId);
-      console.log(JSON.stringify({effectiveEndAt, deadlineAt}));
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      try {
+        const catalogue = new BackupCatalogue(pool, runtime.options.vault, runtime.options.objects, 'test-free-paid');
+        const {rows: [{expiryCheckedAt}]} = await pool.query('SELECT clock_timestamp()+$1::interval AS "expiryCheckedAt"', [shift]);
+        assert.equal(await catalogue.cleanupOne(venueId, expiryCheckedAt), null, 'integration.exit_cleanup_removed_snapshot');
+        const {rows: [{cleanupFinishedAt}]} = await pool.query('SELECT clock_timestamp() AS "cleanupFinishedAt"');
+        console.log(JSON.stringify({effectiveEndAt, deadlineAt, expiryCheckedAt, cleanupFinishedAt}));
+      } finally {runtime.close();}
     } else if (phase === 'inspect-storage-withdrawal') {
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
       const saved = JSON.parse(await readFile('/run/local-stack/integration-storage-' + installationId + '.json', 'utf8'));

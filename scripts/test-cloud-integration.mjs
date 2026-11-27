@@ -1012,7 +1012,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
                 assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
               }});
             journeyStage = 'exit-recovery-window';
-            const window = parseIntegrationJson(await accountPhase('end-exit-download'));
+            const {expiryCheckedAt, cleanupFinishedAt, ...window} = parseIntegrationJson(await accountPhase('end-exit-download'));
             checkSnapshotGrantRefusal(await control(id, 'snapshot-refusal'));
             const {venueId, pointId} = request;
             const list = async expired => {
@@ -1020,9 +1020,16 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               assert.equal(reply.status, 200);
               assert.deepEqual(reply.body.exitRecovery, {...window, expired});
               assert.equal(reply.body.exitDownloadAvailable, expired ? undefined : true);
+              return reply.body.points;
             };
             const files = [['download', 'exit.backup.enc'], ['download-key', 'exit.key'], ['download-manifest', 'exit.manifest.json']];
-            await list(false);
+            const points = await list(false);
+            assert.deepEqual(points.map(({id, verification, protection}) => ({id, verification, protection})), [
+              {id: largeRequest.pointId, verification: 'verified', protection: 'fallback'},
+              {id: pointId, verification: 'verified', protection: null},
+            ]);
+            assert.equal(points[1].capturedAt, request.capturedAt);
+            assert.ok(Date.parse(points[1].expiresAt) < Date.parse(expiryCheckedAt), 'integration.exit_snapshot_ordinary_expiry');
             for (const [action, file] of files) {
               const reply = await api('/api/account/backups/' + action, {venueId, pointId}, browser);
               assert.equal(reply.status, 200, 'integration.exit_window_' + action);
@@ -1040,7 +1047,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               points: [{...captured, attemptId: publishedSnapshot.workerVerification.attemptId}],
             }));
             assert.deepEqual(retained, {retainedSnapshotUnchanged: true});
-            publishedSnapshot.exitRecovery = {...window, ...retained};
+            publishedSnapshot.exitRecovery = {...window, expiryCheckedAt, cleanupFinishedAt, olderSnapshotRead: true, ...retained};
           }
           if (measured) {
             const original = publishedSnapshot;

@@ -8,6 +8,11 @@ new snapshot reservations and publication, even while the venue's plan or servic
 level still includes snapshots. Acting on a request to stop a venue server,
 export, restore or delete data requires separate authority.
 
+Ordinary snapshot cleanup pauses at service end and stays paused after the
+download deadline. A snapshot already marked for deletion stays unavailable.
+An authorised purge needs its own deletion path, and a future verified
+resubscription needs to reopen ordinary cleanup along with snapshot admission.
+
 Use the current venue revision when you record a new request. An identical
 operation ID returns its original revision, even after later requests. Reusing
 that ID with changed input within the same venue conflicts. Another venue has its

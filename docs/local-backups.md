@@ -28,6 +28,11 @@ abandoned-upload cleanup can finish. This preserves test data without choosing a
 customer cancellation or retention policy. An expiry operation already deleting an
 object holds policy until it finishes, so the downgrade cannot commit ahead of it.
 
+In both test plan modes, ordinary snapshot cleanup also pauses at recorded service
+end, even while the plan includes snapshots. You can save an available verified
+snapshot in the opt-in exit rehearsal until the fixed download deadline. The pause
+continues after downloads close so later deletion can follow the exit rules.
+
 After upgrading, explicitly provision the existing backup location again, then configure
 the managed stream with the current installation revision and its original source
 binding. Those operations restore cleared setup while preserving snapshots and keys.
