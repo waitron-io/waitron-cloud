@@ -179,7 +179,8 @@ test('a retry can recover an identity accepted after the first command timed out
 
 test('reset can retire a signing identity accepted after an earlier timeout',async t=>{
  const f=await fixture();t.after(f.db.close);
- await f.choose();
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
  const create=f.options.ses.create;
  let acceptTimedOutWrite:(()=>Promise<void>)|undefined;
  f.options.ses.create=async(...args)=>{
@@ -187,8 +188,12 @@ test('reset can retire a signing identity accepted after an earlier timeout',asy
   throw Error('SES client timed out');
  };
  await assert.rejects(f.run(),/SES client timed out/);
- await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[f.db.venues[0]]);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
+ const diagnostic=t.mock.method(console,'error',()=>{});
  assert.equal(await f.run(),'held');
+ assert.deepEqual(diagnostic.mock.calls.map(call=>call.arguments),[
+  [`Venue ${venueId} stopped signing cleanup before releasing its claim because neither provider record is visible.`],
+ ]);
  await acceptTimedOutWrite!();
  assert.equal(await f.run(),'retired','the reset must still be able to find the late identity');
  assert.equal(f.identities.size,0);

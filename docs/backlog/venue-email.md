@@ -73,7 +73,7 @@ the scope or removed the domain from the test list, restore the original
 settings to retire that identity. If an interrupted run leaves both provider
 records absent, the command keeps the claim while you investigate the
 interrupted operation. The command assumes it is the only writer for these
-test identities and records. The portal tick still checks the alias.
+test identities and records. The portal tick still checks the alias. [Operator steps](../test-cloud-service-controls.md#investigate-held-venue-email-signing-cleanup)
 A later slice will use the venue’s From address and restore the Waitron sender
 with a notice if verification is lost.
 See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).

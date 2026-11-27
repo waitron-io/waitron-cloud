@@ -200,3 +200,23 @@ This uses a synthetic TLS server and provider feedback.
 
 Real SES delivery, its feedback and suppression qualification, the joint box workflow
 and the Amazon machine remain separate work.
+
+## Investigate held venue email signing cleanup
+
+Use these steps when `venue-mail:signing` logs that a venue stopped signing
+cleanup before releasing its claim. The command keeps the database row because
+a timed-out create could still appear after both provider reads report absence.
+Get separate approval for any call to SES or Route 53.
+
+1. Take the venue ID from the log. Read that venue's `venue_mail_signing` row in
+   the test database. It identifies the domain, SES region and tag, Route 53
+   zone, selector, DNS suffix and public key to check.
+2. Check the exact domain identity in the saved SES region and the TXT at
+   `<selector>.mail.<dns-suffix>` in the saved Route 53 zone. If you find an
+   identity with the saved tag or the exact TXT for the saved key, use the
+   original permitted settings and rerun the command for that venue. Leave
+   records that differ from the saved claim in place.
+3. If both records are absent, check the provider's operation history for the
+   interrupted create or delete. Preserve the held row and record what you
+   found in the private test receipt. Reuse the domain only after the
+   interrupted operation and the saved claim have been resolved.

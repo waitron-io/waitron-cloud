@@ -69,7 +69,10 @@ async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:Signin
  const readIdentity=()=>ses.read(claim.domain),readRecord=()=>dns.read(target,claim.public_key);
  const identity=await readIdentity(),record=await readRecord();
  // An absent record cannot settle a create that may still be accepted.
- if(!identity&&record==='absent')return 'held';
+ if(!identity&&record==='absent'){
+  console.error(`Venue ${venueId} stopped signing cleanup before releasing its claim because neither provider record is visible.`);
+  return 'held';
+ }
  if(identity){
   if(identity.tag!==claim.tag)return 'held';
   const absent=await confirmRemoval(()=>ses.remove(claim.domain),async()=>await readIdentity()===null);
