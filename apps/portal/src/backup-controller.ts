@@ -72,7 +72,8 @@ export class BackupController {
      result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):
      result.code==='download_too_large'?'snapshotDownloadTooLarge':
      result.code==='restore_key_unavailable'?'snapshotRestoreKeyUnavailable':
-     result.code==='database_storage_unavailable'?'snapshotDatabaseStorageUnavailable':result.code==='database_open_failed'?'snapshotDatabaseOpenFailed':'snapshotDownloadUnavailable';
+     result.code==='database_storage_unavailable'?(action==='download'?'snapshotBackupStorageUnavailable':'snapshotDatabaseStorageUnavailable'):
+     result.code==='database_open_failed'?'snapshotDatabaseOpenFailed':'snapshotDownloadUnavailable';
     this.downloadProof=result.code==='proof_required'||result.code==='enrollment_required';
     if(result.code==='enrollment_required')document.dispatchEvent(new Event(enrollmentRequiredEvent));
    }

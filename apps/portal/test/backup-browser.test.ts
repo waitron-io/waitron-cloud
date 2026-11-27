@@ -115,7 +115,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   assert.equal(copy.suggestedFilename(),`waitron-backup-${verifiedId}.backup.enc`);
   const saved=await readFile((await copy.path())!);
   assert.deepEqual(openBackupExport(saved),backupPayload(payload));
-  await page.getByText('0011223344556677 · 2026-11-23',{exact:true}).waitFor();
+  await page.getByText('2026-11-23 · 227W',{exact:true}).waitFor();
   const [checksum]=await Promise.all([page.waitForEvent('download',{timeout:5000}),saveManifest.click()]);
   assert.equal(checksum.suggestedFilename(),`waitron-backup-${verifiedId}.manifest.json`);
   assert.deepEqual(JSON.parse(await readFile((await checksum.path())!,'utf8')),{
@@ -123,6 +123,9 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    masterKeyId:'0011223344556677',masterKeyDay:'2026-11-23',
   });
   await captureWindow('saved');
+  await choices.selectOption({index:0});
+  await choices.selectOption(verifiedId);
+  assert.equal(await saveManifest.isDisabled(),true);
   if(locale==='en'){
    await page.evaluate(()=>{
     const getFile=FileSystemFileHandle.prototype.getFile;

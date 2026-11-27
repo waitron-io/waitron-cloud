@@ -14,23 +14,25 @@ let browser: Browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser?.close(); });
 
-for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag', 'oversized database', 'oversized download', 'quota', 'interrupted staging', 'ranged', 'bad range', 'range proof', 'encrypted ranges', 'bad encrypted digest', 'repeated range proof', 'failed release', 'Waitron version 2', 'missing key record', 'malformed key record', 'duplicate key record', 'restore without disk']) {
+for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag', 'oversized database', 'oversized download', 'quota', 'interrupted staging', 'ranged', 'bad range', 'range proof', 'encrypted ranges', 'bad encrypted digest', 'repeated range proof', 'failed release', 'Waitron version 2', 'missing key record', 'malformed key record', 'duplicate key record', 'duplicate key fields', 'restore without disk', 'ranged restore without disk', 'restore wrong tag', 'restore quota']) {
   test(`database worker handles ${scenario}`, async () => {
     const fixedFrame = scenario === 'Waitron version 2';
-    const memoryOnly = scenario === 'restore without disk';
-    const refusedRecord = scenario.endsWith('key record');
-    const restore = fixedFrame || memoryOnly || refusedRecord || ['encrypted ranges','bad encrypted digest'].includes(scenario);
-    const ranged = ['ranged','bad range','range proof','encrypted ranges','bad encrypted digest','repeated range proof','failed release'].includes(scenario);
+    const memoryOnly = scenario.endsWith('without disk');
+    const refusedRecord = scenario.endsWith('key record') || scenario === 'duplicate key fields';
+    const restore = fixedFrame || memoryOnly || refusedRecord || ['encrypted ranges','bad encrypted digest','restore wrong tag','restore quota'].includes(scenario);
+    const ranged = ['ranged','bad range','range proof','encrypted ranges','bad encrypted digest','repeated range proof','failed release','ranged restore without disk','restore quota'].includes(scenario);
+    const quota = scenario === 'quota' ? 1024 ** 2 : scenario === 'restore quota' ? 6 * 1024 ** 2 : undefined;
     const sizeMiB = ({'quota': 2, 'oversized download': 17} as Record<string,number>)[scenario] ?? 0;
     const database = ranged ? Buffer.concat([venueDatabase, Buffer.alloc(4 * 1024 ** 2)]) : venueDatabase;
+    const [keyLine, ...identityLines] = numberedKeyRecord.split('\n');
     const keyRecords = scenario === 'missing key record' || !restore ? [] : scenario === 'duplicate key record' ?
-      [numberedKeyRecord, numberedKeyRecord] : scenario === 'malformed key record' ?
+      [keyLine!, identityLines.join('\n')] : scenario === 'duplicate key fields' ? [numberedKeyRecord + keyLine] : scenario === 'malformed key record' ?
       [numberedKeyRecord.replace('2026-11-23', '2026-02-30')] : [numberedKeyRecord];
     const payloadOptions = {gzip: memoryOnly || ['gzip','quota'].includes(scenario), keyRecords,
       ...(scenario === 'oversized database' ? {databaseLength: 512 * 1024 ** 2 + 1} : {}),
       ...(sizeMiB ? {database: Buffer.concat([venueDatabase, Buffer.alloc(sizeMiB * 1024 ** 2)])} : {database})};
     const archive = backupBytes(payloadOptions);
-    if (scenario === 'wrong tag') archive[33]! ^= 1;
+    if (scenario.endsWith('wrong tag')) archive[33]! ^= 1;
     const manifest = backupManifest(['wrong digest','bad encrypted digest'].includes(scenario) ? Buffer.from('different archive') : archive);
     const offsets:number[] = [], requests:string[] = [];
     let releases = 0;
@@ -92,13 +94,13 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
     }).listen(0, '127.0.0.1');
     await once(server, 'listening');
     const origin = `http://127.0.0.1:${(server.address() as {port:number}).port}`;
-    const context = scenario === 'quota' ? await chromium.launchPersistentContext('') : await browser.newContext();
+    const context = quota ? await chromium.launchPersistentContext('') : await browser.newContext();
     const page = await context.newPage();
     try {
       await page.goto(origin + '/empty');
-      if (scenario === 'quota') {
+      if (quota) {
         const session = await page.context().newCDPSession(page);
-        await session.send('Storage.overrideQuotaForOrigin', {origin, quotaSize: 1024 ** 2});
+        await session.send('Storage.overrideQuotaForOrigin', {origin, quotaSize: quota});
       }
       const result = await page.evaluate(async ({interrupted,ranged,restore,fixedFrame,memoryOnly}) => {
         const worker = new Worker(interrupted ? '/worker-probe.js' : fixedFrame ? '/worker-fixed-random.js' :
@@ -154,7 +156,11 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         return;
       }
       assert.ok(result);
-      if (memoryOnly) {
+      if (memoryOnly && ranged) {
+        assert.equal(result.code,'download_too_large');
+        assert.equal(result.ok,false);
+        assert.deepEqual(requests,['download-manifest','download-key','download']);
+      } else if (memoryOnly) {
         assert.equal(result.ok, true, 'a small restore backup can be saved without disk staging');
         assert.deepEqual(result.files, []);
         assert.deepEqual(openBackupExport(Buffer.from(result.bytes!, 'base64')), backupPayload(payloadOptions));
@@ -177,6 +183,12 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         assert.equal(result.ok,true);
         assert.deepEqual(Buffer.from(result.bytes!, 'base64'),venueDatabase);
         assert.deepEqual(requests,['download-manifest','download-key','download']);
+      } else if (scenario === 'restore quota') {
+        assert.equal(result.ok,false);
+        assert.equal(result.code,'database_storage_unavailable');
+        assert.deepEqual(offsets,[0,4194304]);
+        assert.equal(releases,1);
+        assert.deepEqual(result.files,[]);
       } else if (ranged) {
         assert.equal(result.ok,!['bad range','bad encrypted digest','repeated range proof'].includes(scenario));
         assert.deepEqual(offsets,scenario==='bad range'?[0]:scenario==='range proof'?[0,4194304,4194304]:scenario==='repeated range proof'?[0,0]:[0,4194304]);
@@ -194,6 +206,7 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         if (scenario.startsWith('oversized')) assert.equal(result.code,'download_too_large');
         if (scenario==='truncated') assert.equal(result.code,'network_error');
         if (scenario==='quota') assert.equal(result.code,'database_storage_unavailable');
+        if (scenario==='restore wrong tag') assert.equal(result.code,'database_open_failed');
         assert.deepEqual(result.files,[]);
       }
     } finally {

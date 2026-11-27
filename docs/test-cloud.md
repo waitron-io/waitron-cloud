@@ -1161,7 +1161,7 @@ saved database private because it can contain staff and customer records.
 
 Select **Download backup**, then **Download backup manifest** to keep a version 2
 encrypted copy of the same snapshot with its box state and checksum. Match the
-displayed master key ID and date to your recovery pack. An older snapshot can
+displayed master key name to your recovery pack. An older snapshot can
 name an earlier master key. A snapshot without a usable key record still offers
 **Download database**. The manifest gives the capture time and SHA-256 checksum
 of the file you just saved. Later changes may be missing. After
@@ -1170,9 +1170,10 @@ while the downloads are open. The ordinary test portal accepts verified archives
 up to 16 MiB. Set `CLOUD_EXIT_RANGE_DOWNLOADS=1` with the
 [private LAN stage](local-backups.md#use-disk-stages-for-the-local-publication-trial)
 to save verified archives up to 512 MiB in a LAN test account. Use a regular
-browser window for large saves so it can stage them on disk. In either case
-the browser saves SQLite databases up to 512 MiB after opening. Your browser
-keeps a temporary copy for ten minutes while the portal stays open. It clears the copy
+browser window for large saves so it can stage them on disk. The browser
+saves SQLite databases up to 512 MiB after opening. For a ranged backup or
+SQLite download, the browser keeps a temporary copy for ten minutes while
+the portal stays open. It clears the copy
 sooner if you save another database, sign out or change accounts. If the page
 closes before clearing the file, opening the portal clears it. Opening another
 portal tab leaves a save in an open tab alone.
@@ -1196,7 +1197,8 @@ The rehearsal uses the same file opener as Waitron setup **Restore**. It
 checks that the saved file opens with the matching master key. The
 [isolated full-return plan](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
 covers staging the file in setup, preparing the recovery operation and checking
-the filing authority before activation.
+the filing authority before activation. The pinned version of setup accepts
+uploads up to 256 MiB. [Waitron’s setup upload limit](https://github.com/clintongormley/waitron/blob/5cc7bf033ad3af159fd622ed7de210eb8bcf4124/apps/server/src/setup-request-fields.ts#L4)
 
 For a rehearsal with a separate vault key, give the replacement process that key and
 its matching version as private settings. Nonempty process settings take precedence

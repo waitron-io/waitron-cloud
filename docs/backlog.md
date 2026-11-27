@@ -313,7 +313,7 @@ An allowlisted owner can schedule the backup cutoff and download deadline in
 Billing’s future unpaid-expiry step sets the unpaid-trial deadline by writing the
 existing cancel instruction at expiry. Paid-month cancellation still needs a
 reachable settled-payment path. The [offline guide](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers reading the saved database and matching the backup’s master key to the venue’s
+covers reading the saved database and matching the backup’s master key name to the venue’s
 recovery pack. Full return still needs a rehearsal through Waitron setup, preparation
 with current filing authority and activation using a synthetic source that keeps its
 vault key outside the archive. [Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)

@@ -1,7 +1,7 @@
 # D101 isolated full-return rehearsal
 
 Run this after Cloud offers a version 2 download that the venue’s master key opens. Use the same
-master key for filing authority in Waitron setup Restore. The current version 1 refusal and
+master key for filing authority in Waitron setup Restore. The download and
 read-only steps are in [Test Cloud](../../test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online).
 
 1. **Prepare the files and keys.** Use a disposable synthetic deployment on the approved Linux

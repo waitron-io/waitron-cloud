@@ -167,6 +167,15 @@ test('backup download preserves the account enrollment event and distinguishes C
   assert.equal(f.controller.selected,undefined);
 });
 
+test('a storage refusal identifies the backup that could not be saved',async t=>{
+  const f=fixture(t);
+  f.replies.push({body:{...page,exitDownloadAvailable:true}});
+  await f.controller.open(venueId);
+  workerRefusals(t,{status:503,code:'database_storage_unavailable'});
+  await f.controller.download('download');
+  assert.equal(f.controller.error,'snapshotBackupStorageUnavailable');
+});
+
 test('database download forwards server refusals and the enrollment event',async t=>{
   const f=fixture(t);
   let locked=true;

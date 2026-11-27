@@ -295,7 +295,7 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-async function saveExitFile({origin, port, session, pointId, rangeSize, archive = false}) {
+async function saveExitFile({origin, port, session, pointId, rangeSize, archive = false, masterKeyName}) {
   const {chromium} = createRequire(new URL('../apps/portal/package.json', import.meta.url))('playwright');
   const {hostname} = new URL(origin);
   const browser = await chromium.launch({args: [`--host-resolver-rules=MAP ${hostname} 127.0.0.1:${port}`, '--no-proxy-server']});
@@ -344,6 +344,7 @@ async function saveExitFile({origin, port, session, pointId, rangeSize, archive 
     }
     const filename = await download.path();
     if (archive) {
+      await page.getByText(masterKeyName,{exact:true}).waitFor();
       const [checksum] = await Promise.all([page.waitForEvent('download'),
         page.getByRole('button',{name:'Download backup manifest',exact:true}).click()]);
       assert.equal(checksum.suggestedFilename(), `waitron-backup-${pointId}.manifest.json`);
@@ -359,13 +360,13 @@ async function saveExitFile({origin, port, session, pointId, rangeSize, archive 
   } finally { await browser.close(); }
 }
 
-async function proveExitDownload({api, browser, request, directory, openSaved, masterKeyId, online, origin, port, ranged = false}) {
+async function proveExitDownload({api, browser, request, directory, openSaved, masterKeyId, masterKeyName, online, origin, port, ranged = false}) {
   const {venueId, pointId, archive} = request;
   const body = {venueId, pointId};
   const archivePath = join(directory, 'exit.backup.enc'), keyPath = join(directory, 'exit.key');
   const manifestPath = join(directory, 'exit.manifest.json');
   const browserFile = {origin, port, session: browser, pointId, rangeSize: ranged ? archive.bytes : undefined};
-  const archiveSave = await saveExitFile({...browserFile, archive: true});
+  const archiveSave = await saveExitFile({...browserFile, archive: true, masterKeyName});
   if (ranged) assert.equal((await api('/api/account/backups/download', body, browser)).status, 413);
   for (const [path, saveTo, type] of [
     ...(ranged ? [] : [['download', archivePath, 'application/octet-stream']]), ['download-key', keyPath, 'text/plain; charset=utf-8'],
@@ -974,7 +975,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             journeyStage = 'exit-download';
             const request = parseIntegrationJson(await accountPhase('inspect-exit-download', {...captured, image:verifierImage, revision, nativeTarget}));
             const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
-            const {secret:masterKey,masterKeyId}=recoveryAuthority;
+            const {secret:masterKey,masterKeyId,name:masterKeyName}=recoveryAuthority;
             const openSaved = async (file, cloudKey) => {
               await docker(['exec','-i',id,'sh','-c','umask 077; cat > "$CLOUD_TEST_ROOT/exit-download.enc"'],file,'exit-copy-saved-file');
               return parseIntegrationJson(await docker(['exec','-i','--env','TSX_DISABLE_CACHE=1',id,'node','--permission',
@@ -989,7 +990,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
               assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
             };
-            const proof={api,browser,origin,port,online,openSaved,masterKeyId};
+            const proof={api,browser,origin,port,online,openSaved,masterKeyId,masterKeyName};
             publishedSnapshot.exitDownload = await proveExitDownload({...proof,request,directory});
             journeyStage = 'exit-large-download';
             const large = await control(id, 'snapshot-large');

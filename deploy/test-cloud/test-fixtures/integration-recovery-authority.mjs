@@ -55,7 +55,8 @@ export async function proveIntegrationExitOpen(root, {masterKey, cloudKey, maste
   try {
     const header=await readArtifactFileHeader(downloaded);
     assert.equal(header.version,2);
-    assert.equal(header.masterKeyId.toString('hex'),masterKeyId);
+    const savedMasterKeyId=header.masterKeyId.toString('hex');
+    assert.equal(savedMasterKeyId,masterKeyId);
     const savedPath=join(scratch,'saved'), sourcePath=join(scratch,'source');
     const savedSha256=await decryptBackupFile(downloaded,savedPath,await openingKeyFor({artifactPath:downloaded},masterKey));
     const sourceSha256=await decryptBackupFile(source,sourcePath,cloudKey);
@@ -64,6 +65,6 @@ export async function proveIntegrationExitOpen(root, {masterKey, cloudKey, maste
     const payload=saved[0]===0x1f && saved[1]===0x8b ? gunzipSync(saved,{maxOutputLength:32*1024**2}) : saved;
     const database=unpackArchive(payload).find(entry=>entry.name==='db.dump');
     assert.ok(database,'integration.exit_offline_database_missing');
-    return {savedSha256,sourceSha256,masterKeyId,databaseSha256:createHash('sha256').update(database.bytes).digest('hex')};
+    return {savedSha256,sourceSha256,masterKeyId:savedMasterKeyId,databaseSha256:createHash('sha256').update(database.bytes).digest('hex')};
   } finally { await rm(scratch,{recursive:true,force:true}); await rm(downloaded,{force:true}); }
 }
