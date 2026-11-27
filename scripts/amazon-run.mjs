@@ -537,6 +537,7 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
             if [ "$1" = write ]; then
               umask 077
               printf '%s\n' "$3" > "$marker"
+              sync "$marker" "$2"
             else
               test "$(cat "$marker")" = "$3"
             fi`, 'cold-scratch-witness', phase, '/var/local/d621-verifier/mount', target.instances[index]], undefined, 15_000, request);

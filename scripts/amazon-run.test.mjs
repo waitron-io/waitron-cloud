@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readFile, realpath, stat} from 'node:fs/promises';
+import {mkdtemp, readFile, realpath, rm, stat, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {existsSync} from 'node:fs';
 const api = await import('./amazon-run.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
@@ -311,6 +312,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
   ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
+  ['baseline cold sync failure', /synthetic marker flush failure/],
   ['baseline single stop late', /amazon.measured_stops_expiry/], ['baseline interrupted', {name: 'AbortError'}], ['baseline cleanup failure', /synthetic tunnel close failure/], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [], stop = new AbortController();
   if (['observer failed after stop', 'baseline measured stops'].includes(scenario)) {
@@ -344,6 +346,21 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
   }
   const roles = ['A', 'B', 'C'], ids = roles.map(role => output[role]);
   const diskMarkers = new Map();
+  let markerDirectory;
+  if (scenario === 'baseline cold sync failure') {
+    markerDirectory = await mkdtemp(join(tmpdir(), 'd621-witness-'));
+    t.after(() => rm(markerDirectory, {recursive: true}));
+    await writeFile(join(markerDirectory, 'sudo'), '#!/bin/sh\nexec "$@"\n', {mode: 0o700});
+    await writeFile(join(markerDirectory, 'sync'), `#!/bin/sh
+set -eu
+test "$#" -eq 2
+test "$1" = "$MARKER_DIR/.d618-cold-restart"
+test "$2" = "$MARKER_DIR"
+test "$(cat "$1")" = i-00000000000000001
+echo 'synthetic marker flush failure' >&2
+exit 1
+`, {mode: 0o700});
+  }
   const publicAfter = ['203.0.113.11', '203.0.113.12', '203.0.113.13'];
   if (measuredStops) t.mock.method(performance, 'now', () => stopClock);
   const running = api.startAmazon({...config, baseline: dryRun || scenario.startsWith('baseline'), measuredStops, dryRun, rehearsedWaitronImage,
@@ -567,6 +584,15 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
           const index = Number(args.at(-2).at(-1)) - 1;
           const role = ids[index];
           assert.ok(script.endsWith("'" + role + "'"));
+          if (markerDirectory && index === 0 && script.includes("'cold-scratch-witness' 'write'")) {
+            const mount = '/var/local/d621-verifier/mount';
+            const local = script.replace(`'${mount}'`, '"$MARKER_DIR"');
+            assert.ok(!local.includes(mount));
+            const result = spawnSync('sh', ['-c', local], {encoding: 'utf8',
+              env: {PATH: markerDirectory + ':/usr/bin:/bin', MARKER_DIR: markerDirectory}});
+            if (result.error) throw result.error;
+            if (result.status !== 0) throw Error(result.stderr || 'marker write failed');
+          }
           if (script.includes("'cold-scratch-witness' 'write'")) diskMarkers.set(role, script.split("'").at(-2));
           else assert.equal(diskMarkers.get(role), role, 'read the original marker from that machine');
         }
@@ -705,7 +731,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
     const stopped = calls.findIndex(row => row[1] === 'stop-instances');
     const outage = calls.findIndex(row => row[0] === 'outside outage');
     const start = calls.findIndex(row => row[1] === 'start-instances');
-    if (scenario.endsWith('late') || scenario.endsWith('wrong old address')) assert.equal(stopped, -1);
+    if (scenario.endsWith('late') || scenario.endsWith('wrong old address') || markerDirectory) assert.equal(stopped, -1);
     else assert.ok(stopped >= 0);
     if (scenario.endsWith('cancelled')) assert.equal(start, -1);
     if (start >= 0) assert.ok(stopped < outage && outage < start);
