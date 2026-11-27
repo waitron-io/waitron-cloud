@@ -88,6 +88,16 @@ test('successful setup stays silent and releases its observer',async t=>{
  }finally{await pool.end();}
 });
 
+test('cancelling a query explicitly omits the timeout snapshot',async t=>{
+ const pool=new Pool({connectionString:url}),lines:string[]=[];
+ t.mock.method(console,'error',(line:string)=>lines.push(line));
+ try{
+  await assert.rejects(observeSetup(pool,()=>pool.query('SELECT pg_cancel_backend(pg_backend_pid()), pg_sleep(1)')),
+   {code:'57014',message:'canceling statement due to user request'});
+  assert.ok(!Object.hasOwn(JSON.parse(lines[0]!),'database'),'an explicit cancellation must not capture server data');
+ }finally{await pool.end();}
+});
+
 test('migration setup retains the advisory wait before rollback and still migrates after release',async t=>{
  const schema=`setup_wait_${randomUUID().replaceAll('-','')}`;
  const admin=new Pool({connectionString:url});
@@ -113,7 +123,7 @@ test('unavailable observer and throwing reporter cannot replace a setup failure'
  const pool=new Pool({connectionString:url});const previous=process.env.TEST_DATABASE_URL;
  const original=new Proxy({}, {
   get(){assert.fail('diagnostics read the setup error');},
-  getPrototypeOf(){assert.fail('diagnostics inspected the setup error prototype');},
+  getPrototypeOf(){throw new Error('type inspection failed');},
  });
  const lines:string[]=[];
  t.mock.method(console,'error',(line:string)=>{lines.push(line);throw new Error('reporter refused');});
