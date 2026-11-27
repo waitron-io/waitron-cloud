@@ -308,7 +308,9 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['measured stops dry run', null], ['complete', null], ['baseline', null], ['baseline measured stops', null], ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
+for (const [scenario, expectedError] of [['measured stops dry run', null], ['complete', null], ['baseline', null], ['baseline measured stops', null],
+  ['baseline measured stops address mismatch', /amazon.launch_address/], ['measured stops dry run address mismatch', /amazon.launch_address/],
+  ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
   ['baseline cold foreign metadata', {name: 'TimeoutError'}], ['baseline cold stale lease', {name: 'TimeoutError'}],
@@ -320,8 +322,12 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
   }
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let evidenceBOffline = false;
-  const dryRun = scenario === 'measured stops dry run';
-  const checksSource = dryRun || scenario === 'baseline measured stops';
+  const dryRun = scenario.startsWith('measured stops dry run');
+  const addressMismatch = scenario.endsWith('address mismatch');
+  const checksSource = scenario === 'measured stops dry run' || scenario === 'baseline measured stops';
+  const addressLookup = ['curl', '-q', '-4', '--noproxy', '*', '--fail', '--silent', '--connect-timeout', '3', '--max-time', '5',
+    'https://checkip.amazonaws.com'];
+  const isAddressLookup = row => row[0] === 'curl' && row.at(-1) === addressLookup.at(-1);
   const relayPath = 'deploy/kubernetes/remote-relay.mjs';
   let sourceArchive, sourceBytes;
   const underPrivateUmask = (binary, args) => {
@@ -338,7 +344,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const cold = scenario.startsWith('baseline cold');
-  const measuredStops = dryRun || cold || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
+  const measuredStops = dryRun || cold || addressMismatch || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
   if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
     const timeout = AbortSignal.timeout;
@@ -515,6 +521,10 @@ exit 1
         assert.equal(request?.aborted, false);
       }
       calls.push([binary, ...args]);
+      if (isAddressLookup([binary, ...args])) {
+        assert.equal(timeout, 6_000);
+        return addressMismatch ? '203.0.113.9' : '203.0.113.8';
+      }
       if (['ssh','scp'].includes(binary)) {
         const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
         transports.push({binary,args,input,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
@@ -664,7 +674,13 @@ exit 1
   }
   let result;
   if (expectedError) await assert.rejects(running, expectedError); else result = await running;
+  if (addressMismatch) {
+    assert.deepEqual(calls.filter(isAddressLookup), [addressLookup]);
+    assert.equal(calls.some(row => row[1] === 'create-stack' || row[1] === 'delete-stack'), false);
+    return;
+  }
   if (dryRun) {
+    assert.deepEqual(calls.filter(isAddressLookup), [addressLookup]);
     assert.equal(result.dryRun, true);
     assert.equal(result.revision, '1'.repeat(40));
     assert.deepEqual(Object.keys(result.images), savedTags);
@@ -829,6 +845,12 @@ exit 1
     assert.ok(calls.some(row => row[0] === 'sudo' && row.includes('mangle') && row.includes('PREROUTING')));
     const createdNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'create');
     assert.ok(createdNetwork >= 0 && createdNetwork < calls.findIndex(row => row[1] === 'create-stack'));
+    if (scenario === 'baseline measured stops') {
+      assert.deepEqual(calls.filter(isAddressLookup), [addressLookup]);
+      const lookup = calls.findIndex(isAddressLookup);
+      assert.ok(lookup > createdNetwork);
+      assert.equal(calls.slice(lookup + 1).find(row => row[0] !== 'stderr')?.[1], 'create-stack');
+    } else if (scenario === 'baseline') assert.deepEqual(calls.filter(isAddressLookup), []);
     assert.match(transports.find(row => row.input === '{"kind": "Secret"}')?.args.at(-1) ?? '', /2>\/dev\/null$/);
     assert.match(transports.find(row => row.input === '{"kind":"Secret"}')?.args.at(-1) ?? '', /'exec'.*'node'$/);
     const lifecycle = ['stop-instances', 'describe-instances', 'start-instances'];

@@ -655,6 +655,12 @@ export async function startAmazon(config, {run: execute, aws: provider, sleep = 
       assert.match(id, /^[a-f0-9]{64}$/, 'amazon.outside_network');
       networkId = id;
     }
+    if (config.measuredStops) {
+      const address = await run('curl', ['-q', '-4', '--noproxy', '*', '--fail', '--silent',
+        '--connect-timeout', '3', '--max-time', '5', 'https://checkip.amazonaws.com'], undefined, false, 6_000);
+      assert.ok(isIPv4(address) && address + '/32' === config.operatorCidr,
+        'amazon.launch_address: the launch host public IPv4 must match the single address in D618_CONFIG');
+    }
     if (config.dryRun) return {dryRun: true, revision: await run('git', ['rev-parse', 'HEAD']), images: archiveIds};
     const outcome = await runAmazonExperiment(operations, {sleep, evidence, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};

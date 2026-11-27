@@ -1463,7 +1463,11 @@ with the private `D618_CONFIG` on the test host. The launcher selects a healthy
 control plane over SSH for Kubernetes commands and verifier image import.
 All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
-holds. Its 20-request sign-up allowance covers all three stops within one
+holds. Before creating a stack, it reads the launch host’s public IPv4 over
+HTTPS and requires it to match the single `operatorCidr` address in `D618_CONFIG`.
+The dry run makes the same check. Run it on the launch host with the same
+private settings you will use for the approved rehearsal.
+The 20-request sign-up allowance covers all three stops within one
 hour. The next stop can begin after the returning machine passes its health
 checks. Before each stop, including the full restart, the rehearsal sends one
 activity request on the original account session and records the deadline in
