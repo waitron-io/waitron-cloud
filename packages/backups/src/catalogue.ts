@@ -174,13 +174,11 @@ async function requireSnapshotAdmission(client: PoolClient, venueId: string, mod
   const exit = await LifecycleStore.readExitRecovery(client, venueId);
   if (!exit.allowed || exit.window) backupFail('permission_denied');
 }
-async function active(client: PoolClient, id: string, mode: PlanMode, operation?: 'snapshot-write') {
+async function active(client: PoolClient, id: string, mode: PlanMode) {
   if (!uuid(id)) backupFail("unavailable");
   const initial=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
   if(!initial)backupFail('unavailable');
   await backupPlan(client,initial.venue_id,mode);
-  const checkLifecycle = operation === 'snapshot-write' && mode !== 'existing';
-  if (checkLifecycle) await requireSnapshotAdmission(client, initial.venue_id, mode);
   const row = (
     await client.query(
       "SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i",
@@ -188,7 +186,7 @@ async function active(client: PoolClient, id: string, mode: PlanMode, operation?
     )
   ).rows[0];
   if (!row) backupFail("unavailable");
-  if((mode==='test-venue-levels'||checkLifecycle)&&row.venue_id!==initial.venue_id)backupFail('permission_denied');
+  if(mode==='test-venue-levels'&&row.venue_id!==initial.venue_id)backupFail('permission_denied');
   if (row.revoked_at) backupFail("revoked");
   if (row.environment !== "test") backupFail("local_integration_only");
   if(mode==='test-venue-levels' && (await client.query("SELECT configuration FROM installation_services WHERE installation_id=$1 AND service='retained_snapshots'",[id])).rows[0]?.configuration.testCloudEnabled===false)backupFail('permission_denied');
@@ -576,7 +574,7 @@ export class BackupCatalogue {
   async reserveCapture(installationId: string, id: string, fence?: MutationFence) {
     if (!uuid(id)) backupFail("conflict");
     return transaction(this.#pool, async (client) => {
-      const install = await active(client, installationId, this.#planMode, 'snapshot-write'),
+      const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id);
       await fence?.(client);
       await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
@@ -617,7 +615,7 @@ export class BackupCatalogue {
     validateMetadata(m,venueMode?MAX_OBJECT_BYTES:MAX_LEGACY_BACKUP_BYTES);
     if(venueMode)return this.#publishVenue(installationId,id,m,fence,deadline);
     const published = await transaction(this.#pool, async (client) => {
-      const install = await active(client, installationId, this.#planMode, 'snapshot-write'),
+      const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id),
         capture = (
           await client.query(
@@ -627,10 +625,10 @@ export class BackupCatalogue {
         ).rows[0];
       if (!capture) backupFail("unavailable");
       await fence?.(client);
+      await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
       const prior = await point(client, id);
       if (prior) {
         if (!sameMetadata(prior, m)) backupFail("conflict");
-        await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
         return { point: prior, location: location(l) };
       }
       if(capture.expired)backupFail("capture_expired");
@@ -674,7 +672,7 @@ export class BackupCatalogue {
     const storageOptions=()=>deadline?{signal:deadline.signal,timeoutMs:deadline.remaining()}:undefined;
     return publicationSession(this.#pool,id,deadline,async transact=>{
       const first=await transact(async client=>{
-        const install=await active(client,installationId,this.#planMode,'snapshot-write'),l=await lockVenue(client,install.venue_id);
+        const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
         const capture=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
         if(!capture)backupFail('unavailable');
         await fence?.(client);
@@ -695,7 +693,7 @@ export class BackupCatalogue {
         await putStaged(objects,objectKey,source,storageOptions());
       }finally{await source.dispose();}
       const published=await transact(async client=>{
-        const install=await active(client,installationId,this.#planMode,'snapshot-write'),l=await lockVenue(client,install.venue_id);
+        const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
         await fence?.(client);
         const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
         if(permission.revision!==first.generation)backupFail('conflict');

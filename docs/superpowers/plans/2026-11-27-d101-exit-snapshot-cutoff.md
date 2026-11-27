@@ -10,16 +10,17 @@ November proposed this snapshot-only slice. Lane G's archived 24 November questi
 owner's 17:46 “Yes” to synthetic downloads and 17:58 “yes to all” on the later exit rules. The
 watcher's 25 November 09:31 note leaves the audit for full return. Claude reviewed this plan,
 and the watcher cleared revision `17a8b5c487` for build in Lane G questions.md on 27 November at 08:21.
+The watcher cleared the simpler lock and check sequence below at 09:13 after branch review.
 
-**Snapshot admission.** In `packages/backups/src/catalogue.ts`, opt in to the check from
-`reserveCapture` and both publication paths, in `test-free-paid` and `test-venue-levels`.
-Give `active()` a snapshot-write option so the check runs after plan authority and before
-installation and location locks. Reuse `LifecycleStore.readExitRecovery` in the caller's
-transaction. Refuse with `backup.permission_denied` if the reader refuses or returns a window.
-It locks the venue and lifecycle rows in the same order as the first cancellation and reads
-the current database time after waiting. A scheduled future end still permits admission.
-Recheck before inserting a capture or publishing a point so an end reached during a lock wait
-or legacy storage write takes effect. The signed grant's second reservation check withholds any
+**Snapshot admission.** In `packages/backups/src/catalogue.ts`, use the existing
+`LifecycleStore.readExitRecovery` from `reserveCapture` and both publication paths in
+`test-free-paid` and `test-venue-levels`. Both plans already lock the venue before taking
+the installation and storage location locks. Run the lifecycle read once after those locks
+in each reservation and venue-level publication transaction. Refuse with
+`backup.permission_denied` if the reader refuses or returns a window. It reads the current
+database time after waiting, so a scheduled future end still permits admission. The older
+publication path checks before copying and again before inserting the point so a scheduled end
+reached during the storage write takes effect. The signed grant's second reservation withholds any
 URL or credentials obtained during cancellation. The venue-level publication's second
 transaction refuses if cancellation committed during the copy. A publish replay after end also
 refuses. Existing credentials expire normally, and existing capture cleanup handles copies
