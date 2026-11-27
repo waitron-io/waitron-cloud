@@ -26,6 +26,8 @@ The [signing plan](2026-11-27-paid-venue-email-signing.md) adds a test operator 
 
 ## 2c. Send from the verified domain
 
+The [sender selection plan](2026-11-27-paid-venue-email-sender-selection.md) starts with local relay capture using the operator’s saved signing result. That plan has its own estimate. The remaining SES delivery and verification refresh still need a plan.
+
 Use the venue From only when its records match and SES confirms the sender. Confirmed loss restores the Waitron sender and queues an owner notice. Keep the last confirmed state through transient failures. Reuse worker retry after explicit rejection before acceptance. Extend `smtp-mailer.ts`, `relay-ses-smtp.ts`, `mail-attempts.ts` and SES feedback for each send’s identity. Test fallback, retry and feedback attribution. About 200–300 product and 120–180 test lines.
 
 ## 3. Give the box its contract
