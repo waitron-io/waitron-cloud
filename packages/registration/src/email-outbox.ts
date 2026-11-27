@@ -68,12 +68,12 @@ export class EmailOutbox {
     return rows.map(row=>row.id);
   }
 
-  async enqueueVenueSigningLoss(client:PoolClient,venueId:string,organisationId:string){
+  async enqueueVenueSigningLoss(client:PoolClient,venueId:string,organisationId:string,domain:string){
     const {rows}=await client.query<{accountId:string;email:string;locale:'en'|'es'}>(`SELECT a.id AS "accountId",c.email,COALESCE(p.locale,'en') AS locale
       FROM organisation_memberships m JOIN cloud_accounts a ON a.id=m.account_id JOIN cloud_credentials c ON c.account_id=a.id
       LEFT JOIN account_alert_preferences p ON p.account_id=a.id
       WHERE m.organisation_id=$1 AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL`,[organisationId]);
-    for(const owner of rows)await this.enqueue(client,'venue_signing_lost',{...owner,venueId,organisationId});
+    for(const owner of rows)await this.enqueue(client,'venue_signing_lost',{...owner,venueId,organisationId,domain});
   }
 
   async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail | SignupVolumeNotice | AddressCapNotice | VenueSigningNotice): Promise<string> {
@@ -84,8 +84,8 @@ export class EmailOutbox {
     let content: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail | SignupVolumeNotice | AddressCapNotice | VenueSigningNotice = {email: message.email};
     if(kind==='venue_signing_lost'){
       if(!validVenueSigningNotice(message))throw new Error('Invalid queued email');
-      const {email,accountId,organisationId,venueId}=message;
-      content={email,accountId,organisationId,venueId};
+      const {email,accountId,organisationId,venueId,domain}=message;
+      content={email,accountId,organisationId,venueId,domain};
       expiresAt=(await client.query("SELECT clock_timestamp()+interval '24 hours' AS expiry")).rows[0].expiry;
     } else if(kind==='owner_transfer'){
       if(!validOwnerTransferMail(message))throw new Error('Invalid queued email');

@@ -87,6 +87,7 @@ test('only a definitive signing check changes the saved result',async t=>{
  const venueId=f.db.venues[0]!,selector=await f.choose();
  const outbox=new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}});
  const run=(options:Partial<typeof f.options>={})=>runVenueMailSigning(f.db.pool,venueId,{...f.options,outbox,...options});
+ const diagnostic=t.mock.method(console,'error',()=>{});
  const verified=async()=>(await f.db.pool.query('SELECT * FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rows[0].verified;
  assert.equal(await run(),'verified');
  assert.equal(await verified(),true);
@@ -95,6 +96,12 @@ test('only a definitive signing check changes the saved result',async t=>{
  assert.equal(await run(),'pending');
  assert.equal(await run({resolveCname:async()=>{throw Object.assign(Error('timeout'),{code:'ETIMEOUT'});}}),'awaiting_dns');
  assert.equal(await verified(),true);
+ f.identities.set(domain,{...identity,verified:false,lost:true});
+ assert.equal(await run(),'held');
+ assert.equal(await verified(),false);
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes('lost signing verification')));
+ f.identities.set(domain,identity);
+ assert.equal(await run(),'verified');
  f.identities.delete(domain);
  assert.equal(await run(),'held');
  assert.equal(await verified(),false);
@@ -134,7 +141,6 @@ test('the signing command requires test mode and can inspect a production venue 
   CLOUD_VENUE_MAIL_DNS_ZONE_ID:'Z123',
   CLOUD_VENUE_MAIL_SES_REGION:'eu-north-1',
   CLOUD_VENUE_MAIL_TEST_DOMAINS:domain,
-  CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify({test:'a'.repeat(64)}),
  };
  const run=(extra:NodeJS.ProcessEnv,venueId=db.production)=>spawnSync(process.execPath,['src/venue-mail-signing-cli.ts',venueId],{
   env:{...env,...extra},encoding:'utf8',timeout:5000,

@@ -9,7 +9,7 @@ test('SES signing creates a tagged external identity and reads its exact status 
  const domain='venue.example.test', selector='11111111-1111-4111-8111-111111111111';
  const tag='22222222-2222-4222-8222-222222222222', privateKey='synthetic-private-key';
  const path='/v2/email/identities', calls:{method:string;url:string;input?:unknown}[]=[];
- let exists=false,createFailure:{status:number;type?:string}|undefined;
+ let exists=false,dkimStatus='SUCCESS',verifiedForSending=true,createFailure:{status:number;type?:string}|undefined;
  const server=createServer(async(req,res)=>{
   let body='';for await(const chunk of req)body+=chunk;
   calls.push({method:req.method!,url:req.url!,...(body?{input:JSON.parse(body)}:{})});
@@ -25,9 +25,9 @@ test('SES signing creates a tagged external identity and reads its exact status 
    res.statusCode=404;res.setHeader('x-amzn-errortype','NotFoundException');
    res.end(JSON.stringify({message:'Identity absent'}));return;
   }
-  res.end(JSON.stringify({IdentityType:'DOMAIN',VerifiedForSendingStatus:true,
+  res.end(JSON.stringify({IdentityType:'DOMAIN',VerifiedForSendingStatus:verifiedForSending,
    Tags:[{Key:'waitron-venue-mail',Value:tag}],
-   DkimAttributes:{SigningAttributesOrigin:'EXTERNAL',SigningEnabled:true,Status:'SUCCESS',Tokens:[selector]}}));
+   DkimAttributes:{SigningAttributesOrigin:'EXTERNAL',SigningEnabled:true,Status:dkimStatus,Tokens:[selector]}}));
  });
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  const address=server.address();assert.ok(address&&typeof address!=='string');
@@ -60,4 +60,11 @@ test('SES signing creates a tagged external identity and reads its exact status 
  createFailure={status:409,type:'AlreadyExistsException'};
  await assert.rejects(ses.create(domain,selector,tag,privateKey),{name:'AlreadyExistsException'});
  assert.equal(calls.filter(call=>call.method==='POST').length,7);
+ exists=true;verifiedForSending=false;
+ for(const [status,lost] of [['FAILED',true],['SUCCESS',true],['PENDING',false],['TEMPORARY_FAILURE',false]] as const){
+  dkimStatus=status;
+  const result=await ses.read(domain);
+  assert.equal(result?.verified,false,status);
+  assert.equal(Boolean(result?.lost),lost,status);
+ }
 });

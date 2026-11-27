@@ -20,7 +20,8 @@ try{
   console.error('Supply one test venue ID, a database URL and the venue mail signing settings.');
   process.exitCode=1;
  }else{
-  const outbox=new EmailOutbox({activeKeyId:env.CLOUD_EMAIL_ACTIVE_KEY_ID??'',keys:JSON.parse(env.CLOUD_EMAIL_KEYS??'{}')});
+  const outbox=env.CLOUD_EMAIL_ACTIVE_KEY_ID&&env.CLOUD_EMAIL_KEYS
+   ?new EmailOutbox({activeKeyId:env.CLOUD_EMAIL_ACTIVE_KEY_ID,keys:JSON.parse(env.CLOUD_EMAIL_KEYS)}):undefined;
   pool=new Pool({connectionString:env.DATABASE_URL,max:2,connectionTimeoutMillis:5000,statement_timeout:10000});
   ses=createSesSigningProvider({region});
   dns=createRoute53MailDnsProvider({zoneId,suffix});
@@ -28,8 +29,10 @@ try{
   console.log(result);
   if(result==='held')console.error('Check the configured provider scope, the saved SES identity tag and the exact signing TXT record before retrying.');
  }
-}catch{
- console.error('Venue signing failed. Check the test configuration and rerun to read provider state.');
+}catch(error){
+ console.error(error instanceof Error&&error.message==='venue_signing_mail_keys_required'
+  ?'Set CLOUD_EMAIL_ACTIVE_KEY_ID and CLOUD_EMAIL_KEYS before verifying a venue sender.'
+  :'Venue signing failed. Check the test configuration and rerun to read provider state.');
  process.exitCode=1;
 }finally{
  ses?.close();

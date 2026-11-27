@@ -28,8 +28,8 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if(kind==='venue_signing_lost'){
     if(!validVenueSigningNotice(message))throw new Error('Invalid account email');
     const subject=locale==='es'?'Tu dominio de correo dejó de verificarse':'Your email domain is no longer verified';
-    const detail=locale==='es'?'El correo del personal usa la dirección de Waitron. Revisa tus registros de correo en Acceso remoto.'
-      :'Staff email uses the Waitron address. Check your email records in Remote access.';
+    const detail=locale==='es'?`El correo del personal de ${message.domain} usa la dirección de Waitron. Revisa tus registros de correo en Acceso remoto.`
+      :`Staff email for ${message.domain} uses the Waitron address. Check your email records in Remote access.`;
     const link=new URL('/account',origin);
     link.hash=new URLSearchParams({lang:locale}).toString();
     return {subject,text:`${detail}\n${link.href}`};

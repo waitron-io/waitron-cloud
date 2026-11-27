@@ -17,7 +17,7 @@ interface SigningOptions {
  config:VenueMailSigningConfig;
  ses:Omit<ReturnType<typeof createSesSigningProvider>,'close'>;
  dns:Omit<ReturnType<typeof createRoute53MailDnsProvider>,'close'>;
- outbox:EmailOutbox;
+ outbox?:EmailOutbox;
  resolveCname?:ResolveCname;
  resolveTxt?:ResolveTxt;
 }
@@ -105,6 +105,7 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   if(!choice||!ownsChoice(claim,choice))return retireClaim(pool,venueId,claim,options);
  }
  if(!choice)return 'ineligible';
+ if(!outbox)throw new Error('venue_signing_mail_keys_required');
  const alias=venueMailAlias(choice.domain,choice.selector,config.suffix);
  const hasAlias=async()=>{
   const targets=await publicRecords(boundedResolveCname(alias.name,resolveCname));
@@ -113,17 +114,19 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
  const saveResult=async(verified:boolean)=>{
   const tag=claim?.tag;
   if(!tag)return false;
-  return transaction(pool,async client=>{
-   if(!sameChoice(choice,await readChoice(client,venueId,config)))return false;
+  const previous=await transaction(pool,async client=>{
+   if(!sameChoice(choice,await readChoice(client,venueId,config)))return;
    const saved=(await client.query<{verified:boolean}>(`SELECT verified FROM venue_mail_signing
     WHERE venue_id=$1 AND tag=$2 FOR UPDATE`,[venueId,tag])).rows[0];
-   if(!saved)return false;
+   if(!saved)return;
    if(saved.verified!==verified){
     await client.query('UPDATE venue_mail_signing SET verified=$2 WHERE venue_id=$1',[venueId,verified]);
-    if(!verified)await outbox.enqueueVenueSigningLoss(client,venueId,choice.organisation);
+    if(!verified)await outbox.enqueueVenueSigningLoss(client,venueId,choice.organisation,choice.domain);
    }
-   return true;
+   return saved;
   });
+  if(previous?.verified&&!verified)console.error(`Venue ${venueId} lost signing verification. Local staff mail uses the Waitron sender.`);
+  return !!previous;
  };
  const aliasMatches=await hasAlias();
  if(aliasMatches!==true){
@@ -149,7 +152,7 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   identity=await ses.read(claim.domain);
   record=await dns.read(alias.value,claim.public_key);
  }
- if(!identity||identity.tag!==claim.tag||!identity.external||
+ if(!identity||identity.lost||identity.tag!==claim.tag||!identity.external||
    identity.selectors.length!==1||identity.selectors[0]!==claim.selector||record==='different'){
   await saveResult(false);
   return 'held';

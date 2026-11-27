@@ -13,11 +13,13 @@ export function createSesSigningProvider(config:SESv2ClientConfig){
    try{
     const identity=await client.send(new GetEmailIdentityCommand({EmailIdentity:domain}),deadline());
     const dkim=identity.DkimAttributes;
+    const lost=dkim?.Status==='FAILED'||(dkim?.Status==='SUCCESS'&&identity.VerifiedForSendingStatus===false);
     return {
      tag:identity.Tags?.find(tag=>tag.Key===claimTag)?.Value,
      selectors:dkim?.Tokens??[],
      external:dkim?.SigningAttributesOrigin==='EXTERNAL'&&dkim.SigningEnabled===true,
      verified:identity.IdentityType==='DOMAIN'&&identity.VerifiedForSendingStatus===true&&dkim?.Status==='SUCCESS',
+     ...(lost?{lost:true as const}:{}),
     };
    }catch(error){
     if(error instanceof NotFoundException)return null;

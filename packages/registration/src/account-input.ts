@@ -38,11 +38,12 @@ export interface SignupVolumeNotice extends AccountNotification {
 
 const noticeId=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 
-export interface VenueSigningNotice extends AccountNotification {accountId:string;organisationId:string;venueId:string}
+export interface VenueSigningNotice extends AccountNotification {accountId:string;organisationId:string;venueId:string;domain:string}
 export function validVenueSigningNotice(message:AccountNotification):message is VenueSigningNotice {
  return 'accountId' in message&&typeof message.accountId==='string'&&noticeId.test(message.accountId)
   &&'organisationId' in message&&typeof message.organisationId==='string'&&noticeId.test(message.organisationId)
-  &&'venueId' in message&&typeof message.venueId==='string'&&noticeId.test(message.venueId);
+  &&'venueId' in message&&typeof message.venueId==='string'&&noticeId.test(message.venueId)
+  &&'domain' in message&&typeof message.domain==='string'&&normaliseEmail(`mail@${message.domain}`)===`mail@${message.domain}`;
 }
 
 export function validSignupVolumeNotice(message: AccountNotification): message is SignupVolumeNotice {

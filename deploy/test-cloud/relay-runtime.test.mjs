@@ -371,7 +371,9 @@ test('box-signed staff mail uses verified venue From and falls back after confir
  assert.equal(await queuedNotices(),1);
  await send('relay@example.test');
  const notices=async()=>(await inbox()).filter(mail=>mail.To.some(to=>to.Address===owner)&&mail.Subject==='Tu dominio de correo dejó de verificarse');
- assert.equal((await notices()).length,1);
+ const delivered=await notices();assert.equal(delivered.length,1);
+ const notice=await (await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/message/${delivered[0].ID}`)).json();
+ assert.match(notice.Text,/cafe\.example\.test/);
 
  fake.alias(true);
  assert.equal(await check(),'verified');
