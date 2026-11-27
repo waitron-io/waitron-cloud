@@ -932,8 +932,10 @@ implementation or production evidence.
     when a rehearsal fails. The 26 November rehearsal completed all three stops and rejoins.
     The full restart reached the scratch marker check, which timed out before restore. A free
     Linux probe confirmed that the marker remained readable after verifier startup and cleanup.
-    Stockholm still needs to verify the full restart and restore.
     [Rehearsal and Linux probe evidence](superpowers/plans/2026-11-27-d621-scratch-witness.md#verification)
+    The launcher flushes the marker and its directory before cutting power. The marker survived
+    an abrupt power cut in a [Debian VM](superpowers/plans/2026-11-27-d621-flush-scratch-witness.md#verification).
+    Stockholm still needs to verify the full restart and restore.
   - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
     [Amazon verifier pin](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
     After stopping the database primary, the first fresh reserve must return a
