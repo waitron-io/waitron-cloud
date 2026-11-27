@@ -203,3 +203,70 @@ test('a definite refusal releases the claim for another signing attempt',async t
  f.options.ses.create=create;
  assert.equal(await f.run(),'verified');
 });
+
+test('signing requires a paid venue and a current installation',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
+ await set(f.db,'registered',venueId);
+ assert.equal(await f.run(),'ineligible','a registered venue cannot set up signing');
+ assert.deepEqual(f.writes,[]);
+
+ await set(f.db,'connected',venueId);
+ await f.db.pool.query('UPDATE installations SET revoked_at=now() WHERE venue_id=$1 AND revoked_at IS NULL',[venueId]);
+ assert.equal(await f.run(),'ineligible','a revoked installation cannot set up signing');
+ assert.deepEqual(f.writes,[]);
+});
+
+test('recheck the sender after DNS lookups before saving a signing claim',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
+ const read=f.options.dns.read;
+ f.options.dns.read=async(...args)=>{
+  await f.db.pool.query('UPDATE venues SET waitron_mail_from=$2 WHERE id=$1',[venueId,'changed@'+domain]);
+  return read(...args);
+ };
+ assert.equal(await f.run(),'held');
+ assert.deepEqual(f.writes,[]);
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing')).rowCount,0);
+});
+
+test('a sender reset during identity creation prevents DNS publication',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
+ const create=f.options.ses.create;
+ f.options.ses.create=async(...args)=>{
+  const result=await create(...args);
+  await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
+  return result;
+ };
+ assert.equal(await f.run(),'held');
+ assert.deepEqual(f.writes,['ses create']);
+});
+
+test('a sender that changes during DNS verification is held',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
+ const resolveTxt=f.options.resolveTxt;
+ f.options.resolveTxt=async name=>{
+  const records=await resolveTxt(name);
+  await f.db.pool.query('UPDATE venues SET waitron_mail_from=$2 WHERE id=$1',[venueId,'changed@'+domain]);
+  return records;
+ };
+ assert.equal(await f.run(),'held');
+ assert.deepEqual(f.writes,['ses create','dns create']);
+});
+
+test('keep the TXT record until SES confirms identity deletion',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!,selector=await f.choose();
+ assert.equal(await f.run(),'verified');
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
+ f.options.ses.remove=async()=>{};
+ assert.equal(await f.run(),'held');
+ assert.ok(f.txt.has(selector+'.mail.'+suffix));
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing')).rowCount,1);
+});

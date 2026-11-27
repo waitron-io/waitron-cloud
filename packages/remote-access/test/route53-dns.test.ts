@@ -14,7 +14,7 @@ test('creates and removes only the exact mail TXT in the configured public zone'
  const publicKey='A'.repeat(390)+'==',txt='v=DKIM1; k=rsa; p='+publicKey;
  const xml='xmlns="https://route53.amazonaws.com/doc/2013-04-01/"';
  const change='<ChangeInfo><Id>/change/C1</Id><Status>INSYNC</Status><SubmittedAt>2026-11-06T00:00:00Z</SubmittedAt></ChangeInfo>';
- const requests:{url:string;body:string}[]=[];let zone='test.waitron.io.',stored='';
+ const requests:{url:string;body:string}[]=[];let zone='test.waitron.io.',stored='',uncertainWrite=false;
  const server=createServer(async(req,res)=>{
   let body='';for await(const part of req)body+=part;
   requests.push({url:req.url!,body});
@@ -27,6 +27,9 @@ test('creates and removes only the exact mail TXT in the configured public zone'
    const records=stored?`<ResourceRecordSet><Name>${name.toUpperCase()}.</Name><Type>TXT</Type><TTL>60</TTL><ResourceRecords><ResourceRecord><Value>${stored}</Value></ResourceRecord></ResourceRecords></ResourceRecordSet>`:
     '<ResourceRecordSet><Name>other.mail.test.waitron.io.</Name><Type>TXT</Type><TTL>60</TTL></ResourceRecordSet>';
    res.end(`<ListResourceRecordSetsResponse ${xml}><ResourceRecordSets>${records}</ResourceRecordSets><IsTruncated>false</IsTruncated><MaxItems>1</MaxItems></ListResourceRecordSetsResponse>`);
+  }else if(uncertainWrite){
+   res.statusCode=500;
+   res.end(`<ErrorResponse ${xml}><Error><Code>InternalFailure</Code><Message>Uncertain write</Message></Error></ErrorResponse>`);
   }else{
    stored=body.includes('<Action>DELETE</Action>')?'':body.match(/<Value>([^<]+)<\/Value>/)![1]!;
    res.end(`<ChangeResourceRecordSetsResponse ${xml}>${change}</ChangeResourceRecordSetsResponse>`);
@@ -35,7 +38,7 @@ test('creates and removes only the exact mail TXT in the configured public zone'
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  const address=server.address();assert.ok(address&&typeof address!=='string');
  const dns=adapter.createRoute53MailDnsProvider({zoneId:'Z123',suffix:'test.waitron.io'},
-  {endpoint:'http://127.0.0.1:'+address.port,credentials:{accessKeyId:'test',secretAccessKey:'test'}});
+  {endpoint:'http://127.0.0.1:'+address.port,credentials:{accessKeyId:'test',secretAccessKey:'test'},maxAttempts:3});
  t.after(async()=>{dns.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
  zone='other.example.test.';
  await assert.rejects(dns.checkZone(),/invalid_mail_dns_zone/);
@@ -55,6 +58,10 @@ test('creates and removes only the exact mail TXT in the configured public zone'
  const remove=requests.find(request=>request.body.includes('<Action>DELETE</Action>'))?.body;
  assert.equal(remove,create.replace('<Action>CREATE</Action>','<Action>DELETE</Action>'));
  assert.equal(await dns.read(name,publicKey),'absent');
+ uncertainWrite=true;
+ const before=requests.length;
+ await assert.rejects(dns.create(name,publicKey));
+ assert.equal(requests.length-before,1,'an uncertain provider write must not be retried');
 });
 async function fixture(maxAttempts=1,type:'TXT'|'CNAME'='TXT'){
  const requests:{method:string;path:string;body:string}[]=[],records=new Map<string,string>();let pending=0,denied=false,deniedGet=false,hang=false,hangGet=false,missingId=false;const errors:unknown[]=[],observers:(()=>void)[]=[];

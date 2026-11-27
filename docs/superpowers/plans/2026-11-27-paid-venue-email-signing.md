@@ -1,6 +1,6 @@
 # Paid venue email signing in Cloud · slice 2b
 
-In local tests, an operator can run `venue-mail:signing <venue-id>` to set up, check or retire signing for a test venue. Rerun after DNS or Amazon Simple Email Service (SES) updates, a sender reset or an accepted transfer. In this slice the portal tick still confirms only that the alias points at the requested name. Setting up signing when the owner saves the address and showing signing status in the portal belong to later slice 2b work. Slice 2c owns switching the staff sender and falling back to the Waitron address. [Cloud plan](2026-11-25-paid-venue-email-cloud.md#2b-show-verified-domain-records) · [Domain records plan](2026-11-25-paid-venue-email-domain-records.md)
+Local tests with fake providers exercise setting up, checking and retiring signing for a test venue after DNS updates, a sender reset or an accepted transfer. The `venue-mail:signing <venue-id>` command contacts Amazon Simple Email Service (SES) and Route 53. Running it needs separate approval. In this slice the portal tick still confirms only that the alias points at the requested name. Setting up signing when the owner saves the address and showing signing status in the portal belong to later slice 2b work. Slice 2c owns switching the staff sender and falling back to the Waitron address. [Cloud plan](2026-11-25-paid-venue-email-cloud.md#2b-show-verified-domain-records) · [Domain records plan](2026-11-25-paid-venue-email-domain-records.md)
 
 ## PR 1. Create, check and retire signing
 
