@@ -27,7 +27,7 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
    await blocker.query(`CREATE TABLE ${schema}.remote_configuration_jobs (id integer)`);
    sql='';
   }else{
-   await blocker.query('SELECT pg_advisory_xact_lock(782,19)');
+   await blocker.query("SELECT 'private holder value', pg_advisory_xact_lock(782,19)");
    sql="SELECT 'private row value', pg_advisory_xact_lock(782,19)";
   }
   await assert.rejects(known?migrate(pool):observeSetup(pool,()=>pool.query(sql)),{code:'57014'});
@@ -43,8 +43,16 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
   assert.ok(sample.locks.some((lock:any)=>lock.granted===false));
   assert.equal(sample.locks.length,1,'held locks do not displace the waiting lock');
   assert.ok(sample.locks.every((lock:any)=>lock.granted===false));
+  assert.ok(report.database,'a PostgreSQL statement timeout must retain the server-wide snapshot');
+  assert.deepEqual(Object.keys(report.database).sort(),['activity','activityCount','capturedAt']);
+  const {activity,activityCount,capturedAt}=report.database;
+  assert.ok(activityCount>=activity.length);
+  assert.ok(Number.isFinite(Date.parse(capturedAt)));
+  assert.ok(activity.some((row:any)=>row.pid===blockerPid&&row.state==='idle in transaction'));
+  assert.ok(activity.some((row:any)=>row.backend_type==='checkpointer'));
   assert.ok(lines.join('').length<24000);
   assert.ok(!lines.join('').includes('private row value'));
+  assert.ok(!lines.join('').includes('private holder value'));
   assert.equal(pool.listenerCount('acquire'),0);
   assert.equal((await pool.query('SHOW statement_timeout')).rows[0].statement_timeout,'900ms');
  }finally{
@@ -56,6 +64,12 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
 test('successful setup stays silent and releases its observer',async t=>{
  const pool=new Pool({connectionString:url});const lines:unknown[]=[];const controller=new AbortController();
  const observerPids:number[]=[];
+ const query=Pool.prototype.query;
+ let snapshotReads=0;
+ t.mock.method(Pool.prototype,'query',function(this:Pool,...args:unknown[]){
+  if(this.options.application_name==='cloud-test-setup-observer'&&args[1]===undefined)snapshotReads++;
+  return Reflect.apply(query,this,args);
+ });
  const emit=Pool.prototype.emit;
  t.mock.method(Pool.prototype,'emit',function(this:Pool,event:string|symbol,...args:any[]){
   if(event==='connect'&&this.options.application_name==='cloud-test-setup-observer')observerPids.push(args[0].processID);
@@ -66,8 +80,19 @@ test('successful setup stays silent and releases its observer',async t=>{
   assert.equal(await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');return 17;},{signal:controller.signal}),17);
   controller.abort();await delay(0);
   assert.deepEqual(lines,[]);assert.equal(pool.listenerCount('acquire'),0);
+  assert.equal(snapshotReads,0,'passing setup must not request a server-wide snapshot');
   assert.ok(observerPids.length>0,'observe the real connections owned by this setup');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=ANY($1::int[])',[observerPids])).rows[0].n,0);
+ }finally{await pool.end();}
+});
+
+test('cancelling a query explicitly omits the timeout snapshot',async t=>{
+ const pool=new Pool({connectionString:url}),lines:string[]=[];
+ t.mock.method(console,'error',(line:string)=>lines.push(line));
+ try{
+  await assert.rejects(observeSetup(pool,()=>pool.query('SELECT pg_cancel_backend(pg_backend_pid()), pg_sleep(1)')),
+   {code:'57014',message:'canceling statement due to user request'});
+  assert.ok(!Object.hasOwn(JSON.parse(lines[0]!),'database'),'an explicit cancellation must not capture server data');
  }finally{await pool.end();}
 });
 
@@ -94,7 +119,10 @@ test('migration setup retains the advisory wait before rollback and still migrat
 
 test('unavailable observer and throwing reporter cannot replace a setup failure',async t=>{
  const pool=new Pool({connectionString:url});const previous=process.env.TEST_DATABASE_URL;
- const original=new Proxy({}, {get(){assert.fail('diagnostics read the setup error');}});
+ const original=new Proxy({}, {
+  get(){assert.fail('diagnostics read the setup error');},
+  getPrototypeOf(){throw new Error('type inspection failed');},
+ });
  const lines:string[]=[];
  t.mock.method(console,'error',(line:string)=>{lines.push(line);throw new Error('reporter refused');});
  process.env.TEST_DATABASE_URL='postgres://synthetic:synthetic@127.0.0.1:1/unavailable';
@@ -103,6 +131,7 @@ test('unavailable observer and throwing reporter cannot replace a setup failure'
   try{await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');throw original;});}catch(error){caught=error;}
   assert.equal(caught,original);
   assert.equal(JSON.parse(lines[0]!).unavailable,true);
+  assert.equal(JSON.parse(lines[0]!).database,undefined,'a non-timeout failure must not capture server data');
   assert.equal(pool.listenerCount('acquire'),0);
  }finally{process.env.TEST_DATABASE_URL=previous;await pool.end();}
 });

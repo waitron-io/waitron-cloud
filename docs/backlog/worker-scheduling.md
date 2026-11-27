@@ -38,8 +38,18 @@ later failed migrations 035 (5,000 ms) and 024 (10,000 ms) on shard 3 and killed
 blocked-transaction shutdown case with SIGKILL. Nothing joins these, and passing reruns and
 Debian runs repair none of them.
 
-Keep every cap and exit assertion. On recurrence, read the `cloud-test-setup-waits` report
-beside the migration stage (exercise it with
-`node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/setup-wait-diagnostics.test.ts`),
-and capture runner health separately. Lock contention, slow storage and runner scheduling are
-unproved explanations.
+The [27 November main run](https://github.com/waitron-io/waitron-cloud/actions/runs/45979089526/job/140438311840)
+hit `57014` in migrations 035, 045 and 016 on shard 5. Two reports sampled repeated
+`WALWrite` waits. A [disk-pressure run](https://github.com/waitron-io/waitron-cloud/actions/runs/45987713054/job/140467459086)
+passed all 346 cases. The waiting process was observed, and the writer and its storage latency are still unknown.
+Each registration shard job starts its own PostgreSQL server. The disk-pressure
+run observed three file workers sharing that server, with `fsync`,
+`synchronous_commit` and `full_page_writes` on and `wal_sync_method=fdatasync`.
+
+On recurrence, read `cloud-test-setup-waits` beside the migration stage. Its `database`
+snapshot records when it was taken, up to 24 live processes and the total that
+matched. It follows cancellation, so use the earlier `samples` to see what the
+timed-out process was waiting for. If the new snapshot shows contention, compare
+the active sessions and their wait events with those earlier samples. You can
+exercise both
+with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/setup-wait-diagnostics.test.ts`.
