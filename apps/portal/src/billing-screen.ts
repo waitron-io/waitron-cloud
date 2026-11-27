@@ -49,7 +49,7 @@ export function billingScreen(app:PortalApp){
    <dl><dt>${c.billingBackupCutoff}</dt><dd>${timestamp(backupEnd.effectiveEndAt)}</dd>
     <dt>${c.billingBackupDeadline}</dt><dd>${timestamp(backupEnd.deadlineAt)}</dd></dl>
    ${confirming?html`<p>${c.billingBackupFixed}</p><div class="factor-actions">
-    <wt-button .disabled=${disabled} @click=${()=>{void controller.confirmBackupEnd(venue);}}>${c.billingBackupConfirm}</wt-button>
+    <wt-button .disabled=${disabled} @click=${()=>{void controller.confirmBackupEnd(venue,()=>app.actionProof.load());}}>${c.billingBackupConfirm}</wt-button>
     <wt-button @click=${()=>{controller.cancelBackupEnd();app.root.querySelector<HTMLElement>('#billing-backup-open')?.shadowRoot?.querySelector('button')?.focus();}}>${c.billingBackupCancel}</wt-button>
    </div>`:nothing}
   </section>`:html`<wt-button id="billing-backup-open" .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.prepareBackupEnd();}}>${c.billingBackupSchedule}</wt-button>`):nothing}

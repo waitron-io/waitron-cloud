@@ -51,7 +51,7 @@ export class BillingController{
   this.#changed();
  }
  cancelBackupEnd(){this.backupEndConfirmation=undefined;this.#changed();}
- async confirmBackupEnd(venue:BillingVenue){
+ async confirmBackupEnd(venue:BillingVenue,refreshProof?:()=>Promise<unknown>){
   const backupEnd=venue.backupEnd,generation=this.#generation,venueId=venue.venueId;
   if(this.venue!==venue||!backupEnd||backupEnd.scheduled||this.pending||this.waiting)return;
   this.backupEndConfirmation=undefined;this.pending=true;this.loadAttempted=false;this.error=undefined;this.#changed();
@@ -62,6 +62,7 @@ export class BillingController{
    this.venues=this.venues.map(item=>item===venue?{...venue,backupEnd:{...backupEnd,scheduled:true}}:item);
   }else if(!result.ok&&(result.code==='proof_required'||result.code==='enrollment_required')){
    this.error=result.code==='proof_required'?'billingBackupProof':'billingBackupEnrollment';
+   await refreshProof?.();
   }else if(result.ok||result.status===0||result.status===409||result.status>=500){
    if(!result.ok)this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
    this.venues=this.venues.map(item=>item===venue?{...venue,backupEnd:undefined}:item);

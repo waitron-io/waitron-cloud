@@ -98,7 +98,7 @@ const enBase = {
   billingBackupFixed:'These dates are final, even if you add a payment method later.',
   billingBackupProof:'Verify it’s you, then choose Schedule end of test backups again.',billingBackupEnrollment:'Add a passkey or authenticator to schedule the end of test backups.',
   billingBackupUncertain:'We could not confirm the schedule. Check the current plan before trying again.',
-  billingBackupChanged:'Those backup dates are no longer available. Check the current plan.',
+  billingBackupChanged:'The schedule could not be saved. Check the current plan.',
 
   rememberBrowser:'Remember this browser (30 days)', rememberBrowserHelp:'Only on a browser you control.',
   emailCode:'Email code', emailOrRecoveryHelp:'Enter the email code, or choose a saved recovery code.', accountRecoveryHelp:'Save recovery codes in case you lose access to your passkeys. New codes replace the old ones and sign you out everywhere.', recoveryCodesChanged:'Your recovery codes changed. Sign in again.',
@@ -503,7 +503,7 @@ const esBase: typeof enBase = {
   billingBackupFixed:'Estas fechas son definitivas, aunque añadas un método de pago más adelante.',
   billingBackupProof:'Verifica que eres tú y vuelve a elegir Programar el fin de las copias de prueba.',billingBackupEnrollment:'Añade una llave de acceso o una aplicación de autenticación para programar el fin de las copias de prueba.',
   billingBackupUncertain:'No hemos podido confirmar las fechas. Revisa el plan actual antes de volver a intentarlo.',
-  billingBackupChanged:'Esas fechas ya no están disponibles. Revisa el plan actual.',
+  billingBackupChanged:'No se han guardado las fechas. Revisa el plan actual.',
 
   rememberBrowser:'Recordar este navegador (30 días)', rememberBrowserHelp:'Solo en un navegador que controles.',
   emailCode:'Código del correo', emailOrRecoveryHelp:'Introduce el código del correo o elige un código de recuperación guardado.', accountRecoveryHelp:'Guarda códigos de recuperación por si pierdes tus llaves de acceso. Los nuevos sustituyen a los anteriores y cierran todas tus sesiones.', recoveryCodesChanged:'Tus códigos de recuperación han cambiado. Vuelve a iniciar sesión.',
