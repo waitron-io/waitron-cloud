@@ -312,12 +312,10 @@ An allowlisted owner can schedule the backup cutoff and download deadline in
 [Test Cloud Billing](test-cloud.md) at the end of a Connected trial.
 Billing’s future unpaid-expiry step sets the unpaid-trial deadline by writing the
 existing cancel instruction at expiry. Paid-month cancellation still needs a
-reachable settled-payment path. In the disposable
-[offline return rehearsal](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online),
-the saved archive and key opened and the saved SQLite files passed integrity checks.
-Ordinary restore placed both databases and completed migrations, then the filing
-module refused without outside allocation authority. Full return still needs qualification for
-instructed recovery and installations with separate vault keys. The design also
+reachable settled-payment path. The [offline guide](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
+covers reading the saved database and the observed restore refusal. Full return still
+needs a rehearsal with outside authority to start a new invoice series and a separate
+vault key where the source installation uses one. The design also
 tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).

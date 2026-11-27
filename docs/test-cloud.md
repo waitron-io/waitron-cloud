@@ -1194,10 +1194,11 @@ opening of the matching encrypted archive and recovery key.
 Ordinary Waitron restore also checks whether a replacement can use the saved
 fiscal state. In an isolated synthetic run, the same archive and key placed both
 databases and the restore completed its migrations. The filing module then stopped
-because the replacement had no allocation authority from outside the archive. Keep the
-[filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/developers/offline-fiscal-restore.md)
-with your recovery material. A separate vault key, where required by the source
-installation, also needs its own recovery path.
+with `restore.hook_failed (module fiscal-verifactu: sif.allocation_invalid)` because
+the replacement had no authority from outside the archive to start a new invoice
+series. A separate vault key, where required by the source installation, also needs
+its own recovery path. Keep the [filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/operations/hour-recovery.md#check-the-selected-copy)
+with your recovery material.
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `71daa2410af1c50c3a23429596ae0fb0ef62f552`. This client uses the pairing proof
