@@ -52,13 +52,13 @@ and stale queued runs, and an owned stuck cancel. The watcher held new code for 
 five-minute untaken-job rule (13 November 07:02) until a real case is measured; reverse
 movement waits for one too. Main pushes, schedules and manual runs still need hand moves.
 
-## Keep the private shared UI release current (D579)
+## Keep the private shared packages current (D579)
 
-For future UI releases, verify the published source, review actual Cloud consumers,
+For future UI and signing releases, verify the published source, review actual Cloud consumers,
 approve the immutable archive and publish matching test-host support before adoption.
-Both consumers must install the same release and pass authenticated CI. Follow the
-[release guide](shared-ui-release.md); source/archive review and host publication
-remain human work.
+The portal and UI smoke fixture must install the same UI release. The registration
+package pins the signing release. Follow the [release guide](shared-ui-release.md)
+for authenticated CI, archive review and test-host publication.
 
 ## Shared storage-test seed downloads (D585)
 
