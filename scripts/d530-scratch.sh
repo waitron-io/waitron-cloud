@@ -18,8 +18,10 @@ data_directory=$(timeout 5s "${psql[@]}" -c 'SHOW data_directory')
 mount=$(timeout 5s docker inspect -f '{{range .Mounts}}{{println .Source .Destination}}{{end}}' "$container")
 printf 'D530 database directory and Docker mounts\n%s\n%s\n' "$data_directory" "$mount"
 timeout 5s docker exec "$container" sh -ec 'readlink -f "$1/pg_wal"; df -T "$1" "$1/pg_wal"' sh "$data_directory"
+wal_mount=
 while read -r source destination; do
   if [[ -n $source && $data_directory == "$destination"* ]]; then
+    wal_mount=$source
     timeout 5s sudo -n findmnt -T "$source" -o TARGET,SOURCE,FSTYPE,MAJ:MIN || printf 'D530 host mount lookup failed (%s)\n' "$?"
   fi
 done <<< "$mount"
@@ -51,14 +53,16 @@ timeout 420s bash -c '
     printf "D530 runner %s\n" "$(date -u +%FT%T.%3NZ)"
     awk "{print FILENAME, \$0}" /proc/pressure/cpu /proc/pressure/io
     awk "\$3 !~ /^(loop|ram)/ {print \"disk\",\$0}" /proc/diskstats
-    ps -eo comm,args | awk "\$1 == \"node\" && NF == 3 && \$3 ~ /^test\\/.*\\.test\\.ts\$/ {workers++; if (\$3 ~ /(relay-grants|ses-feedback-bounds)/) print \"fixture worker\",\$3} END {print \"file workers\",workers+0}"
+    ps -eww -o args= | awk "\$1 ~ /(^|\\/)node\$/ && \$(NF-1) == \"--test-timeout=30000\" && \$NF ~ /(^|\\/)test\\/[^/]+\\.test\\.ts\$/ {workers++; if (\$NF ~ /(relay-grants|ses-feedback-bounds)/) print \"fixture worker\",\$NF} END {print \"file workers\",workers+0}"
     sleep 2
   done
 ' &
 host_sampler=$!
 
+pressure_dir=
+pressure_pids=()
 cleanup() {
-  for sampler in "$db_sampler" "$host_sampler"; do
+  for sampler in "${pressure_pids[@]}" "$db_sampler" "$host_sampler"; do
     if kill -0 "$sampler" 2>/dev/null; then
       kill "$sampler" 2>/dev/null || true
       wait "$sampler" 2>/dev/null || true
@@ -66,8 +70,33 @@ cleanup() {
       wait "$sampler" || printf 'D530 sampler exited early (%s)\n' "$?"
     fi
   done
+  if [[ -n $pressure_dir ]]; then
+    python3 - "$pressure_dir" <<'PYTHON'
+from pathlib import Path
+from sys import argv
+
+folder = Path(argv[1])
+for filename in ("writer-1", "writer-2"):
+    (folder / filename).unlink(missing_ok=True)
+folder.rmdir()
+PYTHON
+  fi
 }
 trap cleanup EXIT
+
+if [[ ${D530_DISK_PRESSURE:-} == true ]]; then
+  [[ -n $wal_mount ]]
+  pressure_dir=$(mktemp -d "$RUNNER_TEMP/d530-io.XXXXXX")
+  [[ $(stat -c %d "$pressure_dir") == "$(sudo -n stat -c %d "$wal_mount")" ]]
+  printf 'D530 disk pressure starts at %s: two 32 MiB files, direct synchronous writes, 180-second cap\n' "$(date -u +%FT%T.%3NZ)"
+  for writer in 1 2; do
+    timeout --kill-after=2s 180s bash -c '
+      while dd if=/dev/zero of="$1" bs=4096 count=8192 oflag=direct,dsync status=none; do :; done
+      exit 1
+    ' d530-writer "$pressure_dir/writer-$writer" &
+    pressure_pids+=("$!")
+  done
+fi
 
 printf 'D530 shard start at %s\n' "$(date -u +%FT%T.%3NZ)"
 result=0
