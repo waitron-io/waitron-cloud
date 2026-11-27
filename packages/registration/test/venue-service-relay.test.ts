@@ -200,7 +200,7 @@ test('a reselected sender on the same domain cannot use an old signing selector'
  const worker=new RelayWorker(f.pool,{...f.config,smtpPort:s.port},mode);
  assert.equal(await worker.runOnce(),true);
  assert.equal((await f.row(body.messageId)).state,'accepted');
- assert.match(s.captured[0]!,/^From: Waitron <relay@example\.test>\r?$/m);
+ assert.equal(s.captured[0]?.split('\r\n').find(line=>line.startsWith('From: ')),'From: Waitron <relay@example.test>');
 });
 
 test('an owner can see and clear the active reply address after domain setup is disabled',async t=>{

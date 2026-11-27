@@ -367,6 +367,8 @@ test('box-signed staff mail uses verified venue From and falls back after confir
  fake.alias(false);
  assert.equal(await check(),'awaiting_dns');
  assert.equal(await check(),'awaiting_dns');
+ const queuedNotices=async()=>(await db.pool.query("SELECT count(*)::int AS n FROM email_outbox WHERE kind='venue_signing_lost' AND status='pending'")).rows[0].n;
+ assert.equal(await queuedNotices(),1);
  await send('relay@example.test');
  const notices=async()=>(await inbox()).filter(mail=>mail.To.some(to=>to.Address===owner)&&mail.Subject==='Tu dominio de correo dejó de verificarse');
  assert.equal((await notices()).length,1);
@@ -377,6 +379,7 @@ test('box-signed staff mail uses verified venue From and falls back after confir
  assert.equal(await check(),'awaiting_dns');
  await db.pool.query('UPDATE cloud_credentials SET email=$2 WHERE account_id=$1',[box.accountId,`${randomUUID()}@example.test`]);
  assert.equal(await runEmailEntrypoint(t,db,context),'completed');
+ assert.equal(await queuedNotices(),0);
  assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM email_outbox WHERE kind='venue_signing_lost' AND status='cancelled'")).rows[0].n,1);
  assert.equal((await notices()).length,1);
 });
