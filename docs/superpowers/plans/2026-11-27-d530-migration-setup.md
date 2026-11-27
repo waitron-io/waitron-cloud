@@ -36,7 +36,9 @@ Use one instrumented baseline and one matched control per hypothesis. If needed,
 change only file concurrency or apply bounded disk pressure inside the disposable
 CI job to reproduce the observed timeout and wait. Under the same conditions,
 check whether changing the implicated factor clears them. Use the shared CI
-failure rule for timing comparisons. Bring inconclusive evidence to the watcher.
+failure rule for timing comparisons. Keep the scratch workflow and sampler on
+the scratch branch. Record each run in Lane J's progress log. Bring the evidence
+to the watcher after two hours without a new finding, as the D620 rule requires.
 
 Change only the implicated test setup. Observe a needed regression check fail
 first, then pass it and the matched shard. Use `scripts/ci-test-postgres.test.mjs`
