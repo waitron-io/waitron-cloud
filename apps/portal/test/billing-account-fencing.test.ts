@@ -6,7 +6,30 @@ import type {BillingView} from '../src/billing-types.ts';
 
 const first='11111111-1111-4111-8111-111111111111',second='22222222-2222-4222-8222-222222222222';
 const view:BillingView={venues:[first,second].map(venueId=>({venueId,level:'registered',trial:null,canStartTrial:true}))};
+const backupDates={effectiveEndAt:'2026-12-07T00:00:00.000Z',deadlineAt:'2027-03-07T00:00:00.000Z'};
+const backupView={venues:[{...view.venues[0]!,backupEnd:{...backupDates,scheduled:false}},view.venues[1]!]};
 async function controller(request:typeof accountRequest){return new BillingController(()=>{},request);}
+test('an uncertain backup schedule reads saved dates without sending another confirmation',async()=>{
+ const calls:string[]=[];
+ const c=await controller(async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);
+  if(path.endsWith('schedule-test-backup-end'))return {ok:false,status:0,code:'network_error',retryAfterMs:0};
+  return {ok:true,value:(calls.length===1?backupView:{venues:[{...backupView.venues[0],backupEnd:{...backupDates,scheduled:true}}]}) as T};
+ });
+ c.account('owner');await c.load();await c.confirmBackupEnd(c.venue!);
+ assert.deepEqual(calls,['/billing/read','/billing/schedule-test-backup-end','/billing/read']);
+ assert.deepEqual(c.venue?.backupEnd,{...backupDates,scheduled:true});assert.equal(c.error,undefined);
+});
+for(const boundary of ['account','venue','page'] as const)test(`late backup schedule is ignored after changing ${boundary}`,async()=>{
+ let finish!:(value:ApiResult<unknown>)=>void;
+ const c=await controller(<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/read')?Promise.resolve({ok:true,value:backupView as T})
+  :new Promise(resolve=>{finish=resolve as typeof finish;}));
+ c.account('owner');await c.load();const pending=c.confirmBackupEnd(c.venue!);
+ if(boundary==='account')c.account('other');else if(boundary==='venue')c.select(second);else c.fence();
+ finish({ok:true,value:{venueId:first,...backupDates}});await pending;
+ assert.equal(c.venues.find(venue=>venue.venueId===first)?.backupEnd?.scheduled,boundary==='account'?undefined:false);
+ assert.equal(c.error,undefined);
+});
 test('billing chooser loads without installations and starts only the selected eligible venue',async()=>{
  const calls:unknown[]=[];
  const c=await controller(async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{

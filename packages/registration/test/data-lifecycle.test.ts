@@ -34,6 +34,16 @@ test('fixed_utc_deadline_survives_retry_restart',async()=>{
  assert.deepEqual(await new LifecycleStore(f.pool).read(f.venueId),first);
 });
 
+test('a caller can roll back both journal rows with its own transaction',async()=>{
+ const input=request();
+ await assert.rejects(transaction(f.pool,async client=>{
+  assert.deepEqual(await store.requestOn(client,input),{venueId:f.venueId,revision:1});
+  throw new Error('caller refused');
+ }),{message:'caller refused'});
+ assert.equal((await f.pool.query('SELECT 1 FROM data_lifecycles WHERE venue_id=$1',[f.venueId])).rowCount,0);
+ assert.equal((await f.pool.query('SELECT 1 FROM data_lifecycle_operations WHERE venue_id=$1',[f.venueId])).rowCount,0);
+});
+
 test('an omitted service end uses the database clock instead of the worker clock',async()=>{
  await f.pool.query("CREATE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '2027-01-01T12:00:00.000Z'::timestamptz$$");
  await store.request(request({effectiveEndAt:undefined}));

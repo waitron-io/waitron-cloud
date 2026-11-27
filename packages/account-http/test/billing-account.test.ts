@@ -1,11 +1,14 @@
 import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
+import {prepareConnectionProof,openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
+import {BackupKeyVault} from '../../backups/src/keys.ts';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
+import {Pool} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
 import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
-import {BillingPriceStore,BillingStore,transaction,type PlanMode} from '@waitron-cloud/registration';
+import {BillingPriceStore,BillingStore,LifecycleStore,createLeaseIssuer,transaction,type PlanMode} from '@waitron-cloud/registration';
 import {database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -40,6 +43,83 @@ async function billingRows(organisationId:string){
   result[table]=(await db.pool.query(`SELECT to_jsonb(t) AS row FROM ${table} t WHERE organisation_id=$1 ORDER BY to_jsonb(t)::text`,[organisationId])).rows;
  return result;
 }
+
+const schedulePath='/api/account/billing/schedule-test-backup-end';
+const unused=()=>{throw Error('unexpected backup storage access');};
+const leaseIssuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+async function backupTrial(pool=db.pool){
+ const f=await owner();
+ const target=createAccountApp({pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
+  planMode:'test-venue-levels',billingAccount:{accountIds:[f.accountId]},leaseIssuer,captures:{vault:new BackupKeyVault(Buffer.alloc(32)),objects:unused,grant:unused}});
+ const started=await request(target,f.session,startPath,{venueId:f.venueId});assert.equal(started.status,200);
+ const {endsOn}=(await started.json()).venues[0].trial;
+ await db.pool.query("UPDATE cloud_credentials SET password_hash='synthetic-test-hash' WHERE account_id=$1",[f.accountId]);
+ await prepareConnectionProof(db.pool,f.accountId,f.session.token);
+ const confirm=(trialEndsOn=endsOn,session=f.session)=>request(target,session,schedulePath,{venueId:f.venueId,trialEndsOn});
+ return {...f,target,endsOn,confirm};
+}
+
+function backupClockPool(){
+ return new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema},pg_catalog`,application_name:db.schema});
+}
+
+test('backup trial schedule fixes the deadline once, even after the trial ends',async t=>{
+ const pool=backupClockPool();t.after(()=>pool.end());
+ const f=await backupTrial(pool),end=new Date(`${f.endsOn}T00:00:00.000Z`),deadline=new Date(end);
+ deadline.setUTCDate(deadline.getUTCDate()+90);
+ const dates={effectiveEndAt:end.toISOString(),deadlineAt:deadline.toISOString()};
+ assert.deepEqual((await (await request(f.target,f.session)).json()).venues[0].backupEnd,{...dates,scheduled:false});
+ const outcomes=await Promise.all([f.confirm(),f.confirm()]);
+ for(const reply of outcomes){assert.equal(reply.status,200);assert.deepEqual(await reply.json(),{venueId:f.venueId,...dates});}
+ assert.deepEqual((await db.pool.query(`SELECT o.kind,l.state,l.effective_end_at,l.deadline_at
+  FROM data_lifecycles l JOIN data_lifecycle_operations o USING(venue_id) WHERE l.venue_id=$1`,[f.venueId])).rows,
+  [{kind:'cancel',state:'exit preparing',effective_end_at:end,deadline_at:deadline}]);
+ assert.equal((await f.confirm('2000-01-01')).status,409);
+ await db.pool.query(`CREATE FUNCTION ${db.schema}.clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '${end.toISOString()}'::timestamptz$$`);
+ try{
+  const session=await transaction(pool,client=>createSession(client,f.accountId));
+  await pool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp(),absolute_expires_at=clock_timestamp()+interval '1 hour' WHERE account_id=$1",[f.accountId]);
+  await openProofWindow(pool,session.token);
+  const repeat=await f.confirm(f.endsOn,session);assert.equal(repeat.status,200);assert.deepEqual(await repeat.json(),{venueId:f.venueId,...dates});
+  const venue=(await (await request(f.target,session)).json()).venues[0];
+  assert.equal(venue.trial,null);assert.deepEqual(venue.backupEnd,{...dates,scheduled:true});
+ }finally{await db.pool.query(`DROP FUNCTION ${db.schema}.clock_timestamp()`);}
+});
+
+test('backup trial schedule refuses unavailable, foreign, unproved and changed confirmations',async()=>{
+ const f=await backupTrial(),other=await owner(),body={venueId:f.venueId,trialEndsOn:f.endsOn};
+ for(const [target,input,wanted] of [[app([f.accountId]),body,503],[f.target,{...body,venueId:other.venueId},403],
+  [f.target,{...body,trialEndsOn:'2000-01-01'},409]] as const){
+  assert.equal((await request(target,f.session,schedulePath,input)).status,wanted);
+ }
+ await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL WHERE account_id=$1',[f.accountId]);
+ const reply=await f.confirm();assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:'proof_required'});
+ assert.equal((await db.pool.query('SELECT 1 FROM data_lifecycle_operations WHERE venue_id=$1',[f.venueId])).rowCount,0);
+});
+
+test('backup trial schedule preserves an earlier exit instruction',async()=>{
+ const f=await backupTrial(),store=new LifecycleStore(db.pool);
+ await store.request({venueId:f.venueId,operationId:randomUUID(),expectedRevision:0,kind:'delete',fingerprint:'b'.repeat(64)});
+ const before=await store.read(f.venueId);
+ assert.equal((await f.confirm()).status,409);
+ assert.deepEqual(await store.read(f.venueId),before);
+});
+
+test('backup trial schedule rolls back if proof expires during the venue lock wait',async t=>{
+ const pool=backupClockPool();t.after(()=>pool.end());
+ const f=await backupTrial(pool),blocker=await db.secondPool.connect();let pending:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[f.venueId]);
+  pending=f.confirm();await waitForBillingLock('FROM venues');
+  await blocker.query(`CREATE FUNCTION ${db.schema}.clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT pg_catalog.clock_timestamp()+interval '11 minutes'$$`);
+  await blocker.query('COMMIT');
+  const reply=await pending;assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:'proof_required'});
+  assert.equal((await db.pool.query('SELECT 1 FROM data_lifecycle_operations WHERE venue_id=$1',[f.venueId])).rowCount,0);
+ }finally{
+  await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});
+  await db.pool.query(`DROP FUNCTION IF EXISTS ${db.schema}.clock_timestamp()`);
+ }
+});
 
 test('billing chooser read lists a test venue without an installation or billing writes',async()=>{
  const f=await owner(),target=app([f.accountId]),before=await billingRows(f.organisationId);

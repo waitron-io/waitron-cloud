@@ -520,6 +520,15 @@ export class PortalApp {
     else {await billing.startMethod(kind);return;}
     this.draw();
   }
+  async prepareBackupEnd(){
+    if(this.actionProof.pending)return;
+    await this.billing.prepareBackupEnd(async()=>{
+      const proved=await this.#requireActionProof();
+      if(this.actionProof.status?.methods.every(method=>method==='email'))return 'billingBackupEnrollment';
+      if(!proved)return 'billingBackupProof';
+    });
+    this.root.querySelector<HTMLElement>('#billing-backup-confirm')?.focus();
+  }
   async applyRemote() {
     const remote=this.remote,change=remote.confirmation,id=remote.installationId;
     if(!change||remote.pending||remote.waiting)return;

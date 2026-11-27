@@ -1,23 +1,24 @@
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
-import {validMethodPresentation,validMethodResult,type TaxProfile,type BillingVenue,type BillingView,type MethodPresentation,type MethodState} from './billing-types.ts';
+import {validMethodPresentation,validMethodResult,type BackupEndResult,type TaxProfile,type BillingVenue,type BillingView,type MethodPresentation,type MethodState} from './billing-types.ts';
 
 type TaxDraft={[K in keyof TaxProfile]:string};
 export class BillingController{
  taxInvalid:keyof TaxDraft|undefined;taxSaved=false;readonly #taxDrafts=new Map<string,TaxDraft>();
  venues:BillingVenue[]=[];selected:string|undefined;pending=false;loaded=false;loadAttempted=false;error:keyof Copy|undefined;
  methodCheckout:string|undefined;methodState:MethodState|undefined;
+ backupEndConfirmation:BillingVenue|undefined;
  #account:string|undefined;#generation=0;#retryUntil=0;readonly #changed:()=>void;readonly #request:typeof accountRequest;
  readonly #redirect:(url:string)=>void;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest,redirect:(url:string)=>void=url=>location.assign(url)){this.#changed=changed;this.#request=request;this.#redirect=redirect;}
- account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.#taxDrafts.clear();this.venues=[];this.selected=undefined;this.loaded=false;this.loadAttempted=false;this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();}}
- select(id:string){if(id!==this.selected&&this.venues.some(venue=>venue.venueId===id)){this.selected=id;this.#generation++;this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();this.#changed();}}
+ account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.#taxDrafts.clear();this.venues=[];this.selected=undefined;this.loaded=false;this.loadAttempted=false;this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.backupEndConfirmation=undefined;this.#clearMethod();}}
+ select(id:string){if(id!==this.selected&&this.venues.some(venue=>venue.venueId===id)){this.selected=id;this.#generation++;this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.backupEndConfirmation=undefined;this.#clearMethod();this.#changed();}}
  get venue(){return this.venues.find(venue=>venue.venueId===this.selected);}
- fence(){if (this.pending && !this.loaded) this.loadAttempted = false;this.#generation++;this.#taxDrafts.clear();this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();}
+ fence(){if (this.pending && !this.loaded) this.loadAttempted = false;this.#generation++;this.#taxDrafts.clear();this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.backupEndConfirmation=undefined;this.#clearMethod();}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  async load(){
   if(!this.#account||this.pending||this.waiting)return;
-  const generation=this.#generation;this.#clearMethod();this.pending=true;this.loadAttempted=true;this.error=undefined;this.#changed();
+  const generation=this.#generation;this.#clearMethod();this.backupEndConfirmation=undefined;this.pending=true;this.loadAttempted=true;this.error=undefined;this.#changed();
   const result=await this.#request<BillingView>('/billing/read',{});
   if(generation!==this.#generation)return;
   this.pending=false;
@@ -37,6 +38,36 @@ export class BillingController{
    this.venues=[];this.loaded=false;await this.load();
    if(generation!==this.#generation)return;
    if(!this.error)this.error=result.code==='conflict'?'billingChanged':'billingUncertain';
+  }else this.#failure(result);
+  this.#changed();
+ }
+ async prepareBackupEnd(prove:()=>Promise<keyof Copy|undefined>){
+  const venue=this.venue,generation=this.#generation;
+  if(!venue?.backupEnd||venue.backupEnd.scheduled||this.pending||this.waiting)return;
+  const error=await prove();
+  if(generation!==this.#generation||this.venue!==venue||this.pending)return;
+  this.error=error;
+  if(!error)this.backupEndConfirmation=venue;
+  this.#changed();
+ }
+ cancelBackupEnd(){this.backupEndConfirmation=undefined;this.#changed();}
+ async confirmBackupEnd(venue:BillingVenue){
+  const backupEnd=venue.backupEnd,generation=this.#generation,venueId=venue.venueId;
+  if(this.venue!==venue||!backupEnd||backupEnd.scheduled||this.pending||this.waiting)return;
+  this.backupEndConfirmation=undefined;this.pending=true;this.loadAttempted=false;this.error=undefined;this.#changed();
+  const result=await this.#request<BackupEndResult>('/billing/schedule-test-backup-end',{venueId,trialEndsOn:backupEnd.effectiveEndAt.slice(0,10)});
+  if(generation!==this.#generation)return;
+  this.pending=false;this.loadAttempted=true;
+  if(result.ok&&result.value.venueId===venueId&&result.value.effectiveEndAt===backupEnd.effectiveEndAt&&result.value.deadlineAt===backupEnd.deadlineAt){
+   this.venues=this.venues.map(item=>item===venue?{...venue,backupEnd:{...backupEnd,scheduled:true}}:item);
+  }else if(!result.ok&&(result.code==='proof_required'||result.code==='enrollment_required')){
+   this.error=result.code==='proof_required'?'billingBackupProof':'billingBackupEnrollment';
+  }else if(result.ok||result.status===0||result.status===409||result.status>=500){
+   if(!result.ok)this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+   this.venues=this.venues.map(item=>item===venue?{...venue,backupEnd:undefined}:item);
+   await this.load();
+   if(generation!==this.#generation)return;
+   if(!this.error&&!this.venue?.backupEnd?.scheduled)this.error='billingBackupUncertain';
   }else this.#failure(result);
   this.#changed();
  }

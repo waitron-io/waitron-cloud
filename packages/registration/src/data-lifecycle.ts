@@ -28,9 +28,12 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const fingerprint=/^[a-f0-9]{64}$/;
 const id=(value:unknown)=>typeof value==='string'&&uuid.test(value);
 const revision=(value:unknown)=>Number.isInteger(value)&&Number(value)>=0&&Number(value)<=2147483647;
+export function lifecycleDownloadDeadline(end:Date):Date {
+ return new Date(end.getTime()+90*24*60*60*1000);
+}
 function serviceEnd(value:unknown):boolean {
  if(typeof value!=='string')return false;
- const instant=new Date(value),deadline=new Date(instant.getTime()+90*24*60*60*1000);
+ const instant=new Date(value),deadline=lifecycleDownloadDeadline(instant);
  return Number.isFinite(instant.getTime())&&instant.getUTCFullYear()>=1&&deadline.getUTCFullYear()<=9999&&instant.toISOString()===value;
 }
 function validateRequest(input:LifecycleRequest):void {
@@ -77,38 +80,42 @@ export class LifecycleStore {
 
  async request(input:LifecycleRequest):Promise<LifecycleRef>{
   // Bind the operation before borrowing a connection; callers retain their input object.
+  const request={...input};
+  validateRequest(request);
+  return transaction(this.#pool,client=>this.requestOn(client,request));
+ }
+
+ async requestOn(client:PoolClient,input:LifecycleRequest):Promise<LifecycleRef>{
   input={...input};
   validateRequest(input);
-  return transaction(this.#pool,async client=>{
-   if(!(await client.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[input.venueId])).rowCount)fail('lifecycle_unavailable');
-   const row=(await client.query<Row>('SELECT * FROM data_lifecycles WHERE venue_id=$1 FOR UPDATE',[input.venueId])).rows[0];
-   const prior=(await client.query<OperationRow>('SELECT * FROM data_lifecycle_operations WHERE venue_id=$1 AND operation_id=$2',[input.venueId,input.operationId])).rows[0];
-   if(prior){
-    if(prior.kind!==input.kind||prior.fingerprint!==input.fingerprint||prior.expected_revision!==input.expectedRevision
-     ||iso(prior.requested_effective_end_at)!==(input.effectiveEndAt??null))fail('lifecycle_conflict');
-    return {venueId:input.venueId,revision:prior.revision};
-   }
-   if((row?.revision??0)!==input.expectedRevision||input.expectedRevision===2147483647)fail('lifecycle_conflict');
-   const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-   if(row&&(row.state==='purging'||row.state==='purged'||input.kind==='resubscribe'&&row.deadline_at!==null&&row.deadline_at.getTime()<=now.getTime()))fail('lifecycle_unavailable');
-   let end=row?.effective_end_at??null;
-   if(input.kind==='cancel'){
-    if(end&&input.effectiveEndAt!==undefined&&end.toISOString()!==input.effectiveEndAt)fail('lifecycle_conflict');
-    end??=input.effectiveEndAt===undefined?now:new Date(input.effectiveEndAt);
-   }
-   const deadline=end?new Date(end.getTime()+90*24*60*60*1000):null;
-   const next=input.expectedRevision+1;
-   const state=(!row||row.state==='active')&&(input.kind==='cancel'||input.kind==='delete')?'exit preparing':row?.state??'active';
-   await client.query(`INSERT INTO data_lifecycles(venue_id,revision,state,requested_at,effective_end_at,deadline_at)
-    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(venue_id) DO UPDATE SET revision=$2,state=$3,requested_at=$4,
-    effective_end_at=COALESCE(data_lifecycles.effective_end_at,$5),deadline_at=COALESCE(data_lifecycles.deadline_at,$6)`,
-   [input.venueId,next,state,now,end,deadline]);
-   await client.query("UPDATE data_lifecycle_effects SET phase='uncertain' WHERE venue_id=$1 AND phase='intent'",[input.venueId]);
-   await client.query('UPDATE data_lifecycle_operations SET lease_until=NULL,claim_lifecycle_revision=NULL WHERE venue_id=$1',[input.venueId]);
-   await client.query(`INSERT INTO data_lifecycle_operations(venue_id,operation_id,kind,fingerprint,expected_revision,revision,requested_effective_end_at,requested_at,effective_end_at,deadline_at)
-    SELECT $1,$2,$3,$4,$5,$6,$7,$8,effective_end_at,deadline_at FROM data_lifecycles WHERE venue_id=$1`,[input.venueId,input.operationId,input.kind,input.fingerprint,input.expectedRevision,next,input.effectiveEndAt??null,now]);
-   return {venueId:input.venueId,revision:next};
-  });
+  if(!(await client.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[input.venueId])).rowCount)fail('lifecycle_unavailable');
+  const row=(await client.query<Row>('SELECT * FROM data_lifecycles WHERE venue_id=$1 FOR UPDATE',[input.venueId])).rows[0];
+  const prior=(await client.query<OperationRow>('SELECT * FROM data_lifecycle_operations WHERE venue_id=$1 AND operation_id=$2',[input.venueId,input.operationId])).rows[0];
+  if(prior){
+   if(prior.kind!==input.kind||prior.fingerprint!==input.fingerprint||prior.expected_revision!==input.expectedRevision
+    ||iso(prior.requested_effective_end_at)!==(input.effectiveEndAt??null))fail('lifecycle_conflict');
+   return {venueId:input.venueId,revision:prior.revision};
+  }
+  if((row?.revision??0)!==input.expectedRevision||input.expectedRevision===2147483647)fail('lifecycle_conflict');
+  const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+  if(row&&(row.state==='purging'||row.state==='purged'||input.kind==='resubscribe'&&row.deadline_at!==null&&row.deadline_at.getTime()<=now.getTime()))fail('lifecycle_unavailable');
+  let end=row?.effective_end_at??null;
+  if(input.kind==='cancel'){
+   if(end&&input.effectiveEndAt!==undefined&&end.toISOString()!==input.effectiveEndAt)fail('lifecycle_conflict');
+   end??=input.effectiveEndAt===undefined?now:new Date(input.effectiveEndAt);
+  }
+  const deadline=end?lifecycleDownloadDeadline(end):null;
+  const next=input.expectedRevision+1;
+  const state=(!row||row.state==='active')&&(input.kind==='cancel'||input.kind==='delete')?'exit preparing':row?.state??'active';
+  await client.query(`INSERT INTO data_lifecycles(venue_id,revision,state,requested_at,effective_end_at,deadline_at)
+   VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(venue_id) DO UPDATE SET revision=$2,state=$3,requested_at=$4,
+   effective_end_at=COALESCE(data_lifecycles.effective_end_at,$5),deadline_at=COALESCE(data_lifecycles.deadline_at,$6)`,
+  [input.venueId,next,state,now,end,deadline]);
+  await client.query("UPDATE data_lifecycle_effects SET phase='uncertain' WHERE venue_id=$1 AND phase='intent'",[input.venueId]);
+  await client.query('UPDATE data_lifecycle_operations SET lease_until=NULL,claim_lifecycle_revision=NULL WHERE venue_id=$1',[input.venueId]);
+  await client.query(`INSERT INTO data_lifecycle_operations(venue_id,operation_id,kind,fingerprint,expected_revision,revision,requested_effective_end_at,requested_at,effective_end_at,deadline_at)
+   SELECT $1,$2,$3,$4,$5,$6,$7,$8,effective_end_at,deadline_at FROM data_lifecycles WHERE venue_id=$1`,[input.venueId,input.operationId,input.kind,input.fingerprint,input.expectedRevision,next,input.effectiveEndAt??null,now]);
+  return {venueId:input.venueId,revision:next};
  }
 
  async read(venueId:string):Promise<LifecycleView>{
