@@ -1139,9 +1139,10 @@ spending authority:
    running the already-built single stops or the all-machine restart.
 6. Before each approved outside-venue rehearsal, run `node scripts/amazon-run.mjs measured-stops-dry-run`
    on the launch host from the same clean, installed Cloud checkout and with the same private
-   `D618_CONFIG` you will use for the rehearsal. It checks local tools, imports, Docker networking
-   and the Linux image bundle without contacting AWS. Save its JSON receipt with the Cloud commit
-   and bundled image IDs. After it passes, use `node scripts/amazon-run.mjs measured-stops`.
+   `D618_CONFIG` you will use for the rehearsal. It checks local tools, imports, Docker networking,
+   the Linux image bundle and the launch host’s public IPv4 against `operatorCidr`. The public
+   address lookup uses HTTPS and requires no AWS account credentials. Save its JSON receipt
+   with the Cloud commit and bundled image IDs. After it passes, use `node scripts/amazon-run.mjs measured-stops`.
    Save and load the pinned Waitron image as described in the
    [run decision](superpowers/plans/2026-11-18-d621-run9-qualification.md).
    For the original in-cluster D618 check, use `node scripts/amazon-run.mjs start`.
@@ -1465,8 +1466,6 @@ All three machines keep running until scheduled deletion in `baseline`.
 The `measured-stops` mode runs the individual Stockholm stops with 15-minute
 holds. Before creating a stack, it reads the launch host’s public IPv4 over
 HTTPS and requires it to match the single `operatorCidr` address in `D618_CONFIG`.
-The dry run makes the same check. Run it on the launch host with the same
-private settings you will use for the approved rehearsal.
 The 20-request sign-up allowance covers all three stops within one
 hour. The next stop can begin after the returning machine passes its health
 checks. Before each stop, including the full restart, the rehearsal sends one

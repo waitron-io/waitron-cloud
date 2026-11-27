@@ -310,6 +310,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
 });
 for (const [scenario, expectedError] of [['measured stops dry run', null], ['complete', null], ['baseline', null], ['baseline measured stops', null],
   ['baseline measured stops address mismatch', /amazon.launch_address/], ['measured stops dry run address mismatch', /amazon.launch_address/],
+  ['baseline measured stops address unreadable', /synthetic address lookup failure/],
   ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
@@ -324,6 +325,7 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
   let evidenceBOffline = false;
   const dryRun = scenario.startsWith('measured stops dry run');
   const addressMismatch = scenario.endsWith('address mismatch');
+  const addressUnreadable = scenario.endsWith('address unreadable');
   const checksSource = scenario === 'measured stops dry run' || scenario === 'baseline measured stops';
   const addressLookup = ['curl', '-q', '-4', '--noproxy', '*', '--fail', '--silent', '--connect-timeout', '3', '--max-time', '5',
     'https://checkip.amazonaws.com'];
@@ -344,7 +346,9 @@ for (const [scenario, expectedError] of [['measured stops dry run', null], ['com
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const cold = scenario.startsWith('baseline cold');
-  const measuredStops = dryRun || cold || addressMismatch || ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario), restartedAddress = '203.0.113.33';
+  const measuredStops = dryRun || cold || addressMismatch || addressUnreadable ||
+    ['baseline measured stops', 'baseline missing rehearsal image', 'baseline deadline', 'baseline single stop late'].includes(scenario);
+  const restartedAddress = '203.0.113.33';
   let restarted = false, allState = 'running', stopClock = 100, lateCommandReturned = false;
   if (/ (stale boot|foreign metadata|stale lease)$/.test(scenario)) {
     const timeout = AbortSignal.timeout;
@@ -523,6 +527,7 @@ exit 1
       calls.push([binary, ...args]);
       if (isAddressLookup([binary, ...args])) {
         assert.equal(timeout, 6_000);
+        if (addressUnreadable) throw Error('synthetic address lookup failure');
         return addressMismatch ? '203.0.113.9' : '203.0.113.8';
       }
       if (['ssh','scp'].includes(binary)) {
@@ -673,12 +678,20 @@ exit 1
     }finally{releaseStage?.();releaseRemoval?.();await running.catch(()=>{});}
   }
   let result;
-  if (expectedError) await assert.rejects(running, expectedError); else result = await running;
-  if (addressMismatch) {
+  if (addressMismatch || addressUnreadable) {
+    await assert.rejects(running, error => {
+      assert.match(error.message, expectedError);
+      assert.doesNotMatch(error.message, /203\.0\.113\.(8|9)/);
+      return true;
+    });
     assert.deepEqual(calls.filter(isAddressLookup), [addressLookup]);
-    assert.equal(calls.some(row => row[1] === 'create-stack' || row[1] === 'delete-stack'), false);
+    assert.equal(calls.some(row => row[0] === 'cloudformation'), false);
+    assert.deepEqual(calls.filter(row => row[0] === 'docker' && row[1] === 'network').map(row => row[2]), ['create', 'rm']);
+    assert.deepEqual(calls.filter(row => row[0] === 'docker' && row[1] === 'image' && row[2] === 'rm').map(row => row[3]),
+      savedTags.filter(tag => tag.startsWith('d618-')));
     return;
   }
+  if (expectedError) await assert.rejects(running, expectedError); else result = await running;
   if (dryRun) {
     assert.deepEqual(calls.filter(isAddressLookup), [addressLookup]);
     assert.equal(result.dryRun, true);
