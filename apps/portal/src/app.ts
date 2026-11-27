@@ -101,8 +101,8 @@ export class PortalApp {
     this.locale = this.link.locale ?? chooseLocale(preferred??(entryLocale==='en'||entryLocale==='es'?entryLocale:null), navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
-      if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.billing?.error==='pairEnrollment')this.billing.error=undefined;
-      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'))this.billing.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&(this.billing?.error==='pairEnrollment'||this.billing?.error==='billingBackupEnrollment'))this.billing.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'||this.billing?.error==='billingBackupProof'))this.billing.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.recovery?.error==='pairEnrollment')this.recovery.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.recovery?.error==='actionProofUnavailable'||this.recovery?.error==='recoveryProofRequired'))this.recovery.error=undefined;
       if(!this.actionProof.pending&&this.backups?.downloadProof){
@@ -519,6 +519,15 @@ export class PortalApp {
     else if(!proved)billing.error=this.actionProof.error?'actionProofUnavailable':'billingProofRequired';
     else {await billing.startMethod(kind);return;}
     this.draw();
+  }
+  async prepareBackupEnd(){
+    if(this.actionProof.pending)return;
+    await this.billing.prepareBackupEnd(async()=>{
+      const proved=await this.#requireActionProof();
+      if(this.actionProof.status?.methods.every(method=>method==='email'))return 'billingBackupEnrollment';
+      if(!proved)return 'billingBackupProof';
+    });
+    this.root.querySelector<HTMLElement>('#billing-backup-confirm')?.focus();
   }
   async applyRemote() {
     const remote=this.remote,change=remote.confirmation,id=remote.installationId;

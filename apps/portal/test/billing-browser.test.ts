@@ -12,8 +12,12 @@ const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8')
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: account can start a trial without an installation`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
-  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
-  const c=translations[locale];let starts=0,reads=0;
+  const page=await browser.newPage({locale,colorScheme:theme,timezoneId:'Europe/Madrid',viewport:{width,height:900}});page.setDefaultTimeout(4000);
+  const c=translations[locale];let starts=0,reads=0,schedules=0;
+  const fresh='2099-01-01T00:00:00.000Z';
+  const needsProof=theme==='light'&&width===390;
+  let freshUntil:string|null=needsProof?null:fresh;
+  const dates={effectiveEndAt:'2026-12-07T00:00:00.000Z',deadlineAt:'2027-03-07T00:00:00.000Z'};
   const hosted='33333333-3333-4333-8333-333333333333',usedTrial='44444444-4444-4444-8444-444444444444';
   const free='55555555-5555-4555-8555-555555555555';
   const registered={level:'registered',trial:null as unknown,canStartTrial:true};
@@ -30,11 +34,18 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
+   if(path.endsWith('/action-proof'))return route.fulfill({json:{methods:['passkey','recovery'],freshUntil}});
+   if(path.endsWith('/action-proof/factor')){freshUntil=fresh;return route.fulfill({status:204});}
    if(path.endsWith('/billing/read')){reads++;return route.fulfill({json:{venues}});}
    if(path.endsWith('/billing/start-trial')){
     starts++;assert.deepEqual(route.request().postDataJSON(),{venueId:second});
-    venues=venues.map(v=>v.venueId===second?{...v,level:'connected',canStartTrial:false,trial:{level:'connected',startedOn:'2026-11-07',endsOn:'2026-12-07',state:'active',extended:false}}:v);
+    venues=venues.map(v=>v.venueId===second?{...v,level:'connected',canStartTrial:false,trial:{level:'connected',startedOn:'2026-11-07',endsOn:'2026-12-07',state:'active',extended:false},backupEnd:{...dates,scheduled:false}}:v);
     return route.fulfill({json:{venues}});
+   }
+   if(path.endsWith('/billing/schedule-test-backup-end')){
+    schedules++;assert.deepEqual(route.request().postDataJSON(),{venueId:second,trialEndsOn:'2026-12-07'});
+    if(needsProof&&schedules===1){freshUntil=null;return route.fulfill({status:403,json:{error:'proof_required'}});}
+    return route.fulfill({json:{venueId:second,...dates}});
    }
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
@@ -69,6 +80,25 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await section.getByRole('button',{name:c.billingStart,exact:true}).count(),0);
   await section.getByRole('button',{name:c.billingRefresh,exact:true}).click();await page.waitForFunction(()=>(window as any).app.billing.pending===false);
   assert.equal(reads,2);assert.equal(starts,1);assert.equal(await section.locator('time').getAttribute('datetime'),'2026-12-06');
+  const schedule=section.getByRole('button',{name:locale==='en'?'Schedule end of test backups':'Programar el fin de las copias de prueba',exact:true});
+  await schedule.click();
+  const confirm=section.getByRole('button',{name:locale==='en'?'Confirm schedule':'Confirmar fechas',exact:true});
+  const verify=async()=>{
+   const prompt=section.getByRole('status').filter({hasText:c.billingBackupProof});await prompt.waitFor();
+   assert.equal(await confirm.count(),0);
+   await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
+   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
+   await prompt.waitFor({state:'hidden'});
+   await schedule.click();
+  };
+  if(needsProof)await verify();
+  await confirm.waitFor();assert.equal(schedules,0);
+  for(const value of Object.values(dates))assert.match((await section.locator(`time[datetime="${value}"]`).textContent())??'',/\b0{1,2}:00 UTC$/);
+  if(process.env.BILLING_RECEIPT_DIR){await mkdir(process.env.BILLING_RECEIPT_DIR,{recursive:true});await confirm.scrollIntoViewIfNeeded();await page.screenshot({path:`${process.env.BILLING_RECEIPT_DIR}/${locale}-${theme}-${width}-confirm.png`,fullPage:true});}
+  await confirm.click();
+  if(needsProof){await verify();assert.equal(schedules,1);await confirm.click();}
+  await section.getByText(locale==='en'?'End of test backups scheduled':'Fin de las copias de prueba programado',{exact:true}).waitFor();
+  assert.equal(schedules,needsProof?2:1);assert.equal(await schedule.count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.evaluate(axe.source);assert.deepEqual((await page.evaluate(async()=>(await (window as any).axe.run(document)).violations)).map((v:any)=>({id:v.id,nodes:v.nodes.map((n:any)=>n.target)})),[]);
   if(process.env.BILLING_RECEIPT_DIR){await mkdir(process.env.BILLING_RECEIPT_DIR,{recursive:true});await section.screenshot({path:`${process.env.BILLING_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}

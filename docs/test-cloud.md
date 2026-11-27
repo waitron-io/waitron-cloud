@@ -311,6 +311,14 @@ portal shows no assigned address. The box gets the same reply while the cell
 starts. To check capacity, read the configured cell's `remote_cells.next_address`
 value. A value of 66 means it is full.
 
+During a Connected trial with exit downloads configured, open **Billing** and
+choose **Schedule end of test backups**. Verify it’s you with an enrolled passkey
+or authenticator, then choose the button again if prompted. Check both UTC dates
+and choose **Confirm schedule**. New snapshots stop at midnight UTC after the
+last trial day. The verified archive, key and manifest remain available until the
+download deadline 90 days later. Reopen **Billing** to see the saved dates. The
+schedule is final, even if you add a payment method later.
+
 To rehearse payment setup on **Billing**, put these settings in the same
 private `test.env`, with access limited to the deployment operator:
 

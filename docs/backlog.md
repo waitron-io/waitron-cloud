@@ -308,7 +308,9 @@ saves of the encrypted archive and SQLite from a second snapshot of about
 Real venue exit still needs the
 [support controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-6-every-action-support-audit-cancellation-and-emergency-route)
 and [machine-key controls](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-7-machine-scoped-key-service-separate-human-paths).
-The remaining return work includes a service-end action and a
+An allowlisted owner can schedule the backup cutoff and download deadline in
+[Test Cloud Billing](test-cloud.md) at the end of a Connected trial. Paid-month
+cancellation still needs a reachable settled-payment path. The remaining return work includes a
 [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Read-only use, restore limits, resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).

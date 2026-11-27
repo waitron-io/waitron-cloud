@@ -23,6 +23,10 @@ export function billingScreen(app:PortalApp){
   }
  };
  const levels={registered:c.billingRegistered,connected:c.billingConnected,hosted:c.billingHosted};
+ const backupEnd=venue?.backupEnd,confirming=!!venue&&controller.backupEndConfirmation===venue;
+ const timestamp=(value:string)=>html`<time datetime=${value}>${new Intl.DateTimeFormat(app.locale==='en'?'en-GB':'es',{
+  dateStyle:'long',timeStyle:'short',timeZone:'UTC',hourCycle:'h23'
+ }).format(new Date(value))} UTC</time>`;
  const end=venue?.trial?new Date(venue.trial.endsOn+'T00:00:00Z'):undefined;
  if(end)end.setUTCDate(end.getUTCDate()-1);
  const price=venue&&(venue.canStartTrial||venue.trial)?venue.connectedPrice:undefined;
@@ -32,7 +36,7 @@ export function billingScreen(app:PortalApp){
   monthlyPrice=c.billingMonthlyPrice.replace('{net}',euros.format(price.netCents/100)).replace('{total}',euros.format(price.grossCents/100));
  }
  return html`<section id="connected-trial" aria-label=${c.billingTitle}><h2>${c.billingTitle}</h2><p>${c.billingIntro}</p>
-  ${controller.error&&!methodError?html`<p role="alert">${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
+  ${controller.error&&!methodError?html`<p role=${controller.error==='billingBackupProof'?'status':'alert'}>${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
   ${controller.venues.length>1?html`<div class="business-choice"><label for="billing-venue">${c.billingVenue}</label><select id="billing-venue" ?disabled=${controller.pending} @change=${(event:Event)=>controller.select((event.target as HTMLSelectElement).value)}>${controller.venues.map((item,index)=>html`<option value=${item.venueId} .selected=${item.venueId===controller.selected}>${c.billingVenue} ${index+1} · ${item.venueId.slice(0,8)}</option>`)}</select></div>`:nothing}
   ${venue?html`<dl><dt>${c.billingVenue}</dt><dd class="venue-id">${venue.venueId}</dd><dt>${c.billingLevel}</dt><dd>${levels[venue.level]}</dd>
     ${end?html`<dt>${c.billingLastDay}</dt><dd><time datetime=${end.toISOString().slice(0,10)}>${new Intl.DateTimeFormat(app.locale==='en'?'en-GB':'es',{dateStyle:'long',timeZone:'UTC'}).format(end)}</time></dd>`:nothing}</dl>
@@ -40,6 +44,16 @@ export function billingScreen(app:PortalApp){
    ${price&&price.netCents>0?html`<p>${c.billingFirstCharge}</p>`:nothing}
    ${venue.canStartTrial?html`<wt-button id="connected-trial-start" .disabled=${disabled} .loading=${controller.pending} @click=${()=>{void controller.start();}}>${c.billingStart}</wt-button>`:!venue.trial?html`<p>${c.billingIneligible}</p>`:nothing}`:controller.loaded?html`<p>${c.billingEmpty}</p>`:nothing}
   <wt-button .disabled=${disabled} @click=${()=>{void controller.load();}}>${c.billingRefresh}</wt-button>
+  ${venue&&backupEnd?(backupEnd.scheduled||confirming?html`<section aria-labelledby="billing-backup-confirm">
+   <h3 id="billing-backup-confirm" tabindex="-1">${backupEnd.scheduled?c.billingBackupScheduled:c.billingBackupSchedule}</h3>
+   <dl><dt>${c.billingBackupCutoff}</dt><dd>${timestamp(backupEnd.effectiveEndAt)}</dd>
+    <dt>${c.billingBackupDeadline}</dt><dd>${timestamp(backupEnd.deadlineAt)}</dd></dl>
+   ${confirming?html`<p>${c.billingBackupFixed}</p><div class="factor-actions">
+    <wt-button .disabled=${disabled} @click=${()=>{void controller.confirmBackupEnd(venue,()=>app.actionProof.load());}}>${c.billingBackupConfirm}</wt-button>
+    <wt-button @click=${()=>{controller.cancelBackupEnd();app.root.querySelector<HTMLElement>('#billing-backup-open')?.shadowRoot?.querySelector('button')?.focus();}}>${c.billingBackupCancel}</wt-button>
+   </div>`:nothing}
+  </section>`:html`<wt-button id="billing-backup-open" .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.prepareBackupEnd();}}>${c.billingBackupSchedule}</wt-button>`):nothing}
+  ${controller.error==='billingBackupEnrollment'?html`<p><a href="/account" @click=${(event:MouseEvent)=>app.openAccountSecurity(event)}>${c.accountSecurity}</a></p>`:nothing}
   ${draft?html`<form id="billing-tax-form" method="post" action="/api/account/billing/tax/save" aria-labelledby="billing-tax-title"
     @submit=${(event:SubmitEvent)=>{event.preventDefault();void saveTax();}}>
    <h3 id="billing-tax-title">${c.billingTaxTitle}</h3><p>${c.billingTaxIntro}</p><p class="help">${c.billingTaxLimits}</p>

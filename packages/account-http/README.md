@@ -880,6 +880,15 @@ Reads do not create billing state. A refused start rolls its writes back; a conf
 current venue view. If a write reply is lost, the portal reads the current plan
 before offering another choice, because the write may have committed.
 
+With exit downloads configured, Billing shows `backupEnd` for a test venue with
+an eligible Connected trial or a saved schedule. It includes `effectiveEndAt`,
+`deadlineAt` and `scheduled`. To confirm the preview, send a POST to
+`/api/account/billing/schedule-test-backup-end` with `venueId` and the exclusive
+`trialEndsOn` date from the preview. In addition to the Billing checks, this
+request needs fresh verification and an enrolled factor. An identical authorised
+confirmation returns the same `venueId`, `effectiveEndAt` and `deadlineAt` even
+after the trial ends. See the [Test Cloud walkthrough](../../docs/test-cloud.md).
+
 Run the focused API checks with `node scripts/test-postgres.mjs exec pnpm --dir
 packages/account-http exec node --test --test-timeout=60000 test/billing-account.test.ts`.
 These checks cover real PostgreSQL lock waits, expiry, ownership changes, concurrent

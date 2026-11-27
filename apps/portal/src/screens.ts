@@ -100,7 +100,7 @@ export function screen(app: PortalApp) {
         case 'account': return html`<p>${c.accountIntro}</p>${accountBusinessesScreen(app, countries, countryNames)}${accountSecurityScreen(app)}${ownerTransferScreen(app)}${signout}<p>${link('/forgot-password', c.forgot)}</p>`;
         case 'venues': return html`${installationScreen(app)}${signout}`;
         case 'remoteAccess': return html`${installationScreen(app, true)}${app.remote.installationId ? accountActionProofScreen(app, 2) : nothing}${signout}`;
-        case 'billing': return html`${billingScreen(app)}${app.billing.venue?.paymentMethods ? accountActionProofScreen(app, 2) : nothing}${signout}`;
+        case 'billing': return html`${billingScreen(app)}${app.billing.venue?.paymentMethods || app.billing.venue?.backupEnd?.scheduled === false ? accountActionProofScreen(app, 2) : nothing}${signout}`;
       }
     };
     content = state.kind === 'authenticated'

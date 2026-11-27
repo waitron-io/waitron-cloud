@@ -2,11 +2,16 @@
 
 When a service ends, a retry must not move its recovery deadline or repeat an
 outside call whose reply was lost. `LifecycleStore` records those decisions in
-PostgreSQL. A disposable test fixture records service end so the test Backups
-routes can read the cutoff. At that recorded time, both test plan modes refuse
+PostgreSQL. An allowlisted test owner can use [Billing](test-cloud.md) to record
+service end for snapshots at the end of an active Connected trial. Billing
+records `cancel` and enters `exit preparing` immediately. The separate snapshot
+cutoff is midnight UTC at the start of the trial’s stored end date. At that
+recorded time, both test plan modes refuse
 new snapshot reservations and publication, even while the venue's plan or service
 level still includes snapshots. Acting on a request to stop a venue server,
 export, restore or delete data requires separate authority.
+The disposable HTTPS rehearsal sets service end with a fixture. A separate test
+checks the two dates Billing writes to the journal.
 
 In both test plan modes, ordinary cleanup checks the recorded service end before
 selecting a snapshot for deletion and again before removing the stored copy. It
