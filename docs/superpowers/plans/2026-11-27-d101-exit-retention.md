@@ -2,8 +2,10 @@
 
 A synthetic venue owner can save an older verified snapshot on day 90 after ordinary
 cleanup would have expired it. The venue keeps its paid plan. The fixed UTC deadline
-still closes the download. This is the slice the watcher requested on 27 November
-at 09:01 under the owner’s 24 November exit rules. [Exit rules](../specs/2026-10-29-cloud-billing-design.md#8-cancelling-lapsing-and-closing-an-account)
+still closes the download. The owner said “Yes” to synthetic downloads at 17:46 on
+24 November and “yes to all” to the exit rules at 17:58, recorded in Lane G’s archived
+questions. The watcher named this slice in Lane G’s questions at 09:01 on 27 November.
+[Exit rules](../specs/2026-10-29-cloud-billing-design.md#8-cancelling-lapsing-and-closing-an-account)
 
 ## Pause ordinary snapshot cleanup at service end
 
@@ -30,19 +32,23 @@ sealing and deletion remain later exit work. [Exit plan](2026-11-24-cloud-exit.m
   scheduled end. Use the existing job check on the second transaction to wait
   for the database clock to reach the scheduled end between selection and deletion.
   Confirm the object survives and the marked row stays unavailable on retry.
-- In `deploy/test-cloud/test-fixtures/integration-account.mjs`, call the real
-  `cleanupOne` against the disposable storage after recording the shifted end.
-  Advance the supplied expiry comparison time by the same shift and retain the
-  captured timestamps used in verification. In `scripts/test-cloud-integration.mjs`,
-  prove the earlier of the two verified snapshots has reached ordinary expiry
-  and has neither a recovery hold nor fallback protection. Then compare its
-  archive, key and manifest over HTTPS in the final 90 seconds. Keep the existing
-  offline and SQLite checks, the grant refusal and the three HTTP 410 checks.
-  Require the cleanup time and successful read in `scripts/test-cloud-exit-download.test.mjs`.
+- In `deploy/test-cloud/test-fixtures/integration-account.mjs`, have the existing
+  `end-exit-download` phase call the real `cleanupOne` after recording the shifted
+  end. Require `null` on its first call. Advance the expiry comparison time from
+  the database clock by the same shift and retain the signed capture timestamps.
+  Record the database time after cleanup. In `scripts/test-cloud-integration.mjs`,
+  confirm the list contains the two verified snapshots, with the newer one as
+  fallback and the earlier one past ordinary expiry and free of recovery holds.
+  Compare the earlier archive, key and manifest over HTTPS in the final 90 seconds.
+  Keep the offline and SQLite checks, the grant refusal, the three HTTP 410 checks
+  and the final stored-archive check. In `scripts/test-cloud-exit-download.test.mjs`,
+  require cleanup to have finished during the open window and the read to succeed.
 - Run the two named PostgreSQL files through `scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-concurrency=1`.
   Show each guard’s test failing with the guard removed in a disposable checkout.
   Run `pnpm typecheck` and the unskipped HTTPS test with the pinned local images.
-  Update `docs/test-cloud.md`, `docs/data-lifecycle-journal.md` and `docs/backlog.md`.
+  Explain the test pause in `docs/test-cloud.md`, `docs/local-backups.md`,
+  `packages/account-http/README.md` and `docs/backlog.md`. Record how future
+  resubscription and verified purge must handle it in `docs/data-lifecycle-journal.md`.
   [Rehearsal command](../../test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
 
 Estimate 10–15 product lines, 45–65 PostgreSQL test lines and 25–40 rehearsal lines.
