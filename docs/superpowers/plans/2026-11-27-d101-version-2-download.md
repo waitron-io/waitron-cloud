@@ -1,48 +1,47 @@
 # CLOUD-EXIT · Download a version 2 backup
 
-On an authorised Test Cloud account, save a verified backup and its checksum from Backups.
-Use the venue master key in Waitron setup **Restore**. A synthetic venue on the matched
-release must be able to stage and prepare those exact bytes with one secret. The separate
+In Test Cloud Backups, save a verified backup and its checksum. A copy made with the venue’s
+current numbered backup key must stage and prepare in Waitron setup **Restore** with that
+venue’s one master key. Setup still verifies current authority after opening. The
 [filing and vault rehearsal](2026-11-27-d101-isolated-full-return.md) covers placement and activation.
-Lane G's watcher chose this slice on 27 November at 22:22.
+Lane G’s watcher chose this slice on 27 November at 22:22.
 
-**Use the numbered key already in the verified copy.** Waitron main at
+**Use the key already in the verified copy.** Waitron main
 [`5cc7bf033a`](https://github.com/clintongormley/waitron/tree/5cc7bf033ad3af159fd622ed7de210eb8bcf4124)
-captures the full payload with a separate Cloud key (`cloud-archive-target.ts:274–281`).
-The optional `secrets/backup.env` copied into that payload holds the box's derived backup key,
-its number and its master key's ID and date (`backup-key-record.ts:13–25`,
-`backup-env-writer.ts:54–74`, `archive-entries.ts:88–106`). The owner enters the master key
-only in Waitron. Use a fresh synthetic source set up with the same current master key for
-archive opening and recovery authority. A fixture that inserts only an authority row needs the
-normal Waitron backup-key writer too. Show a specific refusal when a copy lacks a usable numbered
-record. Older packs can name a different key. A single-key recovery claim covers the matching
-copy and pack that the setup proof exercises. Test controls, capture, stored copies, managed
-recovery and Waitron setup stay on their existing paths.
+captures the payload with a separate Cloud key (`cloud-archive-target.ts:274–281`).
+Read the derived backup key, number, master key ID and date from the same optional
+`secrets/backup.env` member (`backup-key-record.ts:13–25`, `backup-env-writer.ts:54–74`,
+`archive-entries.ts:88–106`). Use an actual capture after Waitron writes that record for the
+synthetic venue’s current master key. For a missing, malformed or duplicate record, show
+that the restore file is unavailable. A copy can name an earlier key. Show the ID and date
+at export and explain how to match the current pack before relying on one-key recovery.
+Keep capture, stored copies, managed recovery, the account API and Waitron setup as they are.
 
 - **Backups.** Update `apps/portal/src/{backup-screen,backup-controller,backup-types,locale}.ts`
-  and the existing save binding in `app.ts` if its signature changes. **Download backup** saves
-  the version 2 file and a manifest hashed from those exact bytes with the original capture time.
-  Remove the separate recovery-key and manifest buttons. Reuse the worker's internal key and
-  source-manifest requests. **Download database** remains available for read-only access.
-- **Conversion.** Update `apps/portal/src/{backup-database-download,backup-download-worker,backup-download-bytes}.ts`
-  as needed. Reuse the small transfer, 4 MiB ranges, bounded browser staging, length, SHA-256 and
-  AES-GCM checks. Read only the required fields from the authenticated archive's bounded
-  `backup.env` member. Seal the same compressed payload in Waitron's existing `WBK1` v2 format
-  with its derived key, number, ID and day, and fresh salt and IV. Match
-  `packages/provisioning/src/artifact-cipher.ts` in Waitron. Save after both the sealed output
-  and its hash are ready. Clear temporary files on cancellation or failure.
-- **Test first.** Extend Portal `test/backup-download-worker.test.ts` and its
-  `test/fixtures/backup-download.ts` fixture for the exact frame, unchanged payload, missing
-  metadata and corrupt input. Extend `test/{backup-browser,backup-transport-boundary}.test.ts`
-  where they own simple and ranged Backups saves, exact output hash, proof and cancellations.
-  Keep existing deadline and tenant checks and the independent SQLite byte comparison.
-  Build the portal before browser tests and check English and Spanish in both themes at 390
-  and 1280 pixels.
-- **Prove the handoff.** Use Waitron's pinned `openingKeyFor` and `decryptBackupFile` on the actual
-  browser save and compare the complete payload. Run the normal setup stage and preparation
-  with that file and the synthetic venue pack. Reuse the local journey in
-  `scripts/test-cloud-{integration,exit-download.test}.mjs`. An archive that requires a second
-  authority key fails this proof. Update [Test Cloud](../../test-cloud.md) and the [backlog](../../backlog.md) with what passed.
+  and the save binding in `app.ts` if needed. Send both small and ranged **Download backup**
+  saves through the worker. Offer an explicit checksum save for that exact export. Retire the
+  key download button and use the existing key and manifest requests within the worker.
+  Keep the independent **Download database** action and current owner proof and deadline.
+- **Conversion.** In `apps/portal/src/{backup-database-download,backup-download-worker,backup-download-bytes}.ts`
+  reuse the existing length, SHA-256 and AES-GCM checks, the 16 MiB small transfer and 4 MiB ranges.
+  Authenticate the source before reading the needed member with the bounded archive reader.
+  Stream a fresh opening of the copy into the existing Waitron version 2 frame format
+  (`packages/provisioning/src/artifact-cipher.ts`), preserving every original decrypted byte.
+  Use fresh salt and IV, fill in the tag, then hash and save the same completed output.
+  Keep large input and output in separate encrypted staged files and include both in the
+  storage refusal path. Keep the small transfer bounded if disk staging is unavailable.
+  Clear temporary files and key bytes on completion or cancellation. Include the version 2
+  format, key ID and date, original capture time and exact output SHA-256 in the saved manifest.
+- **Test first.** Use Portal `test/backup-download-worker.test.ts` and its download fixture for
+  exact frame fields, payload bytes, missing key metadata and corrupt input. Use
+  `test/{backup-browser,backup-transport-boundary}.test.ts` for normal small and ranged saves,
+  checksum pairing and cancellation. Preserve deadline, tenant and independent SQLite checks.
+  Build before browser tests and inspect English and Spanish in both themes at 390 and 1280 pixels.
+- **Prove the handoff.** Adapt `scripts/test-cloud-{integration,exit-download.test}.mjs` to open the
+  browser’s actual save with pinned Waitron’s `openingKeyFor` and `decryptBackupFile` and compare
+  the full payload. Use that file for normal setup stage and preparation with the matching pack.
+  A request for a second key fails the proof. Update [Test Cloud](../../test-cloud.md) and the
+  [backlog](../../backlog.md) in the feature PR with the observed result.
 
-Estimate 200–280 added product lines and 100–150 added test lines. Use synthetic data on
+Estimate 230–330 added product lines and 130–190 added test lines. Use synthetic data on
 isolated infrastructure.
