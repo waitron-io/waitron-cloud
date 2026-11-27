@@ -1,18 +1,20 @@
 # CLOUD-EXIT · Download a version 2 backup
 
-In Test Cloud Backups, save a verified backup and its checksum. A copy made with the venue’s
-current numbered backup key must stage and prepare in Waitron setup **Restore** with that
-venue’s one master key. Setup still verifies current authority after opening. The
-[filing and vault rehearsal](2026-11-27-d101-isolated-full-return.md) covers placement and activation.
-Lane G’s watcher chose this slice on 27 November at 22:22.
+In Test Cloud Backups, save a verified backup and its checksum. The same Waitron opener
+that setup **Restore** uses must open the saved copy with the venue’s one master key.
+The [filing and vault rehearsal](2026-11-27-d101-isolated-full-return.md) covers setup,
+current authority, placement and activation. Lane G’s watcher chose this slice on
+27 November at 22:22 and cleared it with the changes below at 23:17.
 
 **Use the key already in the verified copy.** Waitron main
 [`5cc7bf033a`](https://github.com/clintongormley/waitron/tree/5cc7bf033ad3af159fd622ed7de210eb8bcf4124)
 captures the payload with a separate Cloud key (`cloud-archive-target.ts:274–281`).
 Read the derived backup key, number, master key ID and date from the same optional
 `secrets/backup.env` member (`backup-key-record.ts:13–25`, `backup-env-writer.ts:54–74`,
-`archive-entries.ts:88–106`). Use an actual capture after Waitron writes that record for the
-synthetic venue’s current master key. For a missing, malformed or duplicate record, show
+`archive-entries.ts:88–106`). Before capture, mint the synthetic venue’s master key with
+the helper used by `integration-recovery-authority.mjs`, write the numbered record with
+Waitron’s `writeBackupKeyOne`, and keep the master key privately for the proof. For a
+missing, malformed or duplicate record, show
 that the restore file is unavailable. A copy can name an earlier key. Show the ID and date
 at export and explain how to match the current pack before relying on one-key recovery.
 Keep capture, stored copies, managed recovery, the account API and Waitron setup as they are.
@@ -33,15 +35,19 @@ Keep capture, stored copies, managed recovery, the account API and Waitron setup
   Clear temporary files and key bytes on completion or cancellation. Include the version 2
   format, key ID and date, original capture time and exact output SHA-256 in the saved manifest.
 - **Test first.** Use Portal `test/backup-download-worker.test.ts` and its download fixture for
-  exact frame fields, payload bytes, missing key metadata and corrupt input. Use
+  payload bytes, missing key metadata and corrupt input. Compare the worker’s output
+  byte for byte with a small fixed frame made once by the pinned Waitron with a fixed
+  key, salt and IV. Use
   `test/{backup-browser,backup-transport-boundary}.test.ts` for normal small and ranged saves,
   checksum pairing and cancellation. Preserve deadline, tenant and independent SQLite checks.
   Build before browser tests and inspect English and Spanish in both themes at 390 and 1280 pixels.
-- **Prove the handoff.** Adapt `scripts/test-cloud-{integration,exit-download.test}.mjs` to open the
-  browser’s actual save with pinned Waitron’s `openingKeyFor` and `decryptBackupFile` and compare
-  the full payload. Use that file for normal setup stage and preparation with the matching pack.
-  A request for a second key fails the proof. Update [Test Cloud](../../test-cloud.md) and the
-  [backlog](../../backlog.md) in the feature PR with the observed result.
+- **Prove the handoff.** Adapt `scripts/test-cloud-{integration,exit-download.test}.mjs` and the
+  existing `deploy/test-cloud/test-fixtures/integration-recovery-authority.mjs` fixture to open
+  the browser’s actual save with `openingKeyFor` and `decryptBackupFile` at the Waitron pin above.
+  Use that pin for the exit rehearsal and keep the general integration pin.
+  Compare the full payload and verify the master key ID. The opener gets only the master key.
+  Update [Test Cloud](../../test-cloud.md) and the [backlog](../../backlog.md) in the feature
+  PR with the observed result.
 
 Estimate 230–330 added product lines and 130–190 added test lines. Use synthetic data on
 isolated infrastructure.
