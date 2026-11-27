@@ -44,10 +44,14 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
   assert.equal(sample.locks.length,1,'held locks do not displace the waiting lock');
   assert.ok(sample.locks.every((lock:any)=>lock.granted===false));
   assert.ok(report.database,'a PostgreSQL statement timeout must retain the server-wide snapshot');
-  const {activity,walIo}=report.database;
+  const {activity,activityCount,capturedAt,walIo}=report.database;
+  assert.ok(activityCount>=activity.length);
+  assert.ok(Number.isFinite(Date.parse(capturedAt)));
   assert.ok(activity.some((row:any)=>row.pid===blockerPid&&row.state==='idle in transaction'));
   assert.ok(activity.some((row:any)=>row.backend_type==='checkpointer'));
   assert.ok(walIo.some((row:any)=>row.backend_type==='client backend'&&row.writes>0&&Number.isFinite(row.fsyncs)));
+  assert.deepEqual(walIo.filter((row:any)=>row.backend_type==='client backend').map((row:any)=>row.context).sort(),
+   ['init','normal'],'distinguish WAL file creation from ordinary writes');
   assert.ok(lines.join('').length<24000);
   assert.ok(!lines.join('').includes('private row value'));
   assert.ok(!lines.join('').includes('private holder value'));
@@ -107,7 +111,10 @@ test('migration setup retains the advisory wait before rollback and still migrat
 
 test('unavailable observer and throwing reporter cannot replace a setup failure',async t=>{
  const pool=new Pool({connectionString:url});const previous=process.env.TEST_DATABASE_URL;
- const original=new Proxy({}, {get(){assert.fail('diagnostics read the setup error');}});
+ const original=new Proxy({}, {
+  get(){assert.fail('diagnostics read the setup error');},
+  getPrototypeOf(){assert.fail('diagnostics inspected the setup error prototype');},
+ });
  const lines:string[]=[];
  t.mock.method(console,'error',(line:string)=>{lines.push(line);throw new Error('reporter refused');});
  process.env.TEST_DATABASE_URL='postgres://synthetic:synthetic@127.0.0.1:1/unavailable';
@@ -116,6 +123,7 @@ test('unavailable observer and throwing reporter cannot replace a setup failure'
   try{await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');throw original;});}catch(error){caught=error;}
   assert.equal(caught,original);
   assert.equal(JSON.parse(lines[0]!).unavailable,true);
+  assert.equal(JSON.parse(lines[0]!).database,undefined,'a non-timeout failure must not capture server data');
   assert.equal(pool.listenerCount('acquire'),0);
  }finally{process.env.TEST_DATABASE_URL=previous;await pool.end();}
 });

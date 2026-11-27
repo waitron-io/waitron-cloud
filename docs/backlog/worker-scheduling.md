@@ -42,10 +42,15 @@ The [27 November main run](https://github.com/waitron-io/waitron-cloud/actions/r
 hit `57014` in migrations 035, 045 and 016 on shard 5. Two reports sampled repeated
 `WALWrite` waits. A [disk-pressure run](https://github.com/waitron-io/waitron-cloud/actions/runs/45987713054/job/140467459086)
 passed all 346 cases. The waiting process was observed, and the writer and its storage latency are still unknown.
+Each registration shard job starts its own PostgreSQL server. The disk-pressure
+run observed three file workers sharing that server, with `fsync`,
+`synchronous_commit` and `full_page_writes` on and `wal_sync_method=fdatasync`.
 
 On recurrence, read `cloud-test-setup-waits` beside the migration stage. Its `database`
-snapshot records live process roles and waits alongside cumulative PostgreSQL WAL
-write and sync counters. Use `walTiming` to distinguish zero timings from timing
-collection being off. The snapshot follows cancellation, so use the earlier
-`samples` to see what the timed-out process was waiting for. You can exercise both
+snapshot records up to 24 live processes and the total that matched. The WAL write
+and sync counters accumulate from `stats_reset` to `capturedAt`, with separate rows
+for ordinary writes and new WAL file creation. Registration CI has timing collection
+off, so these totals cannot measure I/O latency or isolate work during the stall.
+The snapshot follows cancellation, so use the earlier `samples` to see what the
+timed-out process was waiting for. You can exercise both
 with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/setup-wait-diagnostics.test.ts`.

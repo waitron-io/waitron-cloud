@@ -57,15 +57,16 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
   await pending;
   if(timedOut){
    try{
-    const {rows}=await observer.query(`SELECT
-      (SELECT COALESCE(json_agg(a),'[]'::json) FROM (
+    const {rows}=await observer.query(`WITH activity AS (
         SELECT pid,backend_type,state,wait_event_type,wait_event FROM pg_stat_activity
         WHERE pid<>pg_backend_pid() AND (backend_type<>'client backend' OR state<>'idle')
-        ORDER BY (backend_type='client backend'),pid LIMIT 24
+      ) SELECT clock_timestamp() AS "capturedAt", (SELECT count(*)::int FROM activity) AS "activityCount",
+      (SELECT COALESCE(json_agg(a),'[]'::json) FROM (
+        SELECT * FROM activity ORDER BY (backend_type='client backend'),(state='active') DESC NULLS LAST,pid LIMIT 24
       ) a) AS activity,
       (SELECT json_agg(w) FROM (
-        SELECT backend_type,writes,fsyncs,write_time,fsync_time,stats_reset
-        FROM pg_stat_io WHERE object='wal' ORDER BY backend_type
+        SELECT backend_type,context,writes,fsyncs,write_time,fsync_time,stats_reset
+        FROM pg_stat_io WHERE object='wal' ORDER BY backend_type,context
       ) w) AS "walIo",
       current_setting('track_wal_io_timing') AS "walTiming",
       current_setting('wal_sync_method') AS "walSyncMethod"`);
@@ -89,7 +90,10 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
  }});}
  catch(error){
   failed=true;
-  timedOut=error instanceof DatabaseError&&error.code==='57014'&&error.message==='canceling statement due to statement timeout';
+  try{
+   timedOut=error instanceof DatabaseError&&error.code==='57014'
+    &&error.message==='canceling statement due to statement timeout';
+  }catch{}
   throw error;
  }
  finally{
