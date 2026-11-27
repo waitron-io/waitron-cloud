@@ -1180,6 +1180,25 @@ Actual venue exit still needs the rest of the return and deletion process.
 On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
 first value in the output with `archiveSha256` in the manifest to check the saved file.
 
+After saving the SQLite file, you can open it offline in read-only mode. If you
+have the SQLite command-line tool, use your saved file’s path:
+
+```sh
+sqlite3 -readonly "path/to/your-backup.sqlite" 'PRAGMA integrity_check;'
+```
+
+The check returns `ok` when SQLite can read the saved database and its structure
+is intact. The disposable rehearsal compared this database with the independent
+opening of the matching encrypted archive and recovery key.
+
+Ordinary Waitron restore also checks whether a replacement can use the saved
+fiscal state. In an isolated synthetic run, the same archive and key placed both
+databases and the restore completed its migrations. The filing module then stopped
+because the replacement had no allocation authority from outside the archive. Keep the
+[filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/developers/offline-fiscal-restore.md)
+with your recovery material. A separate vault key, where required by the source
+installation, also needs its own recovery path.
+
 Use the disposable Cloud image and a verifier built from Waitron revision
 `71daa2410af1c50c3a23429596ae0fb0ef62f552`. This client uses the pairing proof
 format the Cloud account service expects.
