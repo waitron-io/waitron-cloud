@@ -100,6 +100,7 @@ test('only a definitive signing check changes the saved result',async t=>{
  assert.equal(await run(),'held');
  assert.equal(await verified(),false);
  assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes('lost signing verification')));
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes('SES reports signing failed')));
  f.identities.set(domain,identity);
  assert.equal(await run(),'verified');
  f.identities.delete(domain);
@@ -149,6 +150,14 @@ test('the signing command requires test mode and can inspect a production venue 
  assert.equal(refused.status,1);assert.match(refused.stderr,/test venue levels/);
  const ineligible=run({CLOUD_VENUE_SERVICE_LEVELS:'test'});
  assert.equal(ineligible.status,0,ineligible.stderr);assert.equal(ineligible.stdout.trim(),'ineligible');
+
+ const eligible=db.venues[1]!;
+ await set(db,'connected',eligible);
+ await db.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3 WHERE id=$1',
+  [eligible,'office@'+domain,randomUUID()]);
+ const missingKeys=run({CLOUD_VENUE_SERVICE_LEVELS:'test'},eligible);
+ assert.equal(missingKeys.status,1);
+ assert.match(missingKeys.stderr,/CLOUD_EMAIL_ACTIVE_KEY_ID and CLOUD_EMAIL_KEYS/);
 
  const testVenue=db.venues[0]!;
  await db.pool.query(`INSERT INTO venue_mail_signing

@@ -155,6 +155,7 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
  if(!identity||identity.lost||identity.tag!==claim.tag||!identity.external||
    identity.selectors.length!==1||identity.selectors[0]!==claim.selector||record==='different'){
   await saveResult(false);
+  if(identity?.lost&&identity.tag===claim.tag)console.error('SES reports signing failed. Clear the sender and rerun this command to retire its signing setup before saving it again.');
   return 'held';
  }
  if(record==='absent'){

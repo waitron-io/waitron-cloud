@@ -60,9 +60,10 @@ test('SES signing creates a tagged external identity and reads its exact status 
  createFailure={status:409,type:'AlreadyExistsException'};
  await assert.rejects(ses.create(domain,selector,tag,privateKey),{name:'AlreadyExistsException'});
  assert.equal(calls.filter(call=>call.method==='POST').length,7);
- exists=true;verifiedForSending=false;
- for(const [status,lost] of [['FAILED',true],['SUCCESS',true],['PENDING',false],['TEMPORARY_FAILURE',false]] as const){
+ exists=true;
+ for(const [status,sending,lost] of [['FAILED',true,true],['SUCCESS',false,false],['PENDING',false,false],['TEMPORARY_FAILURE',false,false]] as const){
   dkimStatus=status;
+  verifiedForSending=sending;
   const result=await ses.read(domain);
   assert.equal(result?.verified,false,status);
   assert.equal(Boolean(result?.lost),lost,status);

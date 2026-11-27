@@ -77,6 +77,10 @@ settings to retire that identity. If an interrupted run leaves both provider
 records absent, the command keeps the claim while you investigate the
 interrupted operation. The command assumes it is the only writer for these
 test identities and records. The portal tick still checks the alias. [Operator steps](../test-cloud-service-controls.md#investigate-held-venue-email-signing-cleanup)
+
+If the command reports that SES marked signing as failed, clear the saved
+sender and rerun the command to retire its old setup. Once it reports
+`retired`, save the address again and publish the new DNS alias.
 The test Cloud email worker delivers to Mailpit from the venue’s From after
 the operator verifies signing. When a later check confirms loss, staff mail
 returns to the Waitron sender and the same worker delivers an owner notice.
