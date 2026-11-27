@@ -927,7 +927,8 @@ implementation or production evidence.
   a restore after the all-machine restart; paid Stockholm qualification remains open:
 
   - Run the [launch-host dry run](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
-    before each paid run. It checks the local tools, imports and image bundle. Synthetic
+    before each paid run. It checks the local tools, imports, image bundle and public IPv4.
+    The paid launcher also refuses a stale allowed address before creating a stack. Synthetic
     checks cover recording the database writer's process start time and keeping measurements
     when a rehearsal fails. The 26 November rehearsal completed all three stops and rejoins.
     The full restart reached the scratch marker check, which timed out before restore. A free
