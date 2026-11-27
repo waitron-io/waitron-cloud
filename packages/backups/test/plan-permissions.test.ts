@@ -85,6 +85,7 @@ test('snapshot exit cutoff refuses new reservations and publication while the pl
  assert.equal((await plans.show(a.organisationId)).plan,'paid');
  await assert.rejects(catalogue().reserveCapture(a.installationId,id),{message:'backup.permission_denied'});
  await assert.rejects(catalogue().publish(a.installationId,pending.reserved.id,pending.metadata),{message:'backup.permission_denied'});
+ assert.equal(objects.has('snapshots/'+pending.reserved.id),false);
  await assert.rejects(catalogue().publish(a.installationId,point.id,metadata),{message:'backup.permission_denied'});
  assert.deepEqual((await db.pool.query('SELECT id FROM backup_points')).rows,[{id:point.id}]);
  assert.equal((await db.pool.query('SELECT id FROM backup_captures WHERE id=$1',[id])).rowCount,0);

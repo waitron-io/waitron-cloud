@@ -4,9 +4,9 @@ When a service ends, a retry must not move its recovery deadline or repeat an
 outside call whose reply was lost. `LifecycleStore` records those decisions in
 PostgreSQL. A disposable test fixture records service end so the test Backups
 routes can read the cutoff. At that recorded time, both test plan modes refuse
-new snapshot reservations and publication, including when the venue still has a
-paid plan. Acting on a request to stop a venue server, export, restore or delete
-data requires separate authority.
+new snapshot reservations and publication, even while the venue's plan or service
+level still includes snapshots. Acting on a request to stop a venue server,
+export, restore or delete data requires separate authority.
 
 Use the current venue revision when you record a new request. An identical
 operation ID returns its original revision, even after later requests. Reusing

@@ -18,7 +18,7 @@ The watcher cleared the simpler lock and check sequence below at 09:13 after bra
 the installation and storage location locks. Run the lifecycle read once after those locks
 in each reservation and venue-level publication transaction. Refuse with
 `backup.permission_denied` if the reader refuses or returns a window. It reads the current
-database time after waiting, so a scheduled future end still permits admission. The older
+database time after waiting. Admission stays open while the end is in the future. The older
 publication path checks before copying and again before inserting the point so a scheduled end
 reached during the storage write takes effect. The signed grant's second reservation withholds any
 URL or credentials obtained during cancellation. The venue-level publication's second
