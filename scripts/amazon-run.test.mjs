@@ -311,6 +311,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
 for (const [scenario, expectedError] of [['measured stops dry run', null], ['complete', null], ['baseline', null], ['baseline measured stops', null],
   ['baseline measured stops address mismatch', /amazon.launch_address/], ['measured stops dry run address mismatch', /amazon.launch_address/],
   ['baseline measured stops address unreadable', /synthetic address lookup failure/],
+  ['measured stops dry run address unreadable', /synthetic address lookup failure/],
   ['baseline missing rehearsal image', /saved image unavailable/], ['baseline deadline', /amazon.run_deadline/], ['baseline cold', null], ['baseline cold denied', /start denied/], ['baseline cold cancelled', {name: 'AbortError'}], ['baseline cold late', /amazon.cold_restart_late/], ['baseline cold volumes changed', /amazon.cold_restart_volumes/],
   ['baseline cold private changed', /amazon.cold_restart_private_address/], ['baseline cold duplicate public', /amazon.cold_restart_public_addresses/],
   ['baseline cold wrong old address', /amazon.cold_restart_binding/], ['baseline cold stale boot', {name: 'TimeoutError'}],
@@ -687,8 +688,11 @@ exit 1
     assert.deepEqual(calls.filter(isAddressLookup), [addressLookup]);
     assert.equal(calls.some(row => row[0] === 'cloudformation'), false);
     assert.deepEqual(calls.filter(row => row[0] === 'docker' && row[1] === 'network').map(row => row[2]), ['create', 'rm']);
+    assert.ok(savedTags.length > 0);
     assert.deepEqual(calls.filter(row => row[0] === 'docker' && row[1] === 'image' && row[2] === 'rm').map(row => row[3]),
       savedTags.filter(tag => tag.startsWith('d618-')));
+    const archive = calls.find(row => row[0] === 'git' && row.includes('archive'));
+    assert.equal(existsSync(dirname(archive[archive.indexOf('-o') + 1])), false);
     return;
   }
   if (expectedError) await assert.rejects(running, expectedError); else result = await running;
