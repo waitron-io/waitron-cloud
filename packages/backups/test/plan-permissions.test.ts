@@ -9,7 +9,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {login} from '@waitron-cloud/identity';
-import {SignupStore,RegistrationStore,OrganisationPlanStore,InstallationStore,createLeaseIssuer,encodeMachine,transaction,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
+import {SignupStore,RegistrationStore,OrganisationPlanStore,InstallationStore,LifecycleStore,createLeaseIssuer,encodeMachine,transaction,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {BackupCatalogue} from '../src/catalogue.ts';
@@ -33,8 +33,8 @@ let workerImageBuilt=false;
 let db:Awaited<ReturnType<typeof database>>,plans:OrganisationPlanStore;
 let a:Awaited<ReturnType<typeof installed>>,b:typeof a;
 const objects=new Map<string,Buffer>();
-let grants=0,provisions=0,wait:(()=>Promise<void>)|undefined,removeWait:(()=>Promise<void>)|undefined;
-const storage=()=>({async read(key:string){const v=objects.get(key);if(!v)throw Error('NoSuchKey');return v;},async put(key:string,v:Buffer){objects.set(key,Buffer.from(v));return receipt(v);},async remove(key:string){await removeWait?.();objects.delete(key);}});
+let grants=0,provisions=0,wait:(()=>Promise<void>)|undefined,removeWait:(()=>Promise<void>)|undefined,putWait:(()=>Promise<void>)|undefined;
+const storage=()=>({async read(key:string){const v=objects.get(key);if(!v)throw Error('NoSuchKey');return v;},async put(key:string,v:Buffer){await putWait?.();objects.set(key,Buffer.from(v));return receipt(v);},async remove(key:string){await removeWait?.();objects.delete(key);}});
 const authority:ManagedStreamAuthority={async provision({venueId}){provisions++;await wait?.();return {writerReference:'writer:'+venueId,readerReference:'reader:'+venueId,writerCredentials:{accessKeyId:'writer',secretAccessKey:'private'}};},async read(){await wait?.();throw Error('NoSuchKey');}};
 const catalogue=()=>new BackupCatalogue(db.pool,vault,storage,mode);
 const streams=()=>new ManagedStreams(db.pool,vault,authority,mode);
@@ -58,10 +58,17 @@ function proof(action:MachineAction,lease?:SignedEnvelope,body:unknown={},id=ran
 }
 async function revision(){return Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[a.installationId])).rows[0].configuration_revision);}
 async function paid(){await plans.set(a.organisationId,'paid');await catalogue().provision(a.installationId,location());}
-async function snapshot(days=0){
+async function stagedCapture(days=0){
  const reserved=await catalogue().reserveCapture(a.installationId,randomUUID()),bytes=Buffer.from('encrypted archive '+reserved.id);objects.set(reserved.incomingKey,bytes);
  const metadata={...receipt(bytes),capturedAt:new Date(Date.now()-days*86400000).toISOString(),retention:'daily' as const,sourceNodeId:randomUUID(),modules:{core:1}};
+ return {reserved,metadata};
+}
+async function snapshot(days=0){
+ const {reserved,metadata}=await stagedCapture(days);
  const point=await catalogue().publish(a.installationId,reserved.id,metadata);await verifyPointFixture(db.pool,catalogue(),point.id);return {point,metadata};
+}
+function recordServiceEnd(effectiveEndAt?:string){
+ return new LifecycleStore(db.pool).request({venueId:a.venueId,kind:'cancel',expectedRevision:0,operationId:randomUUID(),fingerprint:'a'.repeat(64),effectiveEndAt});
 }
 before(async()=>{
  db=await database();plans=new OrganisationPlanStore(db.pool);
@@ -70,7 +77,48 @@ before(async()=>{
  catch(error){reportDockerBuildFailure({command:['docker',...args],elapsedMs:Math.round(performance.now()-started),error});throw error;}
 },{timeout:150000});
 after(async()=>{try{if(workerImageBuilt)await execute('docker',['image','rm',workerImage],{timeout:30000});}finally{await db?.close();}});
-beforeEach(async()=>{await resetSchema(db.pool);objects.clear();grants=0;provisions=0;wait=undefined;removeWait=undefined;a=await installed('plan-a');b=await installed('plan-b');});
+beforeEach(async()=>{await resetSchema(db.pool);objects.clear();grants=0;provisions=0;wait=undefined;removeWait=undefined;putWait=undefined;a=await installed('plan-a');b=await installed('plan-b');});
+
+test('snapshot exit cutoff refuses new reservations and publication while the plan stays paid',async()=>{
+ await paid();const {point,metadata}=await snapshot(),pending=await stagedCapture(),id=randomUUID();
+ await recordServiceEnd();
+ assert.equal((await plans.show(a.organisationId)).plan,'paid');
+ await assert.rejects(catalogue().reserveCapture(a.installationId,id),{message:'backup.permission_denied'});
+ await assert.rejects(catalogue().publish(a.installationId,pending.reserved.id,pending.metadata),{message:'backup.permission_denied'});
+ assert.equal(objects.has('snapshots/'+pending.reserved.id),false);
+ await assert.rejects(catalogue().publish(a.installationId,point.id,metadata),{message:'backup.permission_denied'});
+ assert.deepEqual((await db.pool.query('SELECT id FROM backup_points')).rows,[{id:point.id}]);
+ assert.equal((await db.pool.query('SELECT id FROM backup_captures WHERE id=$1',[id])).rowCount,0);
+});
+
+test('snapshot exit cutoff sees the first cancellation after a venue lock wait',async()=>{
+ await paid();const cancellation=await db.secondPool.connect();
+ try{
+  await cancellation.query('BEGIN');
+  await cancellation.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[a.venueId]);
+  await cancellation.query(`INSERT INTO data_lifecycles(venue_id,revision,state,requested_at,effective_end_at,deadline_at)
+   SELECT $1,1,'exit preparing',now,now,now+interval '2160 hours' FROM (SELECT clock_timestamp() AS now) AS clock`,[a.venueId]);
+  const id=randomUUID(),pending=catalogue().reserveCapture(a.installationId,id).then(()=>null,error=>error);
+  try{await Promise.race([waitForQuery('SELECT id FROM venues%'),pending.then(()=>assert.fail('reservation returned before the cancellation committed'))]);}
+  finally{await cancellation.query('COMMIT');await pending;}
+  assert.equal((await pending)?.message,'backup.permission_denied');
+  assert.equal((await db.pool.query('SELECT id FROM backup_captures WHERE id=$1',[id])).rowCount,0);
+ }finally{cancellation.release();}
+});
+
+test('snapshot exit cutoff rechecks a scheduled end after a legacy object write',async()=>{
+ await paid();const {reserved,metadata}=await stagedCapture();
+ const {rows:[{end}]}=await db.pool.query("SELECT clock_timestamp()+interval '3 seconds' AS end");
+ await recordServiceEnd(end.toISOString());
+ let copied=false;
+ putWait=async()=>{
+  await db.secondPool.query('SELECT pg_sleep(GREATEST(0,EXTRACT(epoch FROM ($1::timestamptz-clock_timestamp()))))',[end]);
+  copied=true;
+ };
+ await assert.rejects(catalogue().publish(a.installationId,reserved.id,metadata),{message:'backup.permission_denied'});
+ assert.equal(copied,true,'publication began before the scheduled end');
+ assert.equal((await db.pool.query('SELECT id FROM backup_points WHERE id=$1',[reserved.id])).rowCount,0);
+});
 
 // Removing the paid admission check would let a free organisation obtain keys or mutate storage state.
 test('free_cannot_provision_reserve_publish_or_rotate',async()=>{

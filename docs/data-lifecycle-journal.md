@@ -3,8 +3,10 @@
 When a service ends, a retry must not move its recovery deadline or repeat an
 outside call whose reply was lost. `LifecycleStore` records those decisions in
 PostgreSQL. A disposable test fixture records service end so the test Backups
-routes can read the cutoff.
-Recording a request grants no permission to stop, export, restore or delete data.
+routes can read the cutoff. At that recorded time, both test plan modes refuse
+new snapshot reservations and publication, even while the venue's plan or service
+level still includes snapshots. Acting on a request to stop a venue server,
+export, restore or delete data requires separate authority.
 
 Use the current venue revision when you record a new request. An identical
 operation ID returns its original revision, even after later requests. Reusing
@@ -25,13 +27,14 @@ The journal recognizes `active`, `exit preparing`, `read-only until deadline`,
 `purging` and `purged`. A cancellation or deletion request can enter
 `exit preparing`. It cannot reopen a read-only period. Resubscription at or after
 the recovery deadline, during purge or after purge refuses. An earlier request
-records intent only; a future adapter must prove that retained data exists before
-reactivating service. This slice supplies no transition into read-only or purge.
+records intent only. A future adapter must prove that retained data exists before
+reactivating service and reopening snapshot admission. This slice supplies no
+transition into read-only or purge.
 Tests seed those states directly. A recorded purged row remains a tombstone;
 this does not prove physical erasure or retention of every outside copy.
 
-The deadline describes ordinary cancellation recovery. A deletion intent proves
-neither verified deletion authority nor completed erasure. Later exit adapters
+The deadline describes ordinary cancellation recovery. A deletion request alone
+leaves snapshot admission open and records only intent. Later exit adapters
 must give an earlier verified delete instruction priority over ordinary retention;
 recording a cancellation cannot authorise a new waiting period for that deletion.
 

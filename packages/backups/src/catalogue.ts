@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import type {Readable} from 'node:stream';
 import {finished} from 'node:stream/promises';
 import type { Pool, PoolClient } from "pg";
-import { readVenuePlan, readVenuePermissions, requireVenueService, type PlanMode, transaction } from "@waitron-cloud/registration";
+import { LifecycleStore, readVenuePlan, readVenuePermissions, requireVenueService, type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
 import {
   validateLocation,
@@ -168,6 +168,11 @@ export function location(row: {
   region: string;
 }): StorageLocation {
   return { endpoint: row.endpoint, bucket: row.bucket, region: row.region };
+}
+async function requireSnapshotAdmission(client: PoolClient, venueId: string, mode: PlanMode) {
+  if (mode === 'existing') return;
+  const exit = await LifecycleStore.readExitRecovery(client, venueId);
+  if (!exit.allowed || exit.window) backupFail('permission_denied');
 }
 async function active(client: PoolClient, id: string, mode: PlanMode) {
   if (!uuid(id)) backupFail("unavailable");
@@ -572,6 +577,7 @@ export class BackupCatalogue {
       const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id);
       await fence?.(client);
+      await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
       await client.query(
         "INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING",
         [id, install.venue_id, installationId, l.active_key_version],
@@ -619,6 +625,7 @@ export class BackupCatalogue {
         ).rows[0];
       if (!capture) backupFail("unavailable");
       await fence?.(client);
+      await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
       const prior = await point(client, id);
       if (prior) {
         if (!sameMetadata(prior, m)) backupFail("conflict");
@@ -636,6 +643,7 @@ export class BackupCatalogue {
         const finalCapture=(await client.query("SELECT expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1",[id])).rows[0];
         if(!finalCapture)backupFail("unavailable");
         if(finalCapture.expired)backupFail("capture_expired");
+        await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
         await client.query(
           `INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
           [
@@ -672,6 +680,7 @@ export class BackupCatalogue {
         if(prior&&!sameMetadata(prior,m))backupFail('conflict');
         if(!prior&&capture.expired)backupFail('capture_expired');
         const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
+        await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
         return {prior,venueId:install.venue_id as string,publicKey:install.public_key as string,generation:permission.revision,keyVersion:capture.key_version as number,location:location(l)};
       });
       const objects=this.#objects(first.location);
@@ -695,6 +704,7 @@ export class BackupCatalogue {
         if(!latest)backupFail('unavailable');
         if(latest.venue_id!==first.venueId||latest.key_version!==first.keyVersion)backupFail('conflict');
         const prior=await point(client,id);
+        await requireSnapshotAdmission(client, install.venue_id, this.#planMode);
         if(prior){if(!sameMetadata(prior,m))backupFail('conflict');return prior;}
         if(latest.expired)backupFail('capture_expired');
         await client.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,

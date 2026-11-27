@@ -58,11 +58,11 @@ try {
     } else if (phase === 'end-exit-download') {
       assert.ok(!services);
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
-      assert.equal((await new OrganisationPlanStore(pool).set(organisationId, 'free')).changed, true);
       const venueId = rows[0].venue_id, lifecycle = new LifecycleStore(pool);
       const {rows: [{ended}]} = await pool.query("SELECT clock_timestamp()-interval '2160 hours'+interval '90 seconds' AS ended");
       await lifecycle.request({venueId, kind: 'cancel', expectedRevision: 0, operationId: randomUUID(),
         fingerprint: createHash('sha256').update('test exit ' + venueId).digest('hex'), effectiveEndAt: ended.toISOString()});
+      assert.equal((await new OrganisationPlanStore(pool).show(organisationId)).plan, 'paid');
       const {effectiveEndAt, deadlineAt} = await lifecycle.read(venueId);
       console.log(JSON.stringify({effectiveEndAt, deadlineAt}));
     } else if (phase === 'inspect-storage-withdrawal') {

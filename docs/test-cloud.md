@@ -1203,11 +1203,13 @@ archive. It records the larger file's staging and transfer times apart from
 local opening. It checks that the original box still serves with the same
 installation after the downloads. It then ends
 service for that same synthetic venue and records a fixed cutoff 90 days later.
+The plan stays paid and a signed request for a new snapshot grant returns HTTP 403.
 The fixture sets the end in the past so the cutoff is about 90 seconds away.
 All three files match the saved copies before the cutoff. After the cutoff, all three
 requests return HTTP 410, the dates stay visible and the stored archive still
 matches its verified checksum. The receipt includes both dates and the archive
-size and checksum. Keep the recovery key private.
+size and checksum. Keep the recovery key private. Ordinary snapshot expiry still
+applies while the plan stays paid, so save the files you need promptly.
 
 ## Check real free and paid clients
 
