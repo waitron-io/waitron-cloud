@@ -438,9 +438,11 @@ five staff notices. The paid design covers every email the box sends, from the
 venue’s own domain or a Waitron address. In test setup you can save your sending
 address, check the DNS aliases and copy or download the list. Mailpit checks
 replies to the sending address or a saved reply address while staff email uses
-the Waitron sender. The sandbox verified one signing alias in one zone. A
-separate venue zone, delivered signatures and sending from the venue domain
-still need qualification.
+the Waitron sender. Gmail and Mailgun verified a Stockholm sandbox message
+whose signing alias and key were in separate zones. Local tests cover
+the operator command to create, verify and retire signing. Rotation,
+automatic setup, portal signing status and sending from the venue domain
+remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
 [Decisions and open work](backlog/venue-email.md).
 

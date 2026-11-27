@@ -10,6 +10,8 @@ Alias `SUCCESS` selects one record. Alias `FAILED` selects three with a successf
 
 On 25 November, both sandbox identities reached `SUCCESS` in one DNS zone. The one-alias path goes forward for test setup. Both identities and all trial records were removed, and no mail was sent.
 
+On 27 November, Gmail and Mailgun verified the signature on the approved Stockholm sandbox message with the alias and key in separate zones. Gmail reported no DMARC record and put the message in spam. The trial sender, both DNS records and temporary permissions were removed. The original Mailgun MX records remained visible at all four authorities.
+
 ## 2a. Choose the Waitron sender
 
 In `test-venue-levels` mode, a Connected or Hosted test owner can choose Waitron sending and set where replies go. Show the own-mail-server option without saving a change for it. The box decides whether to use its own server. Follow the owner checks in `remote-access.ts` when saving the Waitron choice and Reply-To through `account-http/src/venue-email.ts` and a registration migration. Add `venue-email-screen.ts` and English and Spanish portal text.
@@ -20,7 +22,7 @@ Reuse the existing staff grant and allowance. At send, apply the saved Reply-To 
 
 First [build the test setup and read-only DNS checks](2026-11-25-paid-venue-email-domain-records.md). An owner saves the sending address and can copy or download the DNS records and check the aliases. The tick confirms DNS delegation.
 
-Plan SES identity creation, status and cleanup after the separate-zone qualification. Keep the private signing key in memory for creation. Retain the public key and selector for DNS. The plan needs to cover retry, rotation, and two venues asking to use the same domain in one SES account. Keep the certificate DNS rules when adding a mail-specific operation. Bind signing proof to the current choice and its organisation.
+The [signing plan](2026-11-27-paid-venue-email-signing.md) adds a test operator command to create, verify and retire signing with local fakes. Stale listing and rotation come in a second pull request. Creating signing when an owner saves the address and showing signing status in the portal remain open.
 
 ## 2c. Send from the verified domain
 

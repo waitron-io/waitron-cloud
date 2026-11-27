@@ -6,6 +6,8 @@ import {SMTPServer} from 'smtp-server';
 import {BillingStore,RelayMessages,RelayWorker,RelayControl,type BillingLevel} from '../src/index.ts';
 import {RelayGrantStore} from '../src/relay-grants.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
+import {runVenueMailSigning} from '../../remote-access/src/venue-mail-signing.ts';
+import {fakeVenueMailProviders} from '../../remote-access/test/fixtures/venue-mail-signing.ts';
 import {fixture} from './fixtures/relay-worker.ts';
 import {deferred} from './fixtures/relay-stop-barrier.ts';
 import {transaction} from '../src/transaction.ts';
@@ -174,9 +176,13 @@ test('a test owner keeps a DNS alias for mailbox edits and replaces it for domai
  const defaultReply=await request('clear-reply',f.v.session,{installationId});
  assert.equal(defaultReply.status,200);
  assert.deepEqual(await defaultReply.json(),{replyTo:null,domain:current.domain});
+ const signing=fakeVenueMailProviders('cloud.example.test',['bistro.example.test']);
+ assert.equal(await runVenueMailSigning(f.pool,f.venueId,signing.options),'verified');
  const cleared=await request('save',f.v.session,{installationId,replyTo:''});
  assert.equal(cleared.status,200);
  assert.deepEqual(await cleared.json(),{replyTo:null,domain:{address:null,records:[]}});
+ assert.equal(await runVenueMailSigning(f.pool,f.venueId,signing.options),'retired');
+ assert.deepEqual(signing.writes,['ses create','dns create','ses delete','dns delete']);
 });
 
 test('an owner can see and clear the active reply address after domain setup is disabled',async t=>{

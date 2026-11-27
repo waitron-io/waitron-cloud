@@ -26,7 +26,7 @@ test('staff migration preserves populated automatic reports and applied digests 
   const before=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,prior=(await pool.query('SELECT * FROM installation_error_reports')).rows[0];
   await Promise.all([migrate(pool),migrate(pool)]);await migrate(pool);
   const after=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.deepEqual(after.slice(0,53),before);assert.equal(after[52].name,'053_country_flow_authority.sql');assert.equal(after[53].name,'054_staff_problem_reports.sql');assert.equal(after.length,88);assert.equal(after[58].name,'059_account_action_proof.sql');assert.equal(after[59].name,'060_account_email_changes.sql');assert.equal(after[60].name,'061_connection_action_proof.sql');
+  assert.deepEqual(after.slice(0,53),before);assert.equal(after[52].name,'053_country_flow_authority.sql');assert.equal(after[53].name,'054_staff_problem_reports.sql');assert.equal(after.length,89);assert.equal(after[58].name,'059_account_action_proof.sql');assert.equal(after[59].name,'060_account_email_changes.sql');assert.equal(after[60].name,'061_connection_action_proof.sql');
   assert.deepEqual((await pool.query('SELECT * FROM installation_error_reports')).rows,[{...prior,kind:'automatic',details:null,description:null,description_operation_id:null,description_digest:null,staff_receipt_owner_id:null,staff_report_body:null,staff_description_body:null,staff_description_at:null}]);
   for(const change of ["code=NULL","occurrences=NULL","details='{}'::jsonb","description='Private text'","kind='staff'","kind='other'"]){
    await assert.rejects(pool.query('UPDATE installation_error_reports SET '+change),(error:unknown)=>(error as {code?:string}).code==='23514');
@@ -69,7 +69,7 @@ test('Sent reports upgrade dates existing owners without exposing legacy staff r
   assert.equal(result.staff_description_at,null);
   const after=(await pool.query('SELECT name,digest FROM schema_migrations ORDER BY name')).rows;
   assert.deepEqual(after.slice(0,82),before);
-  assert.equal(after.length,88);
+  assert.equal(after.length,89);
   assert.equal(after.at(82)?.name,'083_sent_report_bodies.sql');assert.equal(after.at(83)?.name,'084_venue_snapshot_recovery.sql');assert.equal(after.at(84)?.name,'085_address_lookup.sql');assert.equal(after.at(85)?.name,'086_operator_venues.sql');assert.equal(after.at(86)?.name,'087_venue_mail_sender.sql');
  }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
 });

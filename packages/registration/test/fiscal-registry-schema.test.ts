@@ -100,7 +100,7 @@ test('populated release37 upgrades concurrently preserving retained rows and dig
       'installation_error_reports', 'guest_menus',
       'cloud_action_requests', 'cloud_action_events', 'owner_transfers',
       'country_policy_versions', 'country_policy_heads', 'venue_country_bindings', 'venue_country_binding_heads',
-      'setup_pairing_attempts', 'address_lookup_calls', 'address_lookup_stopped_venues',
+      'setup_pairing_attempts', 'address_lookup_calls', 'address_lookup_stopped_venues', 'venue_mail_signing',
     ]) {
       assert.deepEqual(after[name], [], name);
       delete after[name];
