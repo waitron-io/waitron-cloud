@@ -8,8 +8,8 @@ Lane G's queue asks for download and 90 days of read-only access. The watcher un
 after D642 in Lane G questions.md at 19:20 on 26 November. Lane G's 03:54 progress entry on 27
 November proposed this snapshot-only slice. Lane G's archived 24 November questions record the
 owner's 17:46 “Yes” to synthetic downloads and 17:58 “yes to all” on the later exit rules. The
-watcher's 25 November 09:31 note leaves the audit for full return. The proposed slice awaits
-watcher clearance.
+watcher's 25 November 09:31 note leaves the audit for full return. Claude reviewed this plan,
+and the watcher cleared revision `17a8b5c487` for build in Lane G questions.md on 27 November at 08:21.
 
 **Snapshot admission.** In `packages/backups/src/catalogue.ts`, opt in to the check from
 `reserveCapture` and both publication paths, in `test-free-paid` and `test-venue-levels`.

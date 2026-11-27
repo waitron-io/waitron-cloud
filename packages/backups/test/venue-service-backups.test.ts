@@ -3,7 +3,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
-import {transaction} from '@waitron-cloud/registration';
+import {LifecycleStore,transaction} from '@waitron-cloud/registration';
 import {venueServiceFixture,set} from '../../registration/test/fixtures/venue-service.ts';
 import {BackupCatalogue,pointKeys,type PointMetadata} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
@@ -42,6 +42,21 @@ async function capture(f:Fixture,days=0){
 }
 async function snapshot(f:Fixture,days=0){const c=await capture(f,days),point=await f.catalogue.publish(f.installation,c.reserved.id,c.metadata);return {...c,point};}
 function latch(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return {promise,release};}
+
+test('snapshot exit cutoff refuses venue-level publication when service ends during the copy',async()=>{
+ const f=await fixture(),entered=latch(),blocked=latch();
+ try{
+  await provision(f);const {reserved,metadata}=await capture(f);
+  f.blockPut(async()=>{entered.release();await blocked.promise;});
+  const pending=f.catalogue.publish(f.installation,reserved.id,metadata).then(()=>null,error=>error);
+  try{
+   await Promise.race([entered.promise,pending.then(()=>assert.fail('publication returned before the copy'))]);
+   await new LifecycleStore(f.peer).request({venueId:f.venues[0]!,kind:'cancel',expectedRevision:0,operationId:randomUUID(),fingerprint:'a'.repeat(64)});
+  }finally{blocked.release();await pending;}
+  assert.equal((await pending)?.message,'backup.permission_denied');
+  assert.equal((await f.pool.query('SELECT id FROM backup_points WHERE id=$1',[reserved.id])).rowCount,0);
+ }finally{await f.close();}
+});
 
 // Losing the admission guard would create location/key rows for an unqualified venue.
 test('venue snapshot admission refuses recorded levels without enrolment',async()=>{

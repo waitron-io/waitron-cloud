@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createLeaseIssuer,encodeMachine,transaction,type SignedEnvelope} from '@waitron-cloud/registration';
+import {LifecycleStore,createLeaseIssuer,encodeMachine,transaction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {venueServiceFixture,set,trial,event} from '../../registration/test/fixtures/venue-service.ts';
 import {BackupCaptures,type CaptureAction,type CaptureOptions} from '../src/captures.ts';
 import {BackupCatalogue,pointKeys} from '../src/catalogue.ts';
@@ -74,6 +74,16 @@ const directUpload={upload:'presigned-put-v1'};
 function signedUpload(location:StorageLocation,key:string){
  return {uploadUrl:new URL(location.bucket+'/'+key,location.endpoint).href,expiresAt:new Date(Date.now()+60_000).toISOString()};
 }
+test('snapshot exit cutoff withholds the upload URL when service ends during signing',async()=>{
+ const f=await fixture(undefined,async(location,key)=>{
+  await new LifecycleStore(f.peer).request({venueId:f.venues[0]!,kind:'cancel',expectedRevision:0,operationId:randomUUID(),fingerprint:'a'.repeat(64)});
+  return signedUpload(location,key);
+ });
+ try{
+  await provision(f);
+  await assert.rejects(f.captures.execute('backup-reserve',f.proof('backup-reserve',randomUUID(),directUpload)),{message:'backup.permission_denied'});
+ }finally{await f.close();}
+});
 for(const mode of ['existing','test-venue-levels'] as const)test(`direct reserve returns an upload URL without a session exchange in ${mode} mode`,async()=>{
  const f=await fixture(undefined,async(location,key)=>({
   ...signedUpload(location,key),credentials:{accessKeyId:'fixture-only',secretAccessKey:'fixture-only',sessionToken:'fixture-only'},
