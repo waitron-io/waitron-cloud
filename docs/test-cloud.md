@@ -1191,14 +1191,22 @@ The check returns `ok` when SQLite can read the saved database and its structure
 is intact. The disposable rehearsal compared this database with the independent
 opening of the matching encrypted archive and recovery key.
 
-Ordinary Waitron restore also checks whether a replacement can use the saved
-fiscal state. In an isolated synthetic run, the same archive and key placed both
-databases and the restore completed its migrations. The filing module then stopped
-with `restore.hook_failed (module fiscal-verifactu: sif.allocation_invalid)` because
-the replacement had no authority from outside the archive to start a new invoice
-series. A separate vault key, where required by the source installation, also needs
-its own recovery path. Keep the [filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/operations/hour-recovery.md#check-the-selected-copy)
-with your recovery material.
+When you select the Cloud download in Waitron setup **Restore**, the staging and
+preparation steps refuse the version 1 archive with `backup.artifact_invalid`
+and reason `bad_version`. Both steps currently require a version 2 file that the
+master key can open. [Waitron’s two refusal tests](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/setup-recovery-preparation-api.test.ts#L436-L458)
+
+In the isolated rehearsal, `waitron-restore restore` opened the same version 1
+archive with its downloaded key, placed both databases and completed migrations.
+Without a prepared recovery operation granting authority to start a new invoice
+series, the filing module stopped with `restore.hook_failed (module fiscal-verifactu: sif.allocation_invalid)`.
+[Cloud restore rehearsal](https://github.com/waitron-io/waitron-cloud/pull/1455) · [Filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/operations/hour-recovery.md#check-the-selected-copy)
+
+For a rehearsal with a separate vault key, give the replacement process that key and
+its matching version as private settings. Nonempty process settings take precedence
+over `secrets.env`. This path remains untested until setup can prepare the Cloud download
+and the rehearsal has a synthetic source that keeps its vault key outside the archive.
+[Waitron’s box settings loader](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/box-env.ts#L12-L17)
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `71daa2410af1c50c3a23429596ae0fb0ef62f552`. This client uses the pairing proof
