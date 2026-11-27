@@ -15,3 +15,7 @@ The launcher’s write and read commands ran in an isolated x86 Debian 13 VM on 
 Keep the current marker location, restart and recovery conditions, and timing targets. Bootstrap and paid rehearsal are outside this pull request. Paid runs used are 3 of 10.
 
 After the fix lands, run `node scripts/amazon-run.mjs measured-stops-dry-run` on the launch host from the exact revised, clean and installed `main` checkout selected for launch, with the same private config and pinned Waitron image. Save the Cloud commit and bundled image IDs with the dry-run receipt. [Launch guide](../../aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
+
+## Verification
+
+The Lane G `d621-hard-stop.5eQusYzy` receipt keeps `probe-candidate.py` and `vm-candidate-gnu-revised-1s.log`. The Debian 13 guest used GNU `sync` and ran the launcher’s generated write on loop-mounted ext4. Power was cut one second after the write completed. On a fresh boot, the launcher read the marker and the earlier control seed was still present. The probe exited zero.

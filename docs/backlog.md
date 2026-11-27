@@ -934,7 +934,7 @@ implementation or production evidence.
     Linux probe confirmed that the marker remained readable after verifier startup and cleanup.
     [Rehearsal and Linux probe evidence](superpowers/plans/2026-11-27-d621-scratch-witness.md#verification)
     The launcher flushes the marker and its directory before cutting power. The marker survived
-    an abrupt power cut in a [Debian VM](superpowers/plans/2026-11-27-d621-flush-scratch-witness.md).
+    an abrupt power cut in a [Debian VM](superpowers/plans/2026-11-27-d621-flush-scratch-witness.md#verification).
     Stockholm still needs to verify the full restart and restore.
   - [Signed uploads](authenticated-captures.md#wire-contract) use the Waitron release in the
     [Amazon verifier pin](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
