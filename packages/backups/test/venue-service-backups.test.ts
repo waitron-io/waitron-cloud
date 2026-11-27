@@ -135,6 +135,34 @@ test('venue snapshot retention preserves a recovery hold across a downgrade',asy
   await f.pool.query("UPDATE backup_recoveries SET status='closed' WHERE id=$1",[id]);assert.equal(await f.catalogue.cleanupOne(f.venues[0]!),old.point.id);assert.deepEqual(f.objects.get(last.point.objectKey),last.bytes);
  }finally{await f.close();}
 });
+for (const [stage, fenceCheck, deleting] of [['selection',1,false],['removal',2,true]] as const)
+test(`exit retention checks the scheduled end after waiting before ${stage}`,async()=>{
+ const f=await fixture();try{
+  await provision(f);
+  const venueId=f.venues[0]!,expired=await snapshot(f,42),old=await snapshot(f,40),last=await snapshot(f,1);
+  for (const {point} of [expired,old,last]) assert.equal(await verifyPointFixture(f.pool,f.catalogue,point.id),'verified');
+  const {rows:[{end}]}=await f.pool.query("SELECT clock_timestamp()+interval '10 seconds' AS end");
+  await new LifecycleStore(f.pool).request({venueId,kind:'cancel',expectedRevision:0,operationId:randomUUID(),
+   fingerprint:'a'.repeat(64),effectiveEndAt:end.toISOString()});
+  assert.equal(await f.catalogue.cleanupOne(venueId),expired.point.id);
+  assert.equal(f.objects.has(expired.point.objectKey),false);
+
+  let checks=0;
+  const removed=await f.catalogue.cleanupOne(venueId,new Date(),async client=>{
+   if (++checks===fenceCheck) {
+    // Allow the deliberate clock wait to outlast this fixture's query timeout.
+    await client.query("SET LOCAL statement_timeout='15s'");
+    await client.query('SELECT pg_sleep(GREATEST(0,EXTRACT(epoch FROM ($1::timestamptz-clock_timestamp()))))',[end]);
+   }
+  });
+  assert.equal(removed,null);
+  assert.equal(await f.catalogue.cleanupOne(venueId),null);
+  assert.deepEqual((await f.pool.query('SELECT deleting,deleted_at FROM backup_points WHERE id=$1',[old.point.id])).rows,
+   [{deleting,deleted_at:null}]);
+  assert.deepEqual(f.objects.get(old.point.objectKey),old.bytes);
+  assert.deepEqual(f.objects.get(last.point.objectKey),last.bytes);
+ }finally{await f.close();}
+});
 test('venue snapshot policy wait leaves installation and location unlocked',async()=>{
  const f=await fixture(),holder=await f.pool.connect(),observer=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{

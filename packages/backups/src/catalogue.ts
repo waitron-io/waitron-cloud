@@ -169,10 +169,13 @@ export function location(row: {
 }): StorageLocation {
   return { endpoint: row.endpoint, bucket: row.bucket, region: row.region };
 }
-async function requireSnapshotAdmission(client: PoolClient, venueId: string, mode: PlanMode) {
-  if (mode === 'existing') return;
+async function snapshotServiceActive(client: PoolClient, venueId: string, mode: PlanMode) {
+  if (mode === 'existing') return true;
   const exit = await LifecycleStore.readExitRecovery(client, venueId);
-  if (!exit.allowed || exit.window) backupFail('permission_denied');
+  return exit.allowed && !exit.window;
+}
+async function requireSnapshotAdmission(client: PoolClient, venueId: string, mode: PlanMode) {
+  if (!await snapshotServiceActive(client, venueId, mode)) backupFail('permission_denied');
 }
 async function active(client: PoolClient, id: string, mode: PlanMode) {
   if (!uuid(id)) backupFail("unavailable");
@@ -772,6 +775,7 @@ export class BackupCatalogue {
       await lockVerificationPolicy(client);
       const l = await lockVenue(client, venueId);
       await fence?.(client);
+      if (!await snapshotServiceActive(client, venueId, this.#planMode)) return null;
       await expireRecoveries(client, venueId);
       const result = await client.query(
         `SELECT p.id,p.object_key FROM backup_points p WHERE p.venue_id=$1 AND p.deleted_at IS NULL
@@ -797,7 +801,8 @@ export class BackupCatalogue {
       return transaction(this.#pool,async client=>{
         if(!await snapshotsAllowed(client,venueId,this.#planMode))return null;
         await lockVerificationPolicy(client);await lockVenue(client,venueId);await fence?.(client);
-        // Keep policy through deletion so a committed downgrade cannot be followed by expiry.
+        if (!await snapshotServiceActive(client, venueId, this.#planMode)) return null;
+        // Hold the policy locks through removal so a cancellation cannot commit during it.
         await this.#objects(selected.location).remove(selected.key);
         await fence?.(client);
         await client.query('UPDATE backup_points SET deleted_at=COALESCE(deleted_at,clock_timestamp()) WHERE id=$1 AND deleting',[selected.id]);
