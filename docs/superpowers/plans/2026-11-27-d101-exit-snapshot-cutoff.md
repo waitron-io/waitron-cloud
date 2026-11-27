@@ -1,51 +1,48 @@
-# D101 test Cloud exit snapshot cutoff
+# Stop new test snapshots at service end
 
-Lane G’s CLOUD-EXIT queue says “A venue leaving Cloud can download its data and read it for 90 days”.
-The watcher unblocked it after D642 landed (questions.md, 26 November 19:20). The 03:54 progress.log
-entry narrows this slice to stopping new snapshot reservations and publication at the recorded end.
-The owner cleared synthetic download work on 24 November at 17:46 and answered “yes to all” on
-the exit rules at 17:58. The full-return audit stays parked. Build awaits watcher clearance,
-and D621 has the 15:00–17:00 CET shared test window.
+In the disposable Cloud rehearsal, recording service end stops new snapshot reservations and
+publication while the venue still has a paid plan. Its owner can still save the verified backup
+files through the existing download window.
 
-**Start with failing PostgreSQL cases.** In `packages/backups/test/plan-permissions.test.ts`,
-reuse the paid fixture. Show that reservation and publication work with no journal row and
-before a scheduled end. At the end, refuse a fresh reservation and publication of a previously
-reserved capture, with no new capture or point row. Control the database clock as in
-`packages/registration/test/data-lifecycle.test.ts`. Reuse its held venue lock and uncommitted
-first journal insert to check that admission waits and sees the committed end. Cover a scheduled end
-reached during legacy publication I/O. In `packages/backups/test/venue-service-backups.test.ts`,
-record the first cancellation during the existing object copy wait while the venue keeps its
-entitlement. Check refusal at both entry points and no point row when the copy resumes.
-In `packages/backups/test/venue-service-captures.test.ts`, record the end during upload signing
-and require the second reservation check to withhold the URL. Name the cases with `snapshot exit cutoff`.
-Run `node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-concurrency=1 --test-name-pattern='snapshot exit cutoff' test/plan-permissions.test.ts test/venue-service-backups.test.ts test/venue-service-captures.test.ts`.
-First observe ended operations still succeeding, then rerun after the change. The paid fixture
-builds its existing worker image in setup.
+Lane G's queue asks for download and 90 days of read-only access. The watcher unblocked the item
+after D642 in Lane G questions.md at 19:20 on 26 November. Lane G's 03:54 progress entry on 27
+November proposed this snapshot-only slice. Lane G's archived 24 November questions record the
+owner's 17:46 “Yes” to synthetic downloads and 17:58 “yes to all” on the later exit rules. The
+watcher's 25 November 09:31 note leaves the audit for full return. The proposed slice awaits
+watcher clearance.
 
-**Use one snapshot admission check.** In `packages/registration/src/data-lifecycle.ts`, add a
-caller-transaction `LifecycleStore` check for `effective_end_at <= clock_timestamp()` in SQL
-after locking. Proceed if the row or end is absent or the end is in the future. Both opted-in
-modes already lock the venue during plan authority. Take `FOR SHARE` on the lifecycle row next,
-matching the order for owner downloads and first cancellation. In `packages/backups/src/catalogue.ts`,
-apply the check only at `reserveCapture` and `publish` admission in `test-free-paid` and
-`test-venue-levels`, after plan authority and before installation or location locks. The same
-check covers the signed reservation’s second call and venue-level publication’s second transaction.
-Recheck before inserting new rows since a scheduled end can pass during lock waits or legacy
-publication I/O. Refuse with `backup.permission_denied`. Keep the existing `active()` gates for
-provisioning and rotation and `backupPlan()` gates for recovery, replacement and streams.
-Publication means admitting a `backup_points` row. A copy already authorised in `test-venue-levels`
-can leave an unadmitted object for existing capture cleanup. Keep existing grants, owner downloads
-and the stored 90-day download deadline.
+**Snapshot admission.** In `packages/backups/src/catalogue.ts`, opt in to the check from
+`reserveCapture` and both publication paths, in `test-free-paid` and `test-venue-levels`.
+Give `active()` a snapshot-write option so the check runs after plan authority and before
+installation and location locks. Reuse `LifecycleStore.readExitRecovery` in the caller's
+transaction. Refuse with `backup.permission_denied` if the reader refuses or returns a window.
+It locks the venue and lifecycle rows in the same order as the first cancellation and reads
+the current database time after waiting. A scheduled future end still permits admission.
+Recheck before inserting a capture or publishing a point so an end reached during a lock wait
+or legacy storage write takes effect. The signed grant's second reservation check withholds any
+URL or credentials obtained during cancellation. The venue-level publication's second
+transaction refuses if cancellation committed during the copy. A publish replay after end also
+refuses. Existing credentials expire normally, and existing capture cleanup handles copies
+without a published point. Provisioning, rotation, recovery and streams keep their own gates.
 
-**Rehearse and finish.** In `deploy/test-cloud/test-fixtures/integration-account.mjs`, replace the
-switch to free in `end-exit-download` with an assertion that the organisation stays paid and its
-snapshot entitlement stays configured. Keep the database-time backdate that puts the deadline about
-90 seconds away. In `scripts/test-cloud-integration.mjs`, reuse `exit-recovery-window` and its signed
-reservation witness for HTTP 403 with no grant. The disposable `test-free-paid` run also checks
-matching archive, key and manifest before cutoff, HTTP 410 after cutoff, intact stored bytes, and
-the existing SQLite and offline-open proof. Run `node --test scripts/test-cloud-exit-download.test.mjs`
-unskipped with the pinned images and private scratch settings in the
-[test guide](../../test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online).
-Allow roughly 25–40 implementation lines and 80–120 test and rehearsal lines. Finish with green
-focused cases, `pnpm typecheck`, the unskipped receipt with image IDs and pass count, and one D101 note in
-`docs/backlog.md` recording the test-only result.
+**Focused tests first.** In `packages/backups/test/plan-permissions.test.ts`, use the existing
+paid setup and database-relative scheduled times. Reserve and publish before end, then refuse
+a new reservation and publication of a reserved capture after end without creating rows. Hold
+a first cancellation open on a second connection and verify admission sees it after commit.
+For legacy publication, schedule end before the operation, hold the object write and use the
+database clock to release it after end. In `venue-service-backups.test.ts`, record cancellation
+during the existing copy wait with entitlement intact and assert refusal and no new point.
+In `venue-service-captures.test.ts`, record end during upload signing and assert the response
+withholds the URL. Use `node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-concurrency=1 --test-name-pattern='snapshot exit cutoff' test/plan-permissions.test.ts test/venue-service-backups.test.ts test/venue-service-captures.test.ts`
+before and after the fix.
+
+**Disposable proof.** In `deploy/test-cloud/test-fixtures/integration-account.mjs`, replace the
+downgrade in `end-exit-download` with a check that the plan stays paid. Reuse the signed
+reservation refusal and download comparisons in `scripts/test-cloud-integration.mjs`.
+PostgreSQL tests own publication refusal. Run `pnpm typecheck` and the unskipped
+`scripts/test-cloud-exit-download.test.mjs` with the pinned images and scratch settings in the
+[test guide](../../test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online). Record
+the image IDs and pass count. Update the guide and D101 backlog. Ordinary retention can still
+expire older snapshots in the 90 days when the plan stays paid. The rehearsal checks the recently
+captured files and the access deadline. It leaves long-term retention and deletion for later work.
+Estimate 15–25 implementation lines and 80–120 test and rehearsal lines.
