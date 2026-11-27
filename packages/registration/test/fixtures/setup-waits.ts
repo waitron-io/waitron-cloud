@@ -1,5 +1,5 @@
 import {loadavg} from 'node:os';
-import {Pool, type PoolClient} from 'pg';
+import {DatabaseError, Pool, type PoolClient} from 'pg';
 import {migrate as runMigrations} from '../../src/migrate.ts';
 
 type Observation={attach:(pool:Pool)=>void;mark:(stage:string)=>void};
@@ -13,6 +13,7 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
  const pids=new Set<number>();
  const samples:unknown[]=[];
  let unavailable=false,stopped=false,failed=false,reported=false;
+ let timedOut=false,database:unknown;
  let closing:Promise<void>|undefined;
  let pending:Promise<void>|undefined;
  observer.on('error',()=>{unavailable=true;});
@@ -54,11 +55,28 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
  const stop=()=>closing??=(async()=>{
   stopped=true;clearInterval(timer);pool?.removeListener('acquire',acquire);
   await pending;
+  if(timedOut){
+   try{
+    const {rows}=await observer.query(`SELECT
+      (SELECT COALESCE(json_agg(a),'[]'::json) FROM (
+        SELECT pid,backend_type,state,wait_event_type,wait_event FROM pg_stat_activity
+        WHERE pid<>pg_backend_pid() AND (backend_type<>'client backend' OR state<>'idle')
+        ORDER BY (backend_type='client backend'),pid LIMIT 24
+      ) a) AS activity,
+      (SELECT json_agg(w) FROM (
+        SELECT backend_type,writes,fsyncs,write_time,fsync_time,stats_reset
+        FROM pg_stat_io WHERE object='wal' ORDER BY backend_type
+      ) w) AS "walIo",
+      current_setting('track_wal_io_timing') AS "walTiming",
+      current_setting('wal_sync_method') AS "walSyncMethod"`);
+    database=rows[0];
+   }catch{database={unavailable:true};}
+  }
   try{await observer.end();}catch{unavailable=true;}
  })();
  const report=()=>{
   if(reported)return;reported=true;
-  try{console.error(JSON.stringify({event:'cloud-test-setup-waits',unavailable,samples,
+  try{console.error(JSON.stringify({event:'cloud-test-setup-waits',unavailable,samples,database,
    stage:stages.at(-1)?.stage,stages,elapsedMs:elapsed(),loadAverage:loadavg(),maxLateness,
    pool:pool?{total:pool.totalCount,idle:pool.idleCount,waiting:pool.waitingCount}:undefined}));}catch{}
  };
@@ -69,7 +87,11 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
  try{return await setup({attach,mark(stage){
   stages.push({stage,elapsedMs:elapsed()});if(stages.length>16)stages.shift();
  }});}
- catch(error){failed=true;throw error;}
+ catch(error){
+  failed=true;
+  timedOut=error instanceof DatabaseError&&error.code==='57014'&&error.message==='canceling statement due to statement timeout';
+  throw error;
+ }
  finally{
   options.signal?.removeEventListener('abort',abort);
   await stop();if(failed)report();

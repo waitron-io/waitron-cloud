@@ -40,8 +40,11 @@ failure rule for timing comparisons. Keep the scratch workflow and sampler on
 the scratch branch. Record each run in Lane J's progress log. Bring the evidence
 to the watcher after two hours without a new finding, as the D620 rule requires.
 
-Change only the implicated test setup. Observe a needed regression check fail
-first, then pass it and the matched shard. Use `scripts/ci-test-postgres.test.mjs`
-for launcher changes and require normal CI for every affected launcher consumer.
-Estimate up to 30 code and 30 test lines. Update “Monitoring shutdown fixture
-migration timeout (D530)” in `docs/backlog.md` and its linked failure history.
+The three scratch runs did not reproduce the statement timeout. On 27 November
+at 12:20 CET the watcher cleared one bounded snapshot in the existing setup
+observer after a PostgreSQL statement timeout. Capture live processes and their
+waits, plus write-ahead log write and sync counters. Keep the passing path and the
+test caps as they are. Use the real statement-timeout and successful-setup cases
+in `packages/registration/test/setup-wait-diagnostics.test.ts` and run normal
+registration CI. Estimate up to 30 helper lines and 20 test lines. Update the
+existing D530 backlog entry and wait for a natural recurrence before choosing a repair.

@@ -967,11 +967,11 @@ identify the observed stages and gaps. Preserve all assertions and deadlines.
 
 ## Monitoring shutdown fixture migration timeout (D530)
 
-**Open; causes unproved.** Registration shard 1 failed in migration 013 under its 3,000 ms
-statement cap, and PR #1042's merge saw migration 024/035 setup timeouts and a usage-worker
-SIGKILL on shard 3. Passing reruns reproduce none of it. Preserve the caps and assertions;
-read the retained `cloud-test-setup-waits` output on recurrence before choosing a fix.
-See [the failure and qualification limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
+**Open.** Registration shards 1, 3 and 5 have hit migration setup statement timeouts.
+The shard 5 log showed repeated waits to write the PostgreSQL write-ahead log (WAL).
+Use the next timeout's `cloud-test-setup-waits` report to compare those waits with
+the live PostgreSQL processes and WAL counters before choosing a fix.
+[Failure history and diagnostic limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
 
 ## Service-proof failure diagnostics (D530)
 

@@ -27,7 +27,7 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
    await blocker.query(`CREATE TABLE ${schema}.remote_configuration_jobs (id integer)`);
    sql='';
   }else{
-   await blocker.query('SELECT pg_advisory_xact_lock(782,19)');
+   await blocker.query("SELECT 'private holder value', pg_advisory_xact_lock(782,19)");
    sql="SELECT 'private row value', pg_advisory_xact_lock(782,19)";
   }
   await assert.rejects(known?migrate(pool):observeSetup(pool,()=>pool.query(sql)),{code:'57014'});
@@ -43,8 +43,14 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
   assert.ok(sample.locks.some((lock:any)=>lock.granted===false));
   assert.equal(sample.locks.length,1,'held locks do not displace the waiting lock');
   assert.ok(sample.locks.every((lock:any)=>lock.granted===false));
+  assert.ok(report.database,'a PostgreSQL statement timeout must retain the server-wide snapshot');
+  const {activity,walIo}=report.database;
+  assert.ok(activity.some((row:any)=>row.pid===blockerPid&&row.state==='idle in transaction'));
+  assert.ok(activity.some((row:any)=>row.backend_type==='checkpointer'));
+  assert.ok(walIo.some((row:any)=>row.backend_type==='client backend'&&row.writes>0&&Number.isFinite(row.fsyncs)));
   assert.ok(lines.join('').length<24000);
   assert.ok(!lines.join('').includes('private row value'));
+  assert.ok(!lines.join('').includes('private holder value'));
   assert.equal(pool.listenerCount('acquire'),0);
   assert.equal((await pool.query('SHOW statement_timeout')).rows[0].statement_timeout,'900ms');
  }finally{
@@ -56,6 +62,12 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
 test('successful setup stays silent and releases its observer',async t=>{
  const pool=new Pool({connectionString:url});const lines:unknown[]=[];const controller=new AbortController();
  const observerPids:number[]=[];
+ const query=Pool.prototype.query;
+ let ioReads=0;
+ t.mock.method(Pool.prototype,'query',function(this:Pool,...args:unknown[]){
+  if(this.options.application_name==='cloud-test-setup-observer'&&String(args[0]).includes('pg_stat_io'))ioReads++;
+  return Reflect.apply(query,this,args);
+ });
  const emit=Pool.prototype.emit;
  t.mock.method(Pool.prototype,'emit',function(this:Pool,event:string|symbol,...args:any[]){
   if(event==='connect'&&this.options.application_name==='cloud-test-setup-observer')observerPids.push(args[0].processID);
@@ -66,6 +78,7 @@ test('successful setup stays silent and releases its observer',async t=>{
   assert.equal(await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');return 17;},{signal:controller.signal}),17);
   controller.abort();await delay(0);
   assert.deepEqual(lines,[]);assert.equal(pool.listenerCount('acquire'),0);
+  assert.equal(ioReads,0,'passing setup must not read server I/O statistics');
   assert.ok(observerPids.length>0,'observe the real connections owned by this setup');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=ANY($1::int[])',[observerPids])).rows[0].n,0);
  }finally{await pool.end();}
