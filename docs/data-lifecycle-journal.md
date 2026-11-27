@@ -8,8 +8,10 @@ new snapshot reservations and publication, even while the venue's plan or servic
 level still includes snapshots. Acting on a request to stop a venue server,
 export, restore or delete data requires separate authority.
 
-Ordinary snapshot cleanup pauses at service end and stays paused after the
-download deadline. A snapshot already marked for deletion stays unavailable.
+Ordinary cleanup checks the recorded service end before selecting a snapshot for
+deletion and again before removing the stored copy. It stops admitting deletions
+at service end and stays paused after the download deadline. A snapshot already
+marked for deletion stays unavailable.
 An authorised purge needs its own deletion path, and a future verified
 resubscription needs to reopen ordinary cleanup along with snapshot admission.
 

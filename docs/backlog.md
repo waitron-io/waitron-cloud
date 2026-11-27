@@ -316,9 +316,9 @@ record the research for the specialist to confirm. The
 covers a verified backup, key, checksum manifest and a browser save of the venue’s
 SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
 Recording service end also stops new snapshot grants and publication in the test modes
-while the venue keeps its paid plan. Ordinary snapshot cleanup pauses at that time.
-The rehearsal runs cleanup on day 90 and saves an older verified snapshot that
-would have expired under the daily retention rule.
+while the venue keeps its paid plan. Ordinary cleanup stops starting snapshot deletions
+at that time. The rehearsal runs cleanup on a simulated day 90 and saves an older
+verified snapshot that would have expired under the daily retention rule.
 In an opted-in LAN test account, the [private stage](local-backups.md#use-disk-stages-for-the-local-publication-trial)
 holds a single verified copy for 4 MiB replies. The
 [pinned checker](superpowers/plans/2026-11-26-d642-large-download-qualification.md#verify-a-512-mib-backup-on-the-lan-worker)

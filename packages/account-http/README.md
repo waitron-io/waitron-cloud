@@ -664,8 +664,8 @@ The response contains `venueId`, `points`, `nextCursor`, `defaultPointId` and
 Test venues with downloads enabled receive `exitDownloadAvailable:true` while the lifecycle allows downloads.
 Once service has ended, the list also includes `exitRecovery` with `effectiveEndAt` and `deadlineAt`
 in UTC and an `expired` boolean. The deadline is fixed at 90 days after service ended.
-Ordinary snapshot cleanup pauses at service end in both test plan modes, so a
-verified snapshot can remain available beyond its `expiresAt` until the deadline.
+Ordinary cleanup stops starting snapshot deletions at recorded service end in
+both test plan modes. An available verified snapshot can outlast its `expiresAt`.
 The dates remain visible after expiry. While a venue is being purged or has been purged,
 the response omits both the dates and the download flag. Each point includes only `id`, `capturedAt`,
 `verification`, `retention`, `expiresAt` and `protection`. Protection is `fallback`,

@@ -174,11 +174,11 @@ test('downgrade_preserves_last_verified_snapshot_and_pauses_expiry',async()=>{
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_points WHERE NOT deleting AND deleted_at IS NULL')).rows[0].count,'2');
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_key_versions')).rows[0].count,'1');
 });
-for (const [when, shift] of [['during the exit window', '1 second'], ['after the exit deadline', '91 days']] as const) {
+for (const [when, daysSinceEnd] of [['during the exit window', 0], ['after the exit deadline', 91]] as const) {
  test(`exit retention keeps both paid snapshots ${when}`,async()=>{
   await paid();
-  const old=await snapshot(40),last=await snapshot(1);
-  const {rows:[{ended,now}]}=await db.pool.query('SELECT clock_timestamp()-$1::interval AS ended, clock_timestamp() AS now',[shift]);
+  const old=await snapshot(daysSinceEnd+40),last=await snapshot(daysSinceEnd+1);
+  const {rows:[{ended,now}]}=await db.pool.query("SELECT clock_timestamp()-$1::int*interval '24 hours'-interval '1 second' AS ended, clock_timestamp() AS now",[daysSinceEnd]);
   await recordServiceEnd(ended.toISOString());
   assert.equal((await plans.show(a.organisationId)).plan,'paid');
   assert.equal(await catalogue().cleanupOne(a.venueId,now),null);

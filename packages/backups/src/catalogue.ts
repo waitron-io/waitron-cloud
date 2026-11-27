@@ -802,7 +802,7 @@ export class BackupCatalogue {
         if(!await snapshotsAllowed(client,venueId,this.#planMode))return null;
         await lockVerificationPolicy(client);await lockVenue(client,venueId);await fence?.(client);
         if (!await snapshotServiceActive(client, venueId, this.#planMode)) return null;
-        // Keep plan and lifecycle locks through removal so a committed exit cannot be followed by expiry.
+        // Hold the policy locks through removal so a cancellation cannot commit during it.
         await this.#objects(selected.location).remove(selected.key);
         await fence?.(client);
         await client.query('UPDATE backup_points SET deleted_at=COALESCE(deleted_at,clock_timestamp()) WHERE id=$1 AND deleting',[selected.id]);
