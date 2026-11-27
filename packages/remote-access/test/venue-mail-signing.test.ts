@@ -3,6 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {set,venueServiceFixture} from '../../registration/test/fixtures/venue-service.ts';
+import {deferred} from '../../registration/test/fixtures/relay-stop-barrier.ts';
 import {fakeVenueMailProviders} from './fixtures/venue-mail-signing.ts';
 import {runVenueMailSigning} from '../src/venue-mail-signing.ts';
 
@@ -61,6 +62,15 @@ test('two venues cannot both claim a domain and inherited verification does not 
  const f=await fixture();t.after(f.db.close);
  const [first,second]=f.db.venues;assert.ok(first&&second);
  await f.choose(first);await f.choose(second);
+ const read=f.options.ses.read;
+ let firstReads=0;
+ const bothReading=deferred();
+ f.options.ses.read=async name=>{
+  if(++firstReads>2)return read(name);
+  if(firstReads===2)bothReading.resolve();
+  await bothReading.promise;
+  return null;
+ };
  const results=await Promise.all([f.run(first),f.run(second)]);
  assert.deepEqual(results.toSorted(),['held','verified']);
  assert.deepEqual(f.writes,['ses create','dns create']);
