@@ -3,6 +3,7 @@ import {organisationScopeSql,resolveSession} from '@waitron-cloud/identity';
 import {normaliseEmail,readVenuePermissions,transaction} from '@waitron-cloud/registration';
 import {boundedResolveCname,type ResolveCname} from '@waitron-cloud/remote-access/dns-lookup';
 import {isHostname,isUuid} from '@waitron-cloud/remote-access/manifest';
+import {hasActiveVenueMailInstallation,venueMailAlias,venueMailDomain} from '@waitron-cloud/remote-access/venue-mail-records';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {readSessionCookie} from './cookies.ts';
@@ -13,7 +14,6 @@ import {readAccountBody} from './request.ts';
 interface VenueEmailRow {waitron_mail_reply_to:string|null;waitron_mail_from:string|null;waitron_mail_dns_token:string|null}
 interface DnsAlias {type:'CNAME';name:string;value:string}
 interface VenueEmailSettings {replyTo:string|null;domain?:{address:string|null;records:DnsAlias[]}}
-const domainOf=(address:string)=>address.split('@')[1]!;
 const under=(name:string,suffix:string)=>name===suffix||name.endsWith('.'+suffix);
 
 export async function readVenueEmailSettings(client:PoolClient,venueId:string,installationId:string,suffix?:string):Promise<VenueEmailSettings>{
@@ -22,7 +22,7 @@ export async function readVenueEmailSettings(client:PoolClient,venueId:string,in
  if(!suffix)return {replyTo:row.waitron_mail_reply_to??row.waitron_mail_from};
  const settings={replyTo:row.waitron_mail_reply_to};
  const address=row.waitron_mail_from,token=row.waitron_mail_dns_token,records:DnsAlias[]=[];
- if(address&&token)records.push({type:'CNAME',name:`${token}._domainkey.${domainOf(address)}`,value:`${token}.mail.${suffix}`});
+ if(address&&token)records.push(venueMailAlias(venueMailDomain(address),token,suffix));
  const aliases=(await client.query<{hostname:string;assigned_hostname:string}>(`SELECT h.hostname,h.assigned_hostname
   FROM remote_placements p JOIN remote_hostnames h USING(venue_id)
   WHERE p.installation_id=$1 AND p.venue_id=$2 AND h.hostname<>h.assigned_hostname ORDER BY h.kind DESC`,[installationId,venueId])).rows;
@@ -48,7 +48,7 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
  const body=await readAccountBody(c.req.raw,action==='save'?['installationId','replyTo']:action==='save-domain'?['installationId','address']:['installationId']);
  const installationId=body.installationId!,address=action==='save-domain'?normaliseEmail(body.address):undefined;
  const replyTo=body.replyTo===''?null:normaliseEmail(body.replyTo);
- const domain=address?domainOf(address):undefined;
+ const domain=address?venueMailDomain(address):undefined;
  if(!isUuid(installationId)||(action==='save'&&replyTo===undefined)||(action==='save-domain'&&(!domain||!isHostname(domain)||domain.length>205)))throw new AccountHttpError(400,'invalid_input');
  const token=readSessionCookie(c,secure)??'',csrfToken=c.req.header('x-csrf-token')??'';
  const authorize=async(client:PoolClient)=>{
@@ -60,8 +60,7 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
   if(!venue)throw new AccountHttpError(403,'permission_denied');
   // Hold venue policy and active installation through the write or read, in that order.
   const permission=await readVenuePermissions(client,venue.id,'test-venue-levels');
-  const active=(await client.query(`SELECT 1 FROM installations WHERE id=$1 AND venue_id=$2
-   AND revoked_at IS NULL AND superseded_by IS NULL FOR SHARE`,[installationId,venue.id])).rowCount;
+  const active=await hasActiveVenueMailInstallation(client,venue.id,installationId);
   if(!active||permission.organisationId!==venue.organisation_id)throw new AccountHttpError(403,'permission_denied');
   if(permission.level!=='connected'&&permission.level!=='hosted')throw new AccountHttpError(403,'venue_email_connected_required');
   return {venueId:venue.id,accountId:session.accountId};

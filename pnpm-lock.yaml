@@ -191,6 +191,9 @@ importers:
       '@aws-sdk/client-route-53':
         specifier: 3.1163.0
         version: 3.1163.0
+      '@aws-sdk/client-sesv2':
+        specifier: 3.1163.0
+        version: 3.1163.0
       '@waitron-cloud/registration':
         specifier: workspace:*
         version: link:../registration
@@ -252,6 +255,10 @@ packages:
 
   '@aws-sdk/client-s3@3.1136.0':
     resolution: {integrity: sha512-1FUvu6nuUi3y9VjQAYootkfWKQqZ8aT8wZoV5I0bpeMkGVgntYpJ11xLicGotGE6E1qtLXB+GdOJM9B+OQYWDA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-sesv2@3.1163.0':
+    resolution: {integrity: sha512-XXAx+6NWTFwA6lnx4i2iH5AQ93HjkgEcnthYUZlhrr+Sg/ttrHyf9/+TmQEPEv5AbKrQ7p21M0ulDl+q60xWBA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-sqs@3.1163.0':
@@ -1279,6 +1286,18 @@ snapshots:
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-sesv2@3.1163.0':
+    dependencies:
+      '@aws-sdk/core': 3.980.0
+      '@aws-sdk/credential-provider-node': 3.972.93
+      '@aws-sdk/signature-v4-multi-region': 3.996.51
+      '@aws-sdk/types': 3.975.0
+      '@smithy/core': 3.39.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.14.2
+      '@smithy/types': 4.20.0
       tslib: 2.8.1
 
   '@aws-sdk/client-sqs@3.1163.0':

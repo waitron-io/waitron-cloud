@@ -7,10 +7,12 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
 import {database,signupVerification} from '../../account-http/test/fixtures.ts';
+import {runVenueMailSigning} from '../../remote-access/src/venue-mail-signing.ts';
+import {fakeVenueMailProviders} from '../../remote-access/test/fixtures/venue-mail-signing.ts';
 import {createSession,login,resolveSession} from '@waitron-cloud/identity';
 import {actionTestTotp,openProofWindow,prepareConnectionProof} from './fixtures/action-proof.ts';
 import {transaction} from '../src/transaction.ts';
-import {RegistrationStore} from '../src/index.ts';
+import {BillingStore,RegistrationStore} from '../src/index.ts';
 import {SignupStore} from '../src/signup.ts';
 import {OwnerTransferStore} from '../src/owner-transfer.ts';
 import {AuthenticatorFactorStore} from '../src/authenticator-factor.ts';
@@ -172,6 +174,14 @@ test('acceptance clears only the transferred business’s saved sender and reply
   SET waitron_mail_reply_to=$2,waitron_mail_from=$3,waitron_mail_dns_token=$4 WHERE id=$1`,[venueId,reply,from,selector]);
  await settings(v.venueId,'owner@example.test','office@cafe.example.test',token);
  await settings(other.venueId,'other@example.test','office@bistro.example.test',otherToken);
+ const billing=new BillingStore(db.pool),scope={organisationId:sender.organisationId,legalBusinessId:sender.legalBusinessId};
+ const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+ await billing.execute(scope,event(),{type:'ensure_business'});
+ const previous=await billing.venue(scope,v.venueId);
+ await billing.transition(scope,event(),{type:'set_venue',venueId:v.venueId,expectedRevision:previous.revision,
+  value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+ const signing=fakeVenueMailProviders('cloud.example.test',['cafe.example.test']);
+ assert.equal(await runVenueMailSigning(db.pool,v.venueId,signing.options),'verified');
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
  const address=async(venueId:string)=>(await db.pool.query(`SELECT waitron_mail_reply_to AS reply,waitron_mail_from AS sender,
   waitron_mail_dns_token AS token FROM venues WHERE id=$1`,[venueId])).rows[0];
@@ -179,6 +189,8 @@ test('acceptance clears only the transferred business’s saved sender and reply
  assert.equal((await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept')).state,'accepted');
  assert.deepEqual(await address(v.venueId),{reply:null,sender:null,token:null});
  assert.deepEqual(await address(other.venueId),{reply:'other@example.test',sender:'office@bistro.example.test',token:otherToken});
+ assert.equal(await runVenueMailSigning(db.pool,v.venueId,signing.options),'retired');
+ assert.deepEqual(signing.writes,['ses create','dns create','ses delete','dns delete']);
 });
 for(const state of ['pending','restored','unfinished replacement'] as const)test(`handover refuses ${state} recovery until the owner closes it`,async()=>{
  const sender=await signedAccount(),recipient=await signedAccount(),v=await venueFor(sender),store=new OwnerTransferStore(db.pool,db.outbox),point=randomUUID(),recovery=randomUUID();
@@ -226,7 +238,7 @@ test('upgrade refuses duplicate owners and preserves both rows until the duplica
   assert.deepEqual((await legacy.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner ORDER BY account_id',[org])).rows,[first,second].sort().map(account_id=>({account_id})));
   assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'67');
   await legacy.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1',[second]);await migrate(legacy.pool);
-  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'88');
+  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'89');
  }finally{await legacy.close();await old.close();}
 });
 

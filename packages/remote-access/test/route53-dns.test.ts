@@ -6,6 +6,56 @@ import {createRoute53DnsProvider} from '../src/route53-dns.ts';
 
 const name='_acme-challenge.staff-v-11111111-1111-4111-8111-111111111111.test.waitron.io';
 const token='A'.repeat(43);
+
+test('creates and removes only the exact mail TXT in the configured public zone',async t=>{
+ const adapter=await import('../src/route53-dns.ts');
+ assert.equal(typeof adapter.createRoute53MailDnsProvider,'function');
+ const selector='11111111-1111-4111-8111-111111111111',name=selector+'.mail.test.waitron.io';
+ const publicKey='A'.repeat(390)+'==',txt='v=DKIM1; k=rsa; p='+publicKey;
+ const xml='xmlns="https://route53.amazonaws.com/doc/2013-04-01/"';
+ const change='<ChangeInfo><Id>/change/C1</Id><Status>INSYNC</Status><SubmittedAt>2026-11-06T00:00:00Z</SubmittedAt></ChangeInfo>';
+ const requests:{url:string;body:string}[]=[];let zone='test.waitron.io.',stored='';
+ const server=createServer(async(req,res)=>{
+  let body='';for await(const part of req)body+=part;
+  requests.push({url:req.url!,body});
+  res.setHeader('Content-Type','text/xml');
+  if(req.url==='/2013-04-01/hostedzone/Z123'){
+   res.end(`<GetHostedZoneResponse ${xml}><HostedZone><Id>/hostedzone/Z123</Id><Name>${zone}</Name><Config><PrivateZone>false</PrivateZone></Config></HostedZone></GetHostedZoneResponse>`);
+  }else if(req.url==='/2013-04-01/change/C1'){
+   res.end(`<GetChangeResponse ${xml}>${change}</GetChangeResponse>`);
+  }else if(req.method==='GET'){
+   const records=stored?`<ResourceRecordSet><Name>${name.toUpperCase()}.</Name><Type>TXT</Type><TTL>60</TTL><ResourceRecords><ResourceRecord><Value>${stored}</Value></ResourceRecord></ResourceRecords></ResourceRecordSet>`:
+    '<ResourceRecordSet><Name>other.mail.test.waitron.io.</Name><Type>TXT</Type><TTL>60</TTL></ResourceRecordSet>';
+   res.end(`<ListResourceRecordSetsResponse ${xml}><ResourceRecordSets>${records}</ResourceRecordSets><IsTruncated>false</IsTruncated><MaxItems>1</MaxItems></ListResourceRecordSetsResponse>`);
+  }else{
+   stored=body.includes('<Action>DELETE</Action>')?'':body.match(/<Value>([^<]+)<\/Value>/)![1]!;
+   res.end(`<ChangeResourceRecordSetsResponse ${xml}>${change}</ChangeResourceRecordSetsResponse>`);
+  }
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const address=server.address();assert.ok(address&&typeof address!=='string');
+ const dns=adapter.createRoute53MailDnsProvider({zoneId:'Z123',suffix:'test.waitron.io'},
+  {endpoint:'http://127.0.0.1:'+address.port,credentials:{accessKeyId:'test',secretAccessKey:'test'}});
+ t.after(async()=>{dns.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
+ zone='other.example.test.';
+ await assert.rejects(dns.checkZone(),/invalid_mail_dns_zone/);
+ zone='test.waitron.io.';
+ await dns.checkZone();
+ assert.equal(await dns.read(name,publicKey),'absent');
+ assert.equal(new URL(requests.at(-1)!.url,'http://local').searchParams.get('name'),name);
+ assert.equal(new URL(requests.at(-1)!.url,'http://local').searchParams.get('type'),'TXT');
+ await assert.rejects(dns.create('_acme-challenge.'+name,publicKey),/invalid_mail_dns_record/);
+ await dns.create(name,publicKey);
+ const create=requests.find(request=>request.body.includes('<Action>CREATE</Action>'))?.body;
+ assert.ok(create);assert.match(create,/<TTL>60<\/TTL>/);
+ assert.deepEqual([...stored.replaceAll('&quot;','"').matchAll(/"([^"]*)"/g)].map(match=>match[1]),[txt.slice(0,255),txt.slice(255)]);
+ assert.equal(await dns.read(name,publicKey),'matching');
+ assert.equal(await dns.read(name,'B'+publicKey.slice(1)),'different');
+ await dns.remove(name,publicKey);
+ const remove=requests.find(request=>request.body.includes('<Action>DELETE</Action>'))?.body;
+ assert.equal(remove,create.replace('<Action>CREATE</Action>','<Action>DELETE</Action>'));
+ assert.equal(await dns.read(name,publicKey),'absent');
+});
 async function fixture(maxAttempts=1,type:'TXT'|'CNAME'='TXT'){
  const requests:{method:string;path:string;body:string}[]=[],records=new Map<string,string>();let pending=0,denied=false,deniedGet=false,hang=false,hangGet=false,missingId=false;const errors:unknown[]=[],observers:(()=>void)[]=[];
  const server=createServer(async(req,res)=>{
