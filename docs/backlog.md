@@ -313,10 +313,15 @@ An allowlisted owner can schedule the backup cutoff and download deadline in
 Billing’s future unpaid-expiry step sets the unpaid-trial deadline by writing the
 existing cancel instruction at expiry. Paid-month cancellation still needs a
 reachable settled-payment path. The [offline guide](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers reading the saved database and the observed restore refusal. Full return still
-needs a rehearsal with outside authority to start a new invoice series and a separate
-vault key where the source installation uses one. The design also
-tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
+covers reading the saved database. Waitron setup Restore refuses the Cloud version 1
+archive during staging and preparation with `backup.artifact_invalid` (`bad_version`).
+[Waitron’s refusal tests](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/setup-recovery-preparation-api.test.ts#L436-L458)
+The restore command opened the file, then the filing module refused because the recovery
+had no prepared operation. [Restore command rehearsal](https://github.com/waitron-io/waitron-cloud/pull/1455)
+Full return needs Waitron to prepare the version 1 download using its recovery key
+and the master key for filing authority, followed by a rehearsal with a synthetic source
+that keeps its vault key outside the archive. [Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
+The design also tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).
 The roadmap’s [slice 5 country-policy work](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
