@@ -1,5 +1,5 @@
 import {accountRequest,browserCsrfToken, type ApiResult} from './api.ts';
-import {backupDownloadDirectory, databaseStorageRefusal, removeDatabaseDownload, type DatabaseDownloadRequest} from './backup-types.ts';
+import {backupDownloadDirectory, databaseStorageRefusal, removeDatabaseDownload, type BackupExport, type DatabaseDownloadRequest} from './backup-types.ts';
 
 const refused = (code = 'database_open_failed'): ApiResult<never> => ({ok: false, status: 503, code, retryAfterMs: 0});
 let revokeSavedFile: (() => void) | undefined;
@@ -54,7 +54,7 @@ async function openInWorker(request: DatabaseDownloadRequest, signal: AbortSigna
   let cancel: (() => void) | undefined;
   let attemptId: string | undefined;
   try {
-    return await new Promise<ApiResult<undefined>>(resolve => {
+    return await new Promise<ApiResult<BackupExport | undefined>>(resolve => {
       worker.onmessage = async ({data}) => {
         if(data.kind==='stage'){attemptId=data.attemptId;return;}
         if(data.kind==='released'){attemptId=undefined;return;}
@@ -78,30 +78,59 @@ async function openInWorker(request: DatabaseDownloadRequest, signal: AbortSigna
   }
 }
 
+export function saveBackupBlob(file: Blob, name: string) {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement('a');
+  try { link.href = url; link.download = name; link.click(); }
+  finally { URL.revokeObjectURL(url); }
+}
+
 export async function downloadDatabase(venueId: string, pointId: string, signal: AbortSignal,
-    {kind,renewProof}: {kind?:'archive';renewProof?:()=>Promise<boolean>} = {}): Promise<ApiResult<undefined>> {
-  if (!navigator.locks || !navigator.storage?.getDirectory) return refused('database_storage_unavailable');
+    {kind,renewProof}: {kind?:'archive';renewProof?:()=>Promise<boolean>} = {}): Promise<ApiResult<BackupExport | undefined>> {
+  const attempt = crypto.randomUUID(), filename = `waitron-backup-${pointId}.${kind==='archive'?'backup.enc':'venue.db'}`;
+  const request = () => ({venueId, pointId, attempt, csrfToken: browserCsrfToken(),kind});
+  async function saveWithoutDisk() {
+    if (kind !== 'archive') return refused('database_storage_unavailable');
+    signal.throwIfAborted();
+    const result = await openInWorker({...request(),memoryOnly:true}, signal);
+    if (!result.ok) return result;
+    if (!result.value?.file) return refused('database_storage_unavailable');
+    signal.throwIfAborted();
+    saveBackupBlob(result.value.file, filename);
+    return result;
+  }
   try {
+    if (!navigator.locks || !navigator.storage?.getDirectory) return await saveWithoutDisk();
     return await navigator.locks.request(backupDownloadDirectory, {signal}, async () => {
-      revokeSavedFile?.();
-      const root = await navigator.storage.getDirectory();
-      await removeWhenUnlocked(root);
-      const attempt = crypto.randomUUID();
+      let root;
+      try {
+        root = await navigator.storage.getDirectory();
+        revokeSavedFile?.();
+        await removeWhenUnlocked(root);
+      } catch (error) {
+        if (kind === 'archive' && databaseStorageRefusal(error) === 'database_storage_unavailable') return saveWithoutDisk();
+        throw error;
+      }
       let saved = false;
       let releaseLiveSave: (() => void) | undefined;
       try {
         signal.throwIfAborted();
-        const result = await openInWorker({venueId, pointId, attempt, csrfToken: browserCsrfToken(),kind}, signal, renewProof);
+        const result = await openInWorker(request(), signal, renewProof);
         if (!result.ok) return result;
+        signal.throwIfAborted();
+        if (result.value?.file) {
+          saveBackupBlob(result.value.file, filename);
+          return result;
+        }
         const staging = await root.getDirectoryHandle(backupDownloadDirectory);
         const directory = await staging.getDirectoryHandle(attempt);
-        const file = await (await directory.getFileHandle(kind==='archive'?'archive.wbk':'venue.db')).getFile();
+        const file = await (await directory.getFileHandle(kind==='archive'?'backup.enc':'venue.db')).getFile();
         releaseLiveSave = await holdLiveSave(attempt);
         signal.throwIfAborted();
         const url = URL.createObjectURL(file);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `waitron-backup-${pointId}.${kind==='archive'?'backup.enc':'venue.db'}`;
+        link.download = filename;
         link.click();
         const timer = setTimeout(() => {
           revokeSavedFile?.();

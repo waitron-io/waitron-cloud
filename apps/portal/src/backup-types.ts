@@ -15,7 +15,7 @@ export function validBackupPage(value:unknown):value is BackupPage{
   &&(v.defaultPointId===null||id(v.defaultPointId))&&(v.nextCursor===null||(typeof v.nextCursor==='string'&&/^[A-Za-z0-9_-]{1,256}$/.test(v.nextCursor)))
   &&Array.isArray(v.points)&&v.points.length<=50&&new Set(v.points.map(p=>p?.id)).size===v.points.length&&v.points.every(p=>p&&typeof p==='object'&&!Array.isArray(p)&&keys(p,['id','capturedAt','expiresAt','retention','verification','protection'])&&id(p.id)&&date(p.capturedAt)&&date(p.expiresAt)&&['pending','verified','failed'].includes(p.verification as string)&&['daily','monthly'].includes(p.retention as string)&&(p.protection===null||['fallback','recovery'].includes(p.protection as string)));
 }
-export type BackupDownload = 'download'|'download-key'|'download-manifest'|'download-database';
+export type BackupDownload = 'download'|'download-manifest'|'download-database';
 export const backupArchiveLimit = 512 * 1024 ** 2;
 export const backupRangeBytes = 4 * 1024 ** 2;
 export interface BackupRangeStage {attemptId:string;size:number;}
@@ -26,7 +26,12 @@ export function validBackupRangeStage(value:unknown):value is BackupRangeStage{
   typeof size==='number'&&Number.isSafeInteger(size)&&size>0&&size<=backupArchiveLimit;
 }
 export const backupDownloadDirectory = 'waitron-backup-download';
-export interface DatabaseDownloadRequest {venueId: string; pointId: string; attempt: string; csrfToken: string;kind?:'archive';}
+export interface DatabaseDownloadRequest {venueId: string; pointId: string; attempt: string; csrfToken: string;kind?:'archive';memoryOnly?:boolean;}
+export interface BackupExport {
+ file?:Blob;
+ manifest: {archiveManifestVersion:1;archiveVersion:2;capturedAt:string;archiveSha256:string;
+   masterKeyId:string;masterKeyDay:string;laterChanges:'unknown'};
+}
 export async function removeDatabaseDownload(root: FileSystemDirectoryHandle) {
  try { await root.removeEntry(backupDownloadDirectory, {recursive: true}); }
  catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }

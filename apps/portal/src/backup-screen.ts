@@ -10,6 +10,7 @@ export function backupScreen(app:PortalApp,venueId:string){
  const states={pending:c.snapshotPending,verified:c.snapshotVerified,failed:c.snapshotFailed};
  const date=(s:string)=>formatDateTime(s,app.locale);
  const exit=b.page?.exitRecovery;
+ const exported=b.exportManifest;
  return html`<section aria-label=${c.snapshotHistory}><h4>${c.snapshotHistory}</h4>
   <p>${c.snapshotPurpose}</p><p>${c.recoveryUnavailable}</p>
   ${exit?html`<dl><dt>${c.snapshotServiceEnded}</dt><dd><time datetime=${exit.effectiveEndAt}>${formatDateTime(exit.effectiveEndAt,app.locale,'UTC')}</time></dd>
@@ -29,8 +30,8 @@ export function backupScreen(app:PortalApp,venueId:string){
   ${b.downloadable?html`<p>${c.snapshotLaterChanges}</p><div class="snapshot-actions">
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-database');}}>${c.snapshotDownloadDatabase}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download');}}>${c.snapshotDownload}</wt-button>
-   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-key');}}>${c.snapshotDownloadKey}</wt-button>
-   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>
+   <wt-button .disabled=${!exported||disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>
+   ${exported?html`<p role="status">${c.snapshotMasterKey} <span>${exported.masterKeyId} · ${exported.masterKeyDay}</span></p>`:nothing}
    ${b.downloadProof?(b.error==='pairEnrollment'?html`<a href="/account" @click=${(event:MouseEvent)=>app.openAccountSecurity(event)}>${c.accountSecurity}</a>`:accountActionProofScreen(app)):nothing}`:nothing}
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void b.load();}}>${c.latestSnapshots}</wt-button>
    ${b.page?.nextCursor?html`<wt-button .disabled=${disabled} @click=${()=>{void b.load(true);}}>${c.olderSnapshots}</wt-button>`:nothing}

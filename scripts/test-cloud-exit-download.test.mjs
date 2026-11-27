@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {runTestCloudClients} from './test-cloud-integration.mjs';
 
-test('a test venue owner saves SQLite, opens the backup offline, and all three downloads close at the deadline', {
+test('a test venue owner saves SQLite, opens the backup with one master key, and loses access at the deadline', {
   skip: !process.env.TEST_CLOUD_INTEGRATION_IMAGE || !process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
   timeout: 360_000,
 }, async () => {
@@ -12,13 +12,21 @@ test('a test venue owner saves SQLite, opens the backup offline, and all three d
   const {paidSnapshot: snapshot} = receipt;
   assert.ok(snapshot?.exitDownload);
   const {database, ...archive} = snapshot.exitDownload;
-  assert.deepEqual(archive, {sha256: snapshot.sha256, bytes: snapshot.bytes, offline: true, boxOnline: true});
+  assert.equal(archive.sourceSha256, snapshot.sha256);
+  assert.equal(archive.bytes, snapshot.bytes + 22);
+  assert.match(archive.sha256, /^[a-f0-9]{64}$/);
+  assert.match(archive.masterKeyId, /^[a-f0-9]{16}$/);
+  assert.equal(archive.archiveVersion, 2);
+  assert.equal(archive.offline, true);
+  assert.equal(archive.boxOnline, true);
   assert.equal(database.sqliteIntegrity, 'ok');
   assert.ok(database.bytes >= 4096);
   assert.match(database.sha256, /^[a-f0-9]{64}$/);
   const large = snapshot.largeExitDownload;
   assert.ok(large?.bytes > 16 * 1024 ** 2 && large.bytes < 24 * 1024 ** 2);
   assert.equal(large.offline, true);
+  assert.equal(large.archiveVersion, 2);
+  assert.equal(large.masterKeyId, archive.masterKeyId);
   assert.equal(large.boxOnline, true);
   assert.equal(large.database.sqliteIntegrity, 'ok');
   for (const route of [large.rangeTransfer, large.database.rangeTransfer]) {

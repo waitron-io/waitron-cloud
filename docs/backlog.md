@@ -289,7 +289,7 @@ best guess and ask for confirmation from the specialist later”. The
 [provisional privacy answers](superpowers/specs/2026-11-24-d101-privacy-answers.md)
 record the research for the specialist to confirm. The
 [test-Cloud owner download](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers a verified backup, key, checksum manifest and a browser save of the venue’s
+covers a verified version 2 backup, its checksum manifest and a browser save of the venue’s
 SQLite database through the fixed 90-day deadline in a disposable owner-only rehearsal.
 Recording service end also stops new snapshot grants and publication in the test modes
 while the venue keeps its paid plan. Ordinary cleanup stops starting snapshot deletions
@@ -313,14 +313,10 @@ An allowlisted owner can schedule the backup cutoff and download deadline in
 Billing’s future unpaid-expiry step sets the unpaid-trial deadline by writing the
 existing cancel instruction at expiry. Paid-month cancellation still needs a
 reachable settled-payment path. The [offline guide](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
-covers reading the saved database. Waitron setup Restore refuses the Cloud version 1
-archive during staging and preparation with `backup.artifact_invalid` (`bad_version`).
-[Waitron’s refusal tests](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/setup-recovery-preparation-api.test.ts#L436-L458)
-The restore command opened the file, then the filing module refused because the recovery
-had no prepared operation. [Restore command rehearsal](https://github.com/waitron-io/waitron-cloud/pull/1455)
-Full return needs a version 2 Cloud download that the venue’s master key opens,
-followed by a rehearsal with a synthetic source that keeps its vault key outside
-the archive. [Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
+covers reading the saved database and matching the backup’s master key to the venue’s
+recovery pack. Full return still needs a rehearsal through Waitron setup, preparation
+with current filing authority and activation using a synthetic source that keeps its
+vault key outside the archive. [Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
 The design also tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).

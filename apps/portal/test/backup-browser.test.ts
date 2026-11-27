@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import axe from 'axe-core';
@@ -7,7 +7,7 @@ import {admitPointFixture} from '../../../packages/backups/test/fixtures/verific
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
-import {backupBytes, backupManifest, recoveryKey, venueDatabase} from './fixtures/backup-download.ts';
+import {backupBytes, backupManifest, backupPayload, numberedKeyRecord, openBackupExport, recoveryKey, venueDatabase} from './fixtures/backup-download.ts';
 for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot history at phone width`,async()=>{
  const f=await startPortalFixture();try{
   const email='backups@example.test',password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
@@ -69,7 +69,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
    assert.deepEqual(route.request().postDataJSON(),{kind:'recovery',code:'1'.repeat(32)});
    proof=true;return route.fulfill({status:204});
   });
-  const archive=backupBytes({gzip:true}),key=recoveryKey+'\n';
+  const payload={gzip:true,keyRecords:[numberedKeyRecord]};
+  const archive=backupBytes(payload),key=recoveryKey+'\n';
   const manifest=backupManifest(archive);
   for(const [action,body,contentType] of [['download',archive,'application/octet-stream'],['download-key',key,'text/plain; charset=utf-8'],['download-manifest',manifest,'application/json']] as const){
    await page.route('**/api/account/backups/'+action,route=>{
@@ -80,6 +81,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   }
   await page.getByRole('button',{name:refresh,exact:true}).click();
   await saveManifest.waitFor();
+  assert.equal(await saveManifest.isDisabled(),true);
+  assert.equal(await saveKey.count(),0);
   assert.equal(await warning.count(),0);
   serviceEnded=true;
   await page.getByRole('button',{name:refresh,exact:true}).click();
@@ -108,11 +111,18 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   };
   await page.waitForTimeout(1200);
   assert.equal(await page.evaluate(stageIsPresent,true),true);
-  for(const [button,contents,extension] of [[saveArchive,archive,'backup.enc'],[saveKey,key,'key'],[saveManifest,manifest,'manifest.json']] as const){
-   const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),button.click()]);
-   assert.equal(download.suggestedFilename(),`waitron-backup-${verifiedId}.${extension}`);
-   const file=await download.path();assert.ok(file);assert.deepEqual(await readFile(file),Buffer.from(contents));
-  }
+  const [copy]=await Promise.all([page.waitForEvent('download',{timeout:15000}),saveArchive.click()]);
+  assert.equal(copy.suggestedFilename(),`waitron-backup-${verifiedId}.backup.enc`);
+  const saved=await readFile((await copy.path())!);
+  assert.deepEqual(openBackupExport(saved),backupPayload(payload));
+  await page.getByText('0011223344556677 · 2026-11-23',{exact:true}).waitFor();
+  const [checksum]=await Promise.all([page.waitForEvent('download',{timeout:5000}),saveManifest.click()]);
+  assert.equal(checksum.suggestedFilename(),`waitron-backup-${verifiedId}.manifest.json`);
+  assert.deepEqual(JSON.parse(await readFile((await checksum.path())!,'utf8')),{
+   ...JSON.parse(manifest),archiveVersion:2,archiveSha256:createHash('sha256').update(saved).digest('hex'),
+   masterKeyId:'0011223344556677',masterKeyDay:'2026-11-23',
+  });
+  await captureWindow('saved');
   if(locale==='en'){
    await page.evaluate(()=>{
     const getFile=FileSystemFileHandle.prototype.getFile;
@@ -150,7 +160,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
 
    const piece = 4 * 1024 ** 2, attemptId = randomUUID();
    const largeDatabase = Buffer.concat([venueDatabase, Buffer.alloc(piece)]);
-   const largeArchive = backupBytes({database:largeDatabase});
+   const largePayload={database:largeDatabase,keyRecords:[numberedKeyRecord]};
+   const largeArchive = backupBytes(largePayload);
    const offsets:number[] = [];
    let expireOnSecondRead = true, releases = 0;
    await page.route('**/api/account/backups/download',route=>route.fulfill({status:413,json:{error:'download_too_large'}}));
@@ -192,7 +203,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
     page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click()]);
    assert.deepEqual(await readFile((await resumed.path())!),largeDatabase);
    const [encrypted]=await Promise.all([page.waitForEvent('download',{timeout:15000}),saveArchive.click()]);
-   assert.deepEqual(await readFile((await encrypted.path())!),largeArchive);
+   assert.deepEqual(openBackupExport(await readFile((await encrypted.path())!)),backupPayload(largePayload));
    assert.deepEqual(offsets,[0,piece,piece,0,piece]);assert.equal(releases,3);
   }
   expired=true;

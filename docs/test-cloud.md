@@ -1159,11 +1159,12 @@ SQLite database. If asked, confirm your sign-in and select **Download database**
 again. Your browser checks and opens the encrypted copy on your computer. Keep the
 saved database private because it can contain staff and customer records.
 
-Select **Download backup**, **Download recovery key** and **Download backup
-manifest** to keep an encrypted copy of the same snapshot with its box state.
-Keep the matching key private so you can open the encrypted archive later. The
-manifest gives the capture time
-and SHA-256 checksum of the encrypted file. Later changes may be missing. After
+Select **Download backup**, then **Download backup manifest** to keep a version 2
+encrypted copy of the same snapshot with its box state and checksum. Match the
+displayed master key ID and date to your recovery pack. An older snapshot can
+name an earlier master key. A snapshot without a usable key record still offers
+**Download database**. The manifest gives the capture time and SHA-256 checksum
+of the file you just saved. Later changes may be missing. After
 service ends, Backups reminds you to keep your fiscal records and check your copies
 while the downloads are open. The ordinary test portal accepts verified archives
 up to 16 MiB. Set `CLOUD_EXIT_RANGE_DOWNLOADS=1` with the
@@ -1188,19 +1189,14 @@ sqlite3 -readonly "path/to/your-backup.sqlite" 'PRAGMA integrity_check;'
 ```
 
 The check returns `ok` when SQLite can read the saved database and its structure
-is intact. The disposable rehearsal compared this database with the independent
-opening of the matching encrypted archive and recovery key.
+is intact. The disposable rehearsal compares this database with the independent
+opening of the matching encrypted archive using the master key.
 
-When you select the Cloud download in Waitron setup **Restore**, the staging and
-preparation steps refuse the version 1 archive with `backup.artifact_invalid`
-and reason `bad_version`. Both steps currently require a version 2 file that the
-master key can open. [Waitron’s two refusal tests](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/setup-recovery-preparation-api.test.ts#L436-L458)
-
-In the isolated rehearsal, `waitron-restore restore` opened the same version 1
-archive with its downloaded key, placed both databases and completed migrations.
-Without a prepared recovery operation granting authority to start a new invoice
-series, the filing module stopped with `restore.hook_failed (module fiscal-verifactu: sif.allocation_invalid)`.
-[Cloud restore rehearsal](https://github.com/waitron-io/waitron-cloud/pull/1455) · [Filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/operations/hour-recovery.md#check-the-selected-copy)
+The rehearsal uses the same file opener as Waitron setup **Restore**. It
+checks that the saved file opens with the matching master key. The
+[isolated full-return plan](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
+covers staging the file in setup, preparing the recovery operation and checking
+the filing authority before activation.
 
 For a rehearsal with a separate vault key, give the replacement process that key and
 its matching version as private settings. Nonempty process settings take precedence
@@ -1209,21 +1205,20 @@ and the rehearsal has a synthetic source that keeps its vault key outside the ar
 [Waitron’s box settings loader](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/box-env.ts#L12-L17)
 
 Use the disposable Cloud image and a verifier built from Waitron revision
-`71daa2410af1c50c3a23429596ae0fb0ef62f552`. This client uses the pairing proof
-format the Cloud account service expects.
+`5cc7bf033ad3af159fd622ed7de210eb8bcf4124`. Build against that revision’s own
+verification target, which the rehearsal reads from the image.
 On your disposable Docker host, give the verifier a private 1 GiB ext4 volume
 using the [Amazon scratch settings](#rehearse-backup-on-the-amazon-test-cloud).
 Use a unique volume name and separate private disk directories for the worker and
 the account. The worker stages the archive for verification. The account stages
-the verified copy for the browser. The worker and the saved-file check use the
-verifier volume in turn.
+the verified copy for the browser.
 Load `postgres:18-alpine` and `axllent/mailpit:v1.31.1` in Docker first because
 the rehearsal starts with image pulls disabled. Install Chromium for the browser step
 with `pnpm --dir apps/portal exec playwright install --with-deps chromium`.
 
 ```sh
 TEST_CLOUD_INTEGRATION_IMAGE=<local-cloud-image-id> \
-TEST_CLOUD_INTEGRATION_WAITRON_REVISION=71daa2410af1c50c3a23429596ae0fb0ef62f552 \
+TEST_CLOUD_INTEGRATION_WAITRON_REVISION=5cc7bf033ad3af159fd622ed7de210eb8bcf4124 \
 TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=<local-verifier-image-id> \
 TEST_CLOUD_EXIT_VERIFIER_VOLUME=<private-verifier-volume> \
 TEST_CLOUD_EXIT_STAGE=<private-worker-staging-directory> \
@@ -1231,8 +1226,9 @@ TEST_CLOUD_EXIT_ACCOUNT_STAGE=<private-account-staging-directory> \
   node --test scripts/test-cloud-exit-download.test.mjs
 ```
 
-The test compares the saved archives with the stored and downloaded checksums and
-opens them in a verifier with networking disabled. Chromium saves the SQLite
+The test matches each checksum to the actual browser save. With networking
+disabled, the pinned Waitron opener uses the master key and compares every
+opened byte with the stored copy. Chromium saves the SQLite
 database for a small archive and for a second archive of about 20 MiB. The test
 checks SQLite integrity and compares each file with the independently opened
 archive. It records the larger file's staging and transfer times apart from
@@ -1244,11 +1240,11 @@ The fixture sets the end in the past so the cutoff is about 90 seconds away.
 It simulates day 90 by advancing the time used to compare ordinary expiry. The
 signed capture times stay intact. It then runs normal cleanup.
 The older verified daily snapshot is past ordinary expiry and has no recovery hold.
-Cleanup keeps both snapshots. You can still save the older archive, key and manifest
-in that window. After the cutoff, all three requests return HTTP 410, the dates stay visible
-and the stored archive still matches its verified checksum. The receipt includes
-both lifecycle dates, the cleanup time and the archive size and checksum. Keep the
-recovery key private.
+Cleanup keeps both snapshots. You can still save the older backup in that window.
+After the cutoff, the three requests that supply the browser with the original
+archive, key and manifest return HTTP 410. The dates stay visible and the stored
+archive still matches its verified checksum. The receipt includes both lifecycle
+dates, the cleanup time and the saved file’s size and checksum.
 
 ## Check real free and paid clients
 
