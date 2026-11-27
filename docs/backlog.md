@@ -354,9 +354,10 @@ remains separate. Bring later plans to the watcher one at a time for clearance.
   placement and credential enforcement, production assignment, provider retirement,
   destructive-retention coordination and mail retry semantics. The retention and mail worker
   integrations stop until their existing guarantees have a compatible design. Resubscription
-  needs a retained-data check and an activation adapter. The later exit adapter must keep
-  priority for an earlier verified delete, do an independent status lookup and qualify finer
-  deadline comparisons if another producer writes timestamps beyond milliseconds.
+  needs a retained-data check and an activation adapter that reopens snapshot admission. The
+  later exit adapter must keep priority for an earlier verified delete, do an independent status
+  lookup and qualify finer deadline comparisons if another producer writes timestamps beyond
+  milliseconds.
 - One venue approval permits at most **24 hours** of support access, shorter where practical
   and fresh approval to extend. **Paris `eu-west-3`** is the approved extra encrypted backup
   destination, subject to service, contract and recovery qualification; Spain data, logs and

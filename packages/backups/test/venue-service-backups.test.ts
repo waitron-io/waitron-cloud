@@ -55,6 +55,8 @@ test('snapshot exit cutoff refuses venue-level publication when service ends dur
   }finally{blocked.release();await pending;}
   assert.equal((await pending)?.message,'backup.permission_denied');
   assert.equal((await f.pool.query('SELECT id FROM backup_points WHERE id=$1',[reserved.id])).rowCount,0);
+  f.blockPut(async()=>assert.fail('copy started after service ended'));
+  await assert.rejects(f.catalogue.publish(f.installation,reserved.id,metadata),{message:'backup.permission_denied'});
  }finally{await f.close();}
 });
 
