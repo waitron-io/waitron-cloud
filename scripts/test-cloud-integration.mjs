@@ -6,8 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
-import {createDecipheriv, createHash, createHmac, randomUUID, scryptSync} from 'node:crypto';
-import {gunzipSync} from 'node:zlib';
+import {createHash, createHmac, randomUUID} from 'node:crypto';
 import {request} from 'node:https';
 import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
@@ -33,6 +32,7 @@ export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const composeOrigin = 'https://waitron.local:3000', defaultWaitronRevision = '8eed667ab0586a3144ed7911b57cf50fcb3b0766', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
+const exitWaitronRevision = '5cc7bf033ad3af159fd622ed7de210eb8bcf4124';
 const digest = /^sha256:[a-f0-9]{64}$/;
 const cancellation = new AsyncLocalStorage();
 const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;
@@ -295,7 +295,7 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
   return enrolledBrowser;
 }
 
-async function saveExitFile({origin, port, session, pointId, rangeSize, archive = false}) {
+async function saveExitFile({origin, port, session, pointId, rangeSize, archive = false, masterKeyName}) {
   const {chromium} = createRequire(new URL('../apps/portal/package.json', import.meta.url))('playwright');
   const {hostname} = new URL(origin);
   const browser = await chromium.launch({args: [`--host-resolver-rules=MAP ${hostname} 127.0.0.1:${port}`, '--no-proxy-server']});
@@ -343,7 +343,13 @@ async function saveExitFile({origin, port, session, pointId, rangeSize, archive 
         transferMs: release.responseAt - clickedAt, downloadMs};
     }
     const filename = await download.path();
-    if (archive) return {bytes: await readFile(filename), rangeTransfer};
+    if (archive) {
+      await page.getByText(masterKeyName,{exact:true}).waitFor();
+      const [checksum] = await Promise.all([page.waitForEvent('download'),
+        page.getByRole('button',{name:'Download backup manifest',exact:true}).click()]);
+      assert.equal(checksum.suggestedFilename(), `waitron-backup-${pointId}.manifest.json`);
+      return {bytes: await readFile(filename), manifest: parseIntegrationJson(await readFile(await checksum.path(),'utf8')), rangeTransfer};
+    }
     const {DatabaseSync} = await import('node:sqlite');
     const database = new DatabaseSync(filename, {readOnly: true});
     try {
@@ -354,41 +360,14 @@ async function saveExitFile({origin, port, session, pointId, rangeSize, archive 
   } finally { await browser.close(); }
 }
 
-// Open the archive accepted by the offline verifier without using the browser code.
-function offlineExitDatabaseDigest(archive, secret) {
-  const key = scryptSync(secret, archive.subarray(5, 21), 32, {N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 ** 2});
-  const decipher = createDecipheriv('aes-256-gcm', key, archive.subarray(21, 33));
-  key.fill(0);
-  decipher.setAAD(archive.subarray(0, 33));
-  decipher.setAuthTag(archive.subarray(33, 49));
-  const opened = Buffer.concat([decipher.update(archive.subarray(49)), decipher.final()]);
-  const bytes = opened[0] === 0x1f && opened[1] === 0x8b ? gunzipSync(opened, {maxOutputLength: 32 * 1024 ** 2}) : opened;
-  assert.equal(bytes.toString('ascii', 0, 5), 'WBA1\x01');
-  const entries = bytes.readUInt32LE(5);
-  for (let offset = 9, n = 0; n < entries; n++) {
-    const nameEnd = offset + 4 + bytes.readUInt32LE(offset);
-    const name = bytes.toString('utf8', offset + 4, nameEnd);
-    const end = nameEnd + 8 + Number(bytes.readBigUInt64LE(nameEnd));
-    assert.ok(end <= bytes.length);
-    if (name === 'db.dump') return createHash('sha256').update(bytes.subarray(nameEnd + 8, end)).digest('hex');
-    offset = end;
-  }
-  assert.fail('integration.exit_offline_database_missing');
-}
-
-async function proveExitDownload({api, browser, request, directory, waitronImage, scratchVolume, verifierChildren, onVerifierScope, online, origin, port, ranged = false}) {
-  const {openTestBackupVerifier} = await import('../deploy/test-cloud/backup-verifier-runtime.mjs');
-  const {bufferObject} = await import('../packages/backups/src/object-transfer.ts');
-  const {venueId, pointId, archive, backupKey} = request;
+async function proveExitDownload({api, browser, request, directory, openSaved, masterKeyId, masterKeyName, online, origin, port, ranged = false}) {
+  const {venueId, pointId, archive} = request;
   const body = {venueId, pointId};
   const archivePath = join(directory, 'exit.backup.enc'), keyPath = join(directory, 'exit.key');
   const manifestPath = join(directory, 'exit.manifest.json');
   const browserFile = {origin, port, session: browser, pointId, rangeSize: ranged ? archive.bytes : undefined};
-  const archiveSave = ranged ? await saveExitFile({...browserFile, archive: true}) : undefined;
-  if (archiveSave) {
-    assert.equal((await api('/api/account/backups/download', body, browser)).status, 413);
-    await writeFile(archivePath, archiveSave.bytes, {mode: 0o600});
-  }
+  const archiveSave = await saveExitFile({...browserFile, archive: true, masterKeyName});
+  if (ranged) assert.equal((await api('/api/account/backups/download', body, browser)).status, 413);
   for (const [path, saveTo, type] of [
     ...(ranged ? [] : [['download', archivePath, 'application/octet-stream']]), ['download-key', keyPath, 'text/plain; charset=utf-8'],
     ['download-manifest', manifestPath, 'application/json'],
@@ -399,28 +378,30 @@ async function proveExitDownload({api, browser, request, directory, waitronImage
     assert.equal(response.headers['cache-control'], 'no-store');
     await writeFile(saveTo, response.body, {mode: 0o600});
   }
-  const saved = await readFile(archivePath), secret = (await readFile(keyPath, 'utf8')).trim();
-  const sha256 = createHash('sha256').update(saved).digest('hex');
-  assert.equal(sha256, archive.sha256, 'integration.exit_stored_digest');
-  assert.equal(saved.length, archive.bytes);
+  const cloudKey = (await readFile(keyPath, 'utf8')).trim();
+  if (!ranged) {
+    const source = await readFile(archivePath);
+    assert.equal(createHash('sha256').update(source).digest('hex'), archive.sha256, 'integration.exit_stored_digest');
+    assert.equal(source.length, archive.bytes);
+  }
   assert.deepEqual(parseIntegrationJson(await readFile(manifestPath, 'utf8')), {
-    archiveManifestVersion: archive.manifestVersion, capturedAt: request.capturedAt, archiveSha256: sha256, laterChanges: 'unknown',
+    archiveManifestVersion: archive.manifestVersion, capturedAt: request.capturedAt, archiveSha256: archive.sha256, laterChanges: 'unknown',
   });
-  assert.ok(/^[A-Za-z0-9_-]{43}$/.test(secret), 'integration.exit_saved_key');
-  const {verify, controllerScope} = await openTestBackupVerifier({directory, image: waitronImage,
-    expectedRevision: request.target.runtime.revision, scratchVolume});
-  onVerifierScope(controllerScope);
-  const {result, receipt} = await verify(bufferObject(saved), {...backupKey, secret}, {...request,
-    attempt: {...request.attempt, controllerScope, childToken: randomUUID(), deadline: new Date(Date.now()+60_000).toISOString()}},
-  AbortSignal.any([runSignal(), AbortSignal.timeout(30_000)].filter(Boolean)));
-  assert.equal(result.status, 'passed', 'integration.exit_offline_open');
-  assert.equal(result.activation, 'not_attempted');
-  assert.equal(receipt.cleanupConfirmed, true);
-  assert.deepEqual(await verifierChildren(controllerScope), [], 'integration.exit_verifier_child_remains');
+  assert.ok(/^[A-Za-z0-9_-]{43}$/.test(cloudKey), 'integration.exit_cloud_key');
+  const sha256 = createHash('sha256').update(archiveSave.bytes).digest('hex');
+  const opened = await openSaved(archiveSave.bytes, cloudKey);
+  assert.equal(opened.sourceSha256, archive.sha256);
+  assert.equal(opened.savedSha256, sha256);
+  assert.equal(opened.masterKeyId, masterKeyId);
+  assert.equal(archiveSave.manifest.archiveVersion, 2);
+  assert.equal(archiveSave.manifest.archiveSha256, sha256);
+  assert.equal(archiveSave.manifest.capturedAt, request.capturedAt);
+  assert.equal(archiveSave.manifest.masterKeyId, masterKeyId);
   const database = await saveExitFile(browserFile);
-  assert.equal(database.sha256, offlineExitDatabaseDigest(saved, secret), 'integration.exit_browser_matches_verified_database');
+  assert.equal(database.sha256, opened.databaseSha256, 'integration.exit_browser_matches_verified_database');
   await online();
-  return {sha256, bytes: saved.length, offline: true, boxOnline: true, database, ...(archiveSave && {rangeTransfer: archiveSave.rangeTransfer})};
+  return {sha256, bytes: archiveSave.bytes.length, archiveVersion: 2, masterKeyId, sourceSha256: opened.sourceSha256,
+    offline: true, boxOnline: true, database, ...(ranged && {rangeTransfer: archiveSave.rangeTransfer})};
 }
 
 export async function captureInboxWitness(readInbox, signal) {
@@ -544,8 +525,9 @@ export async function runTestCloudClients(options = {}) {
   }
   if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
   const revision = options.services ? options.verificationTarget?.runtime?.revision ?? '' :
-    process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? defaultWaitronRevision;
+    process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? (options.paidExitDownload ? exitWaitronRevision : defaultWaitronRevision);
   assert.match(revision, /^[a-f0-9]{40}$/, 'integration.waitron_revision_invalid');
+  if (options.paidExitDownload) assert.equal(revision, exitWaitronRevision, 'integration.exit_waitron_revision');
   const stop = new AbortController(), shutdown = () => stop.abort(Error('integration.cancelled'));
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
   try {
@@ -618,7 +600,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, recoveryBuilt = false, started = false, result, cloudSource, cloudAssets, waitronAssets, waitronBaseSource, waitronClientSource;
-  let verifierWorker, verifierStarted = false, verifierScope, exitVerifierScope, capacityEvidence, nativeTarget;
+  let verifierWorker, verifierStarted = false, verifierScope, capacityEvidence, nativeTarget;
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
   let hostCapacity, startupCapacity, capacityChronology;
@@ -892,7 +874,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'snapshot-' + phase);
         await accountPhase('provision-snapshot');
         await control(id, 'refresh');
-        const recoveryAuthority = paidAuthorisedRecovery ? await control(id, 'recovery-authority') : undefined;
+        const recoveryAuthority = paidAuthorisedRecovery || paidExitDownload ? await control(id, 'recovery-authority') : undefined;
         if (paidVerification || paidRecovery) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
         let captured = await control(id, 'snapshot-publish');
         const refused = services ? await control(id, 'snapshot-altered') : undefined;
@@ -993,24 +975,29 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
             journeyStage = 'exit-download';
             const request = parseIntegrationJson(await accountPhase('inspect-exit-download', {...captured, image:verifierImage, revision, nativeTarget}));
             const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
-            publishedSnapshot.exitDownload = await proveExitDownload({api, browser, request, directory, waitronImage, origin, port,
-            scratchVolume: exitScratch.volume, verifierChildren, onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
+            const {secret:masterKey,masterKeyId,name:masterKeyName}=recoveryAuthority;
+            const openSaved = async (file, cloudKey) => {
+              await docker(['exec','-i',id,'sh','-c','umask 077; cat > "$CLOUD_TEST_ROOT/exit-download.enc"'],file,'exit-copy-saved-file');
+              return parseIntegrationJson(await docker(['exec','-i','--env','TSX_DISABLE_CACHE=1',id,'node','--permission',
+                '--allow-fs-read=*','--allow-fs-write='+venueRoot,'--allow-worker','--allow-addons','--import','tsx','--input-type=module','-e',
+                `import {proveIntegrationExitOpen} from '/proof/integration-recovery-authority.mjs';
+                 let input=''; for await (const chunk of process.stdin) {input+=chunk;if(input.length>2048)throw Error('integration.exit_opener_input');}
+                 console.log(JSON.stringify(await proveIntegrationExitOpen(process.env.CLOUD_TEST_ROOT, JSON.parse(input))));`],
+              JSON.stringify({masterKey,masterKeyId,cloudKey}),'exit-open-saved-file'));
+            };
+            const online = async () => {
               await control(id, 'ready');
               assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
               assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
-            }});
+            };
+            const proof={api,browser,origin,port,online,openSaved,masterKeyId,masterKeyName};
+            publishedSnapshot.exitDownload = await proveExitDownload({...proof,request,directory});
             journeyStage = 'exit-large-download';
             const large = await control(id, 'snapshot-large');
             await verify(large);
             const largeRequest = parseIntegrationJson(await accountPhase('inspect-exit-download', {...large, image:verifierImage, revision, nativeTarget}));
             const largeDirectory = await mkdtemp(join(directory, 'large-'));
-            publishedSnapshot.largeExitDownload = await proveExitDownload({api, browser, request: largeRequest, directory: largeDirectory,
-              waitronImage, origin, port, ranged: true, scratchVolume: exitScratch.volume, verifierChildren,
-              onVerifierScope: scope => {exitVerifierScope = scope;}, online: async () => {
-                await control(id, 'ready');
-                assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', id]), started, 'integration.exit_box_restarted');
-                assert.deepEqual((await control(id, 'evidence')).registration, evidence.registration);
-              }});
+            publishedSnapshot.largeExitDownload = await proveExitDownload({...proof,request:largeRequest,directory:largeDirectory,ranged:true});
             journeyStage = 'exit-recovery-window';
             const {expiryCheckedAt, cleanupFinishedAt, ...window} = parseIntegrationJson(await accountPhase('end-exit-download'));
             checkSnapshotGrantRefusal(await control(id, 'snapshot-refusal'));
@@ -1405,7 +1392,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       // Host cleanup owns the native clients; the owned kind node collects its separate verifier daemon.
       const cleanup = () => cleanupTestCloudResources({docker, project, runId, created, removed, owned, started,
         verifier: {worker: kubernetes ? undefined : verifierWorker, started: verifierStarted, readScope: readVerifierScope,
-          children: async () => [...await verifierChildren(), ...(exitVerifierScope ? await verifierChildren(exitVerifierScope) : [])]},
+          children: verifierChildren},
         built, recoveryBuilt, clientTag, recoveryTag, inventory,
         protectedUnchanged: after => checkProtectedContainers(before, after, protectedContainerIds)});
       if (capacityChronology) {

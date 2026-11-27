@@ -3,6 +3,20 @@ import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {formatDateTime} from './dates.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
+import type {BackupExport} from './backup-types.ts';
+
+function masterKeyName({masterKeyId,masterKeyDay}: BackupExport['manifest']) {
+ const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+ // Waitron prints the first four of thirteen fixed-width base-31 digits alongside the date.
+ let prefix = BigInt('0x'+masterKeyId) / 31n**9n;
+ let symbols = '';
+ for(let index = 0; index < 4; index++) {
+  symbols = alphabet[Number(prefix % 31n)] + symbols;
+  prefix /= 31n;
+ }
+ return `${masterKeyDay} · ${symbols}`;
+}
+
 export function backupScreen(app:PortalApp,venueId:string){
  const c=app.copy,b=app.backups;
  if(b.venueId!==venueId)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void b.open(venueId);}}>${c.viewSnapshots}</wt-button>`;
@@ -10,6 +24,7 @@ export function backupScreen(app:PortalApp,venueId:string){
  const states={pending:c.snapshotPending,verified:c.snapshotVerified,failed:c.snapshotFailed};
  const date=(s:string)=>formatDateTime(s,app.locale);
  const exit=b.page?.exitRecovery;
+ const exported=b.exportManifest;
  return html`<section aria-label=${c.snapshotHistory}><h4>${c.snapshotHistory}</h4>
   <p>${c.snapshotPurpose}</p><p>${c.recoveryUnavailable}</p>
   ${exit?html`<dl><dt>${c.snapshotServiceEnded}</dt><dd><time datetime=${exit.effectiveEndAt}>${formatDateTime(exit.effectiveEndAt,app.locale,'UTC')}</time></dd>
@@ -29,8 +44,8 @@ export function backupScreen(app:PortalApp,venueId:string){
   ${b.downloadable?html`<p>${c.snapshotLaterChanges}</p><div class="snapshot-actions">
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-database');}}>${c.snapshotDownloadDatabase}</wt-button>
    <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download');}}>${c.snapshotDownload}</wt-button>
-   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-key');}}>${c.snapshotDownloadKey}</wt-button>
-   <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>
+   <wt-button .disabled=${!exported||disabled||app.actionProof.pending} @click=${()=>{void app.downloadBackup('download-manifest');}}>${c.snapshotDownloadManifest}</wt-button></div>
+   ${exported?html`<p role="status">${c.snapshotMasterKey} <span>${masterKeyName(exported)}</span></p>`:nothing}
    ${b.downloadProof?(b.error==='pairEnrollment'?html`<a href="/account" @click=${(event:MouseEvent)=>app.openAccountSecurity(event)}>${c.accountSecurity}</a>`:accountActionProofScreen(app)):nothing}`:nothing}
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void b.load();}}>${c.latestSnapshots}</wt-button>
    ${b.page?.nextCursor?html`<wt-button .disabled=${disabled} @click=${()=>{void b.load(true);}}>${c.olderSnapshots}</wt-button>`:nothing}

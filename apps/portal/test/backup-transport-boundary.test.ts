@@ -53,6 +53,20 @@ function fixture(t: TestContext) {
   return {controller, replies, requests, changes: () => changes};
 }
 
+function workerRefusals(t: TestContext, ...failures: Array<{status: number;code: string}>) {
+  class RefusingWorker {
+    onmessage?: (event: {data: unknown}) => void;
+    postMessage() {
+      assert.ok(failures.length, 'each worker request needs an explicit refusal');
+      this.onmessage?.({data: {ok:false,retryAfterMs:0,...failures.shift()}});
+    }
+    terminate() {}
+  }
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+  Object.defineProperty(globalThis, 'Worker', {configurable:true,value:RefusingWorker});
+  t.after(() => { if(previous)Object.defineProperty(globalThis,'Worker',previous);else Reflect.deleteProperty(globalThis,'Worker'); });
+}
+
 test('manifest transport requires the expected media type and a nonempty bounded body',async t=>{
   const f=fixture(t),body={archiveManifestVersion:1,capturedAt:stamp,archiveSha256:'a'.repeat(64),laterChanges:'unknown'};
   const request=()=>accountRequest<Blob>('/backups/download-manifest',{venueId,pointId});
@@ -128,7 +142,7 @@ for(const disk of ['absent','refused'])test(`a browser with disk storage ${disk}
  }
  f.replies.push({body:{...page,exitDownloadAvailable:true}});
  await f.controller.open(venueId);
- f.replies.push({status:413,body:{error:'download_too_large'}});
+ workerRefusals(t,{status:413,code:'download_too_large'});
  await f.controller.download('download');
  assert.equal(f.controller.error,'snapshotDownloadTooLarge');
 });
@@ -140,19 +154,26 @@ test('backup download preserves the account enrollment event and distinguishes C
   await f.controller.open(venueId);
   let enrollment=0;
   document.addEventListener(enrollmentRequiredEvent,()=>{enrollment++;});
-  f.replies.push({status:403,body:{error:'enrollment_required'}});
+  workerRefusals(t,{status:403,code:'enrollment_required'},{status:403,code:'forbidden'},{status:403,code:'permission_denied'});
   await f.controller.download('download');
   assert.equal(enrollment,1);
   assert.equal(f.controller.error,'pairEnrollment');
   assert.equal(f.controller.downloadProof,true);
-  f.replies.push({status:403,body:{error:'forbidden'}});
   await f.controller.download('download');
   assert.equal(f.controller.error,'forbidden');
-  f.replies.push({status:403,body:{error:'permission_denied'}});
   await f.controller.download('download');
   assert.equal(f.controller.error,'permissionBusiness');
   assert.equal(f.controller.page,undefined);
   assert.equal(f.controller.selected,undefined);
+});
+
+test('a storage refusal identifies the backup that could not be saved',async t=>{
+  const f=fixture(t);
+  f.replies.push({body:{...page,exitDownloadAvailable:true}});
+  await f.controller.open(venueId);
+  workerRefusals(t,{status:503,code:'database_storage_unavailable'});
+  await f.controller.download('download');
+  assert.equal(f.controller.error,'snapshotBackupStorageUnavailable');
 });
 
 test('database download forwards server refusals and the enrollment event',async t=>{
@@ -195,8 +216,8 @@ test('changing snapshot clears a download refusal and keeps a catalogue refusal 
   const f=fixture(t);
   f.replies.push({body:{...page,exitDownloadAvailable:true,points:[page.points[0],olderPage.points[0]]}});
   await f.controller.open(venueId);
-  f.replies.push({status:403,body:{error:'proof_required'}});
-  await f.controller.download('download-key');
+  workerRefusals(t,{status:403,code:'proof_required'});
+  await f.controller.download('download');
   assert.equal(f.controller.error,'snapshotDownloadProof');
   f.controller.select(olderPointId);
   assert.equal(f.controller.error,undefined);

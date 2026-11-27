@@ -314,8 +314,10 @@ const enBase = {
   diagnosticUnavailable:"The diagnostic report is temporarily unavailable. Retry or refresh the status.",
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
-  snapshotDownload:'Download backup', snapshotDownloadKey:'Download recovery key', snapshotDownloadProof:'Verify it’s you before downloading.',
+  snapshotDownload:'Download backup', snapshotDownloadProof:'Verify it’s you before downloading.',
+  snapshotMasterKey:'Find this master key in your recovery pack.', snapshotRestoreKeyUnavailable:'You can download the database. This copy has no usable restore key.',
   snapshotDatabaseStorageUnavailable:"This browser can't save the database. If you are using a private/incognito browser window then try again with a normal window. Alternatively, try another browser.",
+  snapshotBackupStorageUnavailable:'Couldn’t save the backup. Check free space and try a regular window.',
   snapshotDownloadDatabase:'Download database', snapshotDatabaseOpenFailed:'The backup could not be opened.',
   snapshotDownloadManifest:'Download backup manifest', snapshotLaterChanges:'Later changes may be missing.',
   snapshotFiscalWarning:'You are now responsible for keeping your fiscal records. Download and check your copies.',
@@ -719,8 +721,10 @@ const esBase: typeof enBase = {
   diagnosticUnavailable:"El informe de diagnóstico no está disponible temporalmente. Reinténtalo o actualiza el estado.",
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
-  snapshotDownload:'Descargar copia', snapshotDownloadKey:'Descargar clave de recuperación', snapshotDownloadProof:'Verifica que eres tú antes de descargar.',
+  snapshotDownload:'Descargar copia', snapshotDownloadProof:'Verifica que eres tú antes de descargar.',
+  snapshotMasterKey:'Busca esta clave maestra en tu paquete de recuperación.', snapshotRestoreKeyUnavailable:'Puedes descargar la base de datos. Esta copia no tiene una clave de restauración válida.',
   snapshotDatabaseStorageUnavailable:'Este navegador no puede guardar la base de datos. Si usas una ventana privada o de incógnito, inténtalo de nuevo en una ventana normal. También puedes usar otro navegador.',
+  snapshotBackupStorageUnavailable:'No se pudo guardar la copia. Comprueba el espacio libre y prueba en una ventana normal.',
   snapshotDownloadDatabase:'Descargar base de datos', snapshotDatabaseOpenFailed:'No se pudo abrir la copia.',
   snapshotDownloadManifest:'Descargar manifiesto de la copia', snapshotLaterChanges:'Puede que falten cambios posteriores.',
   snapshotFiscalWarning:'Ahora debes conservar tus registros fiscales. Descarga y comprueba tus copias.',

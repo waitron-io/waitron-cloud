@@ -1,13 +1,13 @@
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,enrollmentRequiredEvent} from './api.ts';
-import {clearAbandonedDatabaseDownload,downloadDatabase} from './backup-database-download.ts';
+import {clearAbandonedDatabaseDownload,downloadDatabase,saveBackupBlob} from './backup-database-download.ts';
 import type {Copy} from './locale.ts';
-import type {BackupDownload,BackupPage} from './backup-types.ts';
-const downloadExtension = {'download':'backup.enc','download-key':'key','download-manifest':'manifest.json'};
+import type {BackupDownload,BackupExport,BackupPage} from './backup-types.ts';
 export class BackupController {
  venueId:string|undefined;page:BackupPage|undefined;selected:string|undefined;selectedSource:'continuous'|'snapshot'|undefined;pending=false;
  downloadProof=false;downloadError:keyof Copy|undefined;
  #listError:keyof Copy|undefined;
+ #exportManifest:BackupExport['manifest']|undefined;
  #download:AbortController|undefined;
  #finishProof:((proved:boolean)=>void)|undefined;
  // Relative retry waits use elapsed time; retryAt projects the remainder for the shared wall-clock countdown.
@@ -20,9 +20,11 @@ export class BackupController {
  close(){this.cancelDownload();this.#generation++;this.venueId=undefined;this.page=undefined;this.selected=undefined;this.selectedSource=undefined;this.pending=false;this.#listError=undefined;}
  cancelDownload(){
   this.downloadError=undefined;
+  this.#exportManifest=undefined;
   this.#download?.abort();this.#download=undefined;this.downloadProof=false;
  }
  get downloading(){return !!this.#download;}
+ get exportManifest(){return this.#exportManifest;}
  get error(){return this.downloadError??this.#listError;}
  get downloadable(){return this.page?.exitDownloadAvailable===true&&this.page.points.some(point=>point.id===this.selected&&point.verification==='verified');}
  selectContinuous(){if(this.page?.continuousRecovery){this.cancelDownload();this.selectedSource='continuous';this.#changed();}}
@@ -37,6 +39,12 @@ export class BackupController {
  async download(action:BackupDownload,refreshProof?:()=>Promise<boolean>){
   const venueId=this.venueId,pointId=this.selected;
   if(!this.#account||!venueId||!pointId||!this.downloadable||this.pending||this.#download||this.waiting)return;
+  if(action==='download-manifest'){
+   if(this.#exportManifest)saveBackupBlob(new Blob([JSON.stringify(this.#exportManifest)+'\n'],{type:'application/json'}),
+    `waitron-backup-${pointId}.manifest.json`);
+   return;
+  }
+  if(action==='download')this.#exportManifest=undefined;
   const transfer=new AbortController();this.#download=transfer;this.downloadError=undefined;this.#listError=undefined;this.#changed();
   const renewProof=async()=>{
    if(!refreshProof||transfer.signal.aborted)return false;
@@ -53,26 +61,21 @@ export class BackupController {
    }
   };
   try{
-   let result=await (action==='download-database'?downloadDatabase(venueId,pointId,transfer.signal,{renewProof})
-    :this.#request<Blob>(`/backups/${action}`,{venueId,pointId},transfer.signal));
-   if(action==='download'&&!result.ok&&result.status===413){
-    const ranged=await downloadDatabase(venueId,pointId,transfer.signal,{kind:'archive',renewProof});
-    if(ranged.ok||ranged.code!=='database_storage_unavailable')result=ranged;
-   }
+   const result=await downloadDatabase(venueId,pointId,transfer.signal,{kind:action==='download'?'archive':undefined,renewProof});
    if(transfer.signal.aborted)return;
    if(result.ok){
-    if(action==='download-database'||!result.value)return;
-    const url=URL.createObjectURL(result.value),link=document.createElement('a');
-    try{link.href=url;link.download=`waitron-backup-${pointId}.${downloadExtension[action]}`;link.click();}finally{URL.revokeObjectURL(url);}
+    if(result.value)this.#exportManifest=result.value.manifest;
    }else{
     this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
     if(result.status===401||result.code==='permission_denied'){this.page=undefined;this.selected=undefined;this.selectedSource=undefined;}
     this.downloadError=result.code==='proof_required'?'snapshotDownloadProof':result.code==='enrollment_required'?'pairEnrollment':
      result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):
      result.code==='download_too_large'?'snapshotDownloadTooLarge':
-     result.code==='database_storage_unavailable'?'snapshotDatabaseStorageUnavailable':result.code==='database_open_failed'?'snapshotDatabaseOpenFailed':'snapshotDownloadUnavailable';
+     result.code==='restore_key_unavailable'?'snapshotRestoreKeyUnavailable':
+     result.code==='database_storage_unavailable'?(action==='download'?'snapshotBackupStorageUnavailable':'snapshotDatabaseStorageUnavailable'):
+     result.code==='database_open_failed'?'snapshotDatabaseOpenFailed':'snapshotDownloadUnavailable';
     this.downloadProof=result.code==='proof_required'||result.code==='enrollment_required';
-    if(action==='download-database'&&result.code==='enrollment_required')document.dispatchEvent(new Event(enrollmentRequiredEvent));
+    if(result.code==='enrollment_required')document.dispatchEvent(new Event(enrollmentRequiredEvent));
    }
   }finally{if(this.#download===transfer){this.#download=undefined;this.#changed();}}
  }

@@ -2,26 +2,38 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {readFile} from 'node:fs/promises';
 import {after, before, test} from 'node:test';
 import {chromium, type Browser} from 'playwright';
 import {loadPortalAssets, portalResponse} from '../../../packages/account-http/src/portal.ts';
 import {readBytes} from '../src/backup-download-bytes.ts';
-import {backupBytes, backupManifest, recoveryKey, venueDatabase} from './fixtures/backup-download.ts';
+import {backupBytes, backupManifest, backupPayload, numberedKeyRecord, openBackupExport, recoveryKey, venueDatabase} from './fixtures/backup-download.ts';
 
 const assets = await loadPortalAssets(new URL('../dist', import.meta.url).pathname);
 let browser: Browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser?.close(); });
 
-for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag', 'oversized database', 'oversized download', 'quota', 'interrupted staging', 'ranged', 'bad range', 'range proof', 'encrypted ranges', 'bad encrypted digest', 'repeated range proof', 'failed release']) {
+for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag', 'oversized database', 'oversized download', 'quota', 'interrupted staging', 'ranged', 'bad range', 'range proof', 'encrypted ranges', 'bad encrypted digest', 'repeated range proof', 'failed release', 'Waitron version 2', 'missing key record', 'malformed key record', 'duplicate key record', 'duplicate key fields', 'restore without disk', 'ranged restore without disk', 'restore wrong tag', 'restore quota']) {
   test(`database worker handles ${scenario}`, async () => {
-    const ranged = ['ranged','bad range','range proof','encrypted ranges','bad encrypted digest','repeated range proof','failed release'].includes(scenario);
+    const fixedFrame = scenario === 'Waitron version 2';
+    const memoryOnly = scenario.endsWith('without disk');
+    const refusedRecord = scenario.endsWith('key record') || scenario === 'duplicate key fields';
+    const restore = fixedFrame || memoryOnly || refusedRecord || ['encrypted ranges','bad encrypted digest','restore wrong tag','restore quota'].includes(scenario);
+    const ranged = ['ranged','bad range','range proof','encrypted ranges','bad encrypted digest','repeated range proof','failed release','ranged restore without disk','restore quota'].includes(scenario);
+    const quota = scenario === 'quota' ? 1024 ** 2 : scenario === 'restore quota' ? 10 * 1024 ** 2 : undefined;
+    const untrusted = scenario === 'restore wrong tag';
     const sizeMiB = ({'quota': 2, 'oversized download': 17} as Record<string,number>)[scenario] ?? 0;
     const database = ranged ? Buffer.concat([venueDatabase, Buffer.alloc(4 * 1024 ** 2)]) : venueDatabase;
-    const archive = backupBytes({gzip: ['gzip','quota'].includes(scenario),
+    const [keyLine, ...identityLines] = numberedKeyRecord.split('\n');
+    const keyRecords = scenario === 'missing key record' || !restore ? [] : scenario === 'duplicate key record' ?
+      [keyLine!, identityLines.join('\n')] : scenario === 'duplicate key fields' ? [numberedKeyRecord + keyLine] : scenario === 'malformed key record' ?
+      [numberedKeyRecord.replace('2026-11-23', '2026-02-30')] : [numberedKeyRecord];
+    const payloadOptions = {gzip: memoryOnly || untrusted || ['gzip','quota'].includes(scenario), keyRecords,
       ...(scenario === 'oversized database' ? {databaseLength: 512 * 1024 ** 2 + 1} : {}),
-      ...(sizeMiB ? {database: Buffer.concat([venueDatabase, Buffer.alloc(sizeMiB * 1024 ** 2)])} : {database})});
-    if (scenario === 'wrong tag') archive[33]! ^= 1;
+      ...(sizeMiB ? {database: Buffer.concat([venueDatabase, Buffer.alloc(sizeMiB * 1024 ** 2)])} : {database})};
+    const archive = backupBytes(payloadOptions);
+    if (scenario.endsWith('wrong tag')) archive[33]! ^= 1;
     const manifest = backupManifest(['wrong digest','bad encrypted digest'].includes(scenario) ? Buffer.from('different archive') : archive);
     const offsets:number[] = [], requests:string[] = [];
     let releases = 0;
@@ -29,6 +41,26 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
       if (req.url?.startsWith('/api/account/backups/')) requests.push(req.url.split('/').at(-1)!);
       switch (req.url) {
         case '/empty': res.writeHead(200, {'Content-Type':'text/html'}).end('<title>Storage inspection</title>'); return;
+        case '/worker-observe-decompression.js':
+          res.writeHead(200, {'Content-Type':'text/javascript'}).end(`
+            globalThis.DecompressionStream = class extends DecompressionStream {
+              constructor(format) { super(format); postMessage({kind:'decompressing'}); }
+            };
+            importScripts('/backup-download-worker.js');
+          `); return;
+        case '/worker-no-disk.js':
+          res.writeHead(200, {'Content-Type':'text/javascript'}).end(`
+            navigator.storage.getDirectory = async () => { throw new DOMException('Disk unavailable', 'SecurityError'); };
+            importScripts('/backup-download-worker.js');
+          `); return;
+        case '/worker-fixed-random.js':
+          res.writeHead(200, {'Content-Type':'text/javascript'}).end(`
+            crypto.getRandomValues = bytes => {
+              if (bytes.length === 28) { bytes.fill(24, 0, 16); return bytes.fill(42, 16); }
+              return bytes.fill(bytes.length === 16 ? 24 : 42);
+            };
+            importScripts('/backup-download-worker.js');
+          `); return;
         case '/worker-probe.js':
           res.writeHead(200, {'Content-Type':'text/javascript'}).end(`
             importScripts('/backup-download-worker.js');
@@ -70,27 +102,30 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
     }).listen(0, '127.0.0.1');
     await once(server, 'listening');
     const origin = `http://127.0.0.1:${(server.address() as {port:number}).port}`;
-    const context = scenario === 'quota' ? await chromium.launchPersistentContext('') : await browser.newContext();
+    const context = quota ? await chromium.launchPersistentContext('') : await browser.newContext();
     const page = await context.newPage();
     try {
       await page.goto(origin + '/empty');
-      if (scenario === 'quota') {
+      if (quota) {
         const session = await page.context().newCDPSession(page);
-        await session.send('Storage.overrideQuotaForOrigin', {origin, quotaSize: 1024 ** 2});
+        await session.send('Storage.overrideQuotaForOrigin', {origin, quotaSize: quota});
       }
-      const result = await page.evaluate(async ({interrupted,encrypted,ranged}) => {
-        const worker = new Worker(interrupted ? '/worker-probe.js' : '/backup-download-worker.js');
+      const result = await page.evaluate(async ({interrupted,ranged,restore,fixedFrame,memoryOnly,untrusted}) => {
+        const worker = new Worker(interrupted ? '/worker-probe.js' : fixedFrame ? '/worker-fixed-random.js' :
+          memoryOnly ? '/worker-no-disk.js' : untrusted ? '/worker-observe-decompression.js' : '/backup-download-worker.js');
         let released = false;
-        const reply = await new Promise<{ok:boolean;code?:string;written?:boolean}>((resolve, reject) => {
+        let decompressed = false;
+        const reply = await new Promise<{ok:boolean;code?:string;written?:boolean;value?:{file?:Blob;manifest:{archiveVersion:number;archiveSha256:string;masterKeyId:string;masterKeyDay:string}}}>((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error('No worker result')), ranged ? 15_000 : 7000);
           worker.onmessage = ({data}) => {
             if(data.kind==='proof'){worker.postMessage({kind:'proof',ok:true});return;}
             if(data.kind==='released'){released=true;return;}
+            if(data.kind==='decompressing'){decompressed=true;return;}
             if(data.kind==='stage')return;
             clearTimeout(timeout); resolve(data);
           };
           worker.onerror = () => reject(new Error('Database worker failed to load'));
-          worker.postMessage({venueId:'test-venue', pointId:'test-point', csrfToken:'fixture', attempt:'test-attempt',...(encrypted?{kind:'archive'}:{})});
+          worker.postMessage({venueId:'test-venue', pointId:'test-point', csrfToken:'fixture', attempt:'test-attempt',...(restore?{kind:'archive'}:{}),memoryOnly});
         });
         if (interrupted) {
           if (!reply.written) throw new Error('Archive finished before interruption');
@@ -100,11 +135,17 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         const root = await navigator.storage.getDirectory();
         const files: string[] = [];
         for await (const name of root.keys()) files.push(name);
-        const saved = reply.ok ? await (await (await root.getDirectoryHandle('waitron-backup-download')).getDirectoryHandle('test-attempt')).getFileHandle(encrypted?'archive.wbk':'venue.db') : undefined;
-        const file=await saved?.getFile();
+        const saved = reply.ok && !reply.value?.file ? await (await (await root.getDirectoryHandle('waitron-backup-download')).getDirectoryHandle('test-attempt')).getFileHandle(restore ? (reply.value ? 'backup.enc' : 'archive.wbk') : 'venue.db') : undefined;
+        const file=reply.value?.file ?? await saved?.getFile();
         const sha256=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):undefined;
-        return {ok:reply.ok, code:reply.code, files, sha256, released, bytes: file&&file.size<2**20 ? Array.from(new Uint8Array(await file.arrayBuffer())) : []};
-      },{interrupted:scenario === 'interrupted staging',encrypted:['encrypted ranges','bad encrypted digest'].includes(scenario),ranged});
+        const bytes = file && (restore || file.size < 2**20) ? await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]!);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        }) : undefined;
+        return {ok:reply.ok, code:reply.code, files, sha256, released, decompressed, manifest:reply.value?.manifest, bytes};
+      },{interrupted:scenario === 'interrupted staging',ranged,restore,fixedFrame,memoryOnly,untrusted});
       if (scenario === 'interrupted staging') {
         await page.close();
         const inspector = await context.newPage();
@@ -125,22 +166,60 @@ for (const scenario of ['raw', 'gzip', 'truncated', 'wrong digest', 'wrong tag',
         return;
       }
       assert.ok(result);
-      if (scenario === 'raw' || scenario === 'gzip') {
-        assert.equal(result.ok,true);
-        assert.deepEqual(Buffer.from(result.bytes),venueDatabase);
+      if (memoryOnly && ranged) {
+        assert.equal(result.code,'download_too_large');
+        assert.equal(result.ok,false);
         assert.deepEqual(requests,['download-manifest','download-key','download']);
+      } else if (memoryOnly) {
+        assert.equal(result.ok, true, 'a small restore backup can be saved without disk staging');
+        assert.deepEqual(result.files, []);
+        assert.deepEqual(openBackupExport(Buffer.from(result.bytes!, 'base64')), backupPayload(payloadOptions));
+        assert.equal(result.sha256, result.manifest?.archiveSha256);
+      } else if (refusedRecord) {
+        assert.equal(result.code, 'restore_key_unavailable');
+        assert.equal(result.ok, false);
+        assert.deepEqual(result.files, []);
+      } else if (fixedFrame) {
+        assert.equal(result.ok, true);
+        const bytes = Buffer.from(result.bytes!, 'base64');
+        assert.equal(bytes[4], 2, 'downloaded archive frame version');
+        const expected = await readFile(new URL('./fixtures/waitron-version-2.backup.b64', import.meta.url), 'utf8');
+        assert.deepEqual(bytes, Buffer.from(expected, 'base64'));
+        assert.equal(result.manifest?.archiveSha256, result.sha256);
+        assert.equal(result.manifest?.masterKeyId, '0011223344556677');
+        assert.equal(result.manifest?.masterKeyDay, '2026-11-23');
+        assert.equal(result.manifest?.archiveVersion, 2);
+      } else if (scenario === 'raw' || scenario === 'gzip') {
+        assert.equal(result.ok,true);
+        assert.deepEqual(Buffer.from(result.bytes!, 'base64'),venueDatabase);
+        assert.deepEqual(requests,['download-manifest','download-key','download']);
+      } else if (scenario === 'restore quota') {
+        assert.equal(result.ok,false);
+        assert.equal(result.code,'database_storage_unavailable');
+        assert.deepEqual(offsets,[0,4194304]);
+        assert.equal(releases,1);
+        assert.deepEqual(result.files,[]);
       } else if (ranged) {
         assert.equal(result.ok,!['bad range','bad encrypted digest','repeated range proof'].includes(scenario));
         assert.deepEqual(offsets,scenario==='bad range'?[0]:scenario==='range proof'?[0,4194304,4194304]:scenario==='repeated range proof'?[0,0]:[0,4194304]);
         assert.equal(releases,1);
         assert.equal(result.released,scenario!=='failed release');
-        if(result.ok)assert.equal(result.sha256,createHash('sha256').update(scenario==='encrypted ranges'?archive:database).digest('hex'));
+        if (result.ok && restore) {
+          const bytes = Buffer.from(result.bytes!, 'base64');
+          assert.equal(bytes[4], 2, 'downloaded archive frame version');
+          assert.deepEqual(openBackupExport(bytes), backupPayload(payloadOptions));
+          assert.equal(result.sha256, result.manifest?.archiveSha256);
+        } else if (result.ok) assert.equal(result.sha256,createHash('sha256').update(database).digest('hex'));
         else assert.deepEqual(result.files,[]);
       } else {
         assert.equal(result.ok,false);
         if (scenario.startsWith('oversized')) assert.equal(result.code,'download_too_large');
         if (scenario==='truncated') assert.equal(result.code,'network_error');
         if (scenario==='quota') assert.equal(result.code,'database_storage_unavailable');
+        if (untrusted) {
+          assert.equal(result.code,'database_open_failed');
+          assert.equal(result.decompressed,false,'refuse a wrong tag before decompressing the source');
+        }
         assert.deepEqual(result.files,[]);
       }
     } finally {

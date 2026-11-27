@@ -36,6 +36,10 @@ for(const scenario of ['504-then-success','500-then-success','504-twice-success'
       const status=scenario==='404'?404:scenario==='429'?429:scenario==='open-503-body'?503:
         scenario==='always-504'||scenario==='cancel-backoff'||(scenario==='504-then-success'&&attempt===1)||(scenario==='504-twice-success'&&attempt<=2)||(scenario==='retry-digest-mismatch'&&attempt===1)?504:
         scenario==='500-then-success'&&attempt===1?500:200;
+      if(scenario==='cancel-backoff'){
+        setTimeout(()=>{response.writeHead(status);response.end('unavailable');},400);
+        return;
+      }
       response.writeHead(status);
       if(scenario==='open-503-body'){response.write('discard this refusal body');return;}
       response.end(status===200?((scenario==='digest-mismatch'&&attempt===1)||(scenario==='retry-digest-mismatch'&&attempt===2)?Buffer.from('damaged'):bytes):'unavailable');
@@ -46,7 +50,16 @@ for(const scenario of ['504-then-success','500-then-success','504-twice-success'
       import assert from 'node:assert/strict';
       import {downloadConformanceArchive} from ${JSON.stringify(new URL('./conformance-archive.mjs',import.meta.url).href)};
       const controller=new AbortController();
-      ${scenario==='cancel-backoff'?"setTimeout(()=>controller.abort('owner interrupted'),250);":''}
+      ${scenario==='cancel-backoff'?`
+        const report=console.error.bind(console);
+        const prefix='conformance_archive=';
+        console.error=(line,...details)=>{
+          report(line,...details);
+          if(typeof line==='string'&&line.startsWith(prefix)&&JSON.parse(line.slice(prefix.length)).event==='retry'){
+            queueMicrotask(()=>controller.abort('owner interrupted'));
+          }
+        };
+      `:''}
       ${scenario==='shared-deadline'?`
         const originalTimeout=AbortSignal.timeout;
         AbortSignal.timeout=ms=>{assert.equal(ms,120000);return originalTimeout(1600);};
