@@ -3,7 +3,7 @@ import {randomUUID,randomBytes} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
 import {SMTPServer} from 'smtp-server';
-import {BillingStore,RelayMessages,RelayWorker,RelayControl,type BillingLevel} from '../src/index.ts';
+import {BillingStore,EmailOutbox,RelayMessages,RelayWorker,RelayControl,type BillingLevel} from '../src/index.ts';
 import {RelayGrantStore} from '../src/relay-grants.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 import {runVenueMailSigning} from '../../remote-access/src/venue-mail-signing.ts';
@@ -177,12 +177,30 @@ test('a test owner keeps a DNS alias for mailbox edits and replaces it for domai
  assert.equal(defaultReply.status,200);
  assert.deepEqual(await defaultReply.json(),{replyTo:null,domain:current.domain});
  const signing=fakeVenueMailProviders('cloud.example.test',['bistro.example.test']);
- assert.equal(await runVenueMailSigning(f.pool,f.venueId,signing.options),'verified');
+ const options={...signing.options,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})};
+ assert.equal(await runVenueMailSigning(f.pool,f.venueId,options),'verified');
  const cleared=await request('save',f.v.session,{installationId,replyTo:''});
  assert.equal(cleared.status,200);
  assert.deepEqual(await cleared.json(),{replyTo:null,domain:{address:null,records:[]}});
- assert.equal(await runVenueMailSigning(f.pool,f.venueId,signing.options),'retired');
+ assert.equal(await runVenueMailSigning(f.pool,f.venueId,options),'retired');
  assert.deepEqual(signing.writes,['ses create','dns create','ses delete','dns delete']);
+});
+
+test('a reselected sender on the same domain cannot use an old signing selector',async t=>{
+ const f=await setup(t),s=await smtp(t);await f.set('connected');
+ const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test'}),installationId=f.v.installation;
+ const choose=()=>request('save-domain',f.v.session,{installationId,address:'office@cafe.example.test'});
+ assert.equal((await choose()).status,200);
+ const fake=fakeVenueMailProviders('cloud.example.test',['cafe.example.test']);
+ const outbox=new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}});
+ assert.equal(await runVenueMailSigning(f.pool,f.venueId,{...fake.options,outbox}),'verified');
+ assert.equal((await request('save',f.v.session,{installationId,replyTo:''})).status,200);
+ assert.equal((await choose()).status,200);
+ const body=await f.v.submit();
+ const worker=new RelayWorker(f.pool,{...f.config,smtpPort:s.port},mode);
+ assert.equal(await worker.runOnce(),true);
+ assert.equal((await f.row(body.messageId)).state,'accepted');
+ assert.equal(s.captured[0]?.split('\r\n').find(line=>line.startsWith('From: ')),'From: Waitron <relay@example.test>');
 });
 
 test('an owner can see and clear the active reply address after domain setup is disabled',async t=>{

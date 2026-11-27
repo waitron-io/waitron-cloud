@@ -1,5 +1,5 @@
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
-import {readVenuePermissions,transaction} from '@waitron-cloud/registration';
+import {readVenuePermissions,transaction,type EmailOutbox} from '@waitron-cloud/registration';
 import type {Pool,PoolClient} from 'pg';
 import {boundedResolveCname,boundedResolveTxt,type ResolveCname,type ResolveTxt} from './dns-lookup.ts';
 import {isHostname,isUuid} from './manifest.ts';
@@ -17,6 +17,7 @@ interface SigningOptions {
  config:VenueMailSigningConfig;
  ses:Omit<ReturnType<typeof createSesSigningProvider>,'close'>;
  dns:Omit<ReturnType<typeof createRoute53MailDnsProvider>,'close'>;
+ outbox?:EmailOutbox;
  resolveCname?:ResolveCname;
  resolveTxt?:ResolveTxt;
 }
@@ -40,6 +41,13 @@ const ownsChoice=(claim:Claim,choice:Choice)=>claim.organisation_id===choice.org
  claim.domain===choice.domain&&claim.selector===choice.selector;
 const sameChoice=(before:Choice,after:Choice|undefined)=>after?.address===before.address&&
  after.organisation===before.organisation&&after.selector===before.selector;
+
+async function publicRecords<T>(read:Promise<T[]>):Promise<T[]|undefined>{
+ try{return await read;}
+ catch(error){
+  if(['ENOTFOUND','ENODATA'].includes((error as NodeJS.ErrnoException)?.code??''))return [];
+ }
+}
 
 async function saveClaim(client:PoolClient,venueId:string,choice:Choice,config:VenueMailSigningConfig,
  publicKey:string,tag:string):Promise<Claim|undefined>{
@@ -86,7 +94,7 @@ async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:Signin
 }
 
 export async function runVenueMailSigning(pool:Pool,venueId:string,options:SigningOptions){
- const {config,ses,dns,resolveCname,resolveTxt}=options;
+ const {config,ses,dns,outbox,resolveCname,resolveTxt}=options;
  if(!isUuid(venueId))throw new Error('invalid_venue_mail_venue');
  const current=()=>transaction(pool,client=>readChoice(client,venueId,config));
  const choice=await current();
@@ -97,12 +105,34 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   if(!choice||!ownsChoice(claim,choice))return retireClaim(pool,venueId,claim,options);
  }
  if(!choice)return 'ineligible';
+ if(!outbox)throw new Error('venue_signing_mail_keys_required');
  const alias=venueMailAlias(choice.domain,choice.selector,config.suffix);
  const hasAlias=async()=>{
-  const targets=await boundedResolveCname(alias.name,resolveCname).catch(()=>[]);
-  return targets.length===1&&targets[0]!.toLowerCase().replace(/\.$/,'')===alias.value;
+  const targets=await publicRecords(boundedResolveCname(alias.name,resolveCname));
+  return targets&&targets.length===1&&targets[0]!.toLowerCase().replace(/\.$/,'')===alias.value;
  };
- if(!await hasAlias())return 'awaiting_dns';
+ const saveResult=async(verified:boolean)=>{
+  const tag=claim?.tag;
+  if(!tag)return false;
+  const previous=await transaction(pool,async client=>{
+   if(!sameChoice(choice,await readChoice(client,venueId,config)))return;
+   const saved=(await client.query<{verified:boolean}>(`SELECT verified FROM venue_mail_signing
+    WHERE venue_id=$1 AND tag=$2 FOR UPDATE`,[venueId,tag])).rows[0];
+   if(!saved)return;
+   if(saved.verified!==verified){
+    await client.query('UPDATE venue_mail_signing SET verified=$2 WHERE venue_id=$1',[venueId,verified]);
+    if(!verified)await outbox.enqueueVenueSigningLoss(client,venueId,choice.organisation,choice.domain);
+   }
+   return saved;
+  });
+  if(previous?.verified&&!verified)console.error(`Venue ${venueId} lost signing verification. Local staff mail uses the Waitron sender.`);
+  return !!previous;
+ };
+ const aliasMatches=await hasAlias();
+ if(aliasMatches!==true){
+  if(aliasMatches===false)await saveResult(false);
+  return 'awaiting_dns';
+ }
  await dns.checkZone();
  let identity=await ses.read(choice.domain);
  let record=claim?await dns.read(alias.value,claim.public_key):undefined;
@@ -122,14 +152,25 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   identity=await ses.read(claim.domain);
   record=await dns.read(alias.value,claim.public_key);
  }
- if(!identity||identity.tag!==claim.tag||!identity.external||
-   identity.selectors.length!==1||identity.selectors[0]!==claim.selector||record==='different')return 'held';
+ if(!identity||identity.lost||identity.tag!==claim.tag||!identity.external||
+   identity.selectors.length!==1||identity.selectors[0]!==claim.selector||record==='different'){
+  await saveResult(false);
+  if(identity?.lost&&identity.tag===claim.tag)console.error('SES reports signing failed. Clear the sender and rerun this command to retire its signing setup before saving it again.');
+  return 'held';
+ }
  if(record==='absent'){
-  if(!sameChoice(choice,await current())||!await hasAlias())return 'held';
+  if(!sameChoice(choice,await current()))return 'held';
+  const stillMatches=await hasAlias();
+  if(stillMatches!==true){if(stillMatches===false)await saveResult(false);return 'held';}
   await dns.create(alias.value,claim.public_key);
  }
- const records=await boundedResolveTxt(alias.value,resolveTxt).catch(()=>[]);
- if(!identity.verified||records.length!==1||records[0]!.join('')!==mailKeyTxt(claim.public_key))return 'pending';
- if(!await hasAlias()||!sameChoice(choice,await current()))return 'held';
- return 'verified';
+ const records=await publicRecords(boundedResolveTxt(alias.value,resolveTxt));
+ if(records&&(records.length!==1||records[0]!.join('')!==mailKeyTxt(claim.public_key))){
+  await saveResult(false);
+  return 'pending';
+ }
+ if(!identity.verified||!records)return 'pending';
+ const stillMatches=await hasAlias();
+ if(stillMatches===false)await saveResult(false);
+ return stillMatches===true&&await saveResult(true)?'verified':'held';
 }

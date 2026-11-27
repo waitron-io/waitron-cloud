@@ -1,6 +1,6 @@
 import {validServiceAlert,type ServiceAlert} from './service-alert.ts';
-import { validOwnerTransferMail, validAddressCapNotice, validSignupVolumeNotice, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
-export type AccountMailKind = 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
+import { validOwnerTransferMail, validAddressCapNotice, validSignupVolumeNotice, validVenueSigningNotice, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+export type AccountMailKind = 'venue_signing_lost' | 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
 const addressCapLabels={
   en:{paid_venue_month:'Monthly cap for a paying venue',free_account_month:'Monthly cap for a free account',
     cloud_month:'Cloud monthly cap',cloud_day:'Cloud daily cap',free_month:'Shared monthly cap for free accounts',free_day:'Shared daily cap for free accounts'},
@@ -25,6 +25,15 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if (message.locale !== undefined && !validLocale(message.locale)) throw new Error('Invalid account email');
   const locale = message.locale ?? 'en';
   const text = copy[locale];
+  if(kind==='venue_signing_lost'){
+    if(!validVenueSigningNotice(message))throw new Error('Invalid account email');
+    const subject=locale==='es'?'Tu dominio de correo dejó de verificarse':'Your email domain is no longer verified';
+    const detail=locale==='es'?`El correo del personal de ${message.domain} usa la dirección de Waitron. Revisa tus registros de correo en Acceso remoto.`
+      :`Staff email for ${message.domain} uses the Waitron address. Check your email records in Remote access.`;
+    const link=new URL('/account',origin);
+    link.hash=new URLSearchParams({lang:locale}).toString();
+    return {subject,text:`${detail}\n${link.href}`};
+  }
   if(kind==='owner_transfer'){
     if(!validOwnerTransferMail(message))throw new Error('Invalid account email');
     const subject=locale==='en'?'Waitron Cloud ownership handover':'Traspaso de titularidad de Waitron Cloud';

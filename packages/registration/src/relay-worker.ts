@@ -172,13 +172,17 @@ export class RelayWorker {
    }
    let sender:RelaySender|undefined;
    if(this.#planMode==='test-venue-levels'){
-    const saved=(await c.query<{id:string;display_name:string|null;reply_to:string}>(`SELECT v.id,v.display_name,COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to
-     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,[row.installation_id])).rows[0];
+    const saved=(await c.query<{id:string;display_name:string|null;reply_to:string;verified_from:string|null}>(`SELECT v.id,v.display_name,
+     COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to,CASE WHEN s.verified THEN v.waitron_mail_from END AS verified_from
+     FROM installations i JOIN venues v ON v.id=i.venue_id LEFT JOIN venue_mail_signing s ON s.venue_id=v.id
+      AND s.organisation_id=v.organisation_id AND s.selector=v.waitron_mail_dns_token AND s.domain=split_part(v.waitron_mail_from,'@',2)
+     WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,[row.installation_id])).rows[0];
     if(saved){
      // Grant reservation already holds venue policy through handoff.
      const {level}=await readVenuePermissions(c,saved.id,this.#planMode);
      const name=saved.display_name?.trim();
-     if(level==='connected'||level==='hosted')sender={name:name&&validRelayDisplayName(name)?name:undefined,replyTo:saved.reply_to};
+     if(level==='connected'||level==='hosted')sender={name:name&&validRelayDisplayName(name)?name:undefined,
+      replyTo:saved.reply_to,from:normaliseEmail(saved.verified_from)};
     }
    }
    // This commit is the handoff boundary. Later revoke/cancel cannot recall SMTP.

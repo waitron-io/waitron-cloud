@@ -4,7 +4,7 @@ import {relayBody,type RelayBody} from './relay-payload.ts';
 import {relayStaffNotice} from './relay-staff-notices.ts';
 export type RelayDelivery='accepted'|'temporary'|'refused'|'uncertain';
 export type RelayContent=RelayBody&{managementOrigin:string};
-export type RelaySender={name?:string;replyTo:string};
+export type RelaySender={name?:string;replyTo:string;from?:string};
 
 /** Revalidate decrypted content before it can reach any SMTP field. */
 export function relayTemplate(content:RelayContent){
@@ -27,7 +27,7 @@ export function relayTemplate(content:RelayContent){
  return {subject,text:`${body.displayName}\n\n${subject}\n${link.href}\n${body.class==='email_change'?`${spanish?'Código':'Code'}: ${body.code}\n`:''}${spanish?'Caduca':'Expires'}: ${expiry}\n`};
 }
 
-/** This adapter has no configurable host, sender or credentials: only disposable loopback capture. */
+/** Venue From overrides are permitted only for disposable loopback capture. */
 export function localRelaySmtp(port:number){
  if(!Number.isInteger(port)||port<1||port>65535)throw new Error('relay_unavailable');
  return async (content:RelayContent,signal:AbortSignal,sender?:RelaySender):Promise<RelayDelivery>=>{
@@ -48,7 +48,7 @@ export function localRelaySmtp(port:number){
    }});
   try{
    signal.addEventListener('abort',abort,{once:true});timer=setTimeout(abort,15000);
-   const sent=transport.sendMail({from:{name:sender?.name??'Waitron',address:'relay@example.test'},to:{name:'',address:content.recipient},
+   const sent=transport.sendMail({from:{name:sender?.name??'Waitron',address:sender?.from??'relay@example.test'},to:{name:'',address:content.recipient},
     replyTo:sender&&{name:'',address:sender.replyTo},
     ...rendered,messageId:`<${content.messageId}@relay.example.test>`}).then((result):RelayDelivery=>
      result.accepted.length===1&&result.rejected.length===0?'accepted':'uncertain',classify);

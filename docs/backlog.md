@@ -437,13 +437,13 @@ on 23 November 2026, for release soon after go-live. A venue’s own mail server
 always wins. Without one, the free relay pilot covers staff account emails and
 five staff notices. The paid design covers every email the box sends, from the
 venue’s own domain or a Waitron address. In test setup you can save your sending
-address, check the DNS aliases and copy or download the list. Mailpit checks
-replies to the sending address or a saved reply address while staff email uses
-the Waitron sender. Gmail and Mailgun verified a Stockholm sandbox message
-whose signing alias and key were in separate zones. Local tests cover
-the operator command to create, verify and retire signing. Rotation,
-automatic setup, portal signing status and sending from the venue domain
-remain open.
+address, check the DNS aliases and copy or download the list. With fake
+providers, a verified venue sender reaches Mailpit with the saved reply address.
+A confirmed loss on the next operator check restores the Waitron sender and
+queues a notice for verified owners. Gmail and Mailgun verified a Stockholm
+sandbox message whose signing alias and key were in separate zones. Real SES
+relay delivery, automatic setup and rechecks, rotation and portal signing
+status remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
 [Decisions and open work](backlog/venue-email.md).
 

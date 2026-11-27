@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
+import {EmailOutbox} from '@waitron-cloud/registration';
 import {set,venueServiceFixture} from '../../registration/test/fixtures/venue-service.ts';
 import {deferred} from '../../registration/test/fixtures/relay-stop-barrier.ts';
 import {fakeVenueMailProviders} from './fixtures/venue-mail-signing.ts';
@@ -12,6 +13,7 @@ const domain='cafe.example.test',suffix='cloud.example.test';
 async function fixture(){
  const db=await venueServiceFixture();
  const signing=fakeVenueMailProviders(suffix,[domain]);
+ const outbox=new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}});
  return {db,...signing,
   async choose(venueId=db.venues[0]!){
    const selector=randomUUID();
@@ -20,7 +22,7 @@ async function fixture(){
     [venueId,'office@'+domain,selector]);
    return selector;
   },
-  run(venueId:string=db.venues[0]!){return runVenueMailSigning(db.pool,venueId,signing.options);},
+  run(venueId:string=db.venues[0]!){return runVenueMailSigning(db.pool,venueId,{...signing.options,outbox});},
  };
 }
 
@@ -80,6 +82,33 @@ test('two venues cannot both claim a domain and inherited verification does not 
  assert.deepEqual(f.writes,['ses create','dns create']);
 });
 
+test('only a definitive signing check changes the saved result',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!,selector=await f.choose();
+ const outbox=new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}});
+ const run=(options:Partial<typeof f.options>={})=>runVenueMailSigning(f.db.pool,venueId,{...f.options,outbox,...options});
+ const diagnostic=t.mock.method(console,'error',()=>{});
+ const verified=async()=>(await f.db.pool.query('SELECT * FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rows[0].verified;
+ assert.equal(await run(),'verified');
+ assert.equal(await verified(),true);
+ const identity=f.identities.get(domain)!;
+ f.identities.set(domain,{...identity,verified:false});
+ assert.equal(await run(),'pending');
+ assert.equal(await run({resolveCname:async()=>{throw Object.assign(Error('timeout'),{code:'ETIMEOUT'});}}),'awaiting_dns');
+ assert.equal(await verified(),true);
+ f.identities.set(domain,{...identity,verified:false,lost:true});
+ assert.equal(await run(),'held');
+ assert.equal(await verified(),false);
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes('lost signing verification')));
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes('SES reports signing failed')));
+ f.identities.set(domain,identity);
+ assert.equal(await run(),'verified');
+ f.identities.delete(domain);
+ assert.equal(await run(),'held');
+ assert.equal(await verified(),false);
+ assert.equal(f.txt.has(selector+'.mail.'+suffix),true);
+});
+
 test('a retry leaves the saved claim alone when SES still shows no identity',async t=>{
  const f=await fixture();t.after(f.db.close);
  const venueId=f.db.venues[0]!;
@@ -121,6 +150,14 @@ test('the signing command requires test mode and can inspect a production venue 
  assert.equal(refused.status,1);assert.match(refused.stderr,/test venue levels/);
  const ineligible=run({CLOUD_VENUE_SERVICE_LEVELS:'test'});
  assert.equal(ineligible.status,0,ineligible.stderr);assert.equal(ineligible.stdout.trim(),'ineligible');
+
+ const eligible=db.venues[1]!;
+ await set(db,'connected',eligible);
+ await db.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3 WHERE id=$1',
+  [eligible,'office@'+domain,randomUUID()]);
+ const missingKeys=run({CLOUD_VENUE_SERVICE_LEVELS:'test'},eligible);
+ assert.equal(missingKeys.status,1);
+ assert.match(missingKeys.stderr,/CLOUD_EMAIL_ACTIVE_KEY_ID and CLOUD_EMAIL_KEYS/);
 
  const testVenue=db.venues[0]!;
  await db.pool.query(`INSERT INTO venue_mail_signing

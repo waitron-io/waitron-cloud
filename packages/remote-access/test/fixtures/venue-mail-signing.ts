@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createPrivateKey,createPublicKey} from 'node:crypto';
 
 export function fakeVenueMailProviders(suffix:string,testDomains:readonly string[]){
- const identities=new Map<string,{tag:string;selectors:string[];external:boolean;verified:boolean}>();
+ const identities=new Map<string,{tag:string;selectors:string[];external:boolean;verified:boolean;lost?:true}>();
  const txt=new Map<string,string>();
  const writes:string[]=[];
  let loseSes=false,loseDns=false,publicKey:string|undefined,alias=true;
