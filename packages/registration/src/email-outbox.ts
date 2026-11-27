@@ -7,7 +7,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { Pool, PoolClient } from 'pg';
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
-import { validOwnerTransferMail, validOperatorWarning, type AddressCapNotice, type SignupVolumeNotice,type OwnerTransferMail, normaliseEmail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+import { validOwnerTransferMail, validOperatorWarning, validVenueSigningNotice, type VenueSigningNotice, type AddressCapNotice, type SignupVolumeNotice,type OwnerTransferMail, normaliseEmail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt, type EmailDeliveryContext } from './email-delivery.ts';
 import {transaction,type TransactionOptions} from './transaction.ts';
 import {admitMailAttempt,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
@@ -16,7 +16,7 @@ import {lockMailScope} from './recipient-suppression.ts';
 
 export interface OperatorNoticeMailer {sendOperatorNotice?(message:AccountNotification,context:EmailDeliveryContext):Promise<void|EmailDeliveryReceipt>;}
 export interface OwnerTransferMailer {sendOwnerTransfer?(message:OwnerTransferMail,context:EmailDeliveryContext):Promise<void|EmailDeliveryReceipt>;}
-export type EmailKind = 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
+export type EmailKind = 'venue_signing_lost' | 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
 type Status = 'pending' | 'processing' | 'sent' | 'expired' | 'cancelled' | 'failed';
 type Failure = EmailDeliveryFailure | 'payload_unavailable' | 'attempts_exhausted';
 interface MessageRow {
@@ -68,13 +68,26 @@ export class EmailOutbox {
     return rows.map(row=>row.id);
   }
 
-  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail | SignupVolumeNotice | AddressCapNotice): Promise<string> {
-    if (!['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed', 'operator_notice','owner_transfer'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
+  async enqueueVenueSigningLoss(client:PoolClient,venueId:string,organisationId:string){
+    const {rows}=await client.query<{accountId:string;email:string;locale:'en'|'es'}>(`SELECT a.id AS "accountId",c.email,COALESCE(p.locale,'en') AS locale
+      FROM organisation_memberships m JOIN cloud_accounts a ON a.id=m.account_id JOIN cloud_credentials c ON c.account_id=a.id
+      LEFT JOIN account_alert_preferences p ON p.account_id=a.id
+      WHERE m.organisation_id=$1 AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL`,[organisationId]);
+    for(const owner of rows)await this.enqueue(client,'venue_signing_lost',{...owner,venueId,organisationId});
+  }
+
+  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail | SignupVolumeNotice | AddressCapNotice | VenueSigningNotice): Promise<string> {
+    if (!['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed', 'operator_notice','owner_transfer','venue_signing_lost'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
     if(kind==='service_alert')return (await this.enqueueServiceAlerts(client,[message as ServiceAlert]))[0]!;
     let tokenHash: string | null = null;
     let expiresAt: Date;
-    let content: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail | SignupVolumeNotice | AddressCapNotice = {email: message.email};
-    if(kind==='owner_transfer'){
+    let content: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail | SignupVolumeNotice | AddressCapNotice | VenueSigningNotice = {email: message.email};
+    if(kind==='venue_signing_lost'){
+      if(!validVenueSigningNotice(message))throw new Error('Invalid queued email');
+      const {email,accountId,organisationId,venueId}=message;
+      content={email,accountId,organisationId,venueId};
+      expiresAt=(await client.query("SELECT clock_timestamp()+interval '24 hours' AS expiry")).rows[0].expiry;
+    } else if(kind==='owner_transfer'){
       if(!validOwnerTransferMail(message))throw new Error('Invalid queued email');
       content={email:message.email,offerId:message.offerId,event:message.event};
       expiresAt=(await client.query("SELECT clock_timestamp()+interval '24 hours' AS expiry")).rows[0].expiry;
@@ -122,8 +135,9 @@ export class EmailOutbox {
       if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error();
       if (row.kind === 'service_alert' && !validServiceAlert(message))throw new Error();
       if(row.kind==='owner_transfer'&&!validOwnerTransferMail(message))throw new Error();
+      if(row.kind==='venue_signing_lost'&&!validVenueSigningNotice(message))throw new Error();
       if(row.kind==='operator_notice'&&'event' in message&&!validOperatorWarning(message))throw new Error();
-      if (row.kind !== 'owner_transfer' && row.kind !== 'operator_notice' && row.kind !== 'password_changed' && row.kind !== 'email_changed' && row.kind !== 'service_alert' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
+      if (row.kind !== 'venue_signing_lost' && row.kind !== 'owner_transfer' && row.kind !== 'operator_notice' && row.kind !== 'password_changed' && row.kind !== 'email_changed' && row.kind !== 'service_alert' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
         || Date.parse(message.expiresAt) !== row.expires_at.getTime())) throw new Error();
       if (row.kind === 'sign_in_check' && (typeof message.code !== 'string' || !/^[0-9]{6}$/.test(message.code))) throw new Error();
       return message;
@@ -131,7 +145,9 @@ export class EmailOutbox {
   }
 }
 
-type AccountMailer = SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer>;
+type AccountMailer = SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer> & {
+  sendVenueSigningLost?(message:AccountNotification,context:EmailDeliveryContext):Promise<void>;
+};
 
 export class EmailWorker {
   readonly #pool: Pool;
@@ -184,9 +200,10 @@ export class EmailWorker {
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
     // Captured messages never acquire provider locks or create an SES attempt.
     const pilot=this.#sesRecipient;
-    const ses=pilot&&(claim.kind==='operator_notice'||message.email!==pilot.email)?undefined:this.#ses;
+    const signingNotice=claim.kind==='venue_signing_lost';
+    const ses=signingNotice||pilot&&(claim.kind==='operator_notice'||message.email!==pilot.email)?undefined:this.#ses;
     const mailer=pilot&&!ses?pilot.captureMailer:this.#mailer;
-    if (claim.kind === 'operator_notice' && (!mailer.sendOperatorNotice || (ses && !validOperatorWarning(message)))) {
+    if ((signingNotice&&!mailer.sendVenueSigningLost) || (claim.kind === 'operator_notice' && (!mailer.sendOperatorNotice || (ses && !validOperatorWarning(message))))) {
       await this.#fail(claim, 'delivery_configuration', false);
       return true;
     }
@@ -205,7 +222,7 @@ export class EmailWorker {
     const context = {deliveryId: claim.id, signal: controller.signal,...(admission?{ses:admission}:{})};
     let receipt: void | EmailDeliveryReceipt;
     try {
-      const send = () => claim.kind === 'owner_transfer' ? this.#sendOwnerTransfer(mailer,message as OwnerTransferMail,context) : claim.kind === 'operator_notice' ? mailer.sendOperatorNotice!(message,context) : claim.kind === 'email_change' || claim.kind === 'email_changed' ? this.#sendEmailChange(mailer,claim.kind,message,context) : claim.kind === 'sign_in_check' ? this.#sendCheck(mailer,message as AccountSignInCheck,context) : claim.kind === 'service_alert' ? this.#sendAlert(mailer,message as ServiceAlert,context) : claim.kind === 'verification' ? mailer.sendVerification(message as AccountEmail, context)
+      const send = () => signingNotice ? mailer.sendVenueSigningLost!(message,context) : claim.kind === 'owner_transfer' ? this.#sendOwnerTransfer(mailer,message as OwnerTransferMail,context) : claim.kind === 'operator_notice' ? mailer.sendOperatorNotice!(message,context) : claim.kind === 'email_change' || claim.kind === 'email_changed' ? this.#sendEmailChange(mailer,claim.kind,message,context) : claim.kind === 'sign_in_check' ? this.#sendCheck(mailer,message as AccountSignInCheck,context) : claim.kind === 'service_alert' ? this.#sendAlert(mailer,message as ServiceAlert,context) : claim.kind === 'verification' ? mailer.sendVerification(message as AccountEmail, context)
         : claim.kind === 'password_reset' ? mailer.sendPasswordReset(message as AccountEmail, context)
         : mailer.sendPasswordChanged(message, context);
       // A timeout cannot retract a message already accepted by a provider. Retried sends may duplicate it.
@@ -317,6 +334,13 @@ export class EmailWorker {
   }
 
   async #live(client:PoolClient,row: MessageRow, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail): Promise<boolean> {
+    if(row.kind==='venue_signing_lost'){
+      if(!validVenueSigningNotice(message))return false;
+      return !!(await client.query(`SELECT 1 FROM cloud_accounts a JOIN cloud_credentials c ON c.account_id=a.id
+        JOIN organisation_memberships m ON m.account_id=a.id JOIN venues v ON v.organisation_id=m.organisation_id
+        WHERE a.id=$1 AND c.email=$2 AND m.organisation_id=$3 AND v.id=$4 AND v.environment='test'
+          AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND m.is_owner`,[message.accountId,message.email,message.organisationId,message.venueId])).rowCount;
+    }
     if(row.kind==='owner_transfer')return ownerTransferMailLive(client,message as OwnerTransferMail);
     if(row.kind==='operator_notice'&&validOperatorWarning(message))return !!(await client.query(`SELECT 1 FROM cloud_accounts account
       JOIN cloud_credentials credential ON credential.account_id=account.id

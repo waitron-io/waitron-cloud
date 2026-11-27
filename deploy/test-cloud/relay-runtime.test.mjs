@@ -9,10 +9,12 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {createSession} from '../../packages/identity/src/index.ts';
-import {createLeaseIssuer,InstallationStore,transaction} from '../../packages/registration/src/index.ts';
+import {BillingStore,createLeaseIssuer,EmailOutbox,InstallationStore,RelayMessages,transaction} from '../../packages/registration/src/index.ts';
 import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
 import {connectedVenue,database} from '../../packages/translation/test/fixtures.ts';
 import {startGuestMenuTrial} from '../../packages/remote-access/test/fixtures/guest-menu.ts';
+import {fakeVenueMailProviders} from '../../packages/remote-access/test/fixtures/venue-mail-signing.ts';
+import {runVenueMailSigning} from '../../packages/remote-access/src/venue-mail-signing.ts';
 import {bootstrapTestCloudIdentity} from './bootstrap.mjs';
 import {bootstrapStorageIssuer} from './storage-issuer.mjs';
 import {loadRuntime} from '../local-stack/runtime.mjs';
@@ -296,28 +298,87 @@ test('one-shot drains account capture before reporting a relay failure and watch
  assert.equal((await inbox.json()).messages.filter(mail=>mail.To.some(to=>to.Address===recipient)).length,2);
 });
 
-test('actual email entrypoint drains account mail before reporting lost relay keys',async t=>{
- const {openTestRelayRuntime}=await api(),{db,context}=await setup(t);
- await bootstrapTestCloudIdentity(context.directory,origin);await openTestRelayRuntime(context);
- await db.pool.query("INSERT INTO relay_suppressions(key_id,digest) VALUES('lost',$1)",['f'.repeat(64)]);
- await unlink(join(context.directory,'relay-keys.json'));
- const config=JSON.parse(await readFile(join(context.directory,'runtime.json'),'utf8'));
- const {EmailOutbox}=await import('../../packages/registration/src/email-outbox.ts'),outbox=new EmailOutbox(config.email);
- const recipient=`${randomUUID()}@example.test`,id=await transaction(db.pool,c=>outbox.enqueue(c,'password_changed',{email:recipient,locale:'en'}));
+async function runEmailEntrypoint(t,db,context){
  const connection=new URL(process.env.TEST_DATABASE_URL);connection.searchParams.set('options','-c search_path='+db.schema);
  const url=relative=>JSON.stringify(new URL(relative,import.meta.url).href);
  const script=`import{mock}from'node:test';const local=await import(${url('../local-stack/runtime.mjs')});
   mock.module(${url('../local-stack/runtime.mjs')},{namedExports:{...local,runtimeEnvironment:(...args)=>({...local.runtimeEnvironment(...args),DATABASE_URL:process.env.TEST_RELAY_DATABASE})}});
   const capture=await import(${url('./capture-mailer.mjs')});mock.module(${url('./capture-mailer.mjs')},{namedExports:{...capture,createTestCaptureMailer:(options,origin)=>capture.createTestCaptureMailer({...options,port:Number(process.env.TEST_RELAY_SMTP_PORT)},origin)}});
+  const relay=await import(${url('./relay-runtime.mjs')});mock.module(${url('./relay-runtime.mjs')},{namedExports:{...relay,openTestRelayRuntime:options=>relay.openTestRelayRuntime({...options,smtpPort:Number(process.env.TEST_RELAY_SMTP_PORT)})}});
   const{runTestEmailWorker}=await import(${url('./email-worker.mjs')});try{await runTestEmailWorker({directory:process.env.LOCAL_STACK_CONFIG_DIR,root:process.cwd(),once:true});console.log('completed');}catch{console.log('refused');}`;
  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module'],{cwd:new URL('../../',import.meta.url),env:{PATH:process.env.PATH,LOCAL_STACK_CONFIG_DIR:context.directory,TEST_CLOUD_ORIGIN:origin,CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',TEST_RELAY_DATABASE:connection.href,TEST_RELAY_SMTP_PORT:String(context.smtpPort)},stdio:['pipe','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',bytes=>stdout+=bytes);child.stderr.on('data',bytes=>stderr+=bytes);
  const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
  t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await exited;});child.stdin.end(script);
- assert.equal(await exited,0,stderr);assert.equal(stdout.trim(),'refused');
+ assert.equal(await exited,0,stderr);return stdout.trim();
+}
+
+test('actual email entrypoint drains account mail before reporting lost relay keys',async t=>{
+ const {openTestRelayRuntime}=await api(),{db,context}=await setup(t);
+ await bootstrapTestCloudIdentity(context.directory,origin);await openTestRelayRuntime(context);
+ await db.pool.query("INSERT INTO relay_suppressions(key_id,digest) VALUES('lost',$1)",['f'.repeat(64)]);
+ await unlink(join(context.directory,'relay-keys.json'));
+ const outbox=new EmailOutbox((await loadRuntime(context.directory)).email);
+ const recipient=`${randomUUID()}@example.test`,id=await transaction(db.pool,c=>outbox.enqueue(c,'password_changed',{email:recipient,locale:'en'}));
+ assert.equal(await runEmailEntrypoint(t,db,context),'refused');
  assert.equal((await db.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'sent');
  const inbox=await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`);
  assert.equal((await inbox.json()).messages.filter(mail=>mail.To.some(to=>to.Address===recipient)).length,1);
+});
+
+test('box-signed staff mail uses verified venue From and falls back after confirmed loss',async t=>{
+ const {openTestRelayRuntime}=await api(),{db,context}=await setup(t);
+ await bootstrapTestCloudIdentity(context.directory,origin);
+ const config=await loadRuntime(context.directory),outbox=new EmailOutbox(config.email);
+ const box=await connectedVenue(db,context.issuer,origin),session=await transaction(db.pool,c=>createSession(c,box.accountId));
+ const scope={organisationId:box.organisationId,legalBusinessId:box.legalBusinessId},billing=new BillingStore(db.pool);
+ await billing.execute(scope,{key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
+ await billing.transition(scope,{key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},
+  {type:'set_venue',venueId:box.venueId,expectedRevision:(await billing.venue(scope,box.venueId)).revision,
+   value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+ const domain='cafe.example.test',from='office@'+domain,reply='reply@'+domain;
+ const owner=(await db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[box.accountId])).rows[0].email;
+ await db.pool.query("INSERT INTO account_alert_preferences(account_id,locale) VALUES($1,'es')",[box.accountId]);
+ await db.pool.query("UPDATE venues SET waitron_mail_from=$2,waitron_mail_reply_to=$3,waitron_mail_dns_token=$4,display_name='Cafe Sol' WHERE id=$1",
+  [box.venueId,from,reply,randomUUID()]);
+ const runtime=await openTestRelayRuntime(context),managementOrigin='https://waitron.local:3000';
+ const statement=box.proof('configuration',{servicesVersion:2,managementOrigin},randomUUID(),box.lease);
+ await new InstallationStore(db.pool,context.issuer,origin).execute('configuration',statement);
+ const expiresAt=new Date(Date.now()+1800000).toISOString();
+ const grant=await new RelayGrantStore(db.pool,runtime.admission.grants,mode).approve(session.token,session.csrfToken,
+  {installationId:box.installationId,expectedRevision:0,consent:true,consentVersion:'local-v1',managementOrigin,expiresAt},statement);
+ const messages=new RelayMessages(db.pool,context.issuer,origin,runtime.admission,undefined,mode);
+ const inbox=async()=>(await (await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`)).json()).messages;
+ async function send(expectedFrom){
+  const messageId=randomUUID(),recipient=`${randomUUID()}@example.test`;
+  const body={version:1,messageId,grantId:grant.id,grantRevision:grant.revision,class:'invitation',recipient,displayName:'Cafe Sol',locale:'en',timeZone:'Europe/Madrid',expiresAt,token:randomBytes(32).toString('base64url')};
+  await messages.execute('email-submit',box.proof('email-submit',body,messageId,box.lease));
+  assert.equal(await runEmailEntrypoint(t,db,context),'completed');
+  const [mail]= (await inbox()).filter(item=>item.To.some(to=>to.Address===recipient));
+  assert.deepEqual(mail?.From,{Name:'Cafe Sol',Address:expectedFrom});
+  const detail=await (await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/message/${mail.ID}`)).json();
+  assert.deepEqual(detail.ReplyTo,[{Name:'',Address:reply}]);
+ }
+ const fake=fakeVenueMailProviders('cloud.example.test',[domain]);
+ const check=()=>runVenueMailSigning(db.pool,box.venueId,{...fake.options,outbox});
+ await send('relay@example.test');
+ assert.equal(await check(),'verified');
+ await send(from);
+ fake.alias(false);
+ assert.equal(await check(),'awaiting_dns');
+ assert.equal(await check(),'awaiting_dns');
+ await send('relay@example.test');
+ const notices=async()=>(await inbox()).filter(mail=>mail.To.some(to=>to.Address===owner)&&mail.Subject==='Tu dominio de correo dejó de verificarse');
+ assert.equal((await notices()).length,1);
+
+ fake.alias(true);
+ assert.equal(await check(),'verified');
+ fake.alias(false);
+ assert.equal(await check(),'awaiting_dns');
+ await db.pool.query('UPDATE cloud_credentials SET email=$2 WHERE account_id=$1',[box.accountId,`${randomUUID()}@example.test`]);
+ assert.equal(await runEmailEntrypoint(t,db,context),'completed');
+ assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM email_outbox WHERE kind='venue_signing_lost' AND status='cancelled'")).rows[0].n,1);
+ assert.equal((await notices()).length,1);
 });
 
 // Restoring an older database beside a newly generated file must retain unknown-key refusal.

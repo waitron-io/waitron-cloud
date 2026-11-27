@@ -41,8 +41,8 @@ Set `CLOUD_VENUE_MAIL_DNS_SUFFIX` to a test DNS suffix in the account server to
 enable **Your domain**. You can save your sending address and copy each DNS
 value or download the same email and remote-access records as a PDF to forward.
 **Refresh status** checks whether the aliases point to the requested names.
-Staff email uses a Waitron address and replies go to your sending address unless
-you save a separate reply address. Save an empty reply address to go back to
+Replies go to your sending address unless you save a separate reply address.
+Save an empty reply address to go back to
 your sending address and keep your DNS setup. Choose **Use standard sender**
 to clear both addresses.
 If domain setup is disabled, **Replies go to** still shows the active address
@@ -64,8 +64,10 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node 
 The operator command
 `pnpm --dir packages/remote-access venue-mail:signing <venue-id>` contacts the
 configured SES and Route 53 services. Get separate approval before running it
-with the `CLOUD_VENUE_MAIL_*` settings in `.env.example`. Rerun after the alias
-points at the hosted key, or after a sender reset or an accepted transfer.
+with the `CLOUD_VENUE_MAIL_*` settings in `.env.example`. Use the same
+`CLOUD_EMAIL_ACTIVE_KEY_ID` and `CLOUD_EMAIL_KEYS` as your test capture worker so
+it can open queued notices. Rerun after the alias points at the hosted key,
+or after a sender reset or an accepted transfer.
 
 A `held` result keeps the claim. Check the configured provider scope, the saved
 SES identity tag and the exact DNS TXT record before retrying. If you changed
@@ -74,8 +76,10 @@ settings to retire that identity. If an interrupted run leaves both provider
 records absent, the command keeps the claim while you investigate the
 interrupted operation. The command assumes it is the only writer for these
 test identities and records. The portal tick still checks the alias. [Operator steps](../test-cloud-service-controls.md#investigate-held-venue-email-signing-cleanup)
-A later slice will use the venue’s From address and restore the Waitron sender
-with a notice if verification is lost.
+In Mailpit, the relay uses the venue’s From after the operator verifies signing.
+When a later check confirms loss, staff mail returns to the Waitron sender and
+each current verified owner gets a notice in Mailpit. An inconclusive check
+keeps the last result. Real SES relay delivery and automatic rechecks are still open.
 See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).
 
 ## Abuse limits

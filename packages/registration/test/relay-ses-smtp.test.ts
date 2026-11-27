@@ -13,9 +13,10 @@ test('standalone relay authenticates verified TLS, preserves RFC ID and extracts
  const create=createSesRelaySender,smtp=await tlsSmtp();
  try{
   const send=create(config(),{...smtpConfig,port:smtp.port},{ca:smtp.cert}),body=content();
-  assert.deepEqual(await send(body,admission,new AbortController().signal),{outcome:'accepted',providerReceipt:{provider:'ses',messageId:'ses-message-1'}});
+  assert.deepEqual(await send(body,admission,new AbortController().signal,{from:'office@venue.example.test',replyTo:'office@venue.example.test'}),{outcome:'accepted',providerReceipt:{provider:'ses',messageId:'ses-message-1'}});
   assert.equal(smtp.captured.length,1);
   const sent=smtp.captured[0]!;assert.equal(sent.secure,true);assert.deepEqual(sent.to,[body.recipient]);assert.equal(sent.from,smtpConfig.from);
+  assert.ok(sent.raw.includes(`From: Waitron Cloud <${smtpConfig.from}>`));
   assert.ok(sent.raw.includes(`Message-ID: <${body.messageId}@mail.example.test>`));
   assert.match(sent.raw,/X-SES-CONFIGURATION-SET: transactional/i);
   assert.match(sent.raw.replace(/\r\n[ \t]+/g,' '),new RegExp(`X-SES-MESSAGE-TAGS: waitron-attempt=${admission.attemptTag}`,'i'));

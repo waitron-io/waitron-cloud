@@ -1,4 +1,4 @@
-import {parsePlanMode} from '@waitron-cloud/registration';
+import {EmailOutbox,parsePlanMode} from '@waitron-cloud/registration';
 import {Pool} from 'pg';
 import {isHostname,isUuid} from './manifest.ts';
 import {createRoute53MailDnsProvider} from './route53-dns.ts';
@@ -20,10 +20,11 @@ try{
   console.error('Supply one test venue ID, a database URL and the venue mail signing settings.');
   process.exitCode=1;
  }else{
+  const outbox=new EmailOutbox({activeKeyId:env.CLOUD_EMAIL_ACTIVE_KEY_ID??'',keys:JSON.parse(env.CLOUD_EMAIL_KEYS??'{}')});
   pool=new Pool({connectionString:env.DATABASE_URL,max:2,connectionTimeoutMillis:5000,statement_timeout:10000});
   ses=createSesSigningProvider({region});
   dns=createRoute53MailDnsProvider({zoneId,suffix});
-  const result=await runVenueMailSigning(pool,venueId,{config:{suffix,zoneId,region,testDomains},ses,dns});
+  const result=await runVenueMailSigning(pool,venueId,{config:{suffix,zoneId,region,testDomains},ses,dns,outbox});
   console.log(result);
   if(result==='held')console.error('Check the configured provider scope, the saved SES identity tag and the exact signing TXT record before retrying.');
  }

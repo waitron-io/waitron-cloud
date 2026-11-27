@@ -181,7 +181,8 @@ test('acceptance clears only the transferred business’s saved sender and reply
  await billing.transition(scope,event(),{type:'set_venue',venueId:v.venueId,expectedRevision:previous.revision,
   value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
  const signing=fakeVenueMailProviders('cloud.example.test',['cafe.example.test']);
- assert.equal(await runVenueMailSigning(db.pool,v.venueId,signing.options),'verified');
+ const signingOptions={...signing.options,outbox:db.outbox};
+ assert.equal(await runVenueMailSigning(db.pool,v.venueId,signingOptions),'verified');
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
  const address=async(venueId:string)=>(await db.pool.query(`SELECT waitron_mail_reply_to AS reply,waitron_mail_from AS sender,
   waitron_mail_dns_token AS token FROM venues WHERE id=$1`,[venueId])).rows[0];
@@ -189,7 +190,7 @@ test('acceptance clears only the transferred business’s saved sender and reply
  assert.equal((await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept')).state,'accepted');
  assert.deepEqual(await address(v.venueId),{reply:null,sender:null,token:null});
  assert.deepEqual(await address(other.venueId),{reply:'other@example.test',sender:'office@bistro.example.test',token:otherToken});
- assert.equal(await runVenueMailSigning(db.pool,v.venueId,signing.options),'retired');
+ assert.equal(await runVenueMailSigning(db.pool,v.venueId,signingOptions),'retired');
  assert.deepEqual(signing.writes,['ses create','dns create','ses delete','dns delete']);
 });
 for(const state of ['pending','restored','unfinished replacement'] as const)test(`handover refuses ${state} recovery until the owner closes it`,async()=>{
@@ -238,7 +239,7 @@ test('upgrade refuses duplicate owners and preserves both rows until the duplica
   assert.deepEqual((await legacy.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner ORDER BY account_id',[org])).rows,[first,second].sort().map(account_id=>({account_id})));
   assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'67');
   await legacy.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1',[second]);await migrate(legacy.pool);
-  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'89');
+  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'90');
  }finally{await legacy.close();await old.close();}
 });
 
