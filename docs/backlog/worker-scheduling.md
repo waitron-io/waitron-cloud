@@ -47,11 +47,9 @@ run observed three file workers sharing that server, with `fsync`,
 `synchronous_commit` and `full_page_writes` on and `wal_sync_method=fdatasync`.
 
 On recurrence, read `cloud-test-setup-waits` beside the migration stage. Its `database`
-snapshot records up to 24 live processes and the total that matched. The WAL write
-and sync counters accumulate from `stats_reset` to `capturedAt`, with separate rows
-for ordinary writes and new WAL file creation. The report’s `walTiming` is `off` in
-standard registration CI, so these totals cannot measure I/O latency or isolate work
-during the stall.
-The snapshot follows cancellation, so use the earlier `samples` to see what the
-timed-out process was waiting for. You can exercise both
+snapshot records when it was taken, up to 24 live processes and the total that
+matched. It follows cancellation, so use the earlier `samples` to see what the
+timed-out process was waiting for. If the new snapshot shows contention, compare
+the active sessions and their wait events with those earlier samples. You can
+exercise both
 with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/setup-wait-diagnostics.test.ts`.

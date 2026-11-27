@@ -42,9 +42,10 @@ to the watcher after two hours without a new finding, as the D620 rule requires.
 
 The three scratch runs did not reproduce the statement timeout. On 27 November
 at 12:20 CET the watcher cleared one bounded snapshot in the existing setup
-observer after a PostgreSQL statement timeout. Capture live processes and their
-waits, plus write-ahead log write and sync counters. Keep the passing path and the
-test caps as they are. Use the real statement-timeout and successful-setup cases
+observer after a PostgreSQL statement timeout. At 12:39 CET the watcher left WAL
+counters to whether they would indicate a specific repair. Cumulative counts cannot
+isolate the stall, so capture live processes and their waits. Keep the passing path
+and test caps as they are. Use the real statement-timeout and successful-setup cases
 in `packages/registration/test/setup-wait-diagnostics.test.ts` and run normal
 registration CI. Estimate up to 30 helper lines and 20 test lines. Update the
 existing D530 backlog entry and wait for a natural recurrence before choosing a repair.

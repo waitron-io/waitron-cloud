@@ -63,13 +63,7 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
       ) SELECT clock_timestamp() AS "capturedAt", (SELECT count(*)::int FROM activity) AS "activityCount",
       (SELECT COALESCE(json_agg(a),'[]'::json) FROM (
         SELECT * FROM activity ORDER BY (backend_type='client backend'),(state='active') DESC NULLS LAST,pid LIMIT 24
-      ) a) AS activity,
-      (SELECT json_agg(w) FROM (
-        SELECT backend_type,context,writes,fsyncs,write_time,fsync_time,stats_reset
-        FROM pg_stat_io WHERE object='wal' ORDER BY backend_type,context
-      ) w) AS "walIo",
-      current_setting('track_wal_io_timing') AS "walTiming",
-      current_setting('wal_sync_method') AS "walSyncMethod"`);
+      ) a) AS activity`);
     database=rows[0];
    }catch{database={unavailable:true};}
   }

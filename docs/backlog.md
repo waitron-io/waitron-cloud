@@ -970,7 +970,7 @@ identify the observed stages and gaps. Preserve all assertions and deadlines.
 **Open.** Registration shards 1, 3 and 5 have hit migration setup statement timeouts.
 The shard 5 log showed repeated waits to write the PostgreSQL write-ahead log (WAL).
 Use the next timeout's `cloud-test-setup-waits` report to compare those waits with
-the live PostgreSQL processes and WAL counters before choosing a fix.
+the live PostgreSQL processes before choosing a fix.
 [Failure history and diagnostic limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
 
 ## Service-proof failure diagnostics (D530)
