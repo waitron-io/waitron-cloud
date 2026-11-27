@@ -1202,11 +1202,11 @@ Without a prepared recovery operation granting authority to start a new invoice
 series, the filing module stopped with `restore.hook_failed (module fiscal-verifactu: sif.allocation_invalid)`.
 [Cloud restore rehearsal](https://github.com/waitron-io/waitron-cloud/pull/1455) · [Filing-box recovery instructions](https://github.com/clintongormley/waitron/blob/main/docs/operations/hour-recovery.md#check-the-selected-copy)
 
-If the source uses a separate vault key, supply it and its matching version as
-private settings to the replacement process. Nonempty process settings take
-precedence over `secrets.env`. Full recovery with this key remains untested until
-setup can prepare the Cloud download and the rehearsal has a synthetic source
-that keeps its vault key outside the archive. [Waitron’s box settings loader](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/box-env.ts#L12-L17)
+For a rehearsal with a separate vault key, give the replacement process that key and
+its matching version as private settings. Nonempty process settings take precedence
+over `secrets.env`. This path remains untested until setup can prepare the Cloud download
+and the rehearsal has a synthetic source that keeps its vault key outside the archive.
+[Waitron’s box settings loader](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/box-env.ts#L12-L17)
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `71daa2410af1c50c3a23429596ae0fb0ef62f552`. This client uses the pairing proof

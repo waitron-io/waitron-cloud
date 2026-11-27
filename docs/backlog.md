@@ -318,9 +318,9 @@ archive during staging and preparation with `backup.artifact_invalid` (`bad_vers
 [Waitron’s refusal tests](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/setup-recovery-preparation-api.test.ts#L436-L458)
 The restore command opened the file, then the filing module refused because the recovery
 had no prepared operation. [Restore command rehearsal](https://github.com/waitron-io/waitron-cloud/pull/1455)
-Full return needs Waitron to prepare the version 1 download using its recovery key
-and the master key for filing authority, followed by a rehearsal with a synthetic source
-that keeps its vault key outside the archive. [Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
+Full return needs a version 2 Cloud download that the venue’s master key opens,
+followed by a rehearsal with a synthetic source that keeps its vault key outside
+the archive. [Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
 The design also tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).

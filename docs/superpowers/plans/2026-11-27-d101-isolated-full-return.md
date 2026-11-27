@@ -1,13 +1,13 @@
 # D101 isolated full-return rehearsal
 
-Run this after Waitron setup Restore can stage and prepare a version 1 Cloud download using its
-downloaded recovery key and the separately held master key for filing authority. The current
-refusal and read-only recovery steps are in [Test Cloud](../../test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online).
+Run this after Cloud offers a version 2 download that the venue’s master key opens. Use the same
+master key for filing authority in Waitron setup Restore. The current version 1 refusal and
+read-only steps are in [Test Cloud](../../test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online).
 
 1. **Prepare the files and keys.** Use a disposable synthetic deployment on the approved Linux
-   test box. Match source, verifier and replacement on a Waitron release with version 1 preparation
-   support. Use a source that keeps its vault key outside the archive. Save one verified archive,
-   key, manifest and SQLite through Backups. Match the archive digest to the manifest. Keep the
+   test box. Match the source, verifier and replacement on the Waitron release used for the new
+   download. Use a source that keeps its vault key outside the archive. Save the verified version 2
+   archive, manifest and SQLite through Backups. Match the archive digest to the manifest. Keep the
    master key from the recovery pack and the separate vault key and version private.
 2. **Prepare and place the recovery.** Stop and disconnect the source and peers. Verify that
    their containers are stopped and the source listener is down. Follow the release’s filing-box
