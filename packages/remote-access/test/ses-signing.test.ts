@@ -9,14 +9,14 @@ test('SES signing creates a tagged external identity and reads its exact status 
  const domain='venue.example.test', selector='11111111-1111-4111-8111-111111111111';
  const tag='22222222-2222-4222-8222-222222222222', privateKey='synthetic-private-key';
  const path='/v2/email/identities', calls:{method:string;url:string;input?:unknown}[]=[];
- let exists=false, createFailure=0;
+ let exists=false,createFailure:{status:number;type?:string}|undefined;
  const server=createServer(async(req,res)=>{
   let body='';for await(const chunk of req)body+=chunk;
   calls.push({method:req.method!,url:req.url!,...(body?{input:JSON.parse(body)}:{})});
   res.setHeader('Content-Type','application/json');
   if(req.method==='POST'&&createFailure){
-   res.statusCode=createFailure;
-   if(createFailure===400)res.setHeader('x-amzn-errortype','BadRequestException');
+   res.statusCode=createFailure.status;
+   if(createFailure.type)res.setHeader('x-amzn-errortype',createFailure.type);
    res.end(JSON.stringify({message:'Provider did not confirm the write'}));return;
   }
   if(req.method==='POST')exists=true;
@@ -45,10 +45,19 @@ test('SES signing creates a tagged external identity and reads its exact status 
  assert.deepEqual(calls.slice(2).map(({method,url})=>[method,url]),[
   ['GET',path+'/'+domain],['DELETE',path+'/'+domain],['GET',path+'/'+domain],
  ]);
- createFailure=500;
+ createFailure={status:500};
  await assert.rejects(ses.create(domain,selector,tag,privateKey));
  assert.equal(calls.filter(call=>call.method==='POST').length,2);
- createFailure=400;
+ createFailure={status:400,type:'BadRequestException'};
  assert.equal(await ses.create(domain,selector,tag,privateKey),'refused');
  assert.equal(calls.filter(call=>call.method==='POST').length,3);
+ for(const [status,type] of [[400,'LimitExceededException'],[404,'NotFoundException'],[429,'TooManyRequestsException']] as const){
+  createFailure={status,type};
+  const before=calls.length;
+  assert.equal(await ses.create(domain,selector,tag,privateKey),'refused',type);
+  assert.equal(calls.length-before,1,type);
+ }
+ createFailure={status:409,type:'AlreadyExistsException'};
+ await assert.rejects(ses.create(domain,selector,tag,privateKey),{name:'AlreadyExistsException'});
+ assert.equal(calls.filter(call=>call.method==='POST').length,7);
 });

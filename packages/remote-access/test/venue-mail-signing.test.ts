@@ -80,7 +80,7 @@ test('two venues cannot both claim a domain and inherited verification does not 
  assert.deepEqual(f.writes,['ses create','dns create']);
 });
 
-test('a retry cannot replace newer claim data it did not read',async t=>{
+test('a retry leaves the saved claim alone when SES still shows no identity',async t=>{
  const f=await fixture();t.after(f.db.close);
  const venueId=f.db.venues[0]!;
  await f.choose();
@@ -188,7 +188,7 @@ test('reset can retire a signing identity accepted after an earlier timeout',asy
  };
  await assert.rejects(f.run(),/SES client timed out/);
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[f.db.venues[0]]);
- await f.run();
+ assert.equal(await f.run(),'held');
  await acceptTimedOutWrite!();
  assert.equal(await f.run(),'retired','the reset must still be able to find the late identity');
  assert.equal(f.identities.size,0);
@@ -269,4 +269,37 @@ test('keep the TXT record until SES confirms identity deletion',async t=>{
  assert.equal(await f.run(),'held');
  assert.ok(f.txt.has(selector+'.mail.'+suffix));
  assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing')).rowCount,1);
+});
+
+test('retire after a lost DNS delete reply when the record is gone',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
+ assert.equal(await f.run(),'verified');
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
+ const remove=f.options.dns.remove;
+ f.options.dns.remove=async(...args)=>{
+  await remove(...args);
+  throw Error('DNS delete reply lost');
+ };
+ assert.equal(await f.run(),'retired');
+ assert.deepEqual(f.writes,['ses create','dns create','ses delete','dns delete']);
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing')).rowCount,0);
+});
+
+test('retire after a lost SES delete reply when no TXT was published',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose(venueId);
+ f.options.dns.create=async()=>{throw Error('DNS publication refused');};
+ await assert.rejects(f.run(),/DNS publication refused/);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
+ const remove=f.options.ses.remove;
+ f.options.ses.remove=async(...args)=>{
+  await remove(...args);
+  throw Error('SES delete reply lost');
+ };
+ assert.equal(await f.run(),'retired');
+ assert.deepEqual(f.writes,['ses create','ses delete']);
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing')).rowCount,0);
 });

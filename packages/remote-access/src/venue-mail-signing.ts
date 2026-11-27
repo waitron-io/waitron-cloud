@@ -54,19 +54,31 @@ async function releaseClaim(pool:Pool,venueId:string,tag:string){
  return (await pool.query('DELETE FROM venue_mail_signing WHERE venue_id=$1 AND tag=$2',[venueId,tag])).rowCount;
 }
 
+async function confirmRemoval(remove:()=>Promise<void>,isAbsent:()=>Promise<boolean>){
+ try{await remove();}
+ catch(error){
+  if(!await isAbsent())throw error;
+  return true;
+ }
+ return isAbsent();
+}
+
 async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:SigningOptions){
  await dns.checkZone();
  const target=venueMailTarget(claim.selector,claim.dns_suffix);
- const identity=await ses.read(claim.domain),record=await dns.read(target,claim.public_key);
+ const readIdentity=()=>ses.read(claim.domain),readRecord=()=>dns.read(target,claim.public_key);
+ const identity=await readIdentity(),record=await readRecord();
  // An absent record cannot settle a create that may still be accepted.
  if(!identity&&record==='absent')return 'held';
  if(identity){
   if(identity.tag!==claim.tag)return 'held';
-  await ses.remove(claim.domain);
-  if(await ses.read(claim.domain))return 'held';
+  const absent=await confirmRemoval(()=>ses.remove(claim.domain),async()=>await readIdentity()===null);
+  if(!absent)return 'held';
  }
- if(record==='matching')await dns.remove(target,claim.public_key);
- if(await dns.read(target,claim.public_key)!=='absent')return 'held';
+ const txtAbsent=async()=>await readRecord()==='absent';
+ const absent=record==='matching'?
+  await confirmRemoval(()=>dns.remove(target,claim.public_key),txtAbsent):await txtAbsent();
+ if(!absent)return 'held';
  return await releaseClaim(pool,venueId,claim.tag)?'retired':'held';
 }
 

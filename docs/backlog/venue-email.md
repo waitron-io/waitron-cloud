@@ -64,13 +64,16 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node 
 The operator command
 `pnpm --dir packages/remote-access venue-mail:signing <venue-id>` contacts the
 configured SES and Route 53 services. Get separate approval before running it
-with the `CLOUD_VENUE_MAIL_*` settings in `.env.example`.
+with the `CLOUD_VENUE_MAIL_*` settings in `.env.example`. Rerun after the alias
+points at the hosted key, or after a sender reset or an accepted transfer.
 
 A `held` result keeps the claim. Check the configured provider scope, the saved
 SES identity tag and the exact DNS TXT record before retrying. If you changed
 the scope or removed the domain from the test list, restore the original
-settings to retire that identity. The command assumes it is the only writer
-for these test identities and records. The portal tick still checks the alias.
+settings to retire that identity. If an interrupted run leaves both provider
+records absent, the command keeps the claim while you investigate the
+interrupted operation. The command assumes it is the only writer for these
+test identities and records. The portal tick still checks the alias.
 A later slice will use the venue’s From address and restore the Waitron sender
 with a notice if verification is lost.
 See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).
