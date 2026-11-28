@@ -103,8 +103,12 @@ In **Remote access**, the signing status and the usual From explain what new
 staff mail will use in the test inbox. **Refresh status** checks the DNS alias
 and reads the signing worker's latest result. **Signing not started** means the
 saved address has no matching signing record. If it persists after the alias
-is verified, ask the test Cloud operator to check whether the worker is
-holding setup, for example because a different claim already owns the domain.
+is verified, ask the test Cloud operator to check whether the domain is
+already set up for signing elsewhere.
+
+If setup is held before it saves a signing record, check for an existing SES
+identity for the sending domain and a TXT record at the DNS alias target.
+The worker leaves those existing provider records in place.
 
 When signing fails, **Use
 standard sender** clears the saved sender and any custom reply address. Save
