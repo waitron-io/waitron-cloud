@@ -1153,6 +1153,12 @@ implementation, complete integration proof and release gates pass.
 
 ### Save a verified backup while the test box stays online
 
+If you leave Test Cloud, use **Backups** to save a verified copy before the
+recorded download deadline, 90 days after service ends. You can read the saved
+database offline and, for a box that keeps its vault key in its settings file,
+rehearse restoring the encrypted backup on an isolated replacement. Save and
+check your copies before the deadline so you can use them after access closes.
+
 Sign in as the owner of a synthetic test venue. Open **View snapshots** and
 choose a verified snapshot. Select **Download database** to save the venue’s
 SQLite database. If asked, confirm your sign-in and select **Download database**
@@ -1177,8 +1183,6 @@ the portal stays open. It clears the copy
 sooner if you save another database, sign out or change accounts. If the page
 closes before clearing the file, opening the portal clears it. Opening another
 portal tab leaves a save in an open tab alone.
-Actual venue exit still needs the rest of the return and deletion process.
-
 On macOS, run `shasum -a 256 "path/to/your-backup.enc"` with your saved file's path. Compare the
 first value in the output with `archiveSha256` in the manifest to check the saved file.
 
