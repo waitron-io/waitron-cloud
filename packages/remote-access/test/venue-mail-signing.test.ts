@@ -171,6 +171,8 @@ test('the setup pass lists allowlisted test choices and retains moved or cleared
  await f.choose(cleared,'office@'+secondDomain);assert.equal(await f.run(cleared),'verified');
  await f.choose(f.db.otherVenue,'office@'+domain,f.db.other);
  await f.choose(f.db.foreignVenue,'office@unlisted.example.test',f.db.foreign);
+ // Each verified venue has both a signing row and an allowlisted saved choice.
+ assert.deepEqual(await listVenueMailSigningCandidates(f.db.pool,testDomains),[moved,cleared,f.db.otherVenue].sort());
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=$2 WHERE id=$1',[moved,'office@unlisted.example.test']);
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[cleared]);
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3 WHERE id=$1',

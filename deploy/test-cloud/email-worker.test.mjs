@@ -11,6 +11,21 @@ test('signing listing failures let one-shot email delivery finish',async t=>{
  assert.ok(logged.mock.calls.every(call=>String(call.arguments[0]).includes('signing pass')));
 });
 
+test('a signing listing failure leaves continuous email delivery running',async t=>{
+ const logged=t.mock.method(console,'error',()=>{});
+ const stop=new AbortController();
+ const signal=AbortSignal.any([stop.signal,AbortSignal.timeout(5_000)]);
+ let accountCalls=0;
+ const account={async runOnce(){
+  if(++accountCalls===5)stop.abort();
+  return false;
+ }};
+ const signing=async()=>{throw Error('listing failed');};
+ await runTestEmailQueues({account,signing,signal});
+ assert.ok(accountCalls>=5,'the account queue starts another batch after signing fails');
+ assert.equal(logged.mock.callCount(),1);
+});
+
 test('signing waits a minute between passes and drains the active pass on shutdown',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});
  // The worker imports the timer as a named built-in export.
