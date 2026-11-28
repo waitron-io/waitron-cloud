@@ -475,6 +475,9 @@ test('venue SES mounts both private files on the email worker and leaves account
  assert.ok(calls.find(args=>args.includes('up')).includes('deploy/test-cloud/compose.amazon-venue-ses.yaml'));
  assert.equal(calls.find(args=>args.includes('up')).includes('deploy/test-cloud/compose.amazon-ses.yaml'),false);
  await assert.rejects(deploy('up',{...options,sesSettingsSource:undefined,inventory:assert.fail}),/test_cloud.amazon_ses/);
+ delete worker.environment.TEST_CLOUD_AMAZON_VENUE_SES;
+ assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+ worker.environment.TEST_CLOUD_AMAZON_VENUE_SES='1';
  worker.environment.CLOUD_TEST_VENUE_MAIL_SIGNING='1';
  assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
  worker.environment.CLOUD_TEST_VENUE_MAIL_SIGNING='0';
