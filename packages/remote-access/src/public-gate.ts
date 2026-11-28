@@ -61,9 +61,9 @@ const menuRefusals:Record<number,[string,string]>={
 };
 const availabilityPaths=['/public/availability','/_cloud/challenge','/_cloud/solve','/_cloud/challenge.js','/_cloud/worker.js'];
 const menuBytes=2*1024*1024;
-function menuHeaders(response:IncomingMessage,kind:MenuKind):Record<string,string>{
+function menuHeaders(response:IncomingMessage,kind:MenuKind,includeBodyHeaders=true):Record<string,string>{
  const headers:Record<string,string>={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
- for(const name of ['content-type','content-language','content-encoding','content-length','vary']){
+ for(const name of includeBodyHeaders?['vary','content-type','content-language','content-encoding','content-length']:['vary']){
   const value=response.headers[name];
   if(typeof value==='string')headers[name]=value;
  }
@@ -139,6 +139,15 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
    });
    if(!await authorized()||!current()){refuse(404);return;}
    if(upstream.statusCode===404||upstream.statusCode===429){refuse(upstream.statusCode);return;}
+   if(upstream.statusCode===302&&kind==='page'&&!upstream.destroyed){
+    const location=upstream.headers.location;
+    if(location&&/^\/(?:[a-z0-9-]+(?:\/[a-z0-9-]+)?)?$/i.test(location)&&!availabilityPaths.includes(location)&&menu.match(location)==='page'){
+     signal.throwIfAborted();
+     res.writeHead(302,{...menuHeaders(upstream,kind,false),Location:location});
+     res.end();
+     return;
+    }
+   }
    if(upstream.destroyed||upstream.statusCode!==200||Number(upstream.headers['content-length']??0)>menuBytes){refuse(503);return;}
    signal.throwIfAborted();
    res.writeHead(200,menuHeaders(upstream,kind));

@@ -22,10 +22,12 @@ bar shows the language URL. The 28 November 04:46 watcher note supplies the
 route contract. Stock gateways still start with live menus disabled.
 
 In `packages/remote-access/test/public-gate.test.ts`, add the root, menu and
-language paths to the loopback fixture’s page matcher. First show a valid 302
+language paths to the loopback fixture’s page matcher and send root requests
+to the fake menu responder. First show a valid 302
 fails today. Check the relative Location, 60-second cache cap, upstream Age
 and Vary, and that a new public request reaches the target page. Check refusal
-for destinations outside the public menu, including one with a backslash.
+for a destination with a backslash, the availability page and a menu address
+the matcher refuses. Each case exercises one separate rule.
 Check that a block at the second authority read suppresses the 302.
 Run `pnpm --dir packages/remote-access exec node --test test/public-gate.test.ts`
 and observe the valid redirect assertion fail before implementation.
