@@ -314,12 +314,13 @@ Billing’s future unpaid-expiry step sets the unpaid-trial deadline by writing 
 existing cancel instruction at expiry. Paid-month cancellation still needs a
 reachable settled-payment path. The [offline guide](test-cloud.md#save-a-verified-backup-while-the-test-box-stays-online)
 covers reading the saved database and matching the backup’s master key name to the venue’s
-recovery pack. Full return through setup, current filing authority and activation still
-needs a rehearsal. The verifier refused a captured backup with its vault key kept
-outside the archive, returning `secret_unavailable` before download. That layout
+recovery pack. The [file-backed vault rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
+used the saved version 2 copy to prepare filing authority, restore with the
+source down and open the replacement’s filing certificate. The verifier
+refused a captured backup with its vault key kept outside the archive,
+returning `secret_unavailable` before download. That layout
 waits for the
 [external vault archive contract](waitron-integration-contract.md#external-vault-archive-compatibility-dependency).
-[Isolated restore rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
 The design also tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
 Resubscription, sealing and deletion remain part of the
 [remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).

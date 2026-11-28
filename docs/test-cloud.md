@@ -1193,12 +1193,19 @@ The check returns `ok` when SQLite can read the saved database and its structure
 is intact. The disposable rehearsal compares this database with the independent
 opening of the matching encrypted archive using the master key.
 
-The rehearsal uses the same file opener as Waitron setup **Restore**. It
-checks that the saved file opens with the matching master key. The
-[isolated full-return plan](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
-covers staging the file in setup, preparing the recovery operation and checking
-the filing authority before activation. The pinned version of setup accepts
-uploads up to 256 MiB. [Waitron’s setup upload limit](https://github.com/clintongormley/waitron/blob/5cc7bf033ad3af159fd622ed7de210eb8bcf4124/apps/server/src/setup-request-fields.ts#L4)
+If your box keeps its vault key in its settings file, the encrypted backup
+includes the key. You can rehearse a cold restore on an isolated replacement
+using the same backup and master key. Keep the source and its peers stopped
+while you restore. Waitron setup **Restore** checks the upload and prepares
+the filing operation after you confirm the two clocks and finish the wait.
+The restore keeps the old invoice series for history and starts the new series
+at one. Follow the [isolated recovery rehearsal](superpowers/plans/2026-11-27-d101-isolated-full-return.md)
+and the pinned [Waitron recovery guide](https://github.com/clintongormley/waitron/blob/5cc7bf033ad3af159fd622ed7de210eb8bcf4124/docs/operations/hour-recovery.md).
+
+The isolated replacement kept all ten practice sales and their filing
+records and opened the certificate in its restored vault. The certificate
+matched its saved fingerprint. The pinned version of setup accepts uploads
+up to 256 MiB. [Waitron’s setup upload limit](https://github.com/clintongormley/waitron/blob/5cc7bf033ad3af159fd622ed7de210eb8bcf4124/apps/server/src/setup-request-fields.ts#L4)
 
 If your box keeps its application vault key outside the backup, the pinned release
 blocks this rehearsal before download. In the isolated run, the source opened its
@@ -1210,8 +1217,7 @@ checks. The same source passed all 17 checks with its key in the encrypted backu
 
 Backups offers only verified copies. The
 [external vault archive contract](waitron-integration-contract.md#external-vault-archive-compatibility-dependency)
-needs to be implemented before this layout can reach setup. Filing authority,
-placement and certificate access on a replacement still need a rehearsal.
+needs to be implemented before this layout can reach setup.
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `5cc7bf033ad3af159fd622ed7de210eb8bcf4124`. Build against that revision’s own
