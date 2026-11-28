@@ -42,14 +42,17 @@ The [27 November main run](https://github.com/waitron-io/waitron-cloud/actions/r
 hit `57014` in migrations 035, 045 and 016 on shard 5. Two reports sampled repeated
 `WALWrite` waits. A [disk-pressure run](https://github.com/waitron-io/waitron-cloud/actions/runs/45987713054/job/140467459086)
 passed all 346 cases. The waiting process was observed, and the writer and its storage latency are still unknown.
-Each registration shard job starts its own PostgreSQL server. The disk-pressure
-run observed three file workers sharing that server, with `fsync`,
-`synchronous_commit` and `full_page_writes` on and `wal_sync_method=fdatasync`.
+Each registration shard starts its own PostgreSQL server. Three file workers shared
+it in the disk-pressure run, with durability settings enabled and `wal_sync_method=fdatasync`.
 
-On recurrence, read `cloud-test-setup-waits` beside the migration stage. Its `database`
-snapshot records when it was taken, up to 24 live processes and the total that
-matched. It follows cancellation, so use the earlier `samples` to see what the
-timed-out process was waiting for. If the new snapshot shows contention, compare
-the active sessions and their wait events with those earlier samples. You can
-exercise both
-with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/setup-wait-diagnostics.test.ts`.
+The 28 November main job hit two migration timeouts through the shared mail fixture.
+All 278 cases passed when the replay applied disk pressure during that file. The
+Sent reports case reached its own 30-second deadline. Keep that failure separate
+until there is evidence that it shared the same wait. [Failed job](https://github.com/waitron-io/waitron-cloud/actions/runs/46134889343/job/140947986646) · [Targeted replay](https://github.com/waitron-io/waitron-cloud/actions/runs/46136915887/job/140954154748)
+
+The disposable launcher turns off `fsync`, `synchronous_commit` and `full_page_writes`
+to reduce disk writes and waits. Crash recovery proofs start their own databases.
+After a wrapped command fails, read `cloud-test-postgres-failure` for cumulative WAL
+write timings and up to 24 remaining processes. Compare them with any
+`cloud-test-setup-waits` samples from before a timeout. A process can exit before the
+launcher takes its snapshot. The original cause remains open.
