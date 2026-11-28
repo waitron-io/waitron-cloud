@@ -18,6 +18,16 @@ test('exact qualified bindings produce an immutable independent configuration fo
   }
 });
 
+test('a venue sender must match the identity in its trusted SMTP binding',()=>{
+  const {policy,input}=feedbackFixture('eu-north-1',['cloud-account-email','venue-email']);
+  const venueIdentityArn='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+  const candidate={...input,venueIdentityArn};
+  assert.throws(()=>validateSesFeedbackConfig(policy,candidate),/Invalid SES feedback configuration/);
+  const smtpBindings=policy.smtpBindings.map(binding=>binding.purpose==='venue-email'?{...binding,venueIdentityArn}:binding);
+  assert.equal(validateSesFeedbackConfig({...policy,smtpBindings},candidate).venueIdentityArn,venueIdentityArn);
+  assert.throws(()=>validateSesFeedbackConfig({...policy,smtpBindings},{...candidate,venueIdentityArn:venueIdentityArn.replace('123456789012','999999999999')}));
+});
+
 test('omitted region defaults to Stockholm without a provider fallback',()=>{
   const {policy,input}=feedbackFixture();delete (input.scope as {region?:string}).region;
   assert.equal(validateSesFeedbackConfig(policy,input).scope.region,'eu-north-1');

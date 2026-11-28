@@ -6,20 +6,20 @@ import {EmailOutbox} from '@waitron-cloud/registration';
 import {set,venueServiceFixture} from '../../registration/test/fixtures/venue-service.ts';
 import {deferred} from '../../registration/test/fixtures/relay-stop-barrier.ts';
 import {fakeVenueMailProviders} from './fixtures/venue-mail-signing.ts';
-import {runVenueMailSigning} from '../src/venue-mail-signing.ts';
+import {refreshVenueMailSignings,runVenueMailSigning} from '../src/venue-mail-signing.ts';
 
 const domain='cafe.example.test',suffix='cloud.example.test';
 
-async function fixture(){
+async function fixture(testDomains=[domain]){
  const db=await venueServiceFixture();
- const signing=fakeVenueMailProviders(suffix,[domain]);
+ const signing=fakeVenueMailProviders(suffix,testDomains);
  const outbox=new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}});
  return {db,...signing,
-  async choose(venueId=db.venues[0]!){
+  async choose(venueId=db.venues[0]!,address='office@'+domain,scope=db.scope){
    const selector=randomUUID();
-   await set(db,'connected',venueId);
+   await set(db,'connected',venueId,true,scope);
    await db.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3 WHERE id=$1',
-    [venueId,'office@'+domain,selector]);
+    [venueId,address,selector]);
    return selector;
   },
   run(venueId:string=db.venues[0]!){return runVenueMailSigning(db.pool,venueId,{...signing.options,outbox});},
@@ -48,6 +48,12 @@ test('resume after unconfirmed provider writes and retire after the sender is cl
  assert.equal(await f.run(),'held');
  assert.deepEqual(f.writes,['ses create','dns create']);
  f.identities.set(domain,identity);
+ const remove=f.options.ses.remove;
+ f.options.ses.remove=async name=>{
+  assert.deepEqual((await f.db.pool.query('SELECT verified,verified_at,ses_identity_arn FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rows[0],
+   {verified:false,verified_at:null,ses_identity_arn:null});
+  await remove(name);
+ };
  const savedValue=f.txt.get(target)!;
  f.txt.set(target,'different value');
  assert.equal(await f.run(),'held');
@@ -107,6 +113,53 @@ test('only a definitive signing check changes the saved result',async t=>{
  assert.equal(await run(),'held');
  assert.equal(await verified(),false);
  assert.equal(f.txt.has(selector+'.mail.'+suffix),true);
+});
+
+test('read-only signing checks renew fresh evidence, keep it on a timeout and clear it on confirmed loss',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!,selector=await f.choose(),target=selector+'.mail.'+suffix;
+ const options={...f.options,config:{...f.options.config,providerAccountId:'123456789012'},
+  outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})};
+ const check=(overrides:Partial<typeof options>={})=>{
+  const watch={...options,...overrides,readOnly:true};
+  return runVenueMailSigning(f.db.pool,venueId,watch);
+ };
+ const evidence=async()=>(await f.db.pool.query(`SELECT verified,to_jsonb(s)->>'verified_at' AS verified_at,
+  to_jsonb(s)->>'ses_identity_arn' AS ses_identity_arn FROM venue_mail_signing s WHERE venue_id=$1`,[venueId])).rows[0];
+ assert.equal(await runVenueMailSigning(f.db.pool,venueId,options),'verified');
+ assert.equal((await evidence()).ses_identity_arn,'arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test');
+ await f.db.pool.query("UPDATE venue_mail_signing SET verified_at=clock_timestamp()-interval '2 hours' WHERE venue_id=$1",[venueId]);
+ const old=await evidence();
+ assert.equal(await check(),'verified');
+ const renewed=await evidence();assert.ok(Date.parse(renewed.verified_at)>Date.parse(old.verified_at));
+ assert.equal(await f.run(venueId),'verified');
+ assert.deepEqual(await evidence(),renewed,'a check without the provider account cannot replace or renew SES evidence');
+ assert.equal(await check({resolveCname:async()=>{throw Object.assign(Error('timeout'),{code:'ETIMEOUT'});}}),'awaiting_dns');
+ assert.deepEqual(await evidence(),renewed);
+ f.writes.length=0;f.txt.delete(target);
+ assert.equal(await check(),'pending');
+ assert.deepEqual(await evidence(),{verified:false,verified_at:null,ses_identity_arn:null});
+ assert.deepEqual(f.writes,[]);
+});
+
+test('the signing watch pass checks every saved claim without setting up an unclaimed address',async t=>{
+ const secondDomain='bar.example.test',unclaimed='unclaimed.example.test';
+ const f=await fixture([domain,secondDomain,unclaimed]);t.after(f.db.close);
+ const [first,second]=f.db.venues;assert.ok(first&&second);
+ await f.choose(first);assert.equal(await f.run(first),'verified');
+ await f.choose(second,'office@'+secondDomain);assert.equal(await f.run(second),'verified');
+ await f.choose(f.db.otherVenue,'office@'+unclaimed,f.db.other);
+ const calls=new Set<string>(),resolveCname=f.options.resolveCname;
+ await refreshVenueMailSignings(f.db.pool,{...f.options,
+  outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}}),
+  resolveCname:async name=>{calls.add(name.split('.').slice(2).join('.'));return resolveCname(name);}});
+ assert.deepEqual(calls,new Set([domain,secondDomain]));
+ assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[second]);
+ const diagnostic=t.mock.method(console,'error',()=>{});
+ await refreshVenueMailSignings(f.db.pool,{...f.options,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes(second)&&String(call.arguments[0]).includes('venue-mail:signing')));
+ assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
 });
 
 test('a retry leaves the saved claim alone when SES still shows no identity',async t=>{

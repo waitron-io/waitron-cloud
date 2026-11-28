@@ -6,6 +6,8 @@ import {config} from './fixtures/mail-attempt.ts';
 import {createSesRelaySender} from '../src/relay-ses-smtp.ts';
 import type {RelayContent} from '../src/relay-smtp.ts';
 import {tlsSmtp,smtpConfig} from './fixtures/ses-smtp.ts';
+import {feedbackFixture} from './fixtures/ses-feedback.ts';
+import {validateSesFeedbackConfig} from '../src/ses-feedback-config.ts';
 
 const content=():RelayContent=>({version:1,grantId:randomUUID(),grantRevision:1,messageId:randomUUID(),class:'password_reset',recipient:'guest@example.test',locale:'en',timeZone:'Europe/Madrid',displayName:'La Plaza',token:'T'.repeat(42)+'A',expiresAt:new Date(Date.now()+60000).toISOString(),managementOrigin:'https://venue.example.test'});
 const admission={attemptTag:'A'.repeat(43),configurationSet:'transactional'};
@@ -25,6 +27,22 @@ test('standalone relay authenticates verified TLS, preserves RFC ID and extracts
    await assert.rejects(send(body,invalid,new AbortController().signal),/delivery_configuration/);
   }
   assert.equal(smtp.connections,1);
+ }finally{await smtp.close();}
+});
+
+test('an admitted venue identity cannot send from another domain',async()=>{
+ const {policy,input}=feedbackFixture('eu-north-1',['venue-email']);
+ const senderIdentityArn='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+ const smtpBindings=policy.smtpBindings.map(binding=>({...binding,venueIdentityArn:senderIdentityArn}));
+ const settings=validateSesFeedbackConfig({...policy,smtpBindings},{...input,venueIdentityArn:senderIdentityArn});
+ const smtp=await tlsSmtp();try{
+  const send=createSesRelaySender(settings,{...smtpConfig,port:smtp.port},{ca:smtp.cert});
+  await assert.rejects(send(content(),{...admission,senderIdentityArn},new AbortController().signal,
+   {from:'office@sub.cafe.example.test',replyTo:'office@cafe.example.test'}),/delivery_configuration/);
+  assert.equal(smtp.connections,0);
+  const accepted=await send(content(),{...admission,senderIdentityArn},new AbortController().signal,
+   {from:'office@cafe.example.test',replyTo:'office@cafe.example.test'});
+  assert.equal(accepted.outcome,'accepted');assert.equal(smtp.connections,1);
  }finally{await smtp.close();}
 });
 

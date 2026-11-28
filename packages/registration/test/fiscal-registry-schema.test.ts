@@ -115,8 +115,10 @@ test('populated release37 upgrades concurrently preserving retained rows and dig
     const expectedInstallations=(before.installations as {value:Record<string,unknown>}[]).map(({value})=>({
       value:{...value,portal_removed_at:null,setup_pairing_account_id:null},
     }));
+    const expectedRelayMessages = (before.relay_messages as { value: Record<string, unknown> }[])
+      .map(({ value }) => ({ value: { ...value, use_waitron_sender: false } }));
     assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, {...before,cloud_accounts:(before.cloud_accounts as {value:Record<string,unknown>}[]).map(({value})=>({value:{...value,recovery_organisation_id:null}})),legal_businesses:(before.legal_businesses as {value:Record<string,unknown>}[]).map(({value})=>({value:{...value,billing_address:null,tax_number:null}})),venues:expectedVenues,installations:expectedInstallations,cloud_sessions:expectedSessions,
-      pairing_requests:connectionDefaults(before.pairing_requests as typeof expectedSessions)});
+      pairing_requests:connectionDefaults(before.pairing_requests as typeof expectedSessions),relay_messages:expectedRelayMessages});
     assert.deepEqual(backup_verification_attempts, []);
     assert.deepEqual(remote_forward_observations, []);
     assert.deepEqual(remote_forward_reporters, []);

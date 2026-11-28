@@ -1,5 +1,6 @@
 import {decideCountryFlow} from './country-policy.ts';
 import type {CountryPolicy,FlowRequest} from './country-policy.ts';
+import {normaliseEmail} from './account-input.ts';
 
 export type MailPurpose='cloud-account-email'|'venue-email';
 export interface MailScope {readonly country:string;readonly providerAccountId:string;readonly region:'eu-north-1'|'eu-west-3';}
@@ -7,18 +8,23 @@ export interface SesFeedbackConfig {
   readonly scope:MailScope;readonly policyRevision:number;readonly revision:string;
   readonly purposes:readonly MailPurpose[];readonly flows:readonly FlowRequest[];
   readonly identityArn:string;readonly configurationSet:string;readonly configurationSetArn:string;
+  readonly venueIdentityArn?:string;
   readonly topicArn:string;readonly queueArn:string;readonly queueUrl:string;readonly dlqArn:string;
   readonly smtpHost:string;readonly smtpPort:number;
 }
 // SMTP qualification belongs to trusted evidence, never the supplied configuration or event.
 export interface SesFeedbackPolicy extends CountryPolicy {
   readonly smtpBindings?:readonly {readonly purpose:MailPurpose;readonly evidenceId:string;readonly host:string;readonly port:number;
-    readonly revision:string;readonly identityArn:string;readonly configurationSetArn:string;readonly topicArn:string;
+    readonly revision:string;readonly identityArn:string;readonly venueIdentityArn?:string;readonly configurationSetArn:string;readonly topicArn:string;
     readonly queueArn:string;readonly dlqArn:string}[];
 }
 const validated=new WeakSet<object>();
 export function isValidatedSesFeedbackConfig(value:SesFeedbackConfig):boolean{return validated.has(value);}
 const refuse=():never=>{throw new Error('Invalid SES feedback configuration');};
+export function isScopedSesIdentity(value:unknown,scope:MailScope):value is string{
+  const prefix=`arn:aws:ses:${scope.region}:${scope.providerAccountId}:identity/`;
+  return typeof value==='string'&&value.startsWith(prefix)&&/^[A-Za-z0-9@._+-]{1,254}$/.test(value.slice(prefix.length));
+}
 function object(value:unknown):Record<string,unknown>{
   if(value===null||typeof value!=='object'||Array.isArray(value))return refuse();
   // Configuration is data: repeated validation reads must not invoke changing accessors.
@@ -28,10 +34,10 @@ function object(value:unknown):Record<string,unknown>{
 function name(value:unknown):string {
   return typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(value)?value:refuse();
 }
-function resource(value:unknown,prefix:string,identity=false):string {
+function resource(value:unknown,prefix:string):string {
   if(typeof value!=='string'||!value.startsWith(prefix))return refuse();
   const tail=value.slice(prefix.length);
-  if(identity?!/^[A-Za-z0-9@._+-]{1,254}$/.test(tail):!/^[A-Za-z0-9_-]{1,80}$/.test(tail))return refuse();
+  if(!/^[A-Za-z0-9_-]{1,80}$/.test(tail))return refuse();
   return value;
 }
 
@@ -49,7 +55,14 @@ export function validateSesFeedbackConfig(policy:SesFeedbackPolicy,input:unknown
     ||new Set(i.purposes).size!==i.purposes.length||i.purposes.some(p=>p!=='cloud-account-email'&&p!=='venue-email'))return refuse();
   const purposes=Object.freeze([...i.purposes]) as readonly MailPurpose[];
   const arn=(service:string)=>`arn:aws:${service}:${region}:${scope.providerAccountId}:`;
-  const identityArn=resource(i.identityArn,arn('ses')+'identity/',true);
+  const identityArn=i.identityArn;
+  if(!isScopedSesIdentity(identityArn,scope))return refuse();
+  const venueIdentityArn=i.venueIdentityArn;
+  if(venueIdentityArn!==undefined){
+    if(!isScopedSesIdentity(venueIdentityArn,scope)||!purposes.includes('venue-email'))return refuse();
+    const mailbox='x@'+venueIdentityArn.split('identity/')[1];
+    if(normaliseEmail(mailbox)!==mailbox)return refuse();
+  }
   if(i.configurationSetArn!==arn('ses')+'configuration-set/'+configurationSet)return refuse();
   const topicArn=resource(i.topicArn,arn('sns'));
   const queueArn=resource(i.queueArn,arn('sqs')),dlqArn=resource(i.dlqArn,arn('sqs'));
@@ -76,12 +89,13 @@ export function validateSesFeedbackConfig(policy:SesFeedbackPolicy,input:unknown
       if(supplierId==='amazon-ses'&&dataClass!=='email-metadata'
         &&!policy.smtpBindings?.some(b=>b.purpose===purpose&&b.evidenceId===decision.evidenceId&&b.host===smtpHost&&b.port===465
           &&b.revision===revision&&b.identityArn===identityArn&&b.configurationSetArn===i.configurationSetArn
+          &&(purpose!=='venue-email'||b.venueIdentityArn===venueIdentityArn)
           &&b.topicArn===topicArn&&b.queueArn===queueArn&&b.dlqArn===dlqArn))return refuse();
       flows.push(Object.freeze(expected));
     }
   }
   if(i.flows.length!==flows.length)return refuse();
   const config:SesFeedbackConfig=Object.freeze({scope,policyRevision:policy.revision,revision,purposes,flows:Object.freeze(flows),
-    identityArn,configurationSet,configurationSetArn:i.configurationSetArn,topicArn,queueArn,queueUrl,dlqArn,smtpHost,smtpPort:465});
+    identityArn,...(venueIdentityArn===undefined?{}:{venueIdentityArn}),configurationSet,configurationSetArn:i.configurationSetArn,topicArn,queueArn,queueUrl,dlqArn,smtpHost,smtpPort:465});
   validated.add(config);return config;
 }

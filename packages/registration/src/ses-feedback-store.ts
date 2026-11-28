@@ -27,6 +27,7 @@ export async function applySesFeedback(pool:Pool,config:SesFeedbackConfig,recipi
   // Late feedback uses the original sealed recipient even after validated revision upgrades.
   if(!attempt||!config.purposes.includes(attempt.purpose)||attempt.configuration_set!==config.configurationSet)
    return receipt('ignored','unresolved');
+  if(event.sourceArn!==(attempt.sender_identity_arn??config.identityArn))return receipt('conflict','binding_conflict');
   const refs=(await client.query('SELECT key_id,digest FROM mail_attempt_recipients WHERE attempt_tag=$1 ORDER BY key_id',[event.attemptTag])).rows;
   const failKeys=():never=>{throw Error('mail_keys_unavailable');};
   if(!recipientKeys?.keys||typeof recipientKeys.keys!=='object'||Array.isArray(recipientKeys.keys)

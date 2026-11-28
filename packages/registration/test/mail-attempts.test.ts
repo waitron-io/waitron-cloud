@@ -46,6 +46,11 @@ test('refuses stale unknown expired and wrong-purpose claims before creating bin
   const {validateSesFeedbackConfig}=await import('../src/ses-feedback-config.ts');
   const onlyVenue=feedbackFixture('eu-north-1',['venue-email']);
   await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,config:validateSesFeedbackConfig(onlyVenue.policy,onlyVenue.input)})),/mail_configuration_unavailable/);
+  const venueSender='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+  const both=feedbackFixture('eu-north-1',['cloud-account-email','venue-email']);
+  const smtpBindings=both.policy.smtpBindings.map(binding=>binding.purpose==='venue-email'?{...binding,venueIdentityArn:venueSender}:binding);
+  const scoped=validateSesFeedbackConfig({...both.policy,smtpBindings},{...both.input,venueIdentityArn:venueSender});
+  await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,config:scoped,senderIdentityArn:venueSender})),/mail_configuration_unavailable/);
   for(const claim of [{...input.claim,claimId:randomUUID()},{...input.claim,attempt:2},{...input.claim,outboxId:randomUUID()}])
    await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,claim})),/mail_claim_unavailable/);
   await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,config:{...input.config}})),/mail_configuration_unavailable/);
@@ -122,6 +127,7 @@ test('venue attempts use their installation scope and share recipient digests wi
   const input={config:config(),recipientKeys:rotated,recipient:'original@example.test',claim:{purpose:'venue-email' as const,installationId:venue.installation,messageId:message.messageId,claimId,attempt:1}};
   await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,input)),/mail_claim_unavailable/);
   await f.pool.query("UPDATE relay_messages SET state='sending' WHERE message_id=$1",[message.messageId]);
+  await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,senderIdentityArn:input.config.identityArn})),/mail_configuration_unavailable/);
   for(const claim of [{...input.claim,claimId:randomUUID()},{...input.claim,attempt:2}])await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,claim})),/mail_claim_unavailable/);
   await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,claim:{...input.claim,installationId:randomUUID()}})),/mail_claim_unavailable/);
   const admission=await transaction(f.pool,c=>admitMailAttempt(c,input));

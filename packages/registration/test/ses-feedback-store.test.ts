@@ -52,6 +52,27 @@ test('feedback before the SMTP receipt binds once and commits one blocking event
  }finally{await f.close();}
 });
 
+test('wrong sender feedback cannot bind or suppress before the original sender reports',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  const wrong=event(a.attemptTag,{sourceArn:'arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test'});
+  assert.equal(await applySesFeedback(f.pool,config(),keys,wrong),'conflict');
+  assert.deepEqual(await counts(f),{receipts:1,events:0,suppressions:0});
+  assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,null);
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'original-source'})),'applied');
+ }finally{await f.close();}
+});
+
+test('feedback for an attempt from before the sender migration uses the fixed identity',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  // An attempt present when migration 091 adds the column has a null sender identity.
+  await f.pool.query('ALTER TABLE mail_attempts DROP COLUMN sender_identity_arn, ADD COLUMN sender_identity_arn text');
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag)),'applied');
+  assert.deepEqual(await counts(f),{receipts:1,events:1,suppressions:1});
+ }finally{await f.close();}
+});
+
 test('a changed SNS payload conflicts without overwriting its original receipt or block',async()=>{
  const f=await fixture();try{
   const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
@@ -352,6 +373,24 @@ test('events without feedback IDs deduplicate by type time provider and original
   assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{kind:'delivery',eventId:null,snsId:'later',eventTime:'2026-11-05T10:00:00.000Z'})),'ignored');
   assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{kind:'temporary',eventId:null,snsId:'other-kind'})),'ignored');
   assert.deepEqual(await counts(f),{receipts:4,events:3,suppressions:0});
+ }finally{await f.close();}
+});
+
+test('late venue feedback matches the admitted identity after sending returns to the fixed sender',async()=>{
+ const {fixture:relayFixture}=await import('./fixtures/relay-worker.ts');
+ const f=await relayFixture();try{
+  const venue=await f.venue(),recipient='owner@example.test',message=await venue.submit({recipient}),claimId=randomUUID();
+  const senderIdentityArn='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+  const {policy,input}=feedbackFixture('eu-north-1',['venue-email']);
+  const smtpBindings=policy.smtpBindings.map(binding=>({...binding,venueIdentityArn:senderIdentityArn}));
+  const sending=validateSesFeedbackConfig({...policy,smtpBindings},{...input,venueIdentityArn:senderIdentityArn});
+  await f.pool.query("UPDATE relay_messages SET state='sending',claim_id=$2,lease_until=clock_timestamp()+interval '1 minute',attempts=1 WHERE message_id=$1",[message.messageId,claimId]);
+  const a=await transaction(f.pool,c=>admitMailAttempt(c,{config:sending,recipientKeys:keys,recipient,senderIdentityArn,
+   claim:{purpose:'venue-email',installationId:venue.installation,messageId:message.messageId,claimId,attempt:1}}));
+  const raw=feedbackEvent();raw.mail.tags['waitron-attempt']=[a.attemptTag];raw.mail.sourceArn=senderIdentityArn;
+  const receiving=config();
+  assert.equal(await applySesFeedback(f.pool,receiving,keys,parseSesFeedback(JSON.stringify(feedbackEnvelope(raw)),receiving)),'applied');
+  assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-message-1');
  }finally{await f.close();}
 });
 

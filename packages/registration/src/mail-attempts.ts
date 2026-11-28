@@ -6,9 +6,9 @@ import {normaliseEmail} from './account-input.ts';
 import {lockMailScope,recipientIsSuppressed,type RecipientRef} from './recipient-suppression.ts';
 export type QueueClaim={purpose:'cloud-account-email';outboxId:string;claimId:string;attempt:number}
  |{purpose:'venue-email';installationId:string;messageId:string;claimId:string;attempt:number};
-export interface AttemptInput {config:SesFeedbackConfig;recipientKeys:RelayKeyConfig;claim:QueueClaim;recipient:string}
+export interface AttemptInput {config:SesFeedbackConfig;recipientKeys:RelayKeyConfig;claim:QueueClaim;recipient:string;senderIdentityArn?:string}
 export type SesHandoffConfig=Pick<AttemptInput,'config'|'recipientKeys'>;
-export interface HandoffAdmission {attemptTag:string;configurationSet:string}
+export interface HandoffAdmission {attemptTag:string;configurationSet:string;senderIdentityArn?:string}
 const accountInstallation='00000000-0000-0000-0000-000000000000';
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const fail=(reason:string):never=>{throw Error(reason);};
@@ -44,8 +44,10 @@ export async function mailRecipientRefs(client:PoolClient,input:SesHandoffConfig
 /** Commit admission before SMTP; caller-owned authority locks must precede this scope lock. */
 export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Promise<HandoffAdmission> {
  if(!input?.config||!isValidatedSesFeedbackConfig(input.config)||input.config.policyRevision>2147483647)return fail('mail_configuration_unavailable');
- const {config,claim}=input;
+ const {config,claim,senderIdentityArn}=input;
  if(!claim||!config.purposes.includes(claim.purpose))return fail('mail_configuration_unavailable');
+ if(senderIdentityArn!==undefined&&(claim.purpose!=='venue-email'||senderIdentityArn!==config.venueIdentityArn))
+  return fail('mail_configuration_unavailable');
  if(!uuid(claim.claimId)||!Number.isInteger(claim.attempt)||claim.attempt<1||claim.attempt>8)return fail('mail_claim_unavailable');
  const queueId=claim.purpose==='cloud-account-email'?claim.outboxId:claim.messageId;
  const installation=claim.purpose==='cloud-account-email'?accountInstallation:claim.installationId;
@@ -71,14 +73,14 @@ export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Pro
  if(deadline.rows[0]?.live!==true)return fail('mail_claim_unavailable');
  const attemptTag=randomBytes(32).toString('base64url');
  const inserted=await client.query(`INSERT INTO mail_attempts(attempt_tag,purpose,installation_id,queue_id,country,provider_account_id,region,
-  policy_revision,configuration_revision,configuration_set,claim_id,attempt)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`,
-  [attemptTag,claim.purpose,installation,queueId,country,providerAccountId,region,config.policyRevision,config.revision,config.configurationSet,claim.claimId,claim.attempt]);
+  policy_revision,configuration_revision,configuration_set,claim_id,attempt,sender_identity_arn)
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT DO NOTHING`,
+  [attemptTag,claim.purpose,installation,queueId,country,providerAccountId,region,config.policyRevision,config.revision,config.configurationSet,claim.claimId,claim.attempt,senderIdentityArn??config.identityArn]);
  if(inserted.rowCount!==1)return fail('mail_attempt_conflict');
  for(const ref of refs)await client.query(`INSERT INTO mail_attempt_recipients(attempt_tag,country,provider_account_id,region,key_id,digest)
   VALUES($1,$2,$3,$4,$5,$6)`,[attemptTag,country,providerAccountId,region,ref.keyId,ref.digest]);
  await client.query('UPDATE mail_attempts SET recipient_refs_sealed=true WHERE attempt_tag=$1',[attemptTag]);
- return {attemptTag,configurationSet:config.configurationSet};
+ return {attemptTag,configurationSet:config.configurationSet,...(senderIdentityArn===undefined?{}:{senderIdentityArn})};
 }
 
 /** Both trusted receipts and feedback use the same first-observation binding. */
