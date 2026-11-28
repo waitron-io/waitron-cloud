@@ -12,8 +12,18 @@ const parse=(event:unknown)=>parseSesFeedback(JSON.stringify(feedbackEnvelope(ev
 test('one-recipient bounce returns bounded fields and a digest of the whole transport',()=>{
   const body=JSON.stringify(feedbackEnvelope());
   assert.deepEqual(parseSesFeedback(body,config()),{snsId:'sns-message-1',contentDigest:createHash('sha256').update(body).digest('hex'),
-    kind:'hard_bounce',eventId:'bounce-1',eventTime:'2026-11-04T10:01:00.000Z',attemptTag,providerMessageId:'ses-message-1',recipient:'owner@example.test'});
+    kind:'hard_bounce',eventId:'bounce-1',eventTime:'2026-11-04T10:01:00.000Z',attemptTag,providerMessageId:'ses-message-1',sourceArn:fixture.input.identityArn,recipient:'owner@example.test'});
   assert.notEqual(parseSesFeedback(body+' ',config()).contentDigest,parseSesFeedback(body,config()).contentDigest);
+});
+
+test('venue feedback keeps its scoped source identity for matching to the original attempt',()=>{
+  const {policy,input}=feedbackFixture('eu-north-1',['venue-email']);
+  const venueConfig=validateSesFeedbackConfig(policy,input),raw=feedbackEvent();
+  const parseVenue=()=>parseSesFeedback(JSON.stringify(feedbackEnvelope(raw)),venueConfig);
+  raw.mail.sourceArn='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+  assert.equal(parseVenue().sourceArn,raw.mail.sourceArn);
+  raw.mail.sourceArn=raw.mail.sourceArn.replace('eu-north-1','eu-west-3');
+  assert.throws(parseVenue,/Invalid SES feedback event/);
 });
 
 test('rejectsWrongSourceAndMultiRecipient',()=>{

@@ -47,6 +47,11 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
     if(normaliseEmail(recipient)!==recipient)throw new EmailDeliveryError('delivery_rejected');
     const headers=ses?sesSmtpHeaders(ses,context?.ses):undefined;
     if(!ses&&context?.ses)throw new EmailDeliveryError('delivery_configuration');
+    const admittedIdentity=context?.ses?.senderIdentityArn;
+    const venueFrom=admittedIdentity?sender?.from:undefined;
+    if(admittedIdentity&&(purpose!=='venue-email'||ses?.venueIdentityArn!==admittedIdentity||!venueFrom
+      ||normaliseEmail(venueFrom)!==venueFrom||venueFrom.split('@')[1]!==admittedIdentity.split('identity/')[1]))
+      throw new EmailDeliveryError('delivery_configuration');
     const signal=context?.signal;
     if(signal?.aborted)throw failure(new EmailDeliveryError('delivery_timeout'));
     let socket: TLSSocket | undefined;
@@ -74,7 +79,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
       signal?.addEventListener('abort', abort, {once: true});
       timer = setTimeout(abort, timeout);
       const rendered=render();
-      const result = await Promise.race([abortPromise, transport.sendMail({from: {name: sender?.name ?? 'Waitron Cloud', address: from},
+      const result = await Promise.race([abortPromise, transport.sendMail({from: {name: sender?.name ?? 'Waitron Cloud', address: venueFrom??from},
         replyTo: sender && {name: '', address: sender.replyTo},
         to: {address: recipient, name: ''}, subject: rendered.subject, text: rendered.text, html: rendered.html, messageId,headers})]);
       if (result.rejected.length || result.accepted.length !== 1) throw new EmailDeliveryError('delivery_rejected');

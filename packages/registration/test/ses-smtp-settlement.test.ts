@@ -18,6 +18,7 @@ import {createSmtpAccountMailer} from '../src/smtp-mailer.ts';
 import {tlsSmtp,smtpConfig} from './fixtures/ses-smtp.ts';
 import {validateSesFeedbackConfig} from '../src/ses-feedback-config.ts';
 import {feedbackFixture} from './fixtures/ses-feedback.ts';
+import {BillingStore} from '../src/billing-store.ts';
 
 const outbox=new EmailOutbox({activeKeyId:'payload',keys:{payload:'77'.repeat(32)}});
 const ses={config:config(),recipientKeys:keys};
@@ -236,6 +237,49 @@ test('real TLS relay handoff binds its provider receipt with and without early f
  }
 });
 
+
+test('a venue SMTP refusal retries as Waitron after 5xx or signing expiry during backoff',async t=>{
+ for(const code of [554,451])await t.test(String(code),async()=>{
+  const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+  try{
+   const venue=await f.venue(),body=await venue.submit(),token=randomUUID(),from='orders@cafe.example.test';
+   const identity='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+   const {id,legal_business_id:legalBusinessId}=(await f.pool.query('SELECT id,legal_business_id FROM venues WHERE organisation_id=$1',[venue.organisation])).rows[0];
+   const billing=new BillingStore(f.pool),scope={organisationId:venue.organisation,legalBusinessId};
+   const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+   await billing.execute(scope,event(),{type:'ensure_business'});
+   await billing.transition(scope,event(),{type:'set_venue',venueId:id,expectedRevision:0,
+    value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+   await f.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3,waitron_mail_reply_to=$4 WHERE id=$1',[id,from,token,'reply@cafe.example.test']);
+   await f.pool.query(`INSERT INTO venue_mail_signing(venue_id,organisation_id,domain,selector,public_key,ses_region,zone_id,dns_suffix,tag,verified,verified_at,ses_identity_arn)
+    VALUES($1,$2,'cafe.example.test',$3,'key','eu-north-1','Z123','cloud.example.test',$4,true,clock_timestamp(),$5)`,[id,venue.organisation,token,randomUUID(),identity]);
+   const {policy,input}=feedbackFixture('eu-north-1',['venue-email']);
+   const smtpBindings=policy.smtpBindings.map(binding=>({...binding,venueIdentityArn:identity}));
+   const binding=validateSesFeedbackConfig({...policy,smtpBindings},{...input,venueIdentityArn:identity});
+   const deliveries:{from:string;raw:string}[]=[];
+   smtp=await tlsSmtp({onData(stream,session,done){
+    let raw='';stream.on('data',bytes=>raw+=bytes);stream.on('end',()=>{
+     deliveries.push({from:session.envelope.mailFrom&&session.envelope.mailFrom.address||'',raw});
+     if(deliveries.length===1)done(Object.assign(Error('fixture refusal'),{responseCode:code}));
+     else done(null,'Ok ses-retry');
+    });
+   }});
+   const w=new RelayWorker(f.pool,{...f.config,ses:{config:binding,recipientKeys:keys},
+    sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}},'test-venue-levels');
+   assert.equal(await w.runOnce(),true);assert.equal(deliveries[0]?.from,from);
+   assert.match(deliveries[0]!.raw,/^From:.*orders@cafe\.example\.test/m);
+   assert.match(deliveries[0]!.raw,/^Reply-To: reply@cafe\.example\.test/m);
+   assert.equal((await f.row(body.messageId)).state,'queued');assert.equal(await w.runOnce(),false);
+   if(code===451)await f.pool.query("UPDATE venue_mail_signing SET verified_at=clock_timestamp()-interval '1 hour'");
+   await f.pool.query('UPDATE relay_messages SET available_at=clock_timestamp() WHERE message_id=$1',[body.messageId]);
+   assert.equal(await w.runOnce(),true);assert.equal((await f.row(body.messageId)).state,'accepted');
+   assert.deepEqual(deliveries.map(delivery=>delivery.from),[from,smtpConfig.from]);
+   const attempts=(await f.pool.query('SELECT * FROM mail_attempts ORDER BY attempt')).rows;
+   assert.notEqual(attempts[0].attempt_tag,attempts[1].attempt_tag);
+   assert.deepEqual(attempts.map(attempt=>attempt.sender_identity_arn),[identity,input.identityArn]);
+  }finally{await smtp?.close();await f.close();}
+ });
+});
 
 test('relay receipt-write failure leaves acceptance terminal without a resend',async()=>{
  const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;

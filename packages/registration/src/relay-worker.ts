@@ -20,6 +20,7 @@ export interface RelayWorkerConfig {
 }
 interface Row extends RelayPayloadBinding {
  payload:Buffer;binding:string;state:string;claim_id:string;lease_until:Date;expires_at:Date;attempts:number;
+ use_waitron_sender:boolean;
 }
 const states=['queued','sending','accepted','uncertain','failed','expired','cancelled'] as const;
 type Terminal='accepted'|'uncertain'|'failed'|'expired'|'cancelled';
@@ -32,10 +33,11 @@ export class RelayWorker {
  readonly #suppression=new Map<string,Buffer>();readonly #active:string|undefined;
  readonly #send:((content:RelayContent,signal:AbortSignal,admission?:HandoffAdmission,sender?:RelaySender)=>Promise<RelaySesResult>)|undefined;readonly #timeout:number;
  readonly #ses:SesHandoffConfig|undefined;readonly #planMode:PlanMode;
+ readonly #usesSesSmtp:boolean;
  constructor(pool:Pool,config?:RelayWorkerConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){
   allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);
-  this.#pool=pool;this.#planMode=planMode;this.#timeout=config?.sendTimeoutMs??20000;
+  this.#pool=pool;this.#planMode=planMode;this.#timeout=config?.sendTimeoutMs??20000;this.#usesSesSmtp=!!config?.sesSmtp;
   if(!config)return;
   this.#ses=config.ses&&{config:config.ses.config,recipientKeys:{activeKeyId:config.ses.recipientKeys.activeKeyId,keys:{...config.ses.recipientKeys.keys}}};
   if(config.mode!=='local-proof'||!Number.isInteger(this.#timeout)||this.#timeout<1||this.#timeout>20000)messageError('relay_unavailable');
@@ -119,7 +121,7 @@ export class RelayWorker {
   }catch{result={outcome:'uncertain'};}
   finally{clearTimeout(timer);controller.abort();}
   // Database failure leaves durable sending for conservative recovery; never retry SMTP here.
-  await this.#settle(claimed,result.outcome);
+  await this.#settle(claimed,result.outcome,result.outcome==='refused'&&!!admission?.senderIdentityArn);
   await settleSesRelayReceipt(this.#pool,admission,result);return true;
  }
  async #terminal(c:PoolClient,row:Row,state:Terminal,reason:string|null){
@@ -173,10 +175,13 @@ export class RelayWorker {
    let sender:RelaySender|undefined;
    if(this.#planMode==='test-venue-levels'){
     const saved=(await c.query<{id:string;display_name:string|null;reply_to:string;verified_from:string|null}>(`SELECT v.id,v.display_name,
-     COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to,CASE WHEN s.verified THEN v.waitron_mail_from END AS verified_from
+     COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to,
+     CASE WHEN s.verified AND NOT $3::boolean AND (NOT $2::boolean OR (s.ses_identity_arn=$4
+       AND s.verified_at>clock_timestamp()-interval '1 hour')) THEN v.waitron_mail_from END AS verified_from
      FROM installations i JOIN venues v ON v.id=i.venue_id LEFT JOIN venue_mail_signing s ON s.venue_id=v.id
       AND s.organisation_id=v.organisation_id AND s.selector=v.waitron_mail_dns_token AND s.domain=split_part(v.waitron_mail_from,'@',2)
-     WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,[row.installation_id])).rows[0];
+     WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,
+     [row.installation_id,this.#usesSesSmtp,row.use_waitron_sender,this.#ses?.config.venueIdentityArn??null])).rows[0];
     if(saved){
      // Grant reservation already holds venue policy through handoff.
      const {level}=await readVenuePermissions(c,saved.id,this.#planMode);
@@ -192,7 +197,9 @@ export class RelayWorker {
    if(!changed.rowCount)return;
    let admission:HandoffAdmission|undefined;
    if(this.#ses){
-    try{admission=await admitMailAttempt(c,{...this.#ses,recipient:content.recipient,claim:{purpose:'venue-email',installationId:row.installation_id,messageId:row.message_id,claimId:claim.claim_id,attempt:row.attempts+1}});}
+    try{admission=await admitMailAttempt(c,{...this.#ses,recipient:content.recipient,
+     senderIdentityArn:this.#usesSesSmtp&&sender?.from?this.#ses.config.venueIdentityArn:undefined,
+     claim:{purpose:'venue-email',installationId:row.installation_id,messageId:row.message_id,claimId:claim.claim_id,attempt:row.attempts+1}});}
     catch(error){
      if(!(error instanceof Error)||error.message!=='mail_recipient_suppressed')throw error;
      await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'failed','refused');return;
@@ -206,19 +213,20 @@ export class RelayWorker {
    return {content,admission,sender};
   });
  }
- async #settle(claim:Row,result:RelayDelivery){
+ async #settle(claim:Row,result:RelayDelivery,fallback:boolean){
   await transaction(this.#pool,async c=>{
    const row=(await c.query<Row>("SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND state='sending' FOR UPDATE",[...key(claim),claim.claim_id])).rows[0];
    if(!row)return;
    const now=(await c.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
    if(row.lease_until.getTime()<=now||result==='uncertain'){await this.#terminal(c,row,'uncertain','uncertain');return;}
    if(result==='accepted'){await this.#terminal(c,row,'accepted',null);return;}
-   if(result==='refused'){await this.#terminal(c,row,'failed','refused');return;}
+   if(result==='refused'&&!fallback){await this.#terminal(c,row,'failed','refused');return;}
    const seconds=Math.min(900,30*2**(row.attempts-1));
    if(row.expires_at.getTime()<=now+seconds*1000){await this.#terminal(c,row,'expired','expired');return;}
    if(row.attempts>=8){await this.#terminal(c,row,'failed','refused');return;}
    await c.query(`UPDATE relay_messages SET state='queued',reason=NULL,claim_id=NULL,lease_until=NULL,
-    available_at=$3::timestamptz+$4*interval '1 second',status_revision=status_revision+1 WHERE installation_id=$1 AND message_id=$2`,[...key(row),new Date(now),seconds]);
+    available_at=$3::timestamptz+$4*interval '1 second',use_waitron_sender=use_waitron_sender OR $5,
+    status_revision=status_revision+1 WHERE installation_id=$1 AND message_id=$2`,[...key(row),new Date(now),seconds,fallback]);
   });
  }
 }

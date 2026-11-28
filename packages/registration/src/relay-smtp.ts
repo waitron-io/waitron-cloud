@@ -27,7 +27,7 @@ export function relayTemplate(content:RelayContent){
  return {subject,text:`${body.displayName}\n\n${subject}\n${link.href}\n${body.class==='email_change'?`${spanish?'Código':'Code'}: ${body.code}\n`:''}${spanish?'Caduca':'Expires'}: ${expiry}\n`};
 }
 
-/** Venue From overrides are permitted only for disposable loopback capture. */
+/** The disposable loopback capture uses the sender supplied by the relay worker. */
 export function localRelaySmtp(port:number){
  if(!Number.isInteger(port)||port<1||port>65535)throw new Error('relay_unavailable');
  return async (content:RelayContent,signal:AbortSignal,sender?:RelaySender):Promise<RelayDelivery>=>{

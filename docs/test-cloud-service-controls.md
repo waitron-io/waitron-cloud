@@ -196,7 +196,9 @@ restart both processes; the account process tries relay startup once.
 The test Cloud startup still sends to Mailpit. You can check the relay worker’s
 SES handoff and saved acceptance receipt locally with
 `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/ses-smtp-settlement.test.ts`.
-This uses a synthetic TLS server and provider feedback.
+This uses a synthetic TLS server and provider feedback. It checks the verified venue
+sender, the Waitron retry after refusal or signing expiry, and the identity saved
+for each attempt.
 
 Real SES delivery, its feedback and suppression qualification, the joint box workflow
 and the Amazon machine remain separate work.

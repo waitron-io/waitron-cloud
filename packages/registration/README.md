@@ -449,6 +449,8 @@ so you can retain the binding without retaining the address, body or token.
 Its caller must commit the transaction before SMTP starts. You can supply the
 optional internal `ses: {config, recipientKeys}` worker setting to exercise that
 boundary with synthetic qualification. Ordinary startup does not enable SES.
+Migration 091 keeps the sender identity on each new attempt. Feedback must match
+that identity, or the configured Waitron identity for attempts from older schemas.
 
 Each call to `lockMailScope`, `admitMailAttempt`, `recipientIsSuppressed` and
 `bindProviderId` requires an open transaction. Commit admission before SMTP.

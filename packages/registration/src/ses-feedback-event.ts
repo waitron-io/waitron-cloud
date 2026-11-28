@@ -1,13 +1,14 @@
 import {createHash} from 'node:crypto';
 import {normaliseEmail} from './account-input.ts';
 import {parseJsonWithUniqueFields} from './json-with-unique-fields.ts';
-import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
+import {isScopedSesIdentity,isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 import type {SesFeedbackConfig} from './ses-feedback-config.ts';
 
 export type FeedbackKind='delivery'|'hard_bounce'|'complaint'|'provider_suppressed'|'temporary'|'unclassified';
 export interface ParsedFeedback {
   readonly snsId:string;readonly contentDigest:string;readonly kind:FeedbackKind;readonly eventId:string|null;
   readonly eventTime:string;readonly attemptTag:string;readonly providerMessageId:string;readonly recipient:string|null;
+  readonly sourceArn:string;
 }
 const refuse=():never=>{throw new Error('Invalid SES feedback event');};
 function object(value:unknown):Record<string,unknown>{
@@ -37,7 +38,9 @@ export function parseSesFeedback(body:string,config:SesFeedbackConfig):ParsedFee
   if(envelope.Type!=='Notification'||envelope.TopicArn!==config.topicArn)return refuse();
   const snsId=identifier(envelope.MessageId);timestamp(envelope.Timestamp);
   const event=json(envelope.Message,128*1024),mail=object(event.mail),tags=object(mail.tags);
-  if(mail.sendingAccountId!==config.scope.providerAccountId||mail.sourceArn!==config.identityArn
+  const sourceArn=mail.sourceArn;
+  if(mail.sendingAccountId!==config.scope.providerAccountId
+    ||(sourceArn!==config.identityArn&&(!config.purposes.includes('venue-email')||!isScopedSesIdentity(sourceArn,config.scope)))
     ||tag(tags,'ses:configuration-set')!==config.configurationSet)return refuse();
   const attemptTag=tag(tags,'waitron-attempt');
   if(!/^[A-Za-z0-9_-]{43}$/.test(attemptTag)||Buffer.from(attemptTag,'base64url').toString('base64url')!==attemptTag)return refuse();
@@ -79,5 +82,5 @@ export function parseSesFeedback(body:string,config:SesFeedbackConfig):ParsedFee
   else if(eventType==='DeliveryDelay') {eventTime=timestamp(object(event.deliveryDelay).timestamp);kind='temporary';}
   if(new Set(recipients).size>1||(!complaint&&recipients.length===0))return refuse();
   return Object.freeze({snsId,contentDigest:createHash('sha256').update(body,'utf8').digest('hex'),kind,eventId,eventTime,attemptTag,
-    providerMessageId,recipient:recipients[0]??null});
+    providerMessageId,sourceArn,recipient:recipients[0]??null});
 }
