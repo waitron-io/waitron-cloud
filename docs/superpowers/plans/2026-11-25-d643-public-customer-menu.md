@@ -14,6 +14,30 @@ Build now with a synthetic TLS box and an injected path matcher. Change `public-
 
 Match Host and TLS name to the signed route. Allow only GET and HEAD, verified with the staff name upstream. Allow framing on menu pages. Forward approved headers and stream bytes without cookies. Recheck the block and signed route when upstream headers arrive. Start with four forwards per venue, 16 globally, five seconds of upstream inactivity and 2 MiB per reply. Allow a short wait for a forward slot and hold it until the reply finishes or closes, with a slow-reader deadline. Test admit, refuse and read failure here. Estimate 145 code and 100 test lines.
 
+## Disabled gateway redirect follow-up
+
+A synthetic box can send a visitor to the menu’s selected language or remove a
+query string. The browser follows the relative 302 on the same public hostname.
+The 28 November 04:46 watcher note supplies the route contract. Stock gateways
+still start with live menus disabled. Pairing and enablement stay in PR 1c.
+
+In `packages/remote-access/test/public-gate.test.ts`, use the existing loopback
+TLS fixture. First show a valid menu 302 fails today. Check the status and
+relative Location, the 60-second cache cap with upstream Age, and that a second
+public request reaches the redirected page. Check that a Location outside the
+menu is refused and a block at the second authority read suppresses the 302.
+Run `pnpm --dir packages/remote-access exec node --test test/public-gate.test.ts`
+and observe the valid redirect assertion fail before implementation.
+
+In `packages/remote-access/src/public-gate.ts`, handle a 302 from a page after
+rechecking route and authority. Accept a root-relative, query-free Location to
+a page admitted by the menu matcher, with the availability paths excluded.
+Use the same page cache policy and send an empty redirect without passing the
+box’s body, cookies or content-length. Return the existing 503 when the 302
+falls outside the contract. Keep the target request on its normal authority
+path. Run the whole gate test file and `pnpm typecheck`. Update the D643 backlog
+with the synthetic receipt. Estimate 20 product and 45 test lines.
+
 ## PR 1c. Pair and enable
 
 Wait for Lane D’s Structure and Lane K’s exact paths, queries, port 8443, photo sizes and Online link. Check request and HAProxy connection limits with four phones on the same venue Wi-Fi opening the photo menu in one minute. Prove mobile publish and switch-off, block, takeover, asset continuity, outage and till responsiveness under load. The owner reconnects the promoted box and chooses Allow sharing if Remove blocked the legacy copy. Enable on unmetered test gateways. Estimate 45 code and 75 test lines. Each cut aims to open within three hours of active work.
