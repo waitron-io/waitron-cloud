@@ -14,7 +14,7 @@ import {AccountHttpError} from './errors.ts';
 import {readVenueEmailSettings} from './venue-email.ts';
 import type {RateRule} from './rate-limit.ts';
 export type RemoteResolver=ResolveCname;
-export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;resolve?:RemoteResolver;planMode?:PlanMode;guestOrigin?:string;liveGuestMenu?:boolean;venueMailDnsSuffix?:string}):Promise<Response>{
+export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;resolve?:RemoteResolver;planMode?:PlanMode;guestOrigin?:string;liveGuestMenu?:boolean;venueMailDnsSuffix?:string;testInbox?:true}):Promise<Response>{
  const {pool,origin,consume}=options,action=c.req.path.slice('/api/account/remote-access/'.length);
  if(!['status','dns','apply','recheck'].includes(action))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
@@ -51,7 +51,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const permission=options.planMode==='test-venue-levels'?await readVenuePermissions(client,binding.venue_id,options.planMode):undefined;
   const paid=permission?permission.level==='connected'||permission.level==='hosted':await readVenuePlan(client,binding.venue_id,options.planMode??'existing')==='paid';
   const installation=(await client.query('SELECT configuration_revision,revoked_at,lease_expires_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];
-  const venueEmail=permission&&paid&&!installation.revoked_at?await readVenueEmailSettings(client,binding.venue_id,id,options.venueMailDnsSuffix):undefined;
+  const venueEmail=permission&&paid&&!installation.revoked_at?await readVenueEmailSettings(client,binding.venue_id,id,options.venueMailDnsSuffix,options.testInbox):undefined;
   const names=(await client.query(`SELECT h.kind,h.assigned_hostname,h.hostname,h.record_moved_at
    FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id
    WHERE p.installation_id=$1`,[id])).rows;

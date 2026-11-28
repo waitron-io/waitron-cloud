@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {organisationScopeSql,resolveSession} from '@waitron-cloud/identity';
-import {normaliseEmail,readVenuePermissions,transaction} from '@waitron-cloud/registration';
+import {normaliseEmail,readVenuePermissions,testInboxFrom,transaction,venueMailSigningJoin} from '@waitron-cloud/registration';
 import {boundedResolveCname,type ResolveCname} from '@waitron-cloud/remote-access/dns-lookup';
 import {isHostname,isUuid} from '@waitron-cloud/remote-access/manifest';
 import {hasActiveVenueMailInstallation,venueMailAlias,venueMailDomain} from '@waitron-cloud/remote-access/venue-mail-records';
@@ -13,12 +13,16 @@ import {readAccountBody} from './request.ts';
 
 interface VenueEmailRow {waitron_mail_reply_to:string|null;waitron_mail_from:string|null;waitron_mail_dns_token:string|null}
 interface DnsAlias {type:'CNAME';name:string;value:string}
-interface VenueEmailSettings {replyTo:string|null;domain?:{address:string|null;records:DnsAlias[]}}
+interface VenueEmailSettings {
+ replyTo:string|null;domain?:{address:string|null;records:DnsAlias[]};
+ sender?:{address:string;signing:'not_started'|'waiting'|'failed'|'verified'|null};
+}
 const under=(name:string,suffix:string)=>name===suffix||name.endsWith('.'+suffix);
 
-export async function readVenueEmailSettings(client:PoolClient,venueId:string,installationId:string,suffix?:string):Promise<VenueEmailSettings>{
- const row=(await client.query<VenueEmailRow>(`SELECT waitron_mail_reply_to,waitron_mail_from,waitron_mail_dns_token
-  FROM venues WHERE id=$1`,[venueId])).rows[0]!;
+export async function readVenueEmailSettings(client:PoolClient,venueId:string,installationId:string,suffix?:string,testInbox?:true):Promise<VenueEmailSettings>{
+ const row=(await client.query<VenueEmailRow&{verified?:boolean|null;ses_failed?:boolean|null}>(`SELECT
+  v.waitron_mail_reply_to,v.waitron_mail_from,v.waitron_mail_dns_token${testInbox?',s.verified,s.ses_failed':''}
+  FROM venues v ${testInbox?venueMailSigningJoin:''} WHERE v.id=$1`,[venueId])).rows[0]!;
  if(!suffix)return {replyTo:row.waitron_mail_reply_to??row.waitron_mail_from};
  const settings={replyTo:row.waitron_mail_reply_to};
  const address=row.waitron_mail_from,token=row.waitron_mail_dns_token,records:DnsAlias[]=[];
@@ -27,7 +31,10 @@ export async function readVenueEmailSettings(client:PoolClient,venueId:string,in
   FROM remote_placements p JOIN remote_hostnames h USING(venue_id)
   WHERE p.installation_id=$1 AND p.venue_id=$2 AND h.hostname<>h.assigned_hostname ORDER BY h.kind DESC`,[installationId,venueId])).rows;
  for(const alias of aliases)records.push({type:'CNAME',name:alias.hostname,value:alias.assigned_hostname});
- return {...settings,domain:{address,records}};
+ const signing=!address?null:row.verified?'verified':row.ses_failed?'failed':row.verified===false?'waiting':'not_started';
+ return {...settings,domain:{address,records},...(testInbox?{sender:{
+  address:(row.verified?normaliseEmail(address):undefined)??testInboxFrom,signing,
+ }}:{})};
 }
 
 async function checkAlias(record:DnsAlias,resolve?:ResolveCname){
@@ -39,8 +46,8 @@ async function checkAlias(record:DnsAlias,resolve?:ResolveCname){
  }
 }
 
-export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:string;secure:boolean;ip:string;suffix?:string;resolve?:ResolveCname;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response>{
- const {pool,origin,secure,ip,consume,suffix,resolve}=options,action=c.req.path.slice('/api/account/venue-email/'.length);
+export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:string;secure:boolean;ip:string;suffix?:string;testInbox?:true;resolve?:ResolveCname;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response>{
+ const {pool,origin,secure,ip,consume,suffix,testInbox,resolve}=options,action=c.req.path.slice('/api/account/venue-email/'.length);
  if(action!=='save'&&action!=='clear-reply'&&(!suffix||(action!=='save-domain'&&action!=='check-dns')))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
@@ -68,7 +75,7 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
  if(action==='check-dns'){
   const read=()=>transaction(pool,async client=>{
    const {venueId,accountId}=await authorize(client);
-   return {accountId,settings:await readVenueEmailSettings(client,venueId,installationId,suffix)};
+   return {accountId,settings:await readVenueEmailSettings(client,venueId,installationId,suffix,testInbox)};
   });
   const before=await read();
   await consume([{scope:'venue-email-dns-account',subject:before.accountId,limit:15,windowSeconds:60}]);
@@ -96,6 +103,6 @@ export async function venueEmailResponse(c:Context, options:{pool:Pool;origin:st
   }else{
    await client.query('UPDATE venues SET waitron_mail_reply_to=$2 WHERE id=$1',[venueId,replyTo]);
   }
-  return readVenueEmailSettings(client,venueId,installationId,suffix);
+  return readVenueEmailSettings(client,venueId,installationId,suffix,testInbox);
  }));
 }

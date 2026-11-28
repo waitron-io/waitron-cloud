@@ -129,7 +129,7 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   const targets=await publicRecords(boundedResolveCname(alias.name,resolveCname));
   return targets&&targets.length===1&&targets[0]!.toLowerCase().replace(/\.$/,'')===alias.value;
  };
- const saveResult=async(verified:boolean)=>{
+ const saveResult=async(verified:boolean|undefined,sesFailed?:boolean)=>{
   const tag=claim?.tag;
   if(!tag)return false;
   const previous=await transaction(pool,async client=>{
@@ -139,13 +139,14 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
    if(!saved)return;
    const arn=verified&&config.providerAccountId?`arn:aws:ses:${config.region}:${config.providerAccountId}:identity/${choice.domain}`:null;
    // Renew SES evidence only when the check names the provider account.
-   await client.query(`UPDATE venue_mail_signing SET verified=$2,
-    verified_at=CASE WHEN NOT $2 THEN NULL WHEN $3::text IS NULL THEN verified_at ELSE clock_timestamp() END,
-    ses_identity_arn=CASE WHEN $2 THEN COALESCE($3,ses_identity_arn) END WHERE venue_id=$1`,[venueId,verified,arn]);
-   if(saved.verified&&!verified)await outbox.enqueueVenueSigningLoss(client,venueId,choice.organisation,choice.domain);
+   await client.query(`UPDATE venue_mail_signing SET verified=COALESCE($3,verified),
+    verified_at=CASE WHEN $3 IS FALSE THEN NULL WHEN $4::text IS NULL THEN verified_at ELSE clock_timestamp() END,
+    ses_identity_arn=CASE WHEN $3 IS FALSE THEN NULL ELSE COALESCE($4,ses_identity_arn) END,
+    ses_failed=COALESCE($5,ses_failed) WHERE venue_id=$1 AND tag=$2`,[venueId,tag,verified,arn,sesFailed]);
+   if(saved.verified&&verified===false)await outbox.enqueueVenueSigningLoss(client,venueId,choice.organisation,choice.domain);
    return saved;
   });
-  if(previous?.verified&&!verified)console.error(`Venue ${venueId} lost signing verification. Local staff mail uses the Waitron sender.`);
+  if(previous?.verified&&verified===false)console.error(`Venue ${venueId} lost signing verification. Local staff mail uses the Waitron sender.`);
   return !!previous;
  };
  const aliasMatches=await hasAlias();
@@ -172,28 +173,32 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   identity=await ses.read(claim.domain);
   record=await dns.read(alias.value,claim.public_key);
  }
+ const sesFailed=identity?.tag===claim.tag?(identity.lost?true:identity.pending?false:undefined):undefined;
  if(!identity||identity.lost||identity.tag!==claim.tag||!identity.external||
    identity.selectors.length!==1||identity.selectors[0]!==claim.selector||record==='different'){
-  await saveResult(false);
+  await saveResult(false,sesFailed);
   if(identity?.lost&&identity.tag===claim.tag)console.error('SES reports signing failed. Clear the sender and rerun this command to retire its signing setup before saving it again.');
   return 'held';
  }
  if(record==='absent'){
-  if(readOnly){await saveResult(false);return 'pending';}
+  if(readOnly){await saveResult(false,sesFailed);return 'pending';}
   if(!sameChoice(choice,await current()))return 'held';
   const stillMatches=await hasAlias();
-  if(stillMatches!==true){if(stillMatches===false)await saveResult(false);return 'held';}
+  if(stillMatches!==true){if(stillMatches===false)await saveResult(false,sesFailed);return 'held';}
   await dns.create(alias.value,claim.public_key);
  }
  const records=await publicRecords(boundedResolveTxt(alias.value,resolveTxt));
  if(records&&(records.length!==1||records[0]!.join('')!==mailKeyTxt(claim.public_key))){
-  await saveResult(false);
+  await saveResult(false,sesFailed);
   return 'pending';
  }
- if(!identity.verified||!records)return 'pending';
+ if(!identity.verified||!records){
+  if(sesFailed===false)await saveResult(undefined,false);
+  return 'pending';
+ }
  const stillMatches=await hasAlias();
  if(stillMatches===false)await saveResult(false);
- return stillMatches===true&&await saveResult(true)?'verified':'held';
+ return stillMatches===true&&await saveResult(true,false)?'verified':'held';
 }
 
 export async function listVenueMailSigningCandidates(pool:Pool,testDomains:readonly string[]=[]){

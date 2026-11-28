@@ -7,7 +7,10 @@ export interface PublicForwardView {category:ForwardCause|null;observedAt:string
 export interface GuestMenuView {version:1;venueId:string;live?:true;url:string|null;revision:number;state:'off'|'current'|'blocked';publication:null|{bodySha256:string;defaultLanguage:string;receivedAt:string};}
 interface RemoteName {assigned:string;current:string;recordMoved?:boolean;}
 export interface VenueDnsAlias {type:'CNAME';name:string;value:string;status?:'verified'|'unverified'|'unknown'}
-export interface VenueEmailSettings {replyTo:string|null;domain?:{address:string|null;records:VenueDnsAlias[]}}
+export interface VenueEmailSettings {
+ replyTo:string|null;domain?:{address:string|null;records:VenueDnsAlias[]};
+ sender?:{address:string;signing:'not_started'|'waiting'|'failed'|'verified'|null};
+}
 export interface RemoteView {venueEmail?:VenueEmailSettings;guestMenu?:GuestMenuView;publicForward?:PublicForwardView|null;connectedRequired?:true;installationId:string;revision:number;revoked:boolean;names:Record<RemoteKind,RemoteName>|null;service:{state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';observedAt:string|null;validUntil:string|null};}
 export interface RemoteDns {installationId:string;kind:RemoteKind;hostname:string;records:[RemoteDnsRecord];}
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -41,7 +44,9 @@ export function sameVenueDnsRecords(expected:VenueDnsAlias[],current?:VenueDnsAl
 }
 export function validVenueEmail(v:unknown):v is VenueEmailSettings{
  if(!object(v)||!(v.replyTo===null||typeof v.replyTo==='string'&&validEmail(v.replyTo)))return false;
- const domain=v.domain;
+ const {domain,sender}=v;
+ if(sender!==undefined&&(!object(sender)||typeof sender.address!=='string'||!validEmail(sender.address)
+  ||!(sender.signing===null||sender.signing==='not_started'||sender.signing==='waiting'||sender.signing==='failed'||sender.signing==='verified')))return false;
  const dnsName=(value:unknown)=>typeof value==='string'&&value.length<=253&&value.includes('.')
   &&value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
  return domain===undefined||object(domain)&&(domain.address===null||typeof domain.address==='string'&&validEmail(domain.address))

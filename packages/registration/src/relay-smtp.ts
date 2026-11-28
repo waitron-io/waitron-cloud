@@ -2,6 +2,7 @@ import {connect,type Socket} from 'node:net';
 import nodemailer from 'nodemailer';
 import {relayBody,type RelayBody} from './relay-payload.ts';
 import {relayStaffNotice} from './relay-staff-notices.ts';
+import {testInboxFrom} from './venue-mail-sender.ts';
 export type RelayDelivery='accepted'|'temporary'|'refused'|'uncertain';
 export type RelayContent=RelayBody&{managementOrigin:string};
 export type RelaySender={name?:string;replyTo:string;from?:string};
@@ -48,7 +49,7 @@ export function localRelaySmtp(port:number){
    }});
   try{
    signal.addEventListener('abort',abort,{once:true});timer=setTimeout(abort,15000);
-   const sent=transport.sendMail({from:{name:sender?.name??'Waitron',address:sender?.from??'relay@example.test'},to:{name:'',address:content.recipient},
+   const sent=transport.sendMail({from:{name:sender?.name??'Waitron',address:sender?.from??testInboxFrom},to:{name:'',address:content.recipient},
     replyTo:sender&&{name:'',address:sender.replyTo},
     ...rendered,messageId:`<${content.messageId}@relay.example.test>`}).then((result):RelayDelivery=>
      result.accepted.length===1&&result.rejected.length===0?'accepted':'uncertain',classify);

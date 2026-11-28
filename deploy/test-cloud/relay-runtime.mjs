@@ -45,7 +45,7 @@ export function testRelayGrantConfig({issuer,origin,setupExpiresAt}){
 export async function openTestRelayRuntime({pool,directory,issuer,origin,mode,setupExpiresAt,smtpPort=1025}){
  if(mode!=='test-venue-levels')return;
  const grants=testRelayGrantConfig({issuer,origin,setupExpiresAt}),keys=await loadKeys(pool,directory);
- const admission={mode:'local-proof',grants,payloadKeys:keys.payload,replayKeys:keys.replay,
+ const admission={mode:'local-proof',testInbox:true,grants,payloadKeys:keys.payload,replayKeys:keys.replay,
   bounds:{version:'local-v1',epoch:testRelaySettings.policy.epoch,windowSeconds:3600,recipientLimit:100,grantLimit:100,queuedPayloadBytes:1000000,maxCounterRows:1000,recipientKeys:keys.bounds}};
  const worker=new RelayWorker(pool,{mode:'local-proof',grants,payloadKeys:keys.payload,suppressionKeys:keys.suppression,smtpPort},mode);
  return {admission,worker};

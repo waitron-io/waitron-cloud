@@ -328,8 +328,7 @@ test('actual email entrypoint drains account mail before reporting lost relay ke
 
 test('box-signed staff mail uses verified venue From and falls back after confirmed loss',async t=>{
  const {openTestRelayRuntime}=await api(),{db,context}=await setup(t);
- await bootstrapTestCloudIdentity(context.directory,origin);
- const config=await loadRuntime(context.directory),outbox=new EmailOutbox(config.email);
+ const config=await prepareAccount(t,context),outbox=new EmailOutbox(config.email);
  const box=await connectedVenue(db,context.issuer,origin),session=await transaction(db.pool,c=>createSession(c,box.accountId));
  const scope={organisationId:box.organisationId,legalBusinessId:box.legalBusinessId},billing=new BillingStore(db.pool);
  await billing.execute(scope,{key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
@@ -349,13 +348,20 @@ test('box-signed staff mail uses verified venue From and falls back after confir
   {installationId:box.installationId,expectedRevision:0,consent:true,consentVersion:'local-v1',managementOrigin,expiresAt},statement);
  const messages=new RelayMessages(db.pool,context.issuer,origin,runtime.admission,undefined,mode);
  const inbox=async()=>(await (await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`)).json()).messages;
+ const account=await startAccount(db,context,{CLOUD_VENUE_MAIL_DNS_SUFFIX:'cloud.example.test'});
+ t.after(()=>account.close());
  async function send(expectedFrom){
+  const response=await accountRequest(account,'/api/account/remote-access/status',{installationId:box.installationId},
+   {origin,cookie:`__Host-cloud_session=${session.token}`,'x-csrf-token':session.csrfToken});
+  assert.equal(response.status,200);
+  const {venueEmail}=response.body;
   const messageId=randomUUID(),recipient=`${randomUUID()}@example.test`;
   const body={version:1,messageId,grantId:grant.id,grantRevision:grant.revision,class:'invitation',recipient,displayName:'Cafe Sol',locale:'en',timeZone:'Europe/Madrid',expiresAt,token:randomBytes(32).toString('base64url')};
   await messages.execute('email-submit',box.proof('email-submit',body,messageId,box.lease));
   assert.equal(await runEmailEntrypoint(t,db,context),'completed');
   const [mail]= (await inbox()).filter(item=>item.To.some(to=>to.Address===recipient));
   assert.deepEqual(mail?.From,{Name:'Cafe Sol',Address:expectedFrom});
+  assert.equal(venueEmail.sender?.address,mail.From.Address);
   const detail=await (await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/message/${mail.ID}`)).json();
   assert.deepEqual(detail.ReplyTo,[{Name:'',Address:reply}]);
  }

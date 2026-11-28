@@ -186,6 +186,53 @@ test('a test owner keeps a DNS alias for mailbox edits and replaces it for domai
  assert.deepEqual(signing.writes,['ses create','dns create','ses delete','dns delete']);
 });
 
+test('the test-inbox sender follows the latest matching claim through delayed DNS',async t=>{
+ const f=await setup(t),other=await f.venue();
+ await f.set('connected');
+ const installationId=f.v.installation,venueMailDnsSuffix='cloud.example.test';
+ const address='bookings@cafe.example.test';
+ const entered=deferred(),released=deferred();
+ let target='';
+ const request=venueEmailSettings(f,{venueMailDnsSuffix,relay:{...f.relay,testInbox:true},leaseIssuer:f.issuer,
+  remoteResolve:async()=>{entered.resolve();await released.promise;return [target];}});
+ const raw=await request('save-domain',f.v.session,{installationId,address});
+ assert.equal(raw.status,200);
+ const saved=await raw.json();
+ target=saved.domain.records[0].value;
+ assert.deepEqual(saved.sender,{address:'relay@example.test',signing:'not_started'});
+ const uncaptured=await venueEmailSettings(f,{venueMailDnsSuffix})('status',f.v.session,{installationId});
+ assert.equal((await uncaptured.json()).venueEmail.sender,undefined);
+ assert.equal((await request('status',other.session,{installationId})).status,403);
+ assert.equal((await request('check-dns',other.session,{installationId})).status,403);
+ const checking=Promise.resolve(request('check-dns',f.v.session,{installationId}));
+ const fake=fakeVenueMailProviders(venueMailDnsSuffix,['cafe.example.test']);
+ const run=()=>runVenueMailSigning(f.pool,f.venueId,{...fake.options,
+  outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
+ try{
+  await Promise.race([entered.promise,checking.then(()=>assert.fail('Check did not reach DNS'))]);
+  assert.equal(await run(),'verified');
+ }finally{released.resolve();}
+ const checked=await checking;
+ assert.equal(checked.status,200);
+ assert.deepEqual((await checked.json()).sender,{address,signing:'verified'});
+
+ const identity=fake.identities.get('cafe.example.test')!;
+ fake.identities.set('cafe.example.test',{...identity,verified:false,lost:true});
+ const diagnostics=t.mock.method(console,'error',()=>{});
+ const outcome=await run().finally(()=>diagnostics.mock.restore());
+ assert.equal(outcome,'held');
+ assert.equal(diagnostics.mock.callCount(),2);
+ assert.match(String(diagnostics.mock.calls[0]?.arguments[0]),/lost signing verification/);
+ assert.match(String(diagnostics.mock.calls[1]?.arguments[0]),/^SES reports signing failed/);
+ const status=async()=>(await (await request('status',f.v.session,{installationId})).json()).venueEmail.sender;
+ assert.deepEqual(await status(),{address:'relay@example.test',signing:'failed'});
+ await f.pool.query('UPDATE venue_mail_signing SET ses_failed=false WHERE venue_id=$1',[f.venueId]);
+ assert.deepEqual(await status(),{address:'relay@example.test',signing:'waiting'});
+ const moved=await request('save-domain',f.v.session,{installationId,address:'bookings@bistro.example.test'});
+ assert.equal(moved.status,200);
+ assert.deepEqual((await moved.json()).sender,{address:'relay@example.test',signing:'not_started'});
+});
+
 test('a reselected sender on the same domain cannot use an old signing selector',async t=>{
  const f=await setup(t),s=await smtp(t);await f.set('connected');
  const request=venueEmailSettings(f,{venueMailDnsSuffix:'cloud.example.test'}),installationId=f.v.installation;

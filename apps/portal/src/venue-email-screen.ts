@@ -4,6 +4,8 @@ import {sameVenueDnsRecords,type VenueEmailSettings} from './remote-types.ts';
 
 export function venueEmailScreen(app:PortalApp,settings:VenueEmailSettings,disabled:boolean){
  const c=app.copy,r=app.remote,result=r.venueEmailField==='replyTo'?r.venueEmailResult:undefined;
+ const sender=settings.sender;
+ const signing=sender?.signing?c.venueSigning[sender.signing]:nothing;
  const defaultReply=!settings.replyTo&&!!settings.domain?.address;
  const replyDescription=result==='invalid'?'venue-email-refusal':defaultReply?'venue-email-reply-default':nothing;
  const persist=async(form:HTMLFormElement,replyTo:string,field:'replyTo'|'reset'='replyTo')=>{
@@ -41,6 +43,11 @@ export function venueEmailScreen(app:PortalApp,settings:VenueEmailSettings,disab
     ${settings.domain?domainForm(app,disabled):nothing}
    </div>
   </div>
+  ${sender?html`<div role="status">
+   ${signing!==nothing?html`<p><strong>${signing}</strong></p>`:nothing}
+   <p>${c.venueTestFrom}<br>${sender.address}</p>
+  </div>`:nothing}
+  ${sender?.signing==='failed'?html`<p class="help">${c.venueSigningRetry}</p>`:nothing}
   ${settings.domain?.records.length?dnsRecords(app,settings.domain,disabled):nothing}
  </section>`;
 }
@@ -86,13 +93,14 @@ function dnsRecords(app:PortalApp,domain:NonNullable<VenueEmailSettings['domain'
    try{link.href=url;link.download='waitron-dns.pdf';link.click();}finally{URL.revokeObjectURL(url);}
   }catch{report(status,c.venueDnsPdfFailed);}
  };
+ const emailAlias=domain.records.find(record=>record.name.includes('._domainkey.'));
  return html`<section aria-labelledby="venue-dns-title">
   <h6 id="venue-dns-title">${c.venueDnsRecords}</h6>
   ${domain.records.map(record=>html`<dl>
-   <dt>${c.remoteRecord}</dt><dd>${record.type}</dd>
+   <dt>${record===emailAlias?c.venueDnsEmailAlias:c.remoteRecord}</dt><dd>${record.type}</dd>
    <dt>${c.remoteRecordName}</dt><dd><span>${record.name}</span> <wt-button .disabled=${disabled} @click=${(event:Event)=>void copy(event,record.name)}>${c.venueDnsCopyName}</wt-button></dd>
    <dt>${c.remoteRecordValue}</dt><dd><span>${record.value}</span> <wt-button .disabled=${disabled} @click=${(event:Event)=>void copy(event,record.value)}>${c.venueDnsCopyTarget}</wt-button></dd>
-   ${record.status?html`<dt>${c.venueDnsStatus}</dt><dd>${record.status==='verified'?html`<span aria-hidden="true">✓</span> <span>${c.venueDnsVerified}</span>`:record.status==='unverified'?c.venueDnsUnverified:c.venueDnsUnknown}</dd>`:nothing}
+   ${record.status?html`<dt>${record===emailAlias?c.venueDnsAliasStatus:c.venueDnsStatus}</dt><dd>${record.status==='verified'?html`<span aria-hidden="true">✓</span> <span>${c.venueDnsVerified}</span>`:record.status==='unverified'?c.venueDnsUnverified:c.venueDnsUnknown}</dd>`:nothing}
   </dl>`)}
   <wt-button .disabled=${disabled} @click=${download}>${c.venueDnsDownload}</wt-button>
   <p class="venue-dns-feedback" role="status"></p>
