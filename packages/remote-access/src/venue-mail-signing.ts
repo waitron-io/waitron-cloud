@@ -123,8 +123,10 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
     WHERE venue_id=$1 AND tag=$2 FOR UPDATE`,[venueId,tag])).rows[0];
    if(!saved)return;
    const arn=verified&&config.providerAccountId?`arn:aws:ses:${config.region}:${config.providerAccountId}:identity/${choice.domain}`:null;
-   await client.query(`UPDATE venue_mail_signing SET verified=$2,verified_at=CASE WHEN $2 THEN clock_timestamp() END,
-    ses_identity_arn=$3 WHERE venue_id=$1`,[venueId,verified,arn]);
+   // Renew SES evidence only when the check names the provider account.
+   await client.query(`UPDATE venue_mail_signing SET verified=$2,
+    verified_at=CASE WHEN NOT $2 THEN NULL WHEN $3::text IS NULL THEN verified_at ELSE clock_timestamp() END,
+    ses_identity_arn=CASE WHEN $2 THEN COALESCE($3,ses_identity_arn) END WHERE venue_id=$1`,[venueId,verified,arn]);
    if(saved.verified&&!verified)await outbox.enqueueVenueSigningLoss(client,venueId,choice.organisation,choice.domain);
    return saved;
   });
@@ -183,7 +185,10 @@ export async function refreshVenueMailSignings(pool:Pool,options:SigningOptions,
  const {rows}=await pool.query<{venue_id:string}>('SELECT venue_id FROM venue_mail_signing ORDER BY venue_id');
  for(const {venue_id} of rows){
   if(signal?.aborted)break;
-  try{await runVenueMailSigning(pool,venue_id,{...options,readOnly:true});}
+  try{
+   const result=await runVenueMailSigning(pool,venue_id,{...options,readOnly:true});
+   if(result==='held')console.error(`Venue ${venue_id} signing check held. Check the saved choice and provider settings.`);
+  }
   catch{console.error('Venue signing check failed; the last confirmed result is retained until expiry.');}
  }
 }

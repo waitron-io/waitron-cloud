@@ -84,13 +84,16 @@ sender and rerun the command to retire its old setup. Once it reports
 The test Cloud email worker delivers to Mailpit from the venue’s From after
 the operator verifies signing. When a later check confirms loss, staff mail
 returns to the Waitron sender and the same worker delivers an owner notice.
-For the offline SES path, the test operator can run the same signing command
-with `--watch` in place of a venue ID. Set `CLOUD_VENUE_MAIL_SES_ACCOUNT_ID`
+To refresh existing signing records for the offline SES path, run the same signing
+command with `--watch` in place of a venue ID. Set `CLOUD_VENUE_MAIL_SES_ACCOUNT_ID`
 to the signing account and keep the existing mail keys. The watch checks saved
 signing records at startup and every 15 minutes without changing provider records.
+The rehearsal allows one venue identity in the relay settings. Mail from other
+venues uses the Waitron sender.
 An inconclusive check keeps the previous result. After an hour without verification,
 the SES relay selects the Waitron sender. A definite SMTP 5xx refusal of a venue
-sender also queues a retry using Waitron. Feedback is matched to the identity
+sender queues a retry using Waitron if the message can still be sent after backoff.
+Feedback is matched to the identity
 saved for that attempt. Test Cloud still uses Mailpit and needs startup wiring
 and provider qualification before real SES delivery.
 See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).

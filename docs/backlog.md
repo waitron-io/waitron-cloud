@@ -447,7 +447,7 @@ A confirmed loss on the next operator check restores the Waitron sender and
 queues a notice for verified owners. Gmail and Mailgun verified a Stockholm
 sandbox message whose signing alias and key were in separate zones. An offline
 SES rehearsal tests signing freshness, fallback after refusal and feedback for
-the sender on each attempt. Test Cloud startup wiring and provider qualification
+one configured venue identity. Test Cloud startup wiring and provider qualification
 are still needed for live sending. Setup after the owner saves, rotation and
 portal signing status remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).

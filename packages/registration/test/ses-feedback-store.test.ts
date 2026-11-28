@@ -56,10 +56,20 @@ test('wrong sender feedback cannot bind or suppress before the original sender r
  const f=await fixture();try{
   const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
   const wrong=event(a.attemptTag,{sourceArn:'arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test'});
-  assert.equal(await applySesFeedback(f.pool,config(),keys,wrong),'ignored');
+  assert.equal(await applySesFeedback(f.pool,config(),keys,wrong),'conflict');
   assert.deepEqual(await counts(f),{receipts:1,events:0,suppressions:0});
   assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,null);
   assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'original-source'})),'applied');
+ }finally{await f.close();}
+});
+
+test('feedback for an attempt from before the sender migration uses the fixed identity',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  // An attempt present when migration 091 adds the column has a null sender identity.
+  await f.pool.query('ALTER TABLE mail_attempts DROP COLUMN sender_identity_arn, ADD COLUMN sender_identity_arn text');
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag)),'applied');
+  assert.deepEqual(await counts(f),{receipts:1,events:1,suppressions:1});
  }finally{await f.close();}
 });
 

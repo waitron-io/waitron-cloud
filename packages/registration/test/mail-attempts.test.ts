@@ -46,6 +46,8 @@ test('refuses stale unknown expired and wrong-purpose claims before creating bin
   const {validateSesFeedbackConfig}=await import('../src/ses-feedback-config.ts');
   const onlyVenue=feedbackFixture('eu-north-1',['venue-email']);
   await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,config:validateSesFeedbackConfig(onlyVenue.policy,onlyVenue.input)})),/mail_configuration_unavailable/);
+  const venueSender='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+  await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,senderIdentityArn:venueSender})),/mail_configuration_unavailable/);
   for(const claim of [{...input.claim,claimId:randomUUID()},{...input.claim,attempt:2},{...input.claim,outboxId:randomUUID()}])
    await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,claim})),/mail_claim_unavailable/);
   await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...input,config:{...input.config}})),/mail_configuration_unavailable/);

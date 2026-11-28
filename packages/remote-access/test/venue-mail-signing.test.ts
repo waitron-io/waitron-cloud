@@ -132,6 +132,8 @@ test('read-only signing checks renew fresh evidence, keep it on a timeout and cl
  const old=await evidence();
  assert.equal(await check(),'verified');
  const renewed=await evidence();assert.ok(Date.parse(renewed.verified_at)>Date.parse(old.verified_at));
+ assert.equal(await f.run(venueId),'verified');
+ assert.deepEqual(await evidence(),renewed,'a check without the provider account cannot replace or renew SES evidence');
  assert.equal(await check({resolveCname:async()=>{throw Object.assign(Error('timeout'),{code:'ETIMEOUT'});}}),'awaiting_dns');
  assert.deepEqual(await evidence(),renewed);
  f.writes.length=0;f.txt.delete(target);
@@ -152,6 +154,11 @@ test('the signing watch pass checks every saved claim without setting up an uncl
   outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}}),
   resolveCname:async name=>{calls.add(name.split('.').slice(2).join('.'));return resolveCname(name);}});
  assert.deepEqual(calls,new Set([domain,secondDomain]));
+ assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[second]);
+ const diagnostic=t.mock.method(console,'error',()=>{});
+ await refreshVenueMailSignings(f.db.pool,{...f.options,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes(second)&&String(call.arguments[0]).includes('held')));
  assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
 });
 
