@@ -218,7 +218,12 @@ test('the test-inbox sender follows the latest matching claim through delayed DN
 
  const identity=fake.identities.get('cafe.example.test')!;
  fake.identities.set('cafe.example.test',{...identity,verified:false,lost:true});
- assert.equal(await run(),'held');
+ const diagnostics=t.mock.method(console,'error',()=>{});
+ const outcome=await run().finally(()=>diagnostics.mock.restore());
+ assert.equal(outcome,'held');
+ assert.equal(diagnostics.mock.callCount(),2);
+ assert.match(String(diagnostics.mock.calls[0]?.arguments[0]),/lost signing verification/);
+ assert.match(String(diagnostics.mock.calls[1]?.arguments[0]),/^SES reports signing failed/);
  const status=async()=>(await (await request('status',f.v.session,{installationId})).json()).venueEmail.sender;
  assert.deepEqual(await status(),{address:'relay@example.test',signing:'failed'});
  await f.pool.query('UPDATE venue_mail_signing SET ses_failed=false WHERE venue_id=$1',[f.venueId]);
