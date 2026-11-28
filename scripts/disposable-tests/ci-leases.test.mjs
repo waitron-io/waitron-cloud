@@ -244,6 +244,7 @@ test('newly routed ordinary families keep their exact GitHub names and routing l
  for(const [jobKey,name] of [
   ['lint-1','lint'],['root-guards-1','root-guards'],['bundle-smoke-1','bundle-smoke'],['typecheck-1','typecheck'],
   ['test-setup-1','test-setup'],['test-staffing-1','test-staffing'],['test-bookings-1','test-bookings'],['test-media-1','test-media'],
+  ['test-customer-menu-1','test-customer-menu'],['mutation-shared-7','mutation-shared (7)'],
   ['test-payments-stripe-1','test-payments-stripe'],['test-payments-sumup-1','test-payments-sumup'],['test-identity-1','test-identity'],['test-workforce-1','test-workforce'],
   ['test-light-a-1','test-light-a'],['test-light-b-1','test-light-b'],
   ['test-fiscal-verifactu-1','test-fiscal-verifactu (1)'],['test-fiscal-verifactu-4','test-fiscal-verifactu (4)'],
@@ -256,7 +257,7 @@ test('newly routed ordinary families keep their exact GitHub names and routing l
 
 test('routed keys still refuse extra shards and malformed job labels',async()=>{
  const {ciIdentity}=await import('./ci-identity.mjs');
- for(const jobKey of ['server-probe-2','lint-2','root-guards-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
+ for(const jobKey of ['server-probe-2','lint-2','root-guards-2','typecheck-2','test-setup-2','test-customer-menu-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-8','test-venue-service-5','test-adjustments-2',
   'test-server-stream-2','mutation-shared-aggregate-2','test-server-merge-2','test-till-merge-2','test-dashboard-merge-2','test-light-a-01','test-bookings-1\n'])
   assert.throws(()=>ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey}),/Invalid CI workflow identity/);
 });
