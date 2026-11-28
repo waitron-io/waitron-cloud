@@ -238,8 +238,8 @@ test('real TLS relay handoff binds its provider receipt with and without early f
 });
 
 
-test('a venue SMTP refusal retries as Waitron after 5xx or signing expiry during backoff',async t=>{
- for(const code of [554,451])await t.test(String(code),async()=>{
+test('venue SMTP sends directly with fresh signing and retries as Waitron after refusal or expiry',async t=>{
+ for(const [label,code,venueIdentity] of [['fresh',250,true],['other account',250,false],['permanent',554,true],['temporary',451,true]] as const)await t.test(label,async()=>{
   const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
   try{
    const venue=await f.venue(),body=await venue.submit(),token=randomUUID(),from='orders@cafe.example.test';
@@ -252,7 +252,8 @@ test('a venue SMTP refusal retries as Waitron after 5xx or signing expiry during
     value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
    await f.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3,waitron_mail_reply_to=$4 WHERE id=$1',[id,from,token,'reply@cafe.example.test']);
    await f.pool.query(`INSERT INTO venue_mail_signing(venue_id,organisation_id,domain,selector,public_key,ses_region,zone_id,dns_suffix,tag,verified,verified_at,ses_identity_arn)
-    VALUES($1,$2,'cafe.example.test',$3,'key','eu-north-1','Z123','cloud.example.test',$4,true,clock_timestamp(),$5)`,[id,venue.organisation,token,randomUUID(),identity]);
+    VALUES($1,$2,'cafe.example.test',$3,'key','eu-north-1','Z123','cloud.example.test',$4,true,clock_timestamp(),$5)`,
+    [id,venue.organisation,token,randomUUID(),venueIdentity?identity:identity.replace('123456789012','999999999999')]);
    const {policy,input}=feedbackFixture('eu-north-1',['venue-email']);
    const smtpBindings=policy.smtpBindings.map(binding=>({...binding,venueIdentityArn:identity}));
    const binding=validateSesFeedbackConfig({...policy,smtpBindings},{...input,venueIdentityArn:identity});
@@ -260,15 +261,21 @@ test('a venue SMTP refusal retries as Waitron after 5xx or signing expiry during
    smtp=await tlsSmtp({onData(stream,session,done){
     let raw='';stream.on('data',bytes=>raw+=bytes);stream.on('end',()=>{
      deliveries.push({from:session.envelope.mailFrom&&session.envelope.mailFrom.address||'',raw});
-     if(deliveries.length===1)done(Object.assign(Error('fixture refusal'),{responseCode:code}));
-     else done(null,'Ok ses-retry');
+     if(deliveries.length===1&&code!==250)done(Object.assign(Error('fixture refusal'),{responseCode:code}));
+     else done(null,'Ok ses-delivery');
     });
    }});
    const w=new RelayWorker(f.pool,{...f.config,ses:{config:binding,recipientKeys:keys},
     sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}},'test-venue-levels');
-   assert.equal(await w.runOnce(),true);assert.equal(deliveries[0]?.from,from);
-   assert.match(deliveries[0]!.raw,/^From:.*orders@cafe\.example\.test/m);
+   assert.equal(await w.runOnce(),true);assert.equal(deliveries[0]?.from,venueIdentity?from:smtpConfig.from);
+   if(venueIdentity)assert.match(deliveries[0]!.raw,/^From:.*orders@cafe\.example\.test/m);
    assert.match(deliveries[0]!.raw,/^Reply-To: reply@cafe\.example\.test/m);
+   if(code===250){
+    assert.equal((await f.row(body.messageId)).state,'accepted');assert.equal(await w.runOnce(),false);
+    assert.deepEqual((await f.pool.query('SELECT sender_identity_arn,provider_message_id FROM mail_attempts')).rows,
+     [{sender_identity_arn:venueIdentity?identity:input.identityArn,provider_message_id:'ses-delivery'}]);
+    return;
+   }
    assert.equal((await f.row(body.messageId)).state,'queued');assert.equal(await w.runOnce(),false);
    if(code===451)await f.pool.query("UPDATE venue_mail_signing SET verified_at=clock_timestamp()-interval '1 hour'");
    await f.pool.query('UPDATE relay_messages SET available_at=clock_timestamp() WHERE message_id=$1',[body.messageId]);
