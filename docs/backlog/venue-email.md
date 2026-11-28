@@ -71,7 +71,13 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node 
 The worker's opt-in is `CLOUD_TEST_VENUE_MAIL_SIGNING=1` in the nonproduction
 email runtime with test venue levels. It uses the `CLOUD_VENUE_MAIL_*` settings
 in `.env.example`, including the signing account, and the account server's DNS
-suffix. Get separate approval before enabling it with real providers.
+suffix. The stock Test Cloud Compose file omits these email-worker settings.
+The local rehearsal passes them directly to the worker with fake providers.
+Get separate approval before enabling it with real providers.
+
+Clear the sending address or move it to another domain to retire the old
+signing setup. If your venue downgrades or loses its last paired installation,
+the signing records stay in place while the same domain and DNS alias are saved.
 
 The operator command
 `pnpm --dir packages/remote-access venue-mail:signing <venue-id>` contacts the

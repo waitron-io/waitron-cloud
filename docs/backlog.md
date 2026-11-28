@@ -446,10 +446,10 @@ A confirmed loss on the next operator check restores the Waitron sender and
 queues a notice for verified owners. Gmail and Mailgun verified a Stockholm
 sandbox message whose signing alias and key were in separate zones. An offline
 SES rehearsal tests signing freshness, fallback after refusal and feedback for
-one configured venue identity. The opt-in test email worker sets up signing
-after an owner saves an allowed address and publishes the exact DNS alias. It
-also picks up changed and cleared addresses for cleanup. This path was exercised
-with fake providers. SMTP startup wiring and provider qualification are still
+one configured venue identity. A local rehearsal with fake providers proved that
+the opt-in email worker sets up signing after an owner saves an allowed address
+and publishes the exact DNS alias. It retires signing for a cleared address or
+changed domain. Test Cloud startup wiring and provider qualification are still
 needed for live sending. Sending from each venue's own identity in a shared
 worker, rotation and portal signing status remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).

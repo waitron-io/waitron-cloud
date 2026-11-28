@@ -181,6 +181,28 @@ test('the setup pass lists allowlisted test choices and retains moved or cleared
  assert.deepEqual(await listVenueMailSigningCandidates(f.db.pool,testDomains),[moved,cleared,f.db.otherVenue].sort());
 });
 
+for(const change of ['downgrade','installation revocation'])test(`automatic setup keeps signing after ${change} while the address stays saved`,async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ const selector=await f.choose();
+ assert.equal(await f.run(),'verified');
+ const target=selector+'.mail.'+suffix;
+ const check=()=>refreshVenueMailSignings(f.db.pool,{...f.options,setupSavedChoices:true,
+  outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
+ t.mock.method(console,'error',()=>{});
+ if(change==='downgrade')await set(f.db,'registered',venueId);
+ else await f.db.pool.query('UPDATE installations SET revoked_at=now() WHERE venue_id=$1 AND revoked_at IS NULL',[venueId]);
+ await check();
+ assert.deepEqual(f.writes,['ses create','dns create']);
+ assert.equal(f.txt.has(target),true);
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rowCount,1);
+
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
+ await check();
+ assert.deepEqual(f.writes,['ses create','dns create','ses delete','dns delete']);
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rowCount,0);
+});
+
 test('a retry leaves the saved claim alone when SES still shows no identity',async t=>{
  const f=await fixture();t.after(f.db.close);
  const venueId=f.db.venues[0]!;
