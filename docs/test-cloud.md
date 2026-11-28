@@ -1200,11 +1200,18 @@ covers staging the file in setup, preparing the recovery operation and checking
 the filing authority before activation. The pinned version of setup accepts
 uploads up to 256 MiB. [Waitron’s setup upload limit](https://github.com/clintongormley/waitron/blob/5cc7bf033ad3af159fd622ed7de210eb8bcf4124/apps/server/src/setup-request-fields.ts#L4)
 
-For a rehearsal with a separate vault key, give the replacement process that key and
-its matching version as private settings. Nonempty process settings take precedence
-over `secrets.env`. This path remains untested until setup can prepare the Cloud download
-and the rehearsal has a synthetic source that keeps its vault key outside the archive.
-[Waitron’s box settings loader](https://github.com/clintongormley/waitron/blob/319041c278425c69af72e08f28fb93edd5fcc8bb/apps/server/src/box-env.ts#L12-L17)
+If your box keeps its application vault key outside the backup, the pinned release
+blocks this rehearsal before download. In the isolated run, the source opened its
+filing certificate with the key and its version supplied privately to the process.
+Capture required `secrets.env`. With that file present and the key kept outside it,
+capture succeeded and the verifier returned `secret_unavailable` before any module
+checks. The same source passed all 17 checks with its key in the encrypted backup.
+[Waitron’s verifier](https://github.com/clintongormley/waitron/blob/5cc7bf033ad3af159fd622ed7de210eb8bcf4124/apps/server/src/backup-verification-secrets.ts#L78-L95)
+
+Backups offers only verified copies. The
+[external vault archive contract](waitron-integration-contract.md#external-vault-archive-compatibility-dependency)
+needs to be implemented before this layout can reach setup. Filing authority,
+placement and certificate access on a replacement still need a rehearsal.
 
 Use the disposable Cloud image and a verifier built from Waitron revision
 `5cc7bf033ad3af159fd622ed7de210eb8bcf4124`. Build against that revision’s own
