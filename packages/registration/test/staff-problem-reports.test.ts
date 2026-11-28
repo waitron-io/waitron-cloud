@@ -26,8 +26,9 @@ test('staff migration preserves populated automatic reports and applied digests 
   const before=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,prior=(await pool.query('SELECT * FROM installation_error_reports')).rows[0];
   await Promise.all([migrate(pool),migrate(pool)]);await migrate(pool);
   const after=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.deepEqual(after.slice(0,53),before);assert.equal(after[52].name,'053_country_flow_authority.sql');assert.equal(after[53].name,'054_staff_problem_reports.sql');assert.equal(after.length,92);assert.equal(after[58].name,'059_account_action_proof.sql');assert.equal(after[59].name,'060_account_email_changes.sql');assert.equal(after[60].name,'061_connection_action_proof.sql');
-  assert.deepEqual((await pool.query('SELECT * FROM installation_error_reports')).rows,[{...prior,kind:'automatic',details:null,description:null,description_operation_id:null,description_digest:null,staff_receipt_owner_id:null,staff_report_body:null,staff_description_body:null,staff_description_at:null}]);
+  assert.deepEqual(after.slice(0,53),before);assert.equal(after[52].name,'053_country_flow_authority.sql');assert.equal(after[53].name,'054_staff_problem_reports.sql');assert.equal(after.length,93);assert.equal(after[58].name,'059_account_action_proof.sql');assert.equal(after[59].name,'060_account_email_changes.sql');assert.equal(after[60].name,'061_connection_action_proof.sql');
+  assert.deepEqual((await pool.query('SELECT * FROM installation_error_reports')).rows,[{...prior,kind:'automatic',details:null,description:null,description_operation_id:null,description_digest:null,staff_receipt_owner_id:null,staff_report_body:null,staff_description_body:null,staff_description_at:null,bug_issue_repository:null,bug_issue_number:null,bug_status:null,fixed_version:null}]);
+  await assert.rejects(pool.query("UPDATE installation_error_reports SET bug_issue_repository='clintongormley/waitron',bug_issue_number=17,bug_status='open'"),{code:'23514'});
   for(const change of ["code=NULL","occurrences=NULL","details='{}'::jsonb","description='Private text'","kind='staff'","kind='other'"]){
    await assert.rejects(pool.query('UPDATE installation_error_reports SET '+change),(error:unknown)=>(error as {code?:string}).code==='23514');
   }
@@ -67,9 +68,24 @@ test('Sent reports upgrade dates existing owners without exposing legacy staff r
   assert.equal(result.staff_receipt_owner_id,null);
   assert.equal(result.staff_description_body,null);
   assert.equal(result.staff_description_at,null);
+  const status = () => pool.query('SELECT bug_issue_repository,bug_issue_number,bug_status,fixed_version FROM installation_error_reports');
+  assert.deepEqual((await status()).rows,[{bug_issue_repository:null,bug_issue_number:null,bug_status:null,fixed_version:null}]);
+  const link = (repository:string|null,issue:number|null,state:string|null,fixedVersion:string|null,environment='test') =>
+   pool.query('UPDATE installation_error_reports SET bug_issue_repository=$1,bug_issue_number=$2,bug_status=$3,fixed_version=$4,environment=$5',
+    [repository,issue,state,fixedVersion,environment]);
+  const repo='clintongormley/waitron';
+  for(const [repository,issue,state,version,environment] of [
+   [null,17,'open',null], [repo,null,'open',null], [repo,17,null,null], [null,null,null,'1.2.4'],
+   ['other/project',17,'open',null], [repo,0,'open',null], [repo,17,'closed',null],
+   [repo,17,'open',null,'production'], [repo,17,'fixed',null], [repo,17,'in_progress','1.2.4'],
+  ] as const) await assert.rejects(link(repository,issue,state,version,environment),{code:'23514'});
+  await link(repo,17,'in_progress',null);
+  await link('waitron-io/waitron-cloud',18,'fixed','1.2.4');
+  assert.deepEqual((await status()).rows,[{bug_issue_repository:'waitron-io/waitron-cloud',bug_issue_number:18,bug_status:'fixed',fixed_version:'1.2.4'}]);
+
   const after=(await pool.query('SELECT name,digest FROM schema_migrations ORDER BY name')).rows;
   assert.deepEqual(after.slice(0,82),before);
-  assert.equal(after.length,92);
+  assert.equal(after.length,93);
   assert.equal(after.at(82)?.name,'083_sent_report_bodies.sql');assert.equal(after.at(83)?.name,'084_venue_snapshot_recovery.sql');assert.equal(after.at(84)?.name,'085_address_lookup.sql');assert.equal(after.at(85)?.name,'086_operator_venues.sql');assert.equal(after.at(86)?.name,'087_venue_mail_sender.sql');
  }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
 });

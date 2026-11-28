@@ -12,7 +12,7 @@ test('Sent reports sends browser proof and accepts only a scoped list or exact d
   Object.defineProperty(globalThis, key, {configurable: true, value});
   t.after(() => previous ? Object.defineProperty(globalThis, key, previous) : Reflect.deleteProperty(globalThis, key));
  }
- const list = {venueId, reports: [{installationId, reportId, reportedAt: '2026-11-22T12:00:00.000Z', version: '1.2.3'}], nextCursor: null};
+ const list = {venueId, reports: [{installationId, reportId, reportedAt: '2026-11-22T12:00:00.000Z', version: '1.2.3', bugStatus: 'fixed', fixedVersion: '1.2.4'}], nextCursor: null};
  const detail = {venueId, installationId, reportId, reportBody: '  {"version":"1.2.3"}\n', descriptionBody: null};
  let reply: unknown = list;
  const requests: RequestInit[] = [];
@@ -29,6 +29,13 @@ test('Sent reports sends browser proof and accepts only a scoped list or exact d
  for (const invalid of [{...detail, reportBody: {}}, {...detail, descriptionBody: 3}, {...detail, receiptOwnerId: 'unused'}]) {
   reply = invalid;
   assert.equal((await accountRequest('/sent-reports/read', {venueId, installationId, reportId})).ok, false);
+ }
+ for (const fields of [
+  {bugStatus: 'fixed', fixedVersion: null}, {bugStatus: null, fixedVersion: '1.2.4'},
+  {bugStatus: 'closed', fixedVersion: null}, {fixedVersion: '01.2.4'}, {fixedVersion: '2147483648.0.0'}, {issue: 18},
+ ]) {
+  reply = {...list, reports: [{...list.reports[0], ...fields}]};
+  assert.equal((await accountRequest('/sent-reports/list', {venueId})).ok, false);
  }
  reply = {...list, reports: [...list.reports, ...list.reports]};
  assert.equal((await accountRequest('/sent-reports/list', {venueId})).ok, false);

@@ -63,7 +63,7 @@ test('lifecycle upgrade preserves the full previous ledger and rejects changed a
   assert.equal(hasReleaseMigrationCount('45'),false);assert.equal(hasReleaseMigrationCount('46'),false);
   await Promise.all([migrations.migrate(p),migrations.migrate(p)]);await migrations.migrate(p);
   const rows=(await p.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(rows.length,92);assert.equal(rows[77].name,'078_installation_portal_removal.sql');assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
+  assert.equal(rows.length,93);assert.equal(rows[77].name,'078_installation_portal_removal.sql');assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
   for(const v of venues){delete v.local_venue_id;v.display_name=null;v.setup_address=null;v.waitron_mail_reply_to=null;v.waitron_mail_from=null;v.waitron_mail_dns_token=null;}
   assert.deepEqual((await p.query('SELECT * FROM venues')).rows,venues);
   assert.equal((await p.query('SELECT count(*) FROM data_lifecycles')).rows[0].count,'0');

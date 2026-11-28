@@ -20,12 +20,15 @@ export function sentReportsScreen(app: PortalApp, venueId: string) {
   ${reports.error ? html`<p role="alert">${c[reports.error]}</p>${permissionActions(app, reports.error)}` : nothing}
   ${reports.pending ? html`<p role="status">${c.wait}</p>` : nothing}
   ${reports.page && !reports.page.reports.length ? html`<p>${c.noSentReports}</p>` : nothing}
-  ${reports.page?.reports.length ? html`<ul>${reports.page.reports.map(report => html`<li>
+  ${reports.page?.reports.length ? html`<ul>${reports.page.reports.map(report => {
+   const status = report.fixedVersion ? c.sentReportFixed.replace('{version}', report.fixedVersion)
+    : report.bugStatus === 'open' ? c.sentReportOpen : report.bugStatus === 'in_progress' ? c.sentReportInProgress : '';
+   return html`<li>
    <wt-button .disabled=${busy} @click=${async () => {
     await reports.read(report);
     if (reports.detail?.reportId === report.reportId && reports.detail.installationId === report.installationId) focus(detailId);
-   }}><span><time datetime=${report.reportedAt}>${formatDateTime(report.reportedAt, app.locale)}</time> · ${report.version}</span></wt-button>
-  </li>`)}</ul>` : nothing}
+   }}><span><time datetime=${report.reportedAt}>${formatDateTime(report.reportedAt, app.locale)}</time> · ${report.version}${status ? html` · ${status}` : nothing}</span></wt-button>
+  </li>`; })}</ul>` : nothing}
   <div class="sent-reports-actions">
    <wt-button .disabled=${busy} @click=${() => { void reports.load(); }}>${c.refreshSentReports}</wt-button>
    ${reports.page?.nextCursor ? html`<wt-button .disabled=${busy} @click=${async () => {

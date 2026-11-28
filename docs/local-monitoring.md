@@ -448,3 +448,27 @@ and exits with status 1. No agent runs and no message is sent. The
 [receiver contract](box-error-reports.md#receive-a-staff-problem-report) gives the
 submission format and the synthetic test command. Triage and Waitron's report form
 remain separate work.
+
+
+## Link a test report to an issue
+
+Use the reader above to get the `installationId` and `reportId` of an exact
+report. Sign in to GitHub with `gh` and give the status command those two IDs,
+the repository and a positive issue number. Use the `DATABASE_URL` for the
+country that stores the report. This works on the local stack and shared Test
+Cloud when the report and its venue are both marked test.
+
+```sh
+node --env-file-if-exists=.env packages/operations/src/staff-bug-status-cli.ts \
+  "$installation_id" "$report_id" clintongormley/waitron "$issue_number"
+```
+
+You can also use `waitron-io/waitron-cloud`. GitHub receives only the issue
+address. The command prints a status and the fix version when it finds one.
+An `in progress` label means **Being worked on**. A single `fixed in X.Y.Z`
+label with a valid version means **Fixed in version X.Y.Z**. Labels are
+case-insensitive. Closing an issue alone leaves it **Open**.
+
+Rerun the command to refresh the status or correct the issue link. A failed
+lookup keeps the last saved status. Production linking awaits the staff route
+that authenticates by country and records staff history.

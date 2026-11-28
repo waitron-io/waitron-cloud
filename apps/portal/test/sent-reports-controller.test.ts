@@ -7,7 +7,7 @@ import type {SentReportDetail, SentReportsPage} from '../src/sent-reports-types.
 const first = '12345678-1234-4234-8234-123456789abc';
 const second = '22345678-1234-4234-8234-123456789abc';
 const item = {installationId: '32345678-1234-4234-8234-123456789abc', reportId: '42345678-1234-4234-8234-123456789abc',
- reportedAt: '2026-11-22T12:00:00.000Z', version: '1.2.3'};
+ reportedAt: '2026-11-22T12:00:00.000Z', version: '1.2.3', bugStatus: 'open' as const, fixedVersion: null};
 const page = (venueId: string): SentReportsPage => ({venueId, reports: [item], nextCursor: null});
 const detail: SentReportDetail = {venueId: first, installationId: item.installationId, reportId: item.reportId, reportBody: 'Exact text', descriptionBody: null};
 

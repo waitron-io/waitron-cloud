@@ -177,6 +177,11 @@ Sign in to Cloud, open **Venues**, and choose **Sent reports** on your venue car
 Open a report to see the exact body the box sent. A description sent separately
 appears below it. Choose **Older reports** to continue through the list.
 
+For a test venue, reports sent while the box and venue are marked test show
+**Open**, **Being worked on** or **Fixed in version X**. A report starts open.
+Choose **Refresh** after staff refresh the linked issue to read the latest saved
+status. You can see the status without a GitHub account. [Staff instructions](local-monitoring.md#link-a-test-report-to-an-issue).
+
 Cloud checks both the owner who held the venue when the report arrived and when
 the box made it. Reports from before your current ownership stay out of the list,
 even if they arrived later. A description sent separately must arrive under the

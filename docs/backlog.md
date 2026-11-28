@@ -564,9 +564,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    browser check](../apps/portal/test/sent-reports-browser.test.ts) covers exact Sent
    reports for the current owner.
    Waitron's A1047 owns the staff form, checked sending and offline retries.
-   Cloud still needs automatic-report opt-in and Sent reports for automatic sends, private
-   bugs and status, country features with votes and comments, GitHub links, the rest of the operator
-   console and common country routes, grant integration and customer-visible staff history. Joining country lists waits for a second country and an
+   Cloud still needs automatic-report opt-in and Sent reports for automatic sends,
+   production private bug status and authenticated country issue linking, country features with votes
+   and comments, the rest of the operator console and common country routes, grant integration and
+   customer-visible staff history. Joining country lists waits for a second country and an
    owner decision. Privacy, retention and qualified country support authority remain open.
    Pending-action operator notices still need a production mail route.
 

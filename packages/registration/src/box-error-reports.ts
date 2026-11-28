@@ -23,7 +23,7 @@ function source(value:unknown):value is string{
  const parts=value.split('#');if(parts.length>2||(parts.length===2&&!/^[A-Za-z_$][A-Za-z0-9_$.-]*$/.test(parts[1]!)))return false;
  return parts[0]!.split('/').every(p=>p!=='.'&&p!=='..'&&/^[A-Za-z0-9_$.-]+$/.test(p));
 }
-function version(value:unknown):number[]{
+export function parseBoxReportVersion(value:unknown):number[]{
  if(typeof value!=='string'||! /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value))return invalid();
  const result=value.split('.').map(Number);if(result.some(n=>!Number.isSafeInteger(n)||n>2147483647))return invalid();return result;
 }
@@ -57,7 +57,7 @@ function staffBody(action:'staff-report'|'staff-description',signed:string,text:
  if(value&&typeof value==='object'&&'description' in value)keys.push('description');
  if(!object(value,keys)||!staffTime(value.time,now)
   ||!Array.isArray(value.logs)||value.logs.length>8)return invalid();
- version(value.version);
+ parseBoxReportVersion(value.version);
  for(const log of value.logs)if(!object(log,['level','code','source'])||typeof log.level!=='string'||!['debug','info','warn','error'].includes(log.level)||!code(log.code)||!source(log.source))return invalid();
  const d=value.details;
  if(!object(d,['device','equipment','upgradedAt','hosting'])||typeof d.device!=='string'||!['till','dashboard','setup','server','unknown'].includes(d.device)
@@ -71,12 +71,12 @@ function body(action:Action,text:string,now:number):Report|{version:string}{
  let v:unknown;try{v=JSON.parse(text);}catch{return invalid();}
  if(Buffer.byteLength(text)>4096||JSON.stringify(v)!==text)return invalid();
  if(action==='release-held'){
-  if(!object(v,['version']))return invalid();version(v.version);return v as {version:string};
+  if(!object(v,['version']))return invalid();parseBoxReportVersion(v.version);return v as {version:string};
  }
  if(!object(v,['code','source','version','time','count','logs'])||!code(v.code)||!source(v.source)
   ||!Number.isSafeInteger(v.time)||Number(v.time)<0||Number(v.time)>now+60000
   ||!Number.isSafeInteger(v.count)||Number(v.count)<1||Number(v.count)>1000000||!Array.isArray(v.logs)||v.logs.length>8)return invalid();
- version(v.version);
+ parseBoxReportVersion(v.version);
  for(const log of v.logs)if(!object(log,['level','code','source'])||!['debug','info','warn','error'].includes(String(log.level))||!code(log.code)||!source(log.source))return invalid();
  return v as unknown as Report;
 }
@@ -113,7 +113,7 @@ export class BoxErrorReports{
     this.#verify(action,envelope,row,venue.environment,routing.installationId);return {received:true};
    }
    const value=body(action,claims.body,Date.now());
-   const parts=version(value.version);
+   const parts=parseBoxReportVersion(value.version);
    if(action==='error-report'){
     const report=value as Report,digest=createHash('sha256').update(JSON.stringify([action,claims.body])).digest('hex');
     const prior=(await client.query('SELECT digest,kind,operation_id FROM installation_error_reports WHERE installation_id=$1 AND (operation_id=$2 OR description_operation_id=$2)',[routing.installationId,claims.operationId])).rows[0];
@@ -178,7 +178,7 @@ export class BoxErrorReports{
   }else{
    const r=value as StaffReport;
    await client.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,kind,version_major,version_minor,version_patch,reported_at,logs,details,description,staff_receipt_owner_id,staff_report_body)
-    VALUES($1,$2,$3,$4,'staff',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[installationId,operationId,environment,digest,...version(r.version),new Date(r.time),JSON.stringify(r.logs),JSON.stringify(r.details),r.description??null,owner,text]);
+    VALUES($1,$2,$3,$4,'staff',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[installationId,operationId,environment,digest,...parseBoxReportVersion(r.version),new Date(r.time),JSON.stringify(r.logs),JSON.stringify(r.details),r.description??null,owner,text]);
   }
  }
 }

@@ -62,6 +62,19 @@ test('Sent reports limits first bodies and later descriptions to the current ten
  const response = await page.json();
  assert.deepEqual(response.reports.map((r: {reportId: string}) => r.reportId).sort(), [visible, oldText].sort());
  assert.ok(!JSON.stringify(response).includes('Structured copy'));
+ assert.deepEqual(response.reports.find((r: {reportId: string}) => r.reportId === visible), {
+  installationId: box.installationId, reportId: visible, reportedAt: cutoff, version: '1.2.3', bugStatus: 'open', fixedVersion: null,
+ });
+ await db.pool.query(`UPDATE installation_error_reports SET bug_issue_repository='clintongormley/waitron',bug_issue_number=18,
+  bug_status='fixed',fixed_version='1.2.4' WHERE operation_id IN ($1,$2,$3)`, [visible, early, wrongOwner]);
+ const updated = (await (await request('list')).json()).reports;
+ assert.deepEqual(updated.map((r: {reportId: string}) => r.reportId).sort(), [visible, oldText].sort());
+ assert.deepEqual(updated.find((r: {reportId: string}) => r.reportId === visible), {
+  installationId: box.installationId, reportId: visible, reportedAt: cutoff, version: '1.2.3', bugStatus: 'fixed', fixedVersion: '1.2.4',
+ });
+ await db.pool.query("UPDATE venues SET environment='production' WHERE id=$1", [box.venueId]);
+ const production = (await (await request('list')).json()).reports;
+ assert.ok(production.every((r: {bugStatus: string|null; fixedVersion: string|null}) => r.bugStatus === null && r.fixedVersion === null));
  const read = (reportId: string) => request('read', {installationId: box.installationId, reportId});
  for (const id of [early, ownerless, wrongOwner, randomUUID()]) assert.equal((await read(id)).status, 403);
  const current = await read(visible);
@@ -91,6 +104,7 @@ test('Sent reports pages tied receipt times over current and replaced boxes in a
  assert.equal(next.status, 200);
  const remaining = await next.json();
  assert.equal(remaining.nextCursor, null);
+ assert.ok([...page.reports, ...remaining.reports].every(r => r.bugStatus === null && r.fixedVersion === null));
  assert.deepEqual([...page.reports, ...remaining.reports].map((r: {reportId: string}) => r.reportId).sort(), ids.sort());
  assert.equal((await request('read', {installationId: previous, reportId: page.reports.find((r: {installationId: string}) => r.installationId === previous).reportId})).status, 200);
  const other = await connectedVenue(db, issuer, origin);
