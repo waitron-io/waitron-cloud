@@ -624,6 +624,9 @@ Startup requires `CLOUD_SES_FEEDBACK_CONSUMER=enabled`, `DATABASE_URL`,
 the standard SDK chain, without SMTP credentials. A supplied file cannot qualify
 its own settings. Spain's default policy still refuses these flows, so this code
 does not enable production consumption.
+The separate `--test-venue` command is for the Stockholm Test Cloud reader.
+It requires the reviewed trial policy and explicit queue-role credentials.
+[Trial setup](../../docs/test-cloud.md#read-feedback-for-the-stockholm-venue-mail-trial)
 
 Read aggregate JSON statuses from standard output. You can supply your trusted
 collector's JSON through `CLOUD_SES_FEEDBACK_HEALTH_SAMPLE_FILE`; missing, invalid

@@ -176,8 +176,12 @@ test('the test venue reader requires the combined binding, retained keys and exp
   for(const field of ['CLOUD_TEST_VENUE_SES_FEEDBACK','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN','CLOUD_MAIL_RECIPIENT_KEYS'])
    assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer({...env,[field]:undefined},trusted),/ses_feedback_configuration_failed/,field);
   assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer({...env,NODE_ENV:'production'},trusted),/ses_feedback_configuration_failed/);
-  assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer(env),/ses_feedback_configuration_failed/);
-  for(const binding of [venueTrialBinding(['venue-email']),venueTrialBinding(input.purposes,true),setup]){
+  let bindingsRead=false;
+  const unpinned={...env,get CLOUD_SES_FEEDBACK_CONFIG_FILE(){bindingsRead=true;return setup.file;}};
+  assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer(unpinned),/ses_feedback_configuration_failed/);
+  assert.equal(bindingsRead,false);
+  const withoutVenueIdentity=feedbackFixture('eu-north-1',input.purposes);
+  for(const binding of [venueTrialBinding(['venue-email']),venueTrialBinding(input.purposes,true),withoutVenueIdentity,setup]){
    writeFileSync(setup.file,JSON.stringify(binding.input));
    assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer(env,binding.policy),/ses_feedback_configuration_failed/);
   }
