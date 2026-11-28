@@ -601,10 +601,11 @@ production feedback qualification.
 
 ## Read feedback for the Stockholm venue mail trial
 
-The owner approved applying account-pilot bounces and complaints on 28 November
-for Test Cloud. You can use one reader for both mail purposes even while account
-sending is off. Until the Stockholm policy is pinned, `--test-venue` refuses
-startup before connecting to the database or queue.
+After you pin the Stockholm policy, one reader can apply feedback for both
+mail purposes even while account sending is off. The watcher recorded the
+owner’s Test Cloud decision in the [Stockholm trial plan](superpowers/plans/2026-11-28-paid-venue-email-stockholm-trial.md#approve-read-back-pin-then-send).
+Until the policy is pinned, `--test-venue` refuses startup before connecting to
+the database or queue.
 
 After [provider qualification](ses-feedback-qualification.md), use the same
 pinned test Cloud image and Docker network as the account service. On the test
@@ -615,19 +616,21 @@ outside the checkout. Proceed when this command succeeds.
 ```sh
 (
   umask 077
-  docker compose --env-file deploy/test-cloud/test.env \
+  feedback_database=$(docker compose --env-file deploy/test-cloud/test.env \
     -f compose.yaml -f deploy/test-cloud/compose.yaml \
     -f deploy/test-cloud/compose.amazon.yaml exec -T account \
-    node --input-type=module > /root/waitron-test-mail/feedback-db.env <<'JS'
+    node --input-type=module <<'JS'
 import {checkConsumerDatabase, loadRuntime, runtimeEnvironment} from './deploy/local-stack/runtime.mjs';
 const {DATABASE_URL} = runtimeEnvironment('email', await loadRuntime('/run/local-stack'));
 await checkConsumerDatabase(DATABASE_URL, '/app');
 console.log('DATABASE_URL=' + DATABASE_URL);
 JS
+  ) && printf '%s\n' "$feedback_database" > /root/waitron-test-mail/feedback-db.env
 )
 ```
 
-In `feedback.env` set `CLOUD_SES_FEEDBACK_CONSUMER=enabled`. Copy
+Save the reviewed queue and sender bindings from the qualification step as
+`feedback.json`. In `feedback.env` set `CLOUD_SES_FEEDBACK_CONSUMER=enabled`. Copy
 `recipientKeys.activeKeyId` and the full `recipientKeys.keys` object from the
 sender’s private `ses.json` to `CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID` and
 `CLOUD_MAIL_RECIPIENT_KEYS`. Write the keys as one JSON line. In
@@ -640,9 +643,9 @@ docker run -d --name waitron-test-venue-feedback --restart unless-stopped \
   --init --read-only --stop-timeout 25 --memory 128m \
   --log-driver json-file --log-opt max-size=5m --log-opt max-file=2 \
   --network waitron-cloud-test_default \
-  --env-file /root/waitron-test-mail/feedback-db.env \
   --env-file /root/waitron-test-mail/feedback.env \
   --env-file /root/waitron-test-mail/feedback-role.env \
+  --env-file /root/waitron-test-mail/feedback-db.env \
   --mount type=bind,src=/root/waitron-test-mail/feedback.json,dst=/run/test-feedback.json,readonly \
   -e CLOUD_SES_FEEDBACK_CONFIG_FILE=/run/test-feedback.json \
   -e CLOUD_TEST_VENUE_SES_FEEDBACK=1 "$TEST_CLOUD_IMAGE" \
@@ -651,8 +654,8 @@ docker run -d --name waitron-test-venue-feedback --restart unless-stopped \
 
 Stop and remove that reader with `docker stop waitron-test-venue-feedback`
 and `docker rm waitron-test-venue-feedback` before taking down the test stack or
-replacing the reader’s settings. The standard feedback command keeps its own
-production policy.
+replacing the reader’s settings. Repeat the schema check after a test Cloud
+image upgrade. The standard feedback command keeps its own production policy.
 
 ## Rehearse backup on the Amazon test Cloud
 
