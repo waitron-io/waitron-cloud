@@ -414,7 +414,8 @@ until release qualification. Recheck active migration reservations before new da
 
 In the [test Cloud](test-cloud-service-controls.md), an owner can block sharing before
 the venue publishes a menu. The private eligibility check applies the same block.
-The gateway forwards menus only in a loopback test with a synthetic box.
+The gateway forwards menus and relative page redirects in a loopback test with
+a synthetic box. Live menu forwarding stays disabled.
 The [Cloud plan](superpowers/plans/2026-11-25-d643-public-customer-menu.md) still calls for
 pairing and enabling the gateway on test installations, then retiring the
 [hosted copy](backlog/guest-menu.md) after the paired test.

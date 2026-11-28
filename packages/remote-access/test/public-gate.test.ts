@@ -72,7 +72,7 @@ for(const outcome of ['403','429','network','worker','challenge','success'])test
  }finally{await f.close();}
 });
 async function fixture(beginForward?:(route:Readonly<{publicHostname:string;staffHostname:string;address:string;port:number}>,startedAt:number)=>((category:string|null,observedAt:number)=>void)|undefined,
- liveMenu?:{authorize?:NonNullable<PublicGateOptions['menu']>['authorize'];respond:RequestListener}){
+ liveMenu?:{authorize?:NonNullable<PublicGateOptions['menu']>['authorize'];match?:NonNullable<PublicGateOptions['menu']>['match'];respond:RequestListener}){
  let routed=true;
  let now=Date.now(),available=true,disconnect=false,failureStatus=503,mode='normal';
  let start:()=>void=()=>{};const started=new Promise<void>(resolve=>{start=resolve;});
@@ -80,8 +80,8 @@ async function fixture(beginForward?:(route:Readonly<{publicHostname:string;staf
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=staff.sol.example.test','-addext','subjectAltName=DNS:staff.sol.example.test','-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem')],{stdio:'ignore'});
  const key=await readFile(join(root,'key.pem')),certificate=await readFile(join(root,'cert.pem'));await rm(root,{recursive:true});
  let upstream=0;let headers:Record<string,unknown>={};
- const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;start();if(liveMenu&&req.url?.startsWith('/synthetic-menu')){liveMenu.respond(req,res);return;}if(mode==='timeout'||mode==='cancel')return;if(mode==='limit'){res.end('x'.repeat(65537));return;}if(mode==='partial'){res.writeHead(200,{'Content-Length':'50'});res.write('partial');setImmediate(()=>res.destroy());return;}if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=failureStatus;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
- const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,beginForward,menu:liveMenu&&{port:address.port,match:path=>path==='/synthetic-menu'?'page':path==='/synthetic-menu/abc.jpg'?'asset':undefined,authorize:liveMenu.authorize??(async()=>true)},routes:()=>routed?[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',get port(){if(mode==='internal')throw 'secret construction failure';return address.port;}}]:[]});
+ const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;start();if(liveMenu&&(req.url==='/'||req.url?.startsWith('/synthetic-menu'))){liveMenu.respond(req,res);return;}if(mode==='timeout'||mode==='cancel')return;if(mode==='limit'){res.end('x'.repeat(65537));return;}if(mode==='partial'){res.writeHead(200,{'Content-Length':'50'});res.write('partial');setImmediate(()=>res.destroy());return;}if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=failureStatus;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
+ const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,beginForward,menu:liveMenu&&{port:address.port,match:liveMenu.match??(path=>path==='/'||path==='/synthetic-menu'||path==='/synthetic-menu/es'?'page':path==='/synthetic-menu/abc.jpg'?'asset':undefined),authorize:liveMenu.authorize??(async()=>true)},routes:()=>routed?[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',get port(){if(mode==='internal')throw 'secret construction failure';return address.port;}}]:[]});
  const server=createServer(gate.handle);await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const bound=server.address();assert.ok(bound&&typeof bound!=='string');
  const send=(path='/public/availability',extra:Record<string,string>={},method='GET',body?:string)=>new Promise<Response>((resolve,reject)=>{
   const req=request({host:'127.0.0.1',port:bound.port,path,method,headers:{host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,...extra}},res=>{const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);res.on('end',()=>{const headers=new Headers();for(const [key,value]of Object.entries(res.headers)){if(Array.isArray(value))for(const v of value)headers.append(key,v);else if(value)headers.set(key,value);}resolve(new Response(res.statusCode===204?null:Buffer.concat(chunks),{status:res.statusCode!,headers}));});});req.on('error',reject);req.end(body);
@@ -458,6 +458,64 @@ test('public menu forwards only an allowed GET or HEAD over verified box TLS',as
   assert.equal((await f.send('/public/availability')).status,403);
   assert.deepEqual(requests,['GET','HEAD']);
   assert.equal(f.gate.stats().forwarded,0);
+ }finally{await f.close();}
+});
+
+test('public menu forwards an empty relative redirect and serves its destination on the next request',async()=>{
+ const f=await fixture(undefined,{respond:(req,res)=>{
+  if(req.url==='/synthetic-menu/es'){res.end('Menú');return;}
+  res.writeHead(302,{location:'/synthetic-menu/es','cache-control':'public, max-age=120',age:'17',vary:'Accept-Language','content-length':'3'});
+  res.end('box');
+ }});
+ try{
+  for(const path of ['/',menuPath]){
+   const redirect=await f.send(path,menuAccept);
+   assert.equal(redirect.status,302);
+   assert.equal(redirect.headers.get('location'),'/synthetic-menu/es');
+   assert.equal(redirect.headers.get('cache-control'),'public, max-age=60');
+   assert.equal(redirect.headers.get('age'),'17');
+   assert.equal(redirect.headers.get('vary'),'Accept-Language');
+   assert.equal(redirect.headers.get('x-content-type-options'),'nosniff');
+   assert.equal(redirect.headers.get('referrer-policy'),'no-referrer');
+   assert.equal(await redirect.text(),'');
+   const page=await f.send(redirect.headers.get('location')!,menuAccept);
+   assert.equal(page.status,200);
+   assert.equal(await page.text(),'Menú');
+  }
+ }finally{await f.close();}
+});
+
+for(const [path,location,destinationKind] of [
+ [menuPath,'/synthetic-menu\\es','page'],
+ [menuPath,'//elsewhere.example.test','page'],
+ [menuPath,'https://elsewhere.example.test/menu','page'],
+ [menuPath,'/public/availability','page'],
+ [menuPath,'/other-menu',undefined],
+ [menuPath,'/synthetic-menu/photo','asset'],
+ ['/synthetic-menu/abc.jpg','/synthetic-menu/es','page'],
+] as const)test(`public menu rejects a redirect from ${path} to ${location}`,async()=>{
+ const f=await fixture(undefined,{
+  match:target=>target==='/synthetic-menu/abc.jpg'?'asset':target===path?'page':target===location?destinationKind:undefined,
+  respond:(_req,res)=>{res.writeHead(302,{location});res.end();},
+ });
+ try{
+  const response=await f.send(path,menuAccept);
+  assert.equal(response.status,503);
+  assert.equal(response.headers.get('location'),null);
+ }finally{await f.close();}
+});
+
+test('public menu withholds a redirect when sharing is blocked at box headers',async()=>{
+ let reads=0;
+ const f=await fixture(undefined,{
+  authorize:async()=>++reads===1,
+  respond:(_req,res)=>{res.writeHead(302,{location:'/synthetic-menu/es'});res.end();},
+ });
+ try{
+  const response=await f.send(menuPath,menuAccept);
+  assert.equal(response.status,404);
+  assert.equal(response.headers.get('location'),null);
+  assert.equal(f.count(),1);
  }finally{await f.close();}
 });
 
