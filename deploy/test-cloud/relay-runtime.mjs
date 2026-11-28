@@ -42,11 +42,11 @@ export function testRelayGrantConfig({issuer,origin,setupExpiresAt}){
  return {setupExpiresAt,mode:'local-proof',...testRelaySettings,testOrigin:{environment:'test',origin,trusted:createLeaseTrust(issuer)},
   verifyOrigin:async()=>{throw Error('origin_unverified');}};
 }
-export async function openTestRelayRuntime({pool,directory,issuer,origin,mode,setupExpiresAt,smtpPort=1025}){
+export async function openTestRelayRuntime({pool,directory,issuer,origin,mode,setupExpiresAt,smtpPort=1025,venueSes}){
  if(mode!=='test-venue-levels')return;
  const grants=testRelayGrantConfig({issuer,origin,setupExpiresAt}),keys=await loadKeys(pool,directory);
  const admission={mode:'local-proof',testInbox:true,grants,payloadKeys:keys.payload,replayKeys:keys.replay,
   bounds:{version:'local-v1',epoch:testRelaySettings.policy.epoch,windowSeconds:3600,recipientLimit:100,grantLimit:100,queuedPayloadBytes:1000000,maxCounterRows:1000,recipientKeys:keys.bounds}};
- const worker=new RelayWorker(pool,{mode:'local-proof',grants,payloadKeys:keys.payload,suppressionKeys:keys.suppression,smtpPort},mode);
+ const worker=new RelayWorker(pool,{mode:'local-proof',grants,payloadKeys:keys.payload,suppressionKeys:keys.suppression,smtpPort,...venueSes},mode);
  return {admission,worker};
 }

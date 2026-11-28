@@ -461,3 +461,23 @@ test('Amazon up requires the explicit private SES file and mounts it only on the
   await assert.rejects(deploy('up',{...options,...change,inventory:assert.fail}),/test_cloud.amazon_ses/);
  }
 });
+
+test('venue SES mounts both private files on the email worker and leaves account sending off',async()=>{
+ const {deploy,validateDeployment}=await api(),value=amazonDeployment(),id='c'.repeat(64),calls=[];
+ const options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',
+  sesSettingsSource:'/private/account.json',venueSesSettingsSource:'/private/venue.json'};
+ const worker={...value.services['email-worker']};value.services['email-worker']=worker;
+ worker.environment={...worker.environment,TEST_CLOUD_AMAZON_VENUE_SES:'1',CLOUD_TEST_VENUE_MAIL_SIGNING:'0'};
+ worker.volumes=['account','venue'].map((name,i)=>({type:'bind',source:`/private/${name}.json`,target:`/run/test-cloud-${i?'venue-':''}ses.json`,read_only:true,bind:{create_host_path:false}}));
+ let reads=0;
+ await deploy('up',{...options,settledSamples:0,inventory:async()=>({...good,availableMiB:2500,freeGiB:12,containers:reads++===0?[]:[{id,project:'waitron-cloud-test'}]}),
+  execute:async(_command,args)=>{calls.push(args);return args.includes('config')?JSON.stringify(value):args[0]==='image'?JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'}):'';}});
+ assert.ok(calls.find(args=>args.includes('up')).includes('deploy/test-cloud/compose.amazon-venue-ses.yaml'));
+ assert.equal(calls.find(args=>args.includes('up')).includes('deploy/test-cloud/compose.amazon-ses.yaml'),false);
+ await assert.rejects(deploy('up',{...options,sesSettingsSource:undefined,inventory:assert.fail}),/test_cloud.amazon_ses/);
+ worker.environment.CLOUD_TEST_VENUE_MAIL_SIGNING='1';
+ assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+ worker.environment.CLOUD_TEST_VENUE_MAIL_SIGNING='0';
+ value.services.account.volumes=[worker.volumes[1]];
+ assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+});

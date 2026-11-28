@@ -1,0 +1,18 @@
+services:
+  email-worker:
+    environment:
+      TEST_CLOUD_AMAZON_VENUE_SES: "1"
+      CLOUD_TEST_VENUE_MAIL_SIGNING: "0"
+    volumes:
+      - type: bind
+        source: ${TEST_CLOUD_SES_SETTINGS_SOURCE:?Set the private account SES settings file}
+        target: /run/test-cloud-ses.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${TEST_CLOUD_VENUE_SES_SETTINGS_SOURCE:?Set the private venue SES settings file}
+        target: /run/test-cloud-venue-ses.json
+        read_only: true
+        bind:
+          create_host_path: false

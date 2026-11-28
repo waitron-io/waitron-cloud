@@ -4,7 +4,7 @@ import {EmailOutbox,EmailWorker} from '../../packages/registration/src/email-out
 import {createLeaseIssuer} from '../../packages/registration/src/installation-proof.ts';
 import {runWorkerLoop} from '../../packages/registration/src/worker-loop.ts';
 import {createTestCaptureMailer} from './capture-mailer.mjs';
-import {loadTestSesRuntime} from './ses-runtime.mjs';
+import {loadTestSesRuntime,loadTestVenueSesRuntime} from './ses-runtime.mjs';
 import {checkConsumerDatabase,loadRuntime} from '../local-stack/runtime.mjs';
 import {testRuntimeEnvironment} from './runtime.mjs';
 import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
@@ -38,6 +38,7 @@ export function createTestAccountWorker(pool,outbox,captureMailer,pilot){
 }
 export async function runTestEmailWorker({directory='/run/local-stack',root='/app',signal,once=false}={}){
  const pilot=loadTestSesRuntime(process.env);
+ const venueSes=loadTestVenueSesRuntime(process.env);
  const config=await loadRuntime(directory),environment=testRuntimeEnvironment('email',config,process.env);
  await checkConsumerDatabase(environment.DATABASE_URL,root);
  const pool=new Pool({connectionString:environment.DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});
@@ -48,9 +49,10 @@ export async function runTestEmailWorker({directory='/run/local-stack',root='/ap
   const captureMailer=createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025},process.env.TEST_CLOUD_ORIGIN??'https://waitron.local:3000');
   const worker=createTestAccountWorker(pool,outbox,captureMailer,pilot);
   const mode=parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS);let relayRuntime;
+  if(venueSes&&(mode!=='test-venue-levels'||environment.CLOUD_TEST_VENUE_MAIL_SIGNING==='1'))throw Error('test_cloud.ses_configuration');
   const relay=mode==='test-venue-levels'?{async runOnce(){
    const {openTestRelayRuntime}=await import('./relay-runtime.mjs');
-   relayRuntime??=await openTestRelayRuntime({pool,directory,issuer:createLeaseIssuer(config.installation.issuerKey),origin:environment.CLOUD_PORTAL_ORIGIN,mode});
+   relayRuntime??=await openTestRelayRuntime({pool,directory,issuer:createLeaseIssuer(config.installation.issuerKey),origin:environment.CLOUD_PORTAL_ORIGIN,mode,venueSes});
    return relayRuntime.worker.runOnce();
   }}:undefined;
   let signing;
