@@ -67,8 +67,9 @@ function reportPostgresFailure() {
           ) activity)
         )`], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 16_384});
     console.error(JSON.stringify(JSON.parse(report)));
-  } catch {
-    console.error('{"event":"cloud-test-postgres-failure","unavailable":true}');
+  } catch (error) {
+    const reason = error.code === 'ETIMEDOUT' ? 'timeout' : 'failed';
+    console.error(JSON.stringify({event: 'cloud-test-postgres-failure', unavailable: true, reason}));
   }
 }
 function cleanup() {

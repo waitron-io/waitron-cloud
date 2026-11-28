@@ -241,7 +241,7 @@ test('launcher reports PostgreSQL activity and WAL writes before cleanup on a fa
 test('launcher keeps the failed command result and cleans up when PostgreSQL reporting hangs', async t => {
   const result = await launch(t, {childStatus: 7, reportHangs: true});
   assert.equal(result.code, 7);
-  assert.match(result.output, /"event":"cloud-test-postgres-failure","unavailable":true/);
+  assert.match(result.output, /"event":"cloud-test-postgres-failure","unavailable":true,"reason":"timeout"/);
   assert.doesNotMatch(result.output, /PRIVATE_POSTGRES_ERROR/);
   const report = result.invocations.find(({args}) => args[0] === 'exec' && args[2] === 'psql');
   assert.ok(report.timeout > 0 && report.timeout <= 2000);
