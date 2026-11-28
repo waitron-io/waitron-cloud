@@ -455,6 +455,7 @@ needed for live sending. In **Remote access**, test owners can see the signing
 status and the From address used for new staff mail in Mailpit. Sending from
 each venue's own identity in a shared worker and key rotation remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
+[Stockholm trial plan](superpowers/plans/2026-11-28-paid-venue-email-stockholm-trial.md).
 [Decisions and open work](backlog/venue-email.md).
 
 ## Launch platform work, in priority order
