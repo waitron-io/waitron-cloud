@@ -16,6 +16,7 @@ export interface VenueMailSigningConfig {suffix:string;zoneId:string;region:stri
 interface SigningOptions {
  config:VenueMailSigningConfig;
  readOnly?:boolean;
+ setupSavedChoices?:boolean;
  ses:Omit<ReturnType<typeof createSesSigningProvider>,'close'>;
  dns:Omit<ReturnType<typeof createRoute53MailDnsProvider>,'close'>;
  outbox?:EmailOutbox;
@@ -72,9 +73,13 @@ async function confirmRemoval(remove:()=>Promise<void>,isAbsent:()=>Promise<bool
  return isAbsent();
 }
 
-async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:SigningOptions){
+async function clearClaimVerification(pool:Pool,venueId:string,tag:string){
  await pool.query(`UPDATE venue_mail_signing SET verified=false,verified_at=NULL,ses_identity_arn=NULL
-  WHERE venue_id=$1 AND tag=$2`,[venueId,claim.tag]);
+  WHERE venue_id=$1 AND tag=$2 AND (verified OR verified_at IS NOT NULL OR ses_identity_arn IS NOT NULL)`,[venueId,tag]);
+}
+
+async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:SigningOptions){
+ await clearClaimVerification(pool,venueId,claim.tag);
  await dns.checkZone();
  const target=venueMailTarget(claim.selector,claim.dns_suffix);
  const readIdentity=()=>ses.read(claim.domain),readRecord=()=>dns.read(target,claim.public_key);
@@ -97,7 +102,7 @@ async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:Signin
 }
 
 export async function runVenueMailSigning(pool:Pool,venueId:string,options:SigningOptions){
- const {config,ses,dns,outbox,resolveCname,resolveTxt,readOnly}=options;
+ const {config,ses,dns,outbox,resolveCname,resolveTxt,readOnly,setupSavedChoices}=options;
  if(!isUuid(venueId))throw new Error('invalid_venue_mail_venue');
  const current=()=>transaction(pool,client=>readChoice(client,venueId,config));
  const choice=await current();
@@ -105,7 +110,17 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
  if(claim){
   if(claim.ses_region!==config.region||claim.zone_id!==config.zoneId||claim.dns_suffix!==config.suffix||
     !config.testDomains.includes(claim.domain))return 'held';
-  if(!choice||!ownsChoice(claim,choice))return readOnly?'held':retireClaim(pool,venueId,claim,options);
+  if(!choice||!ownsChoice(claim,choice)){
+   // Keep the saved key through a loss of eligibility, but check DNS again before reuse.
+   if(!choice&&(setupSavedChoices||readOnly)&&(await pool.query(`SELECT 1 FROM venues WHERE id=$1 AND organisation_id=$2
+    AND waitron_mail_dns_token=$3 AND lower(split_part(waitron_mail_from,'@',2))=$4`,
+    [venueId,claim.organisation_id,claim.selector,claim.domain])).rowCount){
+    if(setupSavedChoices&&!readOnly)await clearClaimVerification(pool,venueId,claim.tag);
+    return 'ineligible';
+   }
+   if(readOnly)return 'held';
+   return retireClaim(pool,venueId,claim,options);
+  }
  }
  if(!choice||(readOnly&&!claim))return 'ineligible';
  if(!outbox)throw new Error('venue_signing_mail_keys_required');
@@ -181,14 +196,24 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
  return stillMatches===true&&await saveResult(true)?'verified':'held';
 }
 
+export async function listVenueMailSigningCandidates(pool:Pool,testDomains:readonly string[]=[]){
+ const {rows}=await pool.query<{venue_id:string}>(`SELECT venue_id FROM venue_mail_signing
+  UNION SELECT id FROM venues WHERE environment='test' AND waitron_mail_dns_token IS NOT NULL
+  AND lower(split_part(waitron_mail_from,'@',2))=ANY($1::text[]) ORDER BY venue_id`,[testDomains]);
+ return rows.map(row=>row.venue_id);
+}
+
 export async function refreshVenueMailSignings(pool:Pool,options:SigningOptions,signal?:AbortSignal){
- const {rows}=await pool.query<{venue_id:string}>('SELECT venue_id FROM venue_mail_signing ORDER BY venue_id');
- for(const {venue_id} of rows){
+ const {setupSavedChoices,config}=options;
+ const venues=await listVenueMailSigningCandidates(pool,setupSavedChoices?config.testDomains:[]);
+ for(const venueId of venues){
   if(signal?.aborted)break;
   try{
-   const result=await runVenueMailSigning(pool,venue_id,{...options,readOnly:true});
-   if(result==='held')console.error(`Venue signing check held. Run venue-mail:signing ${venue_id} and check the provider settings.`);
+   const result=await runVenueMailSigning(pool,venueId,{...options,readOnly:!setupSavedChoices});
+   if(result==='held')console.error(setupSavedChoices
+    ?`Venue ${venueId} signing check held. Disable CLOUD_TEST_VENUE_MAIL_SIGNING and wait for the email worker to exit before running venue-mail:signing ${venueId}.`
+    :`Venue signing check held. Run venue-mail:signing ${venueId} and check the provider settings.`);
   }
-  catch{console.error('Venue signing check failed; the last confirmed result is retained until expiry.');}
+  catch{console.error(`Venue ${venueId} signing check failed. The last confirmed result is retained until expiry.`);}
  }
 }

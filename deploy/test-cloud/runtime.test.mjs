@@ -19,6 +19,27 @@ test('dedicated runtime selects capture mail and forwards validated dormant plan
  assert.equal(api.testRuntimeCommand('email'),'deploy/test-cloud/email-worker.mjs');assert.equal(api.testRuntimeEnvironment('email',config,{}).CLOUD_MAIL_TRANSPORT,'test-capture');
  assert.equal(runtimeEnvironment('account',config).CLOUD_PORTAL_ORIGIN,'http://localhost:3000');
 });
+test('venue signing settings reach only the opted-in test email worker',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-signing-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir),mode={CLOUD_VENUE_SERVICE_LEVELS:'test'};
+ const settings={CLOUD_VENUE_MAIL_DNS_SUFFIX:'cloud.example.test',CLOUD_VENUE_MAIL_DNS_ZONE_ID:'Z123',
+  CLOUD_VENUE_MAIL_SES_REGION:'eu-north-1',CLOUD_VENUE_MAIL_TEST_DOMAINS:'cafe.example.test',
+  CLOUD_VENUE_MAIL_SES_ACCOUNT_ID:'000000000000'};
+ for(const key of Object.keys(settings))assert.equal(testRuntimeEnvironment('email',config,{...mode,...settings})[key],undefined);
+ const enabled={...mode,...settings,CLOUD_TEST_VENUE_MAIL_SIGNING:'1'};
+ const email=testRuntimeEnvironment('email',config,enabled),account=testRuntimeEnvironment('account',config,enabled);
+ for(const [key,value] of Object.entries(settings))assert.equal(email[key],value,key);
+ assert.equal(email.CLOUD_TEST_VENUE_MAIL_SIGNING,'1');
+ assert.equal(account.CLOUD_VENUE_MAIL_DNS_SUFFIX,email.CLOUD_VENUE_MAIL_DNS_SUFFIX);
+ assert.equal(account.CLOUD_VENUE_MAIL_DNS_ZONE_ID,undefined);
+ assert.equal(account.CLOUD_TEST_VENUE_MAIL_SIGNING,undefined);
+ for(const override of [{CLOUD_TEST_VENUE_MAIL_SIGNING:'yes'},{NODE_ENV:'production'},
+  {CLOUD_VENUE_SERVICE_LEVELS:undefined},{CLOUD_VENUE_MAIL_TEST_DOMAINS:''},{CLOUD_VENUE_MAIL_SES_ACCOUNT_ID:undefined}]){
+  assert.throws(()=>testRuntimeEnvironment('email',config,{...enabled,...override}),/test_cloud.venue_signing/);
+ }
+});
+
 test('Test Cloud passes an explicit sign-up limit only to the account process', async t => {
  const {testRuntimeEnvironment} = await import('./runtime.mjs');
  const dir = await mkdtemp(join(tmpdir(), 'cloud-signup-limits-'));

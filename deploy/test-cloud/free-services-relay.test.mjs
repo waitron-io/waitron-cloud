@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
 import {createHash, generateKeyPairSync, randomBytes, randomUUID, sign} from 'node:crypto';
 import {createServer, request} from 'node:https';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
+import {promisify} from 'node:util';
 import {createAccountApp} from '../../packages/account-http/src/app.ts';
 import {createSession, endSession} from '../../packages/identity/src/index.ts';
 import {BillingStore, createLeaseIssuer, encodeMachine, OrganisationPlanStore, SetupPairingStore, SignupStore, transaction} from '../../packages/registration/src/index.ts';
@@ -245,4 +247,77 @@ test('Mailpit gets the venue sender and reply address until downgrade', async t 
   const free = await deliver(queued);
   assert.deepEqual([free.From.Name, free.From.Address], ['Waitron', 'relay@example.test']);
   assert.equal(free.ReplyTo?.length ?? 0, 0);
+});
+
+test('owner save reaches signing after its exact alias is published', async t => {
+  const db = await database();
+  t.after(db.close);
+  const directory = await mkdtemp(join(tmpdir(), 'cloud-signing-save-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  await bootstrapTestCloud(directory);
+  const origin = 'http://localhost', domain = 'cafe.example.test', suffix = 'cloud.example.test';
+  const mode = 'test-venue-levels', accountId = '000000000000';
+  const issuer = createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type: 'pkcs8', format: 'der'}).toString('base64url'));
+  const venue = await connectedVenue(db, issuer, origin);
+  const billing = new BillingStore(db.pool), scope = {organisationId: venue.organisationId, legalBusinessId: venue.legalBusinessId};
+  const event = () => ({key: randomUUID(), occurredAt: new Date().toISOString(), source: {kind: 'internal'}});
+  await billing.execute(scope, event(), {type: 'ensure_business'});
+  const {revision} = await billing.venue(scope, venue.venueId);
+  await billing.transition(scope, event(),
+    {type: 'set_venue', venueId: venue.venueId, expectedRevision: revision,
+      value: {level: 'connected', connectedFrom: null, lapsedOn: null, scheduledLevel: null, scheduledOn: null}});
+  const session = await transaction(db.pool, client => createSession(client, venue.accountId));
+  const app = createAccountApp({pool: db.pool, outbox: db.outbox, planMode: mode, venueMailDnsSuffix: suffix,
+    config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []}});
+  const saved = await app.request(origin + '/api/account/venue-email/save-domain', {
+    method: 'POST', headers: {origin, 'content-type': 'application/json', cookie: `cloud_session=${session.token}`,
+      'x-csrf-token': session.csrfToken},
+    body: JSON.stringify({installationId: venue.installationId, address: 'staff@' + domain}),
+  }, {incoming: {socket: {remoteAddress: '192.0.2.20'}}});
+  const choice = await saved.json();
+  assert.equal(saved.status, 200, choice.error);
+  const [alias] = choice.domain.records;
+
+  const connection = new URL(process.env.TEST_DATABASE_URL);
+  connection.searchParams.set('options', '-c search_path=' + db.schema);
+  const url = relative => JSON.stringify(new URL(relative, import.meta.url).href);
+  const providers = '../../packages/remote-access/src/';
+  const script = `import {mock} from 'node:test';
+    import {fakeVenueMailProviders} from ${url('../../packages/remote-access/test/fixtures/venue-mail-signing.ts')};
+    const runtime=await import(${url('../local-stack/runtime.mjs')});
+    mock.module(${url('../local-stack/runtime.mjs')},{namedExports:{...runtime,
+      runtimeEnvironment:(...args)=>({...runtime.runtimeEnvironment(...args),DATABASE_URL:process.env.TEST_SIGNING_DB})}});
+    const alias=${JSON.stringify(alias)},domain=${JSON.stringify(domain)};
+    const fake=fakeVenueMailProviders(${JSON.stringify(suffix)},[domain]);
+    const route53=await import(${url(providers+'route53-dns.ts')});
+    mock.module(${url(providers+'route53-dns.ts')},{namedExports:{...route53,createRoute53MailDnsProvider:()=>({...fake.options.dns,close(){}})}});
+    mock.module(${url(providers+'ses-signing.ts')},{namedExports:{createSesSigningProvider:()=>({...fake.options.ses,close(){}})}});
+    let published=false;const queries=[];
+    mock.module(${url(providers+'dns-lookup.ts')},{namedExports:{
+      boundedResolveCname:async name=>{queries.push(name);return published&&name===alias.name?[alias.value]:[];},
+      boundedResolveTxt:fake.options.resolveTxt}});
+    const {runTestEmailWorker}=await import(${url('./email-worker.mjs')});
+    const run=()=>runTestEmailWorker({directory:process.env.LOCAL_STACK_CONFIG_DIR,root:process.cwd(),once:true});
+    await run();const before={writes:[...fake.writes],queries:queries.splice(0)};
+    published=true;await run();const writesAfterSetup=[...fake.writes];
+    await run();console.log(JSON.stringify({before,writesAfterSetup,writes:fake.writes,identity:fake.identities.get(domain),key:fake.txt.get(alias.value)}));`;
+  const {stdout} = await promisify(execFile)(process.execPath,
+    ['--experimental-test-module-mocks', '--input-type=module', '--eval', script], {
+      cwd: new URL('../../', import.meta.url), timeout: 30_000,
+      env: {PATH: process.env.PATH, LOCAL_STACK_CONFIG_DIR: directory, TEST_SIGNING_DB: connection.href,
+        CLOUD_VENUE_SERVICE_LEVELS: 'test', CLOUD_TEST_VENUE_MAIL_SIGNING: '1', CLOUD_VENUE_MAIL_DNS_SUFFIX: suffix,
+        CLOUD_VENUE_MAIL_DNS_ZONE_ID: 'Z123', CLOUD_VENUE_MAIL_SES_REGION: 'eu-north-1',
+        CLOUD_VENUE_MAIL_TEST_DOMAINS: domain, CLOUD_VENUE_MAIL_SES_ACCOUNT_ID: accountId},
+    });
+  const observed = JSON.parse(stdout);
+  assert.deepEqual(observed.before, {writes: [], queries: [alias.name]});
+  assert.deepEqual(observed.writesAfterSetup, ['ses create', 'dns create']);
+  assert.deepEqual(observed.writes, observed.writesAfterSetup);
+  const {rows: [claim]} = await db.pool.query(`SELECT domain, selector, tag, public_key, verified, ses_identity_arn
+    FROM venue_mail_signing WHERE venue_id=$1`, [venue.venueId]);
+  assert.equal(claim.verified, true);
+  assert.equal(claim.domain, domain);
+  assert.equal(claim.ses_identity_arn, `arn:aws:ses:eu-north-1:${accountId}:identity/${domain}`);
+  assert.deepEqual([claim.tag, claim.selector, claim.public_key], [observed.identity.tag, alias.name.split('.')[0], observed.key]);
+  assert.deepEqual(observed.identity.selectors, [claim.selector]);
 });

@@ -6,6 +6,7 @@ import {loadRuntime,runtimeEnvironment,checkConsumerDatabase,canonicalHttpsOrigi
 import {cloudActionDemoEnabled} from '../../packages/registration/src/cloud-action-worker.ts';
 import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
 import {allowanceOptionsFromEnv} from '../../packages/registration/src/billing-allowance-rules.ts';
+import {readVenueMailSigningConfig} from '../../packages/remote-access/src/venue-mail-signing-config.ts';
 const commands={'action-demo':'packages/registration/src/cloud-action-cli.ts',migrate:'packages/registration/src/migrate-cli.ts',account:'deploy/test-cloud/account-worker.mjs',storage:'deploy/test-cloud/storage-worker.mjs',email:'deploy/test-cloud/email-worker.mjs',monitor:'packages/registration/src/monitor-cli.ts',usage:'packages/registration/src/usage-reconcile-cli.ts',probe:'packages/remote-access/src/probe-cli.ts',backup:'deploy/test-cloud/backup-worker.mjs',gateway:'packages/remote-access/src/gateway-cli.ts',manifest:'deploy/test-cloud/remote-worker.mjs',reconcile:'packages/remote-access/src/reconciler-cli.ts',translation:'packages/translation/src/worker-cli.ts'};
 const exitStageBusy=73;
 export function testRuntimeCommand(role){if(!Object.hasOwn(commands,role))throw new Error('test_cloud.role_invalid');return commands[role];}
@@ -49,7 +50,18 @@ export function testRuntimeEnvironment(role,config,environment={}){
    for(const name of ['GATEWAY_CHALLENGES','GATEWAY_STATUS_DIR'])if(environment[name]!==undefined)result[name]=environment[name];
   }
  }
- if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
+ if(role==='email'){
+  result.CLOUD_MAIL_TRANSPORT='test-capture';
+  const flag=environment.CLOUD_TEST_VENUE_MAIL_SIGNING??'0';
+  if(flag!=='0'){
+   if(flag!=='1'||mode!=='test-venue-levels'||environment.NODE_ENV==='production')throw Error('test_cloud.venue_signing');
+   const signing=readVenueMailSigningConfig(environment,true);
+   if(!signing)throw Error('test_cloud.venue_signing');
+   Object.assign(result,{CLOUD_TEST_VENUE_MAIL_SIGNING:flag,CLOUD_VENUE_MAIL_DNS_SUFFIX:signing.suffix,
+    CLOUD_VENUE_MAIL_DNS_ZONE_ID:signing.zoneId,CLOUD_VENUE_MAIL_SES_REGION:signing.region,
+    CLOUD_VENUE_MAIL_TEST_DOMAINS:signing.testDomains.join(','),CLOUD_VENUE_MAIL_SES_ACCOUNT_ID:signing.providerAccountId});
+  }
+ }
  if(environment.CLOUD_TEST_AMAZON_BACKUPS==='1'){
   const origin=environment.TEST_CLOUD_ORIGIN;
   if(environment.TEST_CLOUD_AMAZON!=='1'||environment.NODE_ENV==='production'||mode!=='test-venue-levels'||!origin||new URL(origin).port)throw Error('test_cloud.amazon_backups');
