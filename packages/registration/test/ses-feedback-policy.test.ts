@@ -235,3 +235,20 @@ test('array wrappers cannot hide a country, publisher, extra field or sparse gra
   assert.throws(()=>check(validateSesFeedbackConfig(policy,input),documents),{message:'Invalid SES feedback policies'});
  });
 });
+
+test('the shared feedback profile requires both exact sending identities',async()=>{
+ const check=await validate();
+ const {policy,input,documents}=feedbackPolicyFixture('eu-north-1',['cloud-account-email','venue-email']);
+ const venueIdentityArn='arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+ const smtpBindings=policy.smtpBindings.map(binding=>binding.purpose==='venue-email'?{...binding,venueIdentityArn}:binding);
+ const config=validateSesFeedbackConfig({...policy,smtpBindings},{...input,venueIdentityArn});
+ const smtpResources=documents.smtpPolicy.Statement[0]!.Resource;
+ smtpResources.push(venueIdentityArn);
+ assert.equal(check(config,documents),undefined);
+ for(const other of [undefined,venueIdentityArn+'-other','*']){
+  smtpResources.pop();
+  if(other!==undefined)smtpResources.push(other);
+  assert.throws(()=>check(config,documents),/Invalid SES feedback policies/);
+  if(other===undefined)smtpResources.push(venueIdentityArn);
+ }
+});

@@ -452,8 +452,9 @@ the opt-in email worker sets up signing after an owner saves an allowed address
 and publishes the exact DNS alias. It retires signing for a cleared address or
 changed domain. Offline Test Cloud startup and relay routing now isolate the
 planned trial’s venue, box and inbox. The new settings are still unpinned.
-The feedback reader and provider qualification are still needed for live
-sending. In **Remote access**, test owners can see the signing
+The test feedback command can use one queue for both mail purposes with
+synthetic settings. The reviewed settings pin and provider qualification are
+still needed for live sending. In **Remote access**, test owners can see the signing
 status and the From address used for new staff mail in Mailpit. Sending from
 each venue's own identity in a shared worker and key rotation remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).

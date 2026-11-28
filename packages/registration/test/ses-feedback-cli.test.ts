@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {once} from 'node:events';
 import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdtempSync,writeFileSync,rmSync,openSync,writeSync,closeSync,symlinkSync,constants} from 'node:fs';
@@ -149,4 +150,70 @@ test('the hard shutdown deadline survives service completion when a broken drive
   assert.deepEqual(await exited,{code:1,signal:null},'a retained driver handle must fail within the process deadline');
   assert.ok(performance.now()-began<22000);assert.equal(stderr,'SES feedback shutdown failed\n');
  }finally{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;clearTimeout(timeout);f.close();}
+});
+
+function venueTrialBinding(purposes=['cloud-account-email','venue-email'],useFallbackIdentity=false){
+ const {policy,input}=feedbackFixture('eu-north-1',purposes);
+ const venueIdentityArn=useFallbackIdentity?input.identityArn:'arn:aws:ses:eu-north-1:123456789012:identity/cafe.example.test';
+ const smtpBindings=policy.smtpBindings.map(binding=>binding.purpose==='venue-email'?{...binding,venueIdentityArn}:binding);
+ return {input:{...input,venueIdentityArn},policy:{...policy,smtpBindings}};
+}
+
+test('the test venue reader requires the combined binding, retained keys and explicit role credentials',async()=>{
+ const command=await cli();
+ const setup=fixture();
+ const {policy:trusted,input}=venueTrialBinding();
+ const env={...setup.env,CLOUD_TEST_VENUE_SES_FEEDBACK:'1',AWS_ACCESS_KEY_ID:'TESTACCESS',
+  AWS_SECRET_ACCESS_KEY:'synthetic-secret',AWS_SESSION_TOKEN:'synthetic-session'};
+ try{
+  writeFileSync(setup.file,JSON.stringify(input));
+  assert.equal(typeof command.configuredTestVenueSesFeedbackConsumer,'function','missing test venue reader configuration');
+  const loaded=command.configuredTestVenueSesFeedbackConsumer(env,trusted);
+  assert.deepEqual(loaded.config.purposes,['cloud-account-email','venue-email']);
+  assert.equal(loaded.config.venueIdentityArn,input.venueIdentityArn);
+  assert.deepEqual(loaded.recipientKeys,keys);
+  assert.deepEqual(loaded.credentials,{accessKeyId:'TESTACCESS',secretAccessKey:'synthetic-secret',sessionToken:'synthetic-session'});
+  for(const field of ['CLOUD_TEST_VENUE_SES_FEEDBACK','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN','CLOUD_MAIL_RECIPIENT_KEYS'])
+   assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer({...env,[field]:undefined},trusted),/ses_feedback_configuration_failed/,field);
+  assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer({...env,NODE_ENV:'production'},trusted),/ses_feedback_configuration_failed/);
+  assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer(env),/ses_feedback_configuration_failed/);
+  for(const binding of [venueTrialBinding(['venue-email']),venueTrialBinding(input.purposes,true),setup]){
+   writeFileSync(setup.file,JSON.stringify(binding.input));
+   assert.throws(()=>command.configuredTestVenueSesFeedbackConsumer(env,binding.policy),/ses_feedback_configuration_failed/);
+  }
+ }finally{setup.close();}
+});
+
+test('the standalone test venue command refuses an offline file even with an explicit role session',()=>{
+ const setup=fixture();
+ try{
+  const binding=venueTrialBinding();
+  writeFileSync(setup.file,JSON.stringify({...binding.input,policy:binding.policy}));
+  const child=spawnSync(process.execPath,[new URL('../src/ses-feedback-cli.ts',import.meta.url).pathname,'--test-venue'],{
+   env:{PATH:process.env.PATH,...setup.env,CLOUD_TEST_VENUE_SES_FEEDBACK:'1',AWS_ACCESS_KEY_ID:'TESTACCESS',
+    AWS_SECRET_ACCESS_KEY:'synthetic-secret',AWS_SESSION_TOKEN:'synthetic-session'},encoding:'utf8',timeout:3000});
+  assert.equal(child.error,undefined);assert.equal(child.status,1);assert.equal(child.stdout,'');
+  assert.equal(child.stderr,'SES feedback consumer failed; check configuration and service health\n');
+ }finally{setup.close();}
+});
+
+
+test('the test venue command polls with its supplied role session',async()=>{
+ const f=fixture();
+ const {policy:trusted,input}=venueTrialBinding();
+ writeFileSync(f.file,JSON.stringify(input));
+ const child=spawn(process.execPath,['--import',new URL('./fixtures/ses-feedback-cli-hooks.mjs',import.meta.url).href,
+  new URL('../src/ses-feedback-cli.ts',import.meta.url).pathname,'--test-venue'],{
+  env:{PATH:process.env.PATH,...f.env,CLOUD_TEST_VENUE_SES_FEEDBACK:'1',AWS_ACCESS_KEY_ID:'TRIALACCESS',
+   AWS_SECRET_ACCESS_KEY:'synthetic-secret',AWS_SESSION_TOKEN:'synthetic-session',LOCAL_FEEDBACK_POLICY:JSON.stringify(trusted),
+   LOCAL_FEEDBACK_MODE:'idle-test-venue',CLOUD_SES_FEEDBACK_HEALTH_SAMPLE_FILE:join(f.dir,'health.json')},
+  stdio:['ignore','ignore','pipe','ipc']});
+ let stderr='';child.stderr!.on('data',b=>{stderr+=b;});
+ const exited=once(child,'close');
+ try{
+  const [observed]=await Promise.race([once(child,'message',{signal:AbortSignal.timeout(2500)}),exited]);
+  assert.deepEqual(observed,{stage:'receive',roleSigned:true},stderr);
+  child.kill('SIGTERM');
+  assert.deepEqual(await exited,[0,null],stderr);
+ }finally{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;f.close();}
 });

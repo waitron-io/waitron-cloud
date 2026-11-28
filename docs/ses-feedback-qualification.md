@@ -68,7 +68,7 @@ The bundle contains these separately checked parts:
 | Dead-letter queue (DLQ) | Standard, same encrypted queue key, no direct publisher grant, and only the exact primary queue may use it as a DLQ. No automatic replay or message-move permission. |
 | Consumer identity policy | Receive, delete and read attributes on the primary queue; decrypt its exact key. No publish, purge, policy changes, SES administration or DLQ message access. |
 | Health identity policy | Read only DLQ attributes for counts, with no message or key access. Authenticated primary-age and drift collection still needs qualification. |
-| SMTP identity policy | A dedicated IAM user sends raw mail only for the exact SES identity and configuration set. It shares no identity with the consumer, health reader, operator or key administrator. |
+| SMTP identity policy | A dedicated IAM user sends raw mail only for the exact SES identity, the configuration set and, if configured, the additional venue identity. It shares no identity with the consumer, health reader, operator or key administrator. |
 | Queue key and its policy | Exact same-account/region customer-managed symmetric enabled key. SNS data-key/decrypt use is source-bound; the consumer gets decrypt only; a separate administrator gets the enumerated management operations. |
 
 Only a KMS key policy uses `Resource: "*"`: in that context it means the key

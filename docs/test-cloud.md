@@ -599,6 +599,41 @@ The hosted test worker sends and records acceptance. Applying bounces and
 complaints from those queues remains in D102. The mailbox and sandbox
 restriction continues to apply throughout this trial.
 
+## Read feedback for the Stockholm venue mail trial
+
+The test reader needs the reviewed Stockholm policy and the owner’s decision
+on applying account-pilot bounces and complaints. Until the policy is pinned,
+`--test-venue` refuses startup before connecting to the database or queue.
+Use the existing test queue and run only one reader. The reader can apply
+feedback for both account and venue attempts even while account sending is off.
+
+After [provider qualification](ses-feedback-qualification.md), use the same
+pinned test Cloud image and existing Docker network. Keep the qualified JSON
+bindings file and both environment files at mode 0600 outside the checkout. In
+`feedback.env` set `CLOUD_SES_FEEDBACK_CONSUMER=enabled`, the test `DATABASE_URL`
+and the same `CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID` and `CLOUD_MAIL_RECIPIENT_KEYS`
+as the sender. Keep every retained key. In `feedback-role.env` put only the
+reader role’s `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`.
+Replace the role session and recreate the reader before the session expires.
+
+```sh
+docker run -d --name waitron-test-venue-feedback --restart unless-stopped \
+  --init --read-only --stop-timeout 25 --memory 128m \
+  --log-opt max-size=5m --log-opt max-file=2 \
+  --network waitron-cloud-test_default \
+  --env-file /root/waitron-test-mail/feedback.env \
+  --env-file /root/waitron-test-mail/feedback-role.env \
+  --mount type=bind,src=/root/waitron-test-mail/feedback.json,dst=/run/test-feedback.json,readonly \
+  -e CLOUD_SES_FEEDBACK_CONFIG_FILE=/run/test-feedback.json \
+  -e CLOUD_TEST_VENUE_SES_FEEDBACK=1 "$TEST_CLOUD_IMAGE" \
+  node packages/registration/src/ses-feedback-cli.ts --test-venue
+```
+
+Stop and remove that reader with `docker stop waitron-test-venue-feedback`
+and `docker rm waitron-test-venue-feedback` before taking down the test stack or
+replacing the reader’s settings. The standard feedback command keeps its own
+production policy.
+
 ## Rehearse backup on the Amazon test Cloud
 
 Use the exact [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).

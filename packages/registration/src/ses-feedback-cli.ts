@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {spainCountryPolicy} from './country-policy.ts';
 import {validateSesFeedbackConfig,type SesFeedbackPolicy} from './ses-feedback-config.ts';
 import {RelayKeys,type RelayKeyConfig} from './relay-payload.ts';
+import {testVenueSesFeedbackPolicy} from './ses-feedback-test-venue-policy.ts';
 import {createSesFeedbackQueue} from './ses-feedback-queue.ts';
 import {runSesFeedbackConsumer} from './ses-feedback-service.ts';
 
@@ -30,6 +31,17 @@ export function configuredSesFeedbackConsumer(env:NodeJS.ProcessEnv=process.env,
  }catch{throw Error('ses_feedback_configuration_failed');}
 }
 
+/** The trial policy stays absent until the provider readback is pinned in code. */
+export function configuredTestVenueSesFeedbackConsumer(env:NodeJS.ProcessEnv=process.env,policy:SesFeedbackPolicy|null=testVenueSesFeedbackPolicy) {
+ const {AWS_ACCESS_KEY_ID:accessKeyId,AWS_SECRET_ACCESS_KEY:secretAccessKey,AWS_SESSION_TOKEN:sessionToken}=env;
+ if(!policy||env.NODE_ENV==='production'||env.CLOUD_TEST_VENUE_SES_FEEDBACK!=='1'||!accessKeyId||!secretAccessKey||!sessionToken)
+  throw Error('ses_feedback_configuration_failed');
+ const settings=configuredSesFeedbackConsumer(env,policy);
+ const {purposes,identityArn,venueIdentityArn}=settings.config;
+ if(purposes.length!==2||!venueIdentityArn||venueIdentityArn===identityArn)throw Error('ses_feedback_configuration_failed');
+ return {...settings,credentials:{accessKeyId,secretAccessKey,sessionToken}};
+}
+
 export function createSesFeedbackPool(databaseUrl:string):Pool {
  return new Pool({connectionString:databaseUrl,max:3,connectionTimeoutMillis:5000,statement_timeout:5000});
 }
@@ -45,9 +57,11 @@ async function main() {
  process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
  let pool:Pool|undefined,queue:ReturnType<typeof createSesFeedbackQueue>|undefined,ownedByService=false;
  try{
-  const args=process.argv.slice(2);if(args.length>1||(args.length===1&&args[0]!=='--once'))throw Error();
-  const settings=configuredSesFeedbackConsumer();pool=createSesFeedbackPool(settings.databaseUrl);
-  queue=createSesFeedbackQueue(settings.config);ownedByService=true;
+  const args=process.argv.slice(2);
+  if(args.length>1||(args.length===1&&args[0]!=='--once'&&args[0]!=='--test-venue'))throw Error();
+  const trial=args[0]==='--test-venue'?configuredTestVenueSesFeedbackConsumer():undefined;
+  const settings=trial??configuredSesFeedbackConsumer();pool=createSesFeedbackPool(settings.databaseUrl);
+  queue=createSesFeedbackQueue(settings.config,{credentials:trial?.credentials});ownedByService=true;
   await runSesFeedbackConsumer({...settings,pool,queue,signal:stop.signal,once:args[0]==='--once',
    sample:()=>process.env.CLOUD_SES_FEEDBACK_HEALTH_SAMPLE_FILE?readBoundedJson(process.env.CLOUD_SES_FEEDBACK_HEALTH_SAMPLE_FILE):undefined,
    onStatus:status=>console.log(JSON.stringify(status))});

@@ -6,6 +6,8 @@ const policy=JSON.parse(process.env.LOCAL_FEEDBACK_POLICY);
 registerHooks({resolve(specifier,context,next){
  if(context.parentURL===cli&&specifier==='./country-policy.ts')return {
   url:'data:text/javascript,'+encodeURIComponent(`export const spainCountryPolicy=${JSON.stringify(policy)};`),shortCircuit:true};
+ if(context.parentURL===cli&&specifier==='./ses-feedback-test-venue-policy.ts'&&process.env.LOCAL_FEEDBACK_MODE==='idle-test-venue')return {
+  url:'data:text/javascript,'+encodeURIComponent(`export const testVenueSesFeedbackPolicy=${JSON.stringify(policy)};`),shortCircuit:true};
  if(context.parentURL===cli&&specifier==='./ses-feedback-queue.ts')return {
   url:new URL('./ses-feedback-cli-wire.mjs',import.meta.url).href,shortCircuit:true};
  return next(specifier,context);
