@@ -323,8 +323,7 @@ returning `secret_unavailable` before download. That layout
 waits for the
 [external vault archive contract](waitron-integration-contract.md#external-vault-archive-compatibility-dependency).
 The design also tracks a [download audit](superpowers/plans/2026-11-24-cloud-exit.md#first-usable-slice-on-test-cloud).
-Resubscription, sealing and deletion remain part of the
-[remaining exit work](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).
+Resubscription, sealing and deletion follow [Billing slice G](superpowers/plans/2026-10-29-cloud-billing.md#the-slices-in-order) and use the [exit rules](superpowers/plans/2026-11-24-cloud-exit.md#later-retention-and-deletion).
 The roadmap’s [slice 5 country-policy work](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
 remains separate. Bring later plans to the watcher one at a time for clearance.
 
@@ -344,9 +343,8 @@ remains separate. Bring later plans to the watcher one at a time for clearance.
 - Open in slice 5 ([plan](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)):
   placement and credential enforcement, production assignment, provider retirement,
   destructive-retention coordination and mail retry semantics. The retention and mail worker
-  integrations stop until their existing guarantees have a compatible design. Resubscription
-  needs a retained-data check and an activation adapter that reopens snapshot admission. The
-  later exit adapter must keep priority for an earlier verified delete, do an independent status
+  integrations stop until their existing guarantees have a compatible design. The later exit
+  adapter must keep priority for an earlier verified delete, do an independent status
   lookup and qualify finer deadline comparisons if another producer writes timestamps beyond
   milliseconds.
 - One venue approval permits at most **24 hours** of support access, shorter where practical
