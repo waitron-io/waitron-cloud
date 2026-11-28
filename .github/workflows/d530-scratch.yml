@@ -1,0 +1,54 @@
+name: D530 scratch migration investigation
+on:
+  push:
+    branches: [debug/j-d530-migration-setup-recurrence]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Upgrade tests run against pinned historical releases.
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - name: Locate pnpm dependency store
+        id: pnpm-store
+        # The cache version must not depend on the bootstrap's random binary path.
+        run: |
+          export npm_config_store_dir="$RUNNER_TEMP/cloud-pnpm-store"
+          echo "npm_config_store_dir=$npm_config_store_dir" >> "$GITHUB_ENV"
+          pnpm_store_path=$(pnpm store path --silent) || exit "$?"
+          test -n "$pnpm_store_path" || exit 1
+          echo "path=$pnpm_store_path" >> "$GITHUB_OUTPUT"
+      - name: Restore pnpm dependency cache
+        id: pnpm-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Observe registration shard 2
+        run: node scripts/test-postgres.mjs exec bash scripts/d530-scratch.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
