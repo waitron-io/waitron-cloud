@@ -449,14 +449,13 @@ and exits with status 1. No agent runs and no message is sent. The
 submission format and the synthetic test command. Triage and Waitron's report form
 remain separate work.
 
-
 ## Link a test report to an issue
 
 Use the reader above to get the `installationId` and `reportId` of an exact
 report. Sign in to GitHub with `gh` and give the status command those two IDs,
 the repository and a positive issue number. Use the `DATABASE_URL` for the
-country that stores the report. This works on the local stack and shared Test
-Cloud when the report and its venue are both marked test.
+country that stores the report. The command requires both the saved report and
+its venue to be marked test.
 
 ```sh
 node --env-file-if-exists=.env packages/operations/src/staff-bug-status-cli.ts \

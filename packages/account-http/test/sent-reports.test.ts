@@ -56,19 +56,23 @@ test('Sent reports limits first bodies and later descriptions to the current ten
  const oldText = await seed({descriptionAt: beforeCutoff});
  const ownerless = await seed({receiptOwner: null});
  const wrongOwner = await seed({receiptOwner: randomUUID()});
+ const productionReport = await seed({environment: 'production'});
  const page = await request('list');
  assert.equal(page.status, 200, await page.clone().text());
  assert.equal(page.headers.get('cache-control'), 'no-store');
  const response = await page.json();
- assert.deepEqual(response.reports.map((r: {reportId: string}) => r.reportId).sort(), [visible, oldText].sort());
+ assert.deepEqual(response.reports.map((r: {reportId: string}) => r.reportId).sort(), [visible, oldText, productionReport].sort());
  assert.ok(!JSON.stringify(response).includes('Structured copy'));
+ assert.deepEqual(response.reports.find((r: {reportId: string}) => r.reportId === productionReport), {
+  installationId: box.installationId, reportId: productionReport, reportedAt: cutoff, version: '1.2.3', bugStatus: null, fixedVersion: null,
+ });
  assert.deepEqual(response.reports.find((r: {reportId: string}) => r.reportId === visible), {
   installationId: box.installationId, reportId: visible, reportedAt: cutoff, version: '1.2.3', bugStatus: 'open', fixedVersion: null,
  });
  await db.pool.query(`UPDATE installation_error_reports SET bug_issue_repository='clintongormley/waitron',bug_issue_number=18,
   bug_status='fixed',fixed_version='1.2.4' WHERE operation_id IN ($1,$2,$3)`, [visible, early, wrongOwner]);
  const updated = (await (await request('list')).json()).reports;
- assert.deepEqual(updated.map((r: {reportId: string}) => r.reportId).sort(), [visible, oldText].sort());
+ assert.deepEqual(updated.map((r: {reportId: string}) => r.reportId).sort(), [visible, oldText, productionReport].sort());
  assert.deepEqual(updated.find((r: {reportId: string}) => r.reportId === visible), {
   installationId: box.installationId, reportId: visible, reportedAt: cutoff, version: '1.2.3', bugStatus: 'fixed', fixedVersion: '1.2.4',
  });
