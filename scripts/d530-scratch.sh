@@ -88,6 +88,20 @@ if [[ ${D530_DISK_PRESSURE:-} == true ]]; then
   [[ -n $wal_mount ]]
   pressure_dir=$(mktemp -d "$RUNNER_TEMP/d530-io.XXXXXX")
   [[ $(stat -c %d "$pressure_dir") == "$(sudo -n stat -c %d "$wal_mount")" ]]
+fi
+
+printf 'D530 shard start at %s\n' "$(date -u +%FT%T.%3NZ)"
+pnpm --filter @waitron-cloud/registration exec node ../../scripts/ci-run-registration-shard.mjs 2 &
+shard_pid=$!
+if [[ -n $pressure_dir ]] && timeout 410s bash -c '
+    while kill -0 "$1" 2>/dev/null; do
+      if ps -eww -o args= | awk '\''$1 ~ /(^|\/)node$/ && $(NF-1) == "--test-timeout=30000" && $NF == "test/ses-feedback-store.test.ts" {found=1} END {exit !found}'\''; then
+        exit 0
+      fi
+      sleep 0.25
+    done
+    exit 1
+  ' d530-wait-for-mail-worker "$shard_pid"; then
   printf 'D530 disk pressure starts at %s: two 32 MiB files, direct synchronous writes, 180-second cap\n' "$(date -u +%FT%T.%3NZ)"
   for writer in 1 2; do
     timeout --kill-after=2s 180s bash -c '
@@ -96,10 +110,11 @@ if [[ ${D530_DISK_PRESSURE:-} == true ]]; then
     ' d530-writer "$pressure_dir/writer-$writer" &
     pressure_pids+=("$!")
   done
+elif [[ -n $pressure_dir ]]; then
+  printf 'D530 disk pressure did not start because the mail file worker was not observed\n'
 fi
 
-printf 'D530 shard start at %s\n' "$(date -u +%FT%T.%3NZ)"
 result=0
-pnpm --filter @waitron-cloud/registration exec node ../../scripts/ci-run-registration-shard.mjs 2 || result=$?
+wait "$shard_pid" || result=$?
 printf 'D530 shard exit %s at %s\n' "$result" "$(date -u +%FT%T.%3NZ)"
 exit "$result"
