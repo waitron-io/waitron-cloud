@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
+import {bugStatusCommand} from '../../../packages/operations/test/staff-bug-status-fixture.ts';
 import {connectedVenue} from '../../../packages/translation/test/fixtures.ts';
 import {completeBrowserEmail, startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
-test('an owner opens exact signed problem reports from the venue card', async () => {
+test('an owner sees refreshed bug status and opens exact signed reports from the venue card', async t => {
  const f = await startPortalFixture();
  try {
   const box = await connectedVenue(f.db, f.issuer, f.origin);
@@ -29,6 +30,8 @@ test('an owner opens exact signed problem reports from the venue card', async ()
   await completeBrowserEmail(f, page, email, 'en');
   await page.waitForURL(f.origin + '/account');
 
+  const command = await bugStatusCommand(t, f.db.schema);
+  let linked = false;
   const screenshots = process.env.SENT_REPORTS_SCREENSHOTS;
   const layouts = screenshots
    ? (['en', 'es'] as const).flatMap(locale => (['light', 'dark'] as const).flatMap(colorScheme => [390, 1280].map(width => ({locale, colorScheme, width}))))
@@ -44,7 +47,14 @@ test('an owner opens exact signed problem reports from the venue card', async ()
    await page.keyboard.press('Enter');
    const region = page.getByRole('region', {name: label, exact: true});
    assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H4');
-   const item = region.getByRole('button', {name: /1\.2\.3/});
+   if (!linked) {
+    await region.getByRole('button', {name: /1\.2\.3.*Open/}).waitFor();
+    await command.reply({labels: [{name: 'fixed in 1.2.4'}]});
+    await command.run(box.installationId, reportId);
+    await region.getByRole('button', {name: 'Refresh', exact: true}).click();
+    linked = true;
+   }
+   const item = region.getByRole('button', {name: locale === 'en' ? /1\.2\.3.*Fixed in version 1\.2\.4/ : /1\.2\.3.*Corregido en la versión 1\.2\.4/});
    await item.focus();
    await page.keyboard.press('Enter');
    await region.locator('pre').nth(1).waitFor();

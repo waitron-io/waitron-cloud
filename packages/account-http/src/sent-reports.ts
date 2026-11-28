@@ -26,8 +26,8 @@ function decodeCursor(value: string|undefined, venueId: string): [string, string
  return [parts[1], parts[2]];
 }
 
-const visible = `FROM installation_error_reports r JOIN installations i ON i.id=r.installation_id
- WHERE i.venue_id=$1 AND r.kind='staff' AND r.staff_receipt_owner_id=$2
+const reportSource = `FROM installation_error_reports r JOIN installations i ON i.id=r.installation_id`;
+const visible = `WHERE i.venue_id=$1 AND r.kind='staff' AND r.staff_receipt_owner_id=$2
  AND r.reported_at >= $3::timestamptz AND r.staff_report_body IS NOT NULL`;
 
 interface SummaryRow {
@@ -37,6 +37,8 @@ interface SummaryRow {
  version_major: number;
  version_minor: number;
  version_patch: number;
+ bug_status: 'open'|'in_progress'|'fixed'|null;
+ fixed_version: string|null;
 }
 
 export async function sentReportsResponse(c: Context, {pool, origin, consume}: {
@@ -69,6 +71,7 @@ export async function sentReportsResponse(c: Context, {pool, origin, consume}: {
    const row = (await client.query<{report_body: string; description_body: string|null}>(`
     SELECT r.staff_report_body AS report_body,
      CASE WHEN r.staff_description_at >= $3::timestamptz THEN r.staff_description_body END AS description_body
+    ${reportSource}
     ${visible} AND r.installation_id=$4 AND r.operation_id=$5`, [...scope, installationId, reportId])).rows[0];
    if (!row) throw denied();
    await resolveSession(client, token, proof);
@@ -78,12 +81,16 @@ export async function sentReportsResponse(c: Context, {pool, origin, consume}: {
   let cursorTime: string|null = null;
   if (after) {
    const anchor = (await client.query<{received_at: string}>(`SELECT r.received_at::text
+    ${reportSource}
     ${visible} AND r.installation_id=$4 AND r.operation_id=$5`, [...scope, ...after])).rows[0];
    if (!anchor) throw invalidInput();
    cursorTime = anchor.received_at;
   }
   const {rows} = await client.query<SummaryRow>(`
-   SELECT r.installation_id,r.operation_id,r.reported_at,r.version_major,r.version_minor,r.version_patch
+   SELECT r.installation_id,r.operation_id,r.reported_at,r.version_major,r.version_minor,r.version_patch,
+    CASE WHEN r.environment='test' AND v.environment='test' THEN COALESCE(r.bug_status,'open') END AS bug_status,
+    CASE WHEN r.environment='test' AND v.environment='test' THEN r.fixed_version END AS fixed_version
+   ${reportSource} JOIN venues v ON v.id=i.venue_id
    ${visible} AND ($4::timestamptz IS NULL OR (r.received_at,r.installation_id,r.operation_id)<($4::timestamptz,$5::uuid,$6::uuid))
    ORDER BY r.received_at DESC,r.installation_id DESC,r.operation_id DESC LIMIT $7`, [...scope, cursorTime, after?.[0], after?.[1], pageSize + 1]);
   const reports = rows.slice(0, pageSize).map(row => ({
@@ -91,6 +98,8 @@ export async function sentReportsResponse(c: Context, {pool, origin, consume}: {
    reportId: row.operation_id,
    reportedAt: row.reported_at.toISOString(),
    version: `${row.version_major}.${row.version_minor}.${row.version_patch}`,
+   bugStatus: row.bug_status,
+   fixedVersion: row.fixed_version,
   }));
   const last = reports.at(-1);
   const nextCursor = rows.length > pageSize && last
