@@ -63,7 +63,7 @@ const availabilityPaths=['/public/availability','/_cloud/challenge','/_cloud/sol
 const menuBytes=2*1024*1024;
 function menuHeaders(response:IncomingMessage,kind:MenuKind,includeBodyHeaders=true):Record<string,string>{
  const headers:Record<string,string>={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
- for(const name of includeBodyHeaders?['vary','content-type','content-language','content-encoding','content-length']:['vary']){
+ for(const name of includeBodyHeaders?['content-type','content-language','content-encoding','content-length','vary']:['vary']){
   const value=response.headers[name];
   if(typeof value==='string')headers[name]=value;
  }
@@ -139,7 +139,7 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
    });
    if(!await authorized()||!current()){refuse(404);return;}
    if(upstream.statusCode===404||upstream.statusCode===429){refuse(upstream.statusCode);return;}
-   if(upstream.statusCode===302&&kind==='page'&&!upstream.destroyed){
+   if(upstream.statusCode===302&&kind==='page'){
     const location=upstream.headers.location;
     if(location&&/^\/(?:[a-z0-9-]+(?:\/[a-z0-9-]+)?)?$/i.test(location)&&!availabilityPaths.includes(location)&&menu.match(location)==='page'){
      signal.throwIfAborted();

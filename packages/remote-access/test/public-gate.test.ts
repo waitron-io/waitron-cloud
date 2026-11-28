@@ -485,14 +485,17 @@ test('public menu forwards an empty relative redirect and serves its destination
  }finally{await f.close();}
 });
 
-for(const [path,location,admitDestination] of [
- [menuPath,'/synthetic-menu\\es',true],
- [menuPath,'/public/availability',true],
- [menuPath,'/other-menu',false],
- ['/synthetic-menu/abc.jpg','/synthetic-menu/es',true],
+for(const [path,location,destinationKind] of [
+ [menuPath,'/synthetic-menu\\es','page'],
+ [menuPath,'//elsewhere.example.test','page'],
+ [menuPath,'https://elsewhere.example.test/menu','page'],
+ [menuPath,'/public/availability','page'],
+ [menuPath,'/other-menu',undefined],
+ [menuPath,'/synthetic-menu/photo','asset'],
+ ['/synthetic-menu/abc.jpg','/synthetic-menu/es','page'],
 ] as const)test(`public menu rejects a redirect from ${path} to ${location}`,async()=>{
  const f=await fixture(undefined,{
-  match:target=>target==='/synthetic-menu/abc.jpg'?'asset':target===path||(admitDestination&&target===location)?'page':undefined,
+  match:target=>target==='/synthetic-menu/abc.jpg'?'asset':target===path?'page':target===location?destinationKind:undefined,
   respond:(_req,res)=>{res.writeHead(302,{location});res.end();},
  });
  try{
