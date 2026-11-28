@@ -56,3 +56,5 @@ After a wrapped command fails, read `cloud-test-postgres-failure` for cumulative
 write timings and up to 24 remaining processes. Compare them with any
 `cloud-test-setup-waits` samples from before a timeout. A process can exit before the
 launcher takes its snapshot. The original cause remains open.
+If the report is unavailable, its `timeout` reason identifies the launcher's two-second
+limit. PostgreSQL refusals, including its one-second statement limit, appear as `failed`.

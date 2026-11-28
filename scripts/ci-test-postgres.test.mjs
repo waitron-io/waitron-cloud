@@ -77,6 +77,7 @@ if (command === 'image' && args[1] === 'inspect') {
 } else if (command === 'exec') {
   data.calls.push({command, name: args[1], program: args[2]});
   if (args[2] === 'psql') {
+    if (data.reportFails) fail('PRIVATE_POSTGRES_ERROR');
     if (data.reportHangs) {
       save();
       console.error('PRIVATE_POSTGRES_ERROR');
@@ -246,6 +247,14 @@ test('launcher keeps the failed command result and cleans up when PostgreSQL rep
   const report = result.invocations.find(({args}) => args[0] === 'exec' && args[2] === 'psql');
   assert.ok(report.timeout > 0 && report.timeout <= 2000);
   assert.equal(report.killSignal, 'SIGKILL');
+  assert.equal(result.calls.filter(call => call.command === 'rm').length, 2);
+});
+
+test('launcher distinguishes a refused PostgreSQL report from a timeout', async t => {
+  const result = await launch(t, {childStatus: 7, reportFails: true});
+  assert.equal(result.code, 7);
+  assert.match(result.output, /"event":"cloud-test-postgres-failure","unavailable":true,"reason":"failed"/);
+  assert.doesNotMatch(result.output, /PRIVATE_POSTGRES_ERROR/);
   assert.equal(result.calls.filter(call => call.command === 'rm').length, 2);
 });
 
