@@ -205,10 +205,15 @@ and the Amazon machine remain separate work.
 
 ## Investigate held venue email signing cleanup
 
-Use these steps when `venue-mail:signing` logs that a venue stopped signing
-cleanup before releasing its claim. The command keeps the database row because
+Use these steps when the email worker or `venue-mail:signing` logs that a venue
+stopped signing cleanup before releasing its claim. The operation keeps the database row because
 a timed-out create could still appear after both provider reads report absence.
 Get separate approval for any call to SES or Route 53.
+
+When the test email worker owns signing writes, disable
+`CLOUD_TEST_VENUE_MAIL_SIGNING` and wait for the worker to exit before running
+`venue-mail:signing` in the same scope. This lets the active pass finish before
+you inspect or change its provider records.
 
 1. Take the venue ID from the log. Read that venue's `venue_mail_signing` row in
    the test database. It identifies the domain, SES region and tag, Route 53

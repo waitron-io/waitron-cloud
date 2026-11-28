@@ -8,10 +8,19 @@ import {loadTestSesRuntime} from './ses-runtime.mjs';
 import {checkConsumerDatabase,loadRuntime} from '../local-stack/runtime.mjs';
 import {testRuntimeEnvironment} from './runtime.mjs';
 import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
+import {readVenueMailSigningConfig} from '../../packages/remote-access/src/venue-mail-signing-config.ts';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
-export async function runTestEmailQueues({account,relay,signal,once=false}){
+export async function runTestEmailQueues({account,relay,signing,signal,once=false}){
+ const runSigning=async currentSignal=>{
+  try{if(!currentSignal?.aborted)await signing(currentSignal);}
+  catch{console.error('Test venue signing pass failed; check private configuration and schema');}
+  return false;
+ };
  if(once){
-  const results=await Promise.allSettled([Promise.resolve().then(()=>account.runOnce()),...(relay?[Promise.resolve().then(()=>relay.runOnce())]:[])]);
+  const runs=[Promise.resolve().then(()=>account.runOnce())];
+  if(relay)runs.push(Promise.resolve().then(()=>relay.runOnce()));
+  if(signing)runs.push(runSigning(signal));
+  const results=await Promise.allSettled(runs);
   const failure=results.find(result=>result.status==='rejected');if(failure)throw failure.reason;
   return results.some(result=>result.value);
  }
@@ -19,6 +28,8 @@ export async function runTestEmailQueues({account,relay,signal,once=false}){
  const loops=[runWorkerLoop({signal:combined,concurrency:relay?3:4,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>account.runOnce()}).finally(()=>stop.abort())];
  if(relay)loops.push(runWorkerLoop({signal:combined,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>relay.runOnce(),
   onError:()=>console.error('Test relay worker failed; check private configuration and schema')}).finally(()=>stop.abort()));
+ if(signing)loops.push(runWorkerLoop({signal:combined,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:60000,
+  runOnce:runSigning}).finally(()=>stop.abort()));
  const results=await Promise.allSettled(loops),failure=results.find(result=>result.status==='rejected');if(failure)throw failure.reason;
 }
 export function createTestAccountWorker(pool,outbox,captureMailer,pilot){
@@ -31,6 +42,7 @@ export async function runTestEmailWorker({directory='/run/local-stack',root='/ap
  await checkConsumerDatabase(environment.DATABASE_URL,root);
  const pool=new Pool({connectionString:environment.DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});
  const stop=new AbortController(),abort=()=>stop.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();pool.on('error',abort);
+ let ses,dns;
  try{
   const outbox=new EmailOutbox({activeKeyId:config.email.activeKeyId,keys:config.email.keys});
   const captureMailer=createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025},process.env.TEST_CLOUD_ORIGIN??'https://waitron.local:3000');
@@ -41,8 +53,20 @@ export async function runTestEmailWorker({directory='/run/local-stack',root='/ap
    relayRuntime??=await openTestRelayRuntime({pool,directory,issuer:createLeaseIssuer(config.installation.issuerKey),origin:environment.CLOUD_PORTAL_ORIGIN,mode});
    return relayRuntime.worker.runOnce();
   }}:undefined;
-  return await runTestEmailQueues({account:worker,relay,signal:stop.signal,once});
- }finally{signal?.removeEventListener('abort',abort);await pool.end();}
+  let signing;
+  if(environment.CLOUD_TEST_VENUE_MAIL_SIGNING==='1'){
+   const signingConfig=readVenueMailSigningConfig(environment,true);
+   const [{createSesSigningProvider},{createRoute53MailDnsProvider},{refreshVenueMailSignings}]=await Promise.all([
+    import('../../packages/remote-access/src/ses-signing.ts'),import('../../packages/remote-access/src/route53-dns.ts'),
+    import('../../packages/remote-access/src/venue-mail-signing.ts')]);
+   ses=createSesSigningProvider({region:signingConfig.region});
+   dns=createRoute53MailDnsProvider({zoneId:signingConfig.zoneId,suffix:signingConfig.suffix});
+   signing=signal=>refreshVenueMailSignings(pool,{config:signingConfig,ses,dns,outbox,setupSavedChoices:true},signal);
+  }
+  return await runTestEmailQueues({account:worker,relay,signing,signal:stop.signal,once});
+ }finally{
+  signal?.removeEventListener('abort',abort);ses?.close();dns?.close();await pool.end();
+ }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);

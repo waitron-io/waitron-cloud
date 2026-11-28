@@ -162,6 +162,23 @@ test('the signing watch pass checks every saved claim without setting up an uncl
  assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
 });
 
+test('the setup pass lists allowlisted test choices and retains moved or cleared claims',async t=>{
+ const {listVenueMailSigningCandidates}=await import('../src/venue-mail-signing.ts');
+ const secondDomain='bar.example.test',testDomains=[domain,secondDomain];
+ const f=await fixture(testDomains);t.after(f.db.close);
+ const [moved,cleared]=f.db.venues;assert.ok(moved&&cleared);
+ await f.choose(moved);assert.equal(await f.run(moved),'verified');
+ await f.choose(cleared,'office@'+secondDomain);assert.equal(await f.run(cleared),'verified');
+ await f.choose(f.db.otherVenue,'office@'+domain,f.db.other);
+ await f.choose(f.db.foreignVenue,'office@unlisted.example.test',f.db.foreign);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=$2 WHERE id=$1',[moved,'office@unlisted.example.test']);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[cleared]);
+ await f.db.pool.query('UPDATE venues SET waitron_mail_from=$2,waitron_mail_dns_token=$3 WHERE id=$1',
+  [f.db.production,'office@'+domain,randomUUID()]);
+ assert.equal(typeof listVenueMailSigningCandidates,'function');
+ assert.deepEqual(await listVenueMailSigningCandidates(f.db.pool,testDomains),[moved,cleared,f.db.otherVenue].sort());
+});
+
 test('a retry leaves the saved claim alone when SES still shows no identity',async t=>{
  const f=await fixture();t.after(f.db.close);
  const venueId=f.db.venues[0]!;

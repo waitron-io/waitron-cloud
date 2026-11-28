@@ -54,12 +54,24 @@ an alias in the venue's DNS zone and a signing key in Waitron's zone.
 Gmail reported no DMARC record and put the message in spam. The trial sender,
 both trial records and the temporary permissions were removed.
 
-For local proof, run the signing tests against a throwaway database. They use
-fake providers.
+After you save an allowed address and publish its exact alias, the opt-in test
+email worker can set up and verify signing. The worker checks at startup and
+waits one minute between passes. It also checks existing signing records so it
+can retire a setup after you change or clear the saved address. A replacement
+can be set up on a later pass.
+
+For local proof, run the owner-save rehearsal and the signing tests against a
+throwaway database. They use fake providers.
 
 ```sh
+node scripts/test-postgres.mjs exec node --test deploy/test-cloud/free-services-relay.test.mjs
 node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/venue-mail-signing.test.ts
 ```
+
+The worker's opt-in is `CLOUD_TEST_VENUE_MAIL_SIGNING=1` in the nonproduction
+email runtime with test venue levels. It uses the `CLOUD_VENUE_MAIL_*` settings
+in `.env.example`, including the signing account, and the account server's DNS
+suffix. Get separate approval before enabling it with real providers.
 
 The operator command
 `pnpm --dir packages/remote-access venue-mail:signing <venue-id>` contacts the
@@ -75,14 +87,15 @@ SES identity tag and the exact DNS TXT record before retrying. If you changed
 the scope or removed the domain from the test list, restore the original
 settings to retire that identity. If an interrupted run leaves both provider
 records absent, the command keeps the claim while you investigate the
-interrupted operation. The command assumes it is the only writer for these
-test identities and records. The portal tick still checks the alias. [Operator steps](../test-cloud-service-controls.md#investigate-held-venue-email-signing-cleanup)
+interrupted operation. Disable the signing pass and wait for the email worker
+to exit before running the command in the same scope. The portal tick checks
+the alias. [Operator steps](../test-cloud-service-controls.md#investigate-held-venue-email-signing-cleanup)
 
 If the command reports that SES marked signing as failed, clear the saved
 sender and rerun the command to retire its old setup. Once it reports
 `retired`, save the address again and publish the new DNS alias.
 The test Cloud email worker delivers to Mailpit from the venue’s From after
-the operator verifies signing. When a later check confirms loss, staff mail
+signing is verified. When a later check confirms loss, staff mail
 returns to the Waitron sender and the same worker delivers an owner notice.
 To refresh existing signing records for the offline SES path, run the same signing
 command with `--watch` in place of a venue ID. Set `CLOUD_VENUE_MAIL_SES_ACCOUNT_ID`

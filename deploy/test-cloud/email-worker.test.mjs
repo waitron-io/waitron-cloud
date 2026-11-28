@@ -1,6 +1,37 @@
 import assert from 'node:assert/strict';
+import {syncBuiltinESMExports} from 'node:module';
 import {test} from 'node:test';
 import {runTestEmailQueues} from './email-worker.mjs';
+
+test('signing listing failures let one-shot email delivery finish',async t=>{
+ const logged=t.mock.method(console,'error',()=>{});
+ const signing=async()=>{throw Error('listing failed');};
+ for(const worked of [true,false])assert.equal(await runTestEmailQueues({account:{runOnce:async()=>worked},signing,once:true}),worked);
+ assert.equal(logged.mock.callCount(),2);
+ assert.ok(logged.mock.calls.every(call=>String(call.arguments[0]).includes('signing pass')));
+});
+
+test('signing waits a minute between passes and drains the active pass on shutdown',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ // The worker imports the timer as a named built-in export.
+ syncBuiltinESMExports();
+ const stop=new AbortController(),held=Promise.withResolvers();
+ const turn=()=>new Promise(resolve=>setImmediate(resolve));
+ let calls=0,finished=false;
+ const running=runTestEmailQueues({account:{runOnce:async()=>false},signal:stop.signal,
+  signing:async()=>{if(++calls===2)await held.promise;}}).then(()=>{finished=true;});
+ try{
+  await turn();assert.equal(calls,1);
+  t.mock.timers.tick(59_999);await turn();assert.equal(calls,1);
+  t.mock.timers.tick(1);await turn();assert.equal(calls,2);
+  stop.abort();await turn();assert.equal(finished,false);
+  held.resolve();await running;
+  assert.equal(calls,2);
+ }finally{
+  stop.abort();held.resolve();
+  try{await running;}finally{t.mock.timers.reset();syncBuiltinESMExports();}
+ }
+});
 
 for(const withRelay of [false,true])test(`email loops bound active handoffs and drain on account failure, relay ${withRelay?'on':'off'}`,async()=>{
  const stop=new AbortController(),held=[];let reached;

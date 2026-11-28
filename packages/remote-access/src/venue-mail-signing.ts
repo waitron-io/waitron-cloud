@@ -181,14 +181,22 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
  return stillMatches===true&&await saveResult(true)?'verified':'held';
 }
 
-export async function refreshVenueMailSignings(pool:Pool,options:SigningOptions,signal?:AbortSignal){
- const {rows}=await pool.query<{venue_id:string}>('SELECT venue_id FROM venue_mail_signing ORDER BY venue_id');
- for(const {venue_id} of rows){
+export async function listVenueMailSigningCandidates(pool:Pool,testDomains:readonly string[]=[]){
+ const {rows}=await pool.query<{venue_id:string}>(`SELECT venue_id FROM venue_mail_signing
+  UNION SELECT id FROM venues WHERE environment='test' AND waitron_mail_dns_token IS NOT NULL
+  AND lower(split_part(waitron_mail_from,'@',2))=ANY($1::text[]) ORDER BY venue_id`,[testDomains]);
+ return rows.map(row=>row.venue_id);
+}
+
+export async function refreshVenueMailSignings(pool:Pool,options:SigningOptions & {setupSavedChoices?:boolean},signal?:AbortSignal){
+ const {setupSavedChoices,config}=options;
+ const venues=await listVenueMailSigningCandidates(pool,setupSavedChoices?config.testDomains:[]);
+ for(const venueId of venues){
   if(signal?.aborted)break;
   try{
-   const result=await runVenueMailSigning(pool,venue_id,{...options,readOnly:true});
-   if(result==='held')console.error(`Venue signing check held. Run venue-mail:signing ${venue_id} and check the provider settings.`);
+   const result=await runVenueMailSigning(pool,venueId,{...options,readOnly:!setupSavedChoices});
+   if(result==='held')console.error(`Venue signing check held. Run venue-mail:signing ${venueId} and check the provider settings.`);
   }
-  catch{console.error('Venue signing check failed; the last confirmed result is retained until expiry.');}
+  catch{console.error(`Venue ${venueId} signing check failed. The last confirmed result is retained until expiry.`);}
  }
 }
