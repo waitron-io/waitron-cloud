@@ -44,9 +44,10 @@ in the D643 backlog entry. Estimate 20 product and 45 test lines.
 
 ## PR 1c. Pair and enable
 
-On the paired LAN test stack, open a synthetic venue’s published menu through
-Cloud HTTPS. Switch that menu off in Waitron and get a fresh 404 within a minute.
-The first public result requires the same check on a phone using mobile data.
+After D621 pairs the designated test box to the shared Test Cloud, check that
+it runs Waitron `c894f87` or later. The LAN check gates this code pull request.
+The public rehearsal repeats the check on the shared Amazon Test Cloud using
+`compose.amazon.yaml` in step 2 below, with the owner’s phone on mobile data.
 [A1637 contract](https://github.com/clintongormley/waitron/blob/c894f87f4ec4573f567fd3a1db2c6e5538a50c8c/docs/superpowers/plans/2026-11-28-h-a1637-public-customer-menu.md) · [Box listener](https://github.com/clintongormley/waitron/blob/c894f87f4ec4573f567fd3a1db2c6e5538a50c8c/apps/server/src/customer-menu-public.ts) · [Cloud redirect](https://github.com/waitron-io/waitron-cloud/commit/b73fee23d5a17bcf81bf2a2c28ee90e3e07ce2b0)
 
 1. In `packages/remote-access/src/public-gate.ts`, classify the raw path before
@@ -74,18 +75,23 @@ The first public result requires the same check on a phone using mobile data.
    test venue mode through the LAN layout. The private authority port stays unpublished.
 3. First fail `packages/remote-access/test/public-gate.test.ts` on a page query.
    Check all three page shapes, exact query bytes and relative 302, the asset
-   boundaries, signed venue authority, a late denial and reader failure.
+   boundaries and signed venue authority. Test the eligibility reader’s answers
+   once at that reader. A 204 allows, a 404 denies, and a redirect, other failure
+   or timeout returns 503.
    Check production refusal beside signed metering refusal. Extend
    `deploy/test-cloud/{runtime,deployment}.test.mjs` for separate gateway opt-in
    and private port wiring. The page-query check now expects 302. The LAN
    render now passes the account flag to the account service. Run the focused
    cases and `pnpm typecheck`.
-4. Use the [paired gateway lab](../../local-remote-access.md#measure-shared-public-traffic-limits)
-   to check assigned and custom names, a query redirect, the venue block and
-   Waitron menu switch-off. Record status and elapsed time. Keep the separate
-   phone check open until an authorised public test target and operator are
-   available. Qualify upgrade, takeover, outage, four phones sharing Wi-Fi,
-   and sale and till image timing in the paired rollout before broad enablement.
+4. Use a synthetic menu to check assigned and custom names, a query redirect,
+   and the venue block on the paired LAN setup. Switch sharing off in Waitron
+   and confirm a fresh request gets 404 within one minute. Record status, elapsed
+   time and how many requests one photo-menu open uses from the 120-per-minute
+   limit per address.
+   For the [shared Amazon Test Cloud](../../test-cloud.md#configure-a-separate-https-test-name)
+   rehearsal, repeat the checks on the owner’s phone using mobile data. Before
+   enabling beyond that single-phone rehearsal, qualify upgrade, takeover,
+   outage, four phones sharing Wi-Fi, and sale and till image timing.
    Update `docs/backlog.md` and `docs/test-cloud-service-controls.md`.
 
 Allow 65–95 product and 95–130 test lines. Dashboard work stays with A1639.
