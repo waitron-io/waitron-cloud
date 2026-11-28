@@ -51,4 +51,5 @@ jobs:
       - name: Observe registration shard 2
         run: node scripts/test-postgres.mjs exec bash scripts/d530-scratch.sh
         env:
+          D530_DISK_PRESSURE: 'true'
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
