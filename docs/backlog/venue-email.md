@@ -77,7 +77,8 @@ Get separate approval before enabling it with real providers.
 
 Clear the sending address or move it to another domain to retire the old
 signing setup. If your venue downgrades or loses its last paired installation,
-the signing records stay in place while the same domain and DNS alias are saved.
+the worker keeps the saved signing records and requires a fresh check before the
+venue sender can return.
 
 The operator command
 `pnpm --dir packages/remote-access venue-mail:signing <venue-id>` contacts the
@@ -87,6 +88,7 @@ saved sender, use the test capture worker’s `CLOUD_EMAIL_ACTIVE_KEY_ID` and
 `CLOUD_EMAIL_KEYS` so it can open queued notices. Rerun after the alias points
 at the hosted key, or after a sender reset or an accepted transfer. After
 migration 090, rerun for any sender you verified on the previous schema.
+The one-venue command can retire signing when the venue is ineligible.
 
 A `held` result keeps the claim. Check the configured provider scope, the saved
 SES identity tag and the exact DNS TXT record before retrying. If you changed

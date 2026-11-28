@@ -155,10 +155,12 @@ test('the signing watch pass checks every saved claim without setting up an uncl
   resolveCname:async name=>{calls.add(name.split('.').slice(2).join('.'));return resolveCname(name);}});
  assert.deepEqual(calls,new Set([domain,secondDomain]));
  assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
+ await set(f.db,'registered',first);
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[second]);
  const diagnostic=t.mock.method(console,'error',()=>{});
  await refreshVenueMailSignings(f.db.pool,{...f.options,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
  assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes(second)&&String(call.arguments[0]).includes('venue-mail:signing')));
+ assert.ok(diagnostic.mock.calls.every(call=>!String(call.arguments[0]).includes(first)));
  assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
 });
 
@@ -195,10 +197,24 @@ for(const change of ['downgrade','installation revocation'])test(`automatic setu
  await check();
  assert.deepEqual(f.writes,['ses create','dns create']);
  assert.equal(f.txt.has(target),true);
- assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rowCount,1);
+ assert.deepEqual((await f.db.pool.query('SELECT verified FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rows,
+  [{verified:false}]);
 
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[venueId]);
  await check();
+ assert.deepEqual(f.writes,['ses create','dns create','ses delete','dns delete']);
+ assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rowCount,0);
+});
+
+test('automatic setup retires the old signing if the owner moved domains before a downgrade',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose();
+ assert.equal(await f.run(),'verified');
+ await f.choose(venueId,'office@unlisted.example.test');
+ await set(f.db,'registered',venueId);
+ await refreshVenueMailSignings(f.db.pool,{...f.options,setupSavedChoices:true,
+  outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
  assert.deepEqual(f.writes,['ses create','dns create','ses delete','dns delete']);
  assert.equal((await f.db.pool.query('SELECT 1 FROM venue_mail_signing WHERE venue_id=$1',[venueId])).rowCount,0);
 });

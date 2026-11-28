@@ -73,9 +73,13 @@ async function confirmRemoval(remove:()=>Promise<void>,isAbsent:()=>Promise<bool
  return isAbsent();
 }
 
-async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:SigningOptions){
+async function clearClaimVerification(pool:Pool,venueId:string,tag:string){
  await pool.query(`UPDATE venue_mail_signing SET verified=false,verified_at=NULL,ses_identity_arn=NULL
-  WHERE venue_id=$1 AND tag=$2`,[venueId,claim.tag]);
+  WHERE venue_id=$1 AND tag=$2 AND (verified OR verified_at IS NOT NULL OR ses_identity_arn IS NOT NULL)`,[venueId,tag]);
+}
+
+async function retireClaim(pool:Pool,venueId:string,claim:Claim,{ses,dns}:SigningOptions){
+ await clearClaimVerification(pool,venueId,claim.tag);
  await dns.checkZone();
  const target=venueMailTarget(claim.selector,claim.dns_suffix);
  const readIdentity=()=>ses.read(claim.domain),readRecord=()=>dns.read(target,claim.public_key);
@@ -107,11 +111,14 @@ export async function runVenueMailSigning(pool:Pool,venueId:string,options:Signi
   if(claim.ses_region!==config.region||claim.zone_id!==config.zoneId||claim.dns_suffix!==config.suffix||
     !config.testDomains.includes(claim.domain))return 'held';
   if(!choice||!ownsChoice(claim,choice)){
-   if(readOnly)return 'held';
-   // Losing eligibility does not discard a signing setup the venue still has saved.
-   if(setupSavedChoices&&!choice&&(await pool.query(`SELECT 1 FROM venues WHERE id=$1 AND organisation_id=$2
+   // Keep the saved key through a loss of eligibility, but check DNS again before reuse.
+   if(!choice&&(setupSavedChoices||readOnly)&&(await pool.query(`SELECT 1 FROM venues WHERE id=$1 AND organisation_id=$2
     AND waitron_mail_dns_token=$3 AND lower(split_part(waitron_mail_from,'@',2))=$4`,
-    [venueId,claim.organisation_id,claim.selector,claim.domain])).rowCount)return 'ineligible';
+    [venueId,claim.organisation_id,claim.selector,claim.domain])).rowCount){
+    if(setupSavedChoices&&!readOnly)await clearClaimVerification(pool,venueId,claim.tag);
+    return 'ineligible';
+   }
+   if(readOnly)return 'held';
    return retireClaim(pool,venueId,claim,options);
   }
  }
@@ -203,7 +210,9 @@ export async function refreshVenueMailSignings(pool:Pool,options:SigningOptions,
   if(signal?.aborted)break;
   try{
    const result=await runVenueMailSigning(pool,venueId,{...options,readOnly:!setupSavedChoices});
-   if(result==='held')console.error(`Venue signing check held. ${setupSavedChoices?'Stop the signing worker before you run':'Run'} venue-mail:signing ${venueId} and check the provider settings.`);
+   if(result==='held')console.error(setupSavedChoices
+    ?`Venue ${venueId} signing check held. Disable CLOUD_TEST_VENUE_MAIL_SIGNING and wait for the email worker to exit before running venue-mail:signing ${venueId}.`
+    :`Venue signing check held. Run venue-mail:signing ${venueId} and check the provider settings.`);
   }
   catch{console.error(`Venue ${venueId} signing check failed. The last confirmed result is retained until expiry.`);}
  }
