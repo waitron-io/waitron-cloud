@@ -206,3 +206,15 @@ for(const backups of [false,true])test(`the Amazon SES overlay isolates its sett
   assert.ok(!service.volumes?.some(v=>v.source===sesSettingsSource),name);
  }
 });
+
+test('the Amazon venue SES overlay renders both private mounts on the email worker',async()=>{
+ const {validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');
+ const origin='https://cloud.example.test',certificateSource='/tmp/synthetic-certificates';
+ const sesSettingsSource='/tmp/synthetic-account-settings.json',venueSesSettingsSource='/tmp/synthetic-venue-settings.json';
+ const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env',
+  '-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml',
+  '-f','deploy/test-cloud/compose.amazon-venue-ses.yaml','config','--format','json'],{cwd:root,encoding:'utf8',
+  env:{...process.env,TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource,
+   TEST_CLOUD_SES_SETTINGS_SOURCE:sesSettingsSource,TEST_CLOUD_VENUE_SES_SETTINGS_SOURCE:venueSesSettingsSource}}));
+ assert.equal(validateDeployment(value,{image:value.services.account.image,target:'amazon',origin,certificateSource,sesSettingsSource,venueSesSettingsSource}).ready,true);
+});

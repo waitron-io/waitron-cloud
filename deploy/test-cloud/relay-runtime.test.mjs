@@ -11,6 +11,7 @@ import {test} from 'node:test';
 import {createSession} from '../../packages/identity/src/index.ts';
 import {BillingStore,createLeaseIssuer,EmailOutbox,InstallationStore,RelayMessages,transaction} from '../../packages/registration/src/index.ts';
 import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
+import {tlsSmtp,smtpConfig} from '../../packages/registration/test/fixtures/ses-smtp.ts';
 import {connectedVenue,database} from '../../packages/translation/test/fixtures.ts';
 import {startGuestMenuTrial} from '../../packages/remote-access/test/fixtures/guest-menu.ts';
 import {fakeVenueMailProviders} from '../../packages/remote-access/test/fixtures/venue-mail-signing.ts';
@@ -253,6 +254,17 @@ test('composed signed account submission survives worker restart and reaches Mai
   assert.equal((await db.pool.query('SELECT state FROM relay_messages WHERE message_id=$1',[body.messageId])).rows[0].state,'accepted');
   const inbox=await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`);assert.equal(inbox.status,200);
   assert.equal((await inbox.json()).messages.filter(mail=>mail.To.some(to=>to.Address===body.recipient)).length,1);
+  await t.test('the email entrypoint routes a scoped relay message through the configured transport',async()=>{
+   const smtp=await tlsSmtp();try{
+    const trial={...body,messageId:randomUUID()};
+    const response=await accountRequest(running,'/v1/installations/email/submit',box.proof('email-submit',trial,trial.messageId,box.lease));
+    assert.equal(response.status,202,JSON.stringify(response.body));
+    const sesSmtp={smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert.toString()},
+     scope:{venueId:grant.venueId,installationId:box.installationId,recipient:trial.recipient,from:'staff@venue.example.test'}};
+    assert.equal(await runEmailEntrypoint(t,db,context,sesSmtp),'completed');
+    assert.deepEqual(smtp.captured.map(mail=>mail.to),[[trial.recipient]]);
+   }finally{await smtp.close();}
+  });
   await unlink(join(context.directory,'relay-keys.json'));
   await assert.rejects(openTestRelayRuntime(context),/test_cloud.relay_keys/);
   await assert.rejects(readFile(join(context.directory,'relay-keys.json')),error=>error.code==='ENOENT');
@@ -298,13 +310,15 @@ test('one-shot drains account capture before reporting a relay failure and watch
  assert.equal((await inbox.json()).messages.filter(mail=>mail.To.some(to=>to.Address===recipient)).length,2);
 });
 
-async function runEmailEntrypoint(t,db,context){
+async function runEmailEntrypoint(t,db,context,sesSmtp){
  const connection=new URL(process.env.TEST_DATABASE_URL);connection.searchParams.set('options','-c search_path='+db.schema);
  const url=relative=>JSON.stringify(new URL(relative,import.meta.url).href);
  const script=`import{mock}from'node:test';const local=await import(${url('../local-stack/runtime.mjs')});
   mock.module(${url('../local-stack/runtime.mjs')},{namedExports:{...local,runtimeEnvironment:(...args)=>({...local.runtimeEnvironment(...args),DATABASE_URL:process.env.TEST_RELAY_DATABASE})}});
   const capture=await import(${url('./capture-mailer.mjs')});mock.module(${url('./capture-mailer.mjs')},{namedExports:{...capture,createTestCaptureMailer:(options,origin)=>capture.createTestCaptureMailer({...options,port:Number(process.env.TEST_RELAY_SMTP_PORT)},origin)}});
   const relay=await import(${url('./relay-runtime.mjs')});mock.module(${url('./relay-runtime.mjs')},{namedExports:{...relay,openTestRelayRuntime:options=>relay.openTestRelayRuntime({...options,smtpPort:Number(process.env.TEST_RELAY_SMTP_PORT)})}});
+  ${sesSmtp?`const ses=await import(${url('./ses-runtime.mjs')});const {config,keys}=await import(${url('../../packages/registration/test/fixtures/mail-attempt.ts')});
+  mock.module(${url('./ses-runtime.mjs')},{namedExports:{...ses,loadTestVenueSesRuntime:()=>({ses:{config:config(),recipientKeys:keys},sesSmtp:${JSON.stringify(sesSmtp)}})}});`:''}
   const{runTestEmailWorker}=await import(${url('./email-worker.mjs')});try{await runTestEmailWorker({directory:process.env.LOCAL_STACK_CONFIG_DIR,root:process.cwd(),once:true});console.log('completed');}catch{console.log('refused');}`;
  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module'],{cwd:new URL('../../',import.meta.url),env:{PATH:process.env.PATH,LOCAL_STACK_CONFIG_DIR:context.directory,TEST_CLOUD_ORIGIN:origin,CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',TEST_RELAY_DATABASE:connection.href,TEST_RELAY_SMTP_PORT:String(context.smtpPort)},stdio:['pipe','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',bytes=>stdout+=bytes);child.stderr.on('data',bytes=>stderr+=bytes);

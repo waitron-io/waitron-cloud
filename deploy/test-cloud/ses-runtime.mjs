@@ -8,6 +8,8 @@ import {createSmtpAccountMailer} from '../../packages/registration/src/smtp-mail
 // The reviewed Stockholm sandbox scope stays pinned across credential rotation.
 const hostedScopeDigest='4e99c94d0674adb4be6007bfaa5364d1f12e88a26605d4d659a7330bd8d18a27';
 const settingsPath='/run/test-cloud-ses.json';
+const venueSettingsPath='/run/test-cloud-venue-ses.json';
+const venueScopeDigest=null;
 const limit=65536;
 
 function readSettings(path){
@@ -21,34 +23,58 @@ function readSettings(path){
  }finally{closeSync(fd);}
 }
 
-export function loadTestSesRuntime(environment,{path=settingsPath,digest=hostedScopeDigest}={}){
- if(environment.TEST_CLOUD_AMAZON_SES===undefined)return;
- try{
-  if(environment.TEST_CLOUD_AMAZON_SES!=='1')throw Error();
-  const {scope,smtp,recipientKeys}=readSettings(path);
-  const email=normaliseEmail(scope.mailbox);
-  if(!email||scope.origin!==environment.TEST_CLOUD_ORIGIN)throw Error();
-  const canonical={...scope,mailbox:email};
-  const ordered=Object.fromEntries(Object.keys(canonical).sort().map(key=>[key,canonical[key]]));
-  if(createHash('sha256').update(JSON.stringify(ordered)).digest('hex')!==digest)throw Error();
-  new RelayKeys(recipientKeys);
+function readScopedSettings(path,digest,origin,recipientField){
+ if(!digest)throw Error();
+ const settings=readSettings(path),scope={...settings.scope,[recipientField]:normaliseEmail(settings.scope[recipientField])};
+ if(!scope[recipientField]||scope.origin!==origin)throw Error();
+ const ordered=Object.fromEntries(Object.keys(scope).sort().map(key=>[key,scope[key]]));
+ if(createHash('sha256').update(JSON.stringify(ordered)).digest('hex')!==digest)throw Error();
+ return {...settings,scope};
+}
 
-  const {country,providerAccountId:accountId,region,policyRevision,purpose:serviceId,bindingRevision:revision,
+function mailRuntime(scope,smtp,recipientKeys,serviceId,venueIdentityArn){
+  const {country,providerAccountId:accountId,region,policyRevision,bindingRevision:revision,
    identityArn,configurationSetArn,topicArn,queueArn,queueUrl,dlqArn,smtpHost:host,smtpPort:port}=scope;
-  const evidenceId='d102-stockholm-sandbox-2026-11-21';
+  const evidenceId=serviceId==='venue-email'?'stockholm-venue-email-trial':'d102-stockholm-sandbox-2026-11-21';
   const sesEndpoint=`https://email.${region}.amazonaws.com/`;
   const flows=[
-   ['amazon-ses','account-email',sesEndpoint],['amazon-ses','email-metadata',sesEndpoint],
+   ['amazon-ses',serviceId==='venue-email'?'venue-email':'account-email',sesEndpoint],['amazon-ses','email-metadata',sesEndpoint],
    ['amazon-sns','email-metadata',`https://sns.${region}.amazonaws.com/`],
    ['amazon-sqs','email-metadata',queueUrl],['amazon-sqs','email-metadata',`https://sqs.${region}.amazonaws.com/${accountId}/${dlqArn.split(':').at(-1)}`],
   ].map(([supplierId,dataClass,endpoint])=>({country,policyRevision,serviceId,supplierId,accountId,dataClass,endpoint,region}));
   const policy={country,revision:policyRevision,homeRegion:region,backupRegions:[],
    flows:flows.map(flow=>({...flow,dataClasses:[flow.dataClass],regions:[region],evidenceId,qualified:true})),
-   smtpBindings:[{purpose:serviceId,evidenceId,host,port,revision,identityArn,configurationSetArn,topicArn,queueArn,dlqArn}]};
+   smtpBindings:[{purpose:serviceId,evidenceId,host,port,revision,identityArn,venueIdentityArn,configurationSetArn,topicArn,queueArn,dlqArn}]};
   const config=validateSesFeedbackConfig(policy,{scope:{country,providerAccountId:accountId,region},policyRevision,
-   revision,purposes:[serviceId],flows,identityArn,configurationSetArn,configurationSet:configurationSetArn.split('/').at(-1),
+   revision,purposes:[serviceId],flows,identityArn,venueIdentityArn,configurationSetArn,configurationSet:configurationSetArn.split('/').at(-1),
    topicArn,queueArn,queueUrl,dlqArn,smtpHost:host,smtpPort:port});
-  const mailer=createSmtpAccountMailer({host,port,user:smtp.user,password:smtp.password,from:scope.sender,portalOrigin:scope.origin},{},config);
-  return {email,mailer,ses:{config,recipientKeys}};
+  return {ses:{config,recipientKeys},smtp:{host,port,user:smtp.user,password:smtp.password,from:scope.sender,portalOrigin:scope.origin}};
+}
+
+export function loadTestSesRuntime(environment,{path=settingsPath,digest=hostedScopeDigest}={}){
+ if(environment.TEST_CLOUD_AMAZON_SES===undefined)return;
+ try{
+  if(environment.TEST_CLOUD_AMAZON_SES!=='1')throw Error();
+  const {scope,smtp,recipientKeys}=readScopedSettings(path,digest,environment.TEST_CLOUD_ORIGIN,'mailbox');
+  new RelayKeys(recipientKeys);
+  const runtime=mailRuntime(scope,smtp,recipientKeys,scope.purpose);
+  return {email:scope.mailbox,mailer:createSmtpAccountMailer(runtime.smtp,{},runtime.ses.config),ses:runtime.ses};
+ }catch{throw new Error('test_cloud.ses_configuration');}
+}
+
+export function loadTestVenueSesRuntime(environment,{path=settingsPath,digest=hostedScopeDigest,venuePath=venueSettingsPath,venueDigest=venueScopeDigest}={}){
+ if(environment.TEST_CLOUD_AMAZON_VENUE_SES===undefined)return;
+ try{
+  if(environment.TEST_CLOUD_AMAZON_VENUE_SES!=='1'||environment.TEST_CLOUD_AMAZON_SES!==undefined||environment.NODE_ENV==='production')throw Error();
+  const origin=environment.TEST_CLOUD_ORIGIN;
+  const {scope,smtp,recipientKeys:separateKeys}=readScopedSettings(venuePath,venueDigest,origin,'recipient');
+  const {venueId,installationId,from,recipient,venueIdentityArn}=scope;
+  const uuid=/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/;
+  if(separateKeys!==undefined||!uuid.test(venueId)||!uuid.test(installationId)||!from||normaliseEmail(from)!==from||
+   from.split('@')[1]!==venueIdentityArn.split('identity/')[1]||typeof smtp?.user!=='string'||!smtp.user||typeof smtp.password!=='string'||!smtp.password)throw Error();
+  const account=readScopedSettings(path,digest,origin,'mailbox');
+  new RelayKeys(account.recipientKeys);
+  const runtime=mailRuntime(account.scope,smtp,account.recipientKeys,'venue-email',venueIdentityArn);
+  return {ses:runtime.ses,sesSmtp:{smtp:runtime.smtp,scope:{venueId,installationId,recipient,from}}};
  }catch{throw new Error('test_cloud.ses_configuration');}
 }

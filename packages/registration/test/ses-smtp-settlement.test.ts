@@ -19,6 +19,7 @@ import {tlsSmtp,smtpConfig} from './fixtures/ses-smtp.ts';
 import {validateSesFeedbackConfig} from '../src/ses-feedback-config.ts';
 import {feedbackFixture} from './fixtures/ses-feedback.ts';
 import {BillingStore} from '../src/billing-store.ts';
+import {lockMailScope} from '../src/recipient-suppression.ts';
 
 const outbox=new EmailOutbox({activeKeyId:'payload',keys:{payload:'77'.repeat(32)}});
 const ses={config:config(),recipientKeys:keys};
@@ -210,6 +211,36 @@ test('relay SES settings require validated venue admission before claiming',asyn
  }finally{await f.close();}
 });
 
+test('only the pinned venue, box and recipient use the relay SES admission',async()=>{
+ const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const venue=await f.venue(),recipient='owner@example.test';
+  const scope={venueId:venue.grant.venueId,installationId:venue.installation,recipient,from:'orders@cafe.example.test'};
+  smtp=await tlsSmtp();
+  const smtpSettings={smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}};
+  for(const change of [{venueId:randomUUID()},{installationId:randomUUID()},{recipient}]){
+   const body=await venue.submit();
+   const w=new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{...smtpSettings,scope:{...scope,recipient:body.recipient,...change}}});
+   const blocked=await f.pool.connect();
+   try{
+    await blocked.query('BEGIN');await lockMailScope(blocked,ses.config.scope);
+    assert.equal(await w.runOnce(),true);
+   }finally{await blocked.query('ROLLBACK').finally(()=>blocked.release());}
+   assert.equal((await f.row(body.messageId)).state,'accepted');
+   await captured(process.env.MAILPIT_TEST_URL!,'Restablece tu contraseña de Waitron',body.recipient);
+  }
+  assert.equal(smtp.connections,0);
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+  const body=await venue.submit({recipient});
+  const w=new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{...smtpSettings,scope}});
+  assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);
+  assert.equal((await f.row(body.messageId)).state,'accepted');
+  assert.deepEqual(smtp.captured.map(mail=>[mail.from,mail.to]),[[smtpConfig.from,[recipient]]]);
+  assert.deepEqual((await f.pool.query('SELECT queue_id,provider_message_id FROM mail_attempts')).rows,
+   [{queue_id:body.messageId,provider_message_id:'ses-message-1'}]);
+ }finally{await smtp?.close();await f.close();}
+});
+
 test('real TLS relay handoff binds its provider receipt with and without early feedback',async()=>{
  for(const [withFeedback,feedbackCount] of [[false,'0'],[true,'1']] as const){
  const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
@@ -239,7 +270,7 @@ test('real TLS relay handoff binds its provider receipt with and without early f
 
 
 test('venue SMTP sends directly with fresh signing and retries as Waitron after refusal or expiry',async t=>{
- for(const [label,code,venueIdentity] of [['fresh',250,true],['other account',250,false],['permanent',554,true],['temporary',451,true]] as const)await t.test(label,async()=>{
+ for(const [label,code,venueIdentity] of [['fresh',250,true],['other account',250,false],['pinned address',250,true],['other address',250,true],['permanent',554,true],['temporary',451,true]] as const)await t.test(label,async()=>{
   const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
   try{
    const venue=await f.venue(),body=await venue.submit(),token=randomUUID(),from='orders@cafe.example.test';
@@ -265,16 +296,19 @@ test('venue SMTP sends directly with fresh signing and retries as Waitron after 
      else done(null,'Ok ses-delivery');
     });
    }});
+   const trial=label.endsWith('address')?{venueId:id,installationId:venue.installation,recipient:body.recipient,
+    from:label==='pinned address'?from:'another@cafe.example.test'}:undefined;
+   const useVenueFrom=venueIdentity&&(!trial||trial.from===from);
    const w=new RelayWorker(f.pool,{...f.config,ses:{config:binding,recipientKeys:keys},
-    sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}},'test-venue-levels');
-   assert.equal(await w.runOnce(),true);assert.equal(deliveries[0]?.from,venueIdentity?from:smtpConfig.from);
-   if(venueIdentity)assert.match(deliveries[0]!.raw,/^From:.*orders@cafe\.example\.test/m);
+    sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert},scope:trial}},'test-venue-levels');
+   assert.equal(await w.runOnce(),true);assert.equal(deliveries[0]?.from,useVenueFrom?from:smtpConfig.from);
+   if(useVenueFrom)assert.match(deliveries[0]!.raw,/^From:.*orders@cafe\.example\.test/m);
    else assert.match(deliveries[0]!.raw,/^From:.*accounts@mail\.example\.test/m);
    assert.match(deliveries[0]!.raw,/^Reply-To: reply@cafe\.example\.test/m);
    if(code===250){
     assert.equal((await f.row(body.messageId)).state,'accepted');assert.equal(await w.runOnce(),false);
     assert.deepEqual((await f.pool.query('SELECT sender_identity_arn,provider_message_id FROM mail_attempts')).rows,
-     [{sender_identity_arn:venueIdentity?identity:input.identityArn,provider_message_id:'ses-delivery'}]);
+     [{sender_identity_arn:useVenueFrom?identity:input.identityArn,provider_message_id:'ses-delivery'}]);
     return;
    }
    assert.equal((await f.row(body.messageId)).state,'queued');assert.equal(await w.runOnce(),false);

@@ -15,9 +15,10 @@ import type {SmtpAccountMailConfig} from './smtp-mailer.ts';
 import {lockMailScope,advanceMailSuppressionRevision} from './recipient-suppression.ts';
 import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 import {venueMailSigningJoin} from './venue-mail-sender.ts';
+interface RelaySesTrialScope {venueId:string;installationId:string;recipient:string;from:string}
 export interface RelayWorkerConfig {
  mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;ses?:SesHandoffConfig;
- sesSmtp?:{smtp:SmtpAccountMailConfig;trust?:{ca?:string|Buffer}};
+ sesSmtp?:{smtp:SmtpAccountMailConfig;trust?:{ca?:string|Buffer};scope?:RelaySesTrialScope};
 }
 interface Row extends RelayPayloadBinding {
  payload:Buffer;binding:string;state:string;claim_id:string;lease_until:Date;expires_at:Date;attempts:number;
@@ -34,27 +35,28 @@ export class RelayWorker {
  readonly #suppression=new Map<string,Buffer>();readonly #active:string|undefined;
  readonly #send:((content:RelayContent,signal:AbortSignal,admission?:HandoffAdmission,sender?:RelaySender)=>Promise<RelaySesResult>)|undefined;readonly #timeout:number;
  readonly #ses:SesHandoffConfig|undefined;readonly #planMode:PlanMode;
- readonly #usesSesSmtp:boolean;
+ readonly #usesSesSmtp:boolean;readonly #trial:RelaySesTrialScope|undefined;
  constructor(pool:Pool,config?:RelayWorkerConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){
   allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);
   this.#pool=pool;this.#planMode=planMode;this.#timeout=config?.sendTimeoutMs??20000;this.#usesSesSmtp=!!config?.sesSmtp;
   if(!config)return;
+  this.#trial=config.sesSmtp?.scope&&{...config.sesSmtp.scope};
   this.#ses=config.ses&&{config:config.ses.config,recipientKeys:{activeKeyId:config.ses.recipientKeys.activeKeyId,keys:{...config.ses.recipientKeys.keys}}};
   if(config.mode!=='local-proof'||!Number.isInteger(this.#timeout)||this.#timeout<1||this.#timeout>20000)messageError('relay_unavailable');
   this.#grants=new RelayGrantStore(pool,config.grants,planMode,allowances);this.#payload=new RelayKeys(config.payloadKeys);
   new RelayKeys(config.suppressionKeys);
   for(const [id,value] of Object.entries(config.suppressionKeys.keys))this.#suppression.set(id,Buffer.from(value,'hex'));
   this.#active=config.suppressionKeys.activeKeyId;
+  const capture=!config.sesSmtp||this.#trial?localRelaySmtp(config.smtpPort):undefined;
   if(config.sesSmtp){
    if(!this.#ses||!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email'))messageError('relay_unavailable');
    try{
     const send=createSesRelaySender(this.#ses.config,config.sesSmtp.smtp,config.sesSmtp.trust);
-    this.#send=(content,signal,admission,sender)=>send(content,admission!,signal,sender);
+    this.#send=(content,signal,admission,sender)=>capture&&!admission?capture(content,signal,sender).then(outcome=>({outcome})):
+     send(content,admission!,signal,sender);
    }catch{messageError('relay_unavailable');}
-  }else{
-   const send=localRelaySmtp(config.smtpPort);this.#send=async(content,signal,_admission,sender)=>({outcome:await send(content,signal,sender)});
-  }
+  }else this.#send=async(content,signal,_admission,sender)=>({outcome:await capture!(content,signal,sender)});
  }
  #digest(id:string,recipient:string){return createHmac('sha256',this.#suppression.get(id)!).update(JSON.stringify(['relay-suppression-v1',recipient])).digest('hex');}
  async #checkSuppressionKeys(client:PoolClient){
@@ -151,8 +153,20 @@ export class RelayWorker {
      {grantId:claim.grant_id,grantRevision:claim.grant_revision,messageId:claim.message_id,binding:claim.binding});
     if(!reserved.replay)messageError('relay_unavailable');
    }catch(e){if(e instanceof RelayError&&e.code==='grant_unavailable')authorised=false;else throw e;}
+   // The message identity and grant locks cover the sealed recipient used to choose the provider lock.
+   const grant=authorised&&(await c.query('SELECT management_origin,venue_id FROM relay_grants WHERE id=$1',[candidate.grant_id])).rows[0];
+   let content:RelayContent|undefined;
+   if(grant)try{
+    const opened=this.#payload!.open(candidate);relayTemplate(opened);
+    if(opened.managementOrigin===grant.management_origin&&opened.messageId===candidate.message_id&&opened.grantId===candidate.grant_id&&
+      opened.grantRevision===candidate.grant_revision&&opened.class===candidate.class)content=opened;
+   }catch{/* The queue row is checked again before settling unreadable payloads. */}
+   const trial=this.#trial;
+   const ses=this.#ses&&(!trial||(grant&&grant.venue_id===trial.venueId&&candidate.installation_id===trial.installationId&&
+    content?.recipient===trial.recipient))?this.#ses:undefined;
+   const usesSesSmtp=this.#usesSesSmtp&&!!ses;
    await c.query(suppressionLock);
-   if(this.#ses)await lockMailScope(c,this.#ses.config.scope);
+   if(ses)await lockMailScope(c,ses.config.scope);
    const row=(await c.query<Row>('SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2 FOR UPDATE',key(claim))).rows[0];
    const now=(await c.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
    if(!row||row.state!=='queued'||row.claim_id!==claim.claim_id||row.lease_until.getTime()<=now)return;
@@ -164,12 +178,7 @@ export class RelayWorker {
    if(!live){await this.#terminal(c,row,'cancelled','cancelled');return;}
    if(row.attempts>=8){await this.#terminal(c,row,'failed','refused');return;}
    await this.#checkSuppressionKeys(c);
-   let content:RelayContent;
-   try{
-    content=this.#payload!.open(row);relayTemplate(content);
-    const grant=(await c.query('SELECT management_origin FROM relay_grants WHERE id=$1',[row.grant_id])).rows[0];
-    if(content.managementOrigin!==grant.management_origin||content.messageId!==row.message_id||content.grantId!==row.grant_id||content.grantRevision!==row.grant_revision||content.class!==row.class)throw new Error();
-   }catch{await this.#terminal(c,row,'failed','payload_unavailable');return;}
+   if(!content){await this.#terminal(c,row,'failed','payload_unavailable');return;}
    for(const id of this.#suppression.keys()){
     if((await c.query('SELECT 1 FROM relay_suppressions WHERE key_id=$1 AND digest=$2',[id,this.#digest(id,content.recipient)])).rowCount){await this.#terminal(c,row,'failed','refused');return;}
    }
@@ -178,10 +187,10 @@ export class RelayWorker {
     const saved=(await c.query<{id:string;display_name:string|null;reply_to:string;verified_from:string|null}>(`SELECT v.id,v.display_name,
      COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to,
      CASE WHEN s.verified AND NOT $3::boolean AND (NOT $2::boolean OR (s.ses_identity_arn=$4
-       AND s.verified_at>clock_timestamp()-interval '1 hour')) THEN v.waitron_mail_from END AS verified_from
+       AND s.verified_at>clock_timestamp()-interval '1 hour' AND ($5::text IS NULL OR v.waitron_mail_from=$5))) THEN v.waitron_mail_from END AS verified_from
      FROM installations i JOIN venues v ON v.id=i.venue_id ${venueMailSigningJoin}
      WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,
-     [row.installation_id,this.#usesSesSmtp,row.use_waitron_sender,this.#ses?.config.venueIdentityArn??null])).rows[0];
+     [row.installation_id,usesSesSmtp,row.use_waitron_sender,ses?.config.venueIdentityArn??null,trial?.from??null])).rows[0];
     if(saved){
      // Grant reservation already holds venue policy through handoff.
      const {level}=await readVenuePermissions(c,saved.id,this.#planMode);
@@ -196,9 +205,9 @@ export class RelayWorker {
     WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND lease_until>clock_timestamp() AND expires_at>clock_timestamp()`,[...key(row),claim.claim_id]);
    if(!changed.rowCount)return;
    let admission:HandoffAdmission|undefined;
-   if(this.#ses){
-    try{admission=await admitMailAttempt(c,{...this.#ses,recipient:content.recipient,
-     senderIdentityArn:this.#usesSesSmtp&&sender?.from?this.#ses.config.venueIdentityArn:undefined,
+   if(ses){
+    try{admission=await admitMailAttempt(c,{...ses,recipient:content.recipient,
+     senderIdentityArn:usesSesSmtp&&sender?.from?ses.config.venueIdentityArn:undefined,
      claim:{purpose:'venue-email',installationId:row.installation_id,messageId:row.message_id,claimId:claim.claim_id,attempt:row.attempts+1}});}
     catch(error){
      if(!(error instanceof Error)||error.message!=='mail_recipient_suppressed')throw error;
