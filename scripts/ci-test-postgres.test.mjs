@@ -12,6 +12,11 @@ const mailpit = 'axllent/mailpit:v1.31.1';
 const transient = 'net/http: request canceled (Client.Timeout exceeded while awaiting headers)';
 const gatewayFailure = 'Error response from daemon: Head "https://registry-1.docker.io/v2/axllent/mailpit/manifests/v1.31.1": received unexpected HTTP status: 502 Bad Gateway';
 const unreachableFailure = 'Error response from daemon: Get "https://registry-1.docker.io/v2/": dial tcp [2600:1f18:2148:bc00:6c71:bfe1:7acf:43cc]:443: connect: network is unreachable';
+const databaseReport = {
+  event: 'cloud-test-postgres-failure',
+  wal_io: [{backend_type: 'client backend', context: 'normal', writes: 3, write_time: 2, fsyncs: 0, fsync_time: 0}],
+  activity: [{pid: 321, backend_type: 'client backend', wait_event_type: 'LWLock', wait_event: 'WALWrite'}],
+};
 
 // Run the actual launcher; only external Docker and the requested package command are controlled.
 async function launch(t, scenario = {}) {
@@ -60,7 +65,7 @@ if (command === 'image' && args[1] === 'inspect') {
   if (data.hangPull) {save(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);}
   acquire(args[1]);
 } else if (command === 'run') {
-  const image = args.at(-1);
+  const image = args.find(arg => arg === '${postgres}' || arg === '${mailpit}');
   const name = args[args.indexOf('--name') + 1];
   data.calls.push({command, image, name, noPull: args.includes('--pull=never')});
   if (data.runFailure) fail(data.runFailure);
@@ -70,7 +75,16 @@ if (command === 'image' && args[1] === 'inspect') {
   }
   console.log('owned-container');
 } else if (command === 'exec') {
-  data.calls.push({command, name: args[1]});
+  data.calls.push({command, name: args[1], program: args[2]});
+  if (args[2] === 'psql') {
+    if (data.reportFails) fail('PRIVATE_POSTGRES_ERROR');
+    if (data.reportHangs) {
+      save();
+      console.error('PRIVATE_POSTGRES_ERROR');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);
+    }
+    console.log(${JSON.stringify(JSON.stringify(databaseReport, null, 2))});
+  }
 } else if (command === 'port') {
   console.log('127.0.0.1:' + process.env.LAUNCHER_PORT);
 } else if (command === 'rm') {
@@ -192,10 +206,56 @@ test('launcher disables reverse DNS only for the Mailpit container', async t => 
   assert.equal(result.code, 0);
   const runs = result.invocations.filter(({command, args}) => command === 'docker' && args[0] === 'run');
   const setting = 'MP_SMTP_DISABLE_RDNS=true';
-  const hasSetting = image => runs.find(({args}) => args.at(-1) === image).args
+  const hasSetting = image => runs.find(({args}) => args.includes(image)).args
     .some((arg, index, args) => arg === '--env' && args[index + 1] === setting);
   assert.equal(hasSetting(mailpit), true, 'Mailpit must start with SMTP reverse DNS disabled');
   assert.equal(hasSetting(postgres), false, 'the Mailpit setting must stay out of PostgreSQL');
+});
+
+test('launcher reduces disk flushes in disposable PostgreSQL and reads no report on success', async t => {
+  const result = await launch(t);
+  assert.equal(result.code, 0);
+  const starts = result.invocations.filter(({command, args}) => command === 'docker' && args[0] === 'run');
+  const serverArgs = image => {
+    const {args} = starts.find(({args}) => args.includes(image));
+    return args.slice(args.indexOf(image) + 1);
+  };
+  assert.deepEqual(serverArgs(postgres), [
+    '-c', 'track_wal_io_timing=on', '-c', 'fsync=off', '-c', 'synchronous_commit=off', '-c', 'full_page_writes=off',
+  ]);
+  assert.deepEqual(serverArgs(mailpit), []);
+  assert.equal(result.calls.some(call => call.program === 'psql'), false);
+});
+
+test('launcher reports PostgreSQL activity and WAL writes before cleanup on a failed command', async t => {
+  const result = await launch(t, {childStatus: 7});
+  assert.equal(result.code, 7);
+  const reports = result.output.split('\n').filter(line => line.includes('cloud-test-postgres-failure'));
+  assert.match(reports[0] ?? '', /^\{/, 'PostgreSQL output must be printed as one JSON record');
+  assert.deepEqual(reports.map(line => JSON.parse(line)), [databaseReport]);
+  const report = result.calls.findIndex(call => call.program === 'psql');
+  assert.ok(report > result.calls.findIndex(call => call.command === 'pnpm'));
+  assert.ok(report < result.calls.findIndex(call => call.command === 'rm'));
+  assert.equal(result.calls[report].name, result.calls.find(call => call.image === postgres && call.command === 'run').name);
+});
+
+test('launcher keeps the failed command result and cleans up when PostgreSQL reporting hangs', async t => {
+  const result = await launch(t, {childStatus: 7, reportHangs: true});
+  assert.equal(result.code, 7);
+  assert.match(result.output, /"event":"cloud-test-postgres-failure","unavailable":true,"reason":"timeout"/);
+  assert.doesNotMatch(result.output, /PRIVATE_POSTGRES_ERROR/);
+  const report = result.invocations.find(({args}) => args[0] === 'exec' && args[2] === 'psql');
+  assert.ok(report.timeout > 0 && report.timeout <= 2000);
+  assert.equal(report.killSignal, 'SIGKILL');
+  assert.equal(result.calls.filter(call => call.command === 'rm').length, 2);
+});
+
+test('launcher distinguishes a refused PostgreSQL report from a timeout', async t => {
+  const result = await launch(t, {childStatus: 7, reportFails: true});
+  assert.equal(result.code, 7);
+  assert.match(result.output, /"event":"cloud-test-postgres-failure","unavailable":true,"reason":"failed"/);
+  assert.doesNotMatch(result.output, /PRIVATE_POSTGRES_ERROR/);
+  assert.equal(result.calls.filter(call => call.command === 'rm').length, 2);
 });
 
 for (const image of [postgres, mailpit]) {

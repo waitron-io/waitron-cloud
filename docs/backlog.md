@@ -758,7 +758,7 @@ implementation or production evidence.
   | Boundary | Retained cause or uncertainty | Disposition |
   | --- | --- | --- |
   | Translation disconnect (D201) | Natural cause unknown. | Retain the existing disconnect evidence; no guessed worker change. |
-  | Registration migrations and usage-worker termination | Natural causes unknown. | Keep existing diagnostics; investigate a matching recurrence. |
+  | Registration migrations and usage-worker termination | Natural causes unknown. | Read the disposable PostgreSQL failure report for migration timeouts and keep the existing termination diagnostics. |
   | Storage LIST during stop | Interrupted replies observed; natural cause unknown. | Keep strict accounting refusals and the existing 0.5.17/0.5.18 comparison. |
   | First storage PUT after stop | A held initial upload can arrive after stop. | Retain the boundary work in [#1016](https://github.com/waitron-io/waitron-cloud/pull/1016). |
   | Archive-header cancellation timer | Two timers share one event loop. | Controlled ordering is delivered in [#1072](https://github.com/waitron-io/waitron-cloud/pull/1072). |
@@ -992,10 +992,11 @@ identify the observed stages and gaps. Preserve all assertions and deadlines.
 
 ## Monitoring shutdown fixture migration timeout (D530)
 
-**Open.** Registration shards 1, 3 and 5 have hit migration setup statement timeouts.
+**Open.** Registration shards 1, 2, 3 and 5 have hit migration setup statement timeouts.
 The shard 5 log showed repeated waits to write the PostgreSQL write-ahead log (WAL).
-Use the next timeout's `cloud-test-setup-waits` report to compare those waits with
-the live PostgreSQL processes before choosing a fix.
+The disposable test server reduces disk flushes and reports its WAL counters and
+remaining processes on command failure. Read that report alongside any live wait samples
+on recurrence. The separate Sent reports test deadline remains outside this investigation.
 [Failure history and diagnostic limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
 
 ## Service-proof failure diagnostics (D530)

@@ -50,6 +50,28 @@ async function ensureTestImage(image) {
     }
   }
 }
+function reportPostgresFailure() {
+  try {
+    const report = execFileSync('docker', ['exec', name, 'psql', '-XAtq', '-v', 'ON_ERROR_STOP=1',
+      '-U', 'postgres', '-d', 'cloud_test', '-c', "SET statement_timeout = '1s'", '-c', `
+        SELECT json_build_object(
+          'event', 'cloud-test-postgres-failure',
+          'wal_io', (SELECT json_agg(wal) FROM (
+            SELECT backend_type, context, writes, write_time, fsyncs, fsync_time
+              FROM pg_catalog.pg_stat_io WHERE object = 'wal' ORDER BY backend_type, context
+          ) wal),
+          'activity', (SELECT json_agg(activity) FROM (
+            SELECT pid, backend_type, state, wait_event_type, wait_event
+              FROM pg_catalog.pg_stat_activity
+              WHERE pid <> pg_backend_pid() AND state IS DISTINCT FROM 'idle' ORDER BY pid LIMIT 24
+          ) activity)
+        )`], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 16_384});
+    console.error(JSON.stringify(JSON.parse(report)));
+  } catch (error) {
+    const reason = error.code === 'ETIMEDOUT' ? 'timeout' : 'failed';
+    console.error(JSON.stringify({event: 'cloud-test-postgres-failure', unavailable: true, reason}));
+  }
+}
 function cleanup() {
   if (mailRunning) {
     docker('rm', '-f', '-v', `${name}-mail`);
@@ -71,8 +93,10 @@ try {
   // Acquire both images before resource ownership starts; container creation is never retried.
   await ensureTestImage('postgres:18-alpine');
   await ensureTestImage('axllent/mailpit:v1.31.1');
+  // Each run discards its database. Crash recovery proofs provision their own servers.
   docker('run', '--pull=never', '--detach', '--rm', '--name', name, '--publish', '127.0.0.1::5432',
-    '--env', `POSTGRES_PASSWORD=${password}`, '--env', 'POSTGRES_DB=cloud_test', 'postgres:18-alpine');
+    '--env', `POSTGRES_PASSWORD=${password}`, '--env', 'POSTGRES_DB=cloud_test', 'postgres:18-alpine',
+    '-c', 'track_wal_io_timing=on', '-c', 'fsync=off', '-c', 'synchronous_commit=off', '-c', 'full_page_writes=off');
   running = true;
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -110,6 +134,7 @@ try {
     child.once('error', reject);
     child.once('exit', (code) => resolve(code ?? 1));
   });
+  if (process.exitCode !== 0) reportPostgresFailure();
 } finally {
   cleanup();
 }
