@@ -17,9 +17,9 @@ const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies
  es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',defaultReply:'Por defecto, las respuestas van a tu dirección de envío.',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.',refresh:'Actualizar estado',address:'Dirección de envío',saveDomain:'Guardar dirección de envío',records:'Registros DNS',recordName:'Nombre',recordValue:'Destino',copy:'Copiar destino',pdf:'Descargar registros DNS',verified:'Verificado',unknown:'Desconocido'}};
 
 const signingLabels={
- en:{alias:'Email signing alias',from:'From in the test inbox',notStarted:'Signing not started',
+ en:{alias:'Email signing alias',aliasStatus:'Alias status',from:'From in the test inbox',notStarted:'Signing not started',
   waiting:'Waiting for signing',verified:'Signing verified',failed:'Signing failed',resetHelp:'Using the standard sender also clears your reply address.'},
- es:{alias:'Alias de firma de correo',from:'Remitente en la bandeja de pruebas',notStarted:'Firma sin iniciar',
+ es:{alias:'Alias de firma de correo',aliasStatus:'Estado del alias',from:'Remitente en la bandeja de pruebas',notStarted:'Firma sin iniciar',
   waiting:'Esperando la firma',verified:'Firma verificada',failed:'Error de firma',resetHelp:'Usar el remitente habitual también borra tu dirección de respuesta.'},
 };
 
@@ -185,6 +185,7 @@ test('a venue owner can save a reply address from Remote access',async t=>{
    checkedSigning='failed';
    await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
    await signingStatus(signing.failed).waitFor();
+   await list.getByText(signing.aliasStatus,{exact:true}).waitFor();
    await fromStatus.waitFor();
    await sender.getByText(signing.resetHelp,{exact:false}).waitFor();
    if(receipts)await page.screenshot({path:`${receipts}/failed-${locale}-${colorScheme}-${width}.png`,fullPage:true});

@@ -93,13 +93,14 @@ function dnsRecords(app:PortalApp,domain:NonNullable<VenueEmailSettings['domain'
    try{link.href=url;link.download='waitron-dns.pdf';link.click();}finally{URL.revokeObjectURL(url);}
   }catch{report(status,c.venueDnsPdfFailed);}
  };
+ const emailAlias=domain.records.find(record=>record.name.includes('._domainkey.'));
  return html`<section aria-labelledby="venue-dns-title">
   <h6 id="venue-dns-title">${c.venueDnsRecords}</h6>
   ${domain.records.map(record=>html`<dl>
-   <dt>${record.name.includes('._domainkey.')?c.venueDnsEmailAlias:c.remoteRecord}</dt><dd>${record.type}</dd>
+   <dt>${record===emailAlias?c.venueDnsEmailAlias:c.remoteRecord}</dt><dd>${record.type}</dd>
    <dt>${c.remoteRecordName}</dt><dd><span>${record.name}</span> <wt-button .disabled=${disabled} @click=${(event:Event)=>void copy(event,record.name)}>${c.venueDnsCopyName}</wt-button></dd>
    <dt>${c.remoteRecordValue}</dt><dd><span>${record.value}</span> <wt-button .disabled=${disabled} @click=${(event:Event)=>void copy(event,record.value)}>${c.venueDnsCopyTarget}</wt-button></dd>
-   ${record.status?html`<dt>${c.venueDnsStatus}</dt><dd>${record.status==='verified'?html`<span aria-hidden="true">✓</span> <span>${c.venueDnsVerified}</span>`:record.status==='unverified'?c.venueDnsUnverified:c.venueDnsUnknown}</dd>`:nothing}
+   ${record.status?html`<dt>${record===emailAlias?c.venueDnsAliasStatus:c.venueDnsStatus}</dt><dd>${record.status==='verified'?html`<span aria-hidden="true">✓</span> <span>${c.venueDnsVerified}</span>`:record.status==='unverified'?c.venueDnsUnverified:c.venueDnsUnknown}</dd>`:nothing}
   </dl>`)}
   <wt-button .disabled=${disabled} @click=${download}>${c.venueDnsDownload}</wt-button>
   <p class="venue-dns-feedback" role="status"></p>

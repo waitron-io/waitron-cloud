@@ -90,7 +90,7 @@ export class RemoteController {
   const id=this.installationId,email=this.view?.venueEmail,domain=email?.domain;
   if(!id||!email||!domain?.records.length)return;
   const result=await this.#request<VenueEmailSettings>('/venue-email/check-dns',{installationId:id});
-  if(!this.view||this.installationId!==id||this.view.venueEmail!==email)return;
+  if(!this.view||this.view.venueEmail!==email)return;
   const latest=result.ok&&validVenueEmail(result.value)?result.value:undefined,checked=latest?.domain;
   const matches=checked&&checked.address===domain.address&&sameVenueDnsRecords(domain.records,checked.records);
   const records=matches?checked.records:domain.records.map(record=>({...record,status:'unknown' as const}));
