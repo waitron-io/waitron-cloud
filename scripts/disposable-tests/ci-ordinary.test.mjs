@@ -199,7 +199,11 @@ for(const event of ['pull_request','push','schedule','workflow_dispatch'])test(`
 });
 
 // Background recovery reconstructs the concrete identity without a saved job key.
-for(const [name,key,allowed] of [['test-adjustments','test-adjustments-1',true],['test-provisioning (7)','test-provisioning-7',false]])test(`keyless recovery ${allowed?'retries an owned adjustments job':'refuses an unapproved shard without writes'}`,async t=>{
+for(const [name,key,allowed] of [
+ ['test-adjustments','test-adjustments-1',true],['test-provisioning (7)','test-provisioning-7',false],
+ ['test-customer-menu','test-customer-menu-1',true],['test-customer-menu (1)','test-customer-menu-1',false],
+ ['mutation-shared (7)','mutation-shared-7',true],['mutation-shared (8)','mutation-shared-8',false],
+])test(`keyless recovery ${allowed?'retries':'refuses'} ${name}`,async t=>{
  const leases=pending(t),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
  let mode='server',cancelled=false;const writes=[];
  const api={get:async path=>path.includes('/pulls/')?evidence().pull:path.includes('/variables/')?{value:mode}:

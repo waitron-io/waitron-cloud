@@ -283,6 +283,7 @@ test('UI refuses a matrix-looking API job name before registering',async t=>{
 
 for(const [jobKey,apiJobName,label] of [
  ['lint-1','lint','dt-123-789-1-lint-1'],['typecheck-1','typecheck','dt-123-789-1-typecheck-1'],
+ ['test-customer-menu-1','test-customer-menu','dt-123-789-1-test-customer-menu-1'],
  ['test-venue-service-4','test-venue-service (4)','dt-123-789-1-test-venue-service-4'],['test-adjustments-1','test-adjustments','dt-123-789-1-test-adjustments-1']
 ])test(`the routed ${apiJobName} keeps the fixed executor, exact label and cleanup`,async t=>{
  const {runCI}=await import('./ci-canary.mjs');const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey};

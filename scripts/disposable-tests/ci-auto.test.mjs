@@ -961,6 +961,7 @@ for(const changed of ['repository','workflow-id','workflow-path','event','PR-hea
 for(const [name,key] of [
  ['lint','lint-1'],['root-guards','root-guards-1'],['bundle-smoke','bundle-smoke-1'],['typecheck','typecheck-1'],
  ['test-setup','test-setup-1'],['test-staffing','test-staffing-1'],['test-bookings','test-bookings-1'],['test-media','test-media-1'],
+ ['test-customer-menu','test-customer-menu-1'],['mutation-shared (7)','mutation-shared-7'],
  ['test-payments-stripe','test-payments-stripe-1'],['test-payments-sumup','test-payments-sumup-1'],['test-identity','test-identity-1'],['test-workforce','test-workforce-1'],
  ['test-light-a','test-light-a-1'],['test-light-b','test-light-b-1'],['test-fiscal-verifactu (4)','test-fiscal-verifactu-4'],['test-provisioning (6)','test-provisioning-6'],['mutation-shared (4)','mutation-shared-4'],
  ['test-venue-service (1)','test-venue-service-1'],['test-venue-service (2)','test-venue-service-2'],['test-venue-service (3)','test-venue-service-3'],['test-venue-service (4)','test-venue-service-4'],['test-adjustments','test-adjustments-1']
