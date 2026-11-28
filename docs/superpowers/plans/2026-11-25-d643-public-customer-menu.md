@@ -44,7 +44,58 @@ in the D643 backlog entry. Estimate 20 product and 45 test lines.
 
 ## PR 1c. Pair and enable
 
-Plan from A1637 once its listener and paths are on Waitron main. Admit query strings on the three page routes for the box to remove with a relative 302. Keep assets and photos query-free. Use the exact listener paths, port 8443 and photo sizes from A1637. Check request and HAProxy connection limits with four phones on the same venue Wi-Fi opening the photo menu in one minute. Prove mobile publish and switch-off, block, takeover, asset continuity, outage and till responsiveness under load. The owner reconnects the promoted box and chooses Allow sharing if Remove blocked the legacy copy. Enable on unmetered test gateways. The dashboard’s Online link belongs to A1639. Estimate 45 code and 75 test lines. Each cut aims to open within three hours of active work.
+After D621 pairs the designated test box to the shared Test Cloud, check that
+it runs Waitron `c894f87` or later. The LAN check gates this code pull request.
+The public rehearsal repeats the check on the shared Amazon Test Cloud using
+`compose.amazon.yaml` in step 2 below, with the owner’s phone on mobile data.
+[A1637 contract](https://github.com/clintongormley/waitron/blob/c894f87f4ec4573f567fd3a1db2c6e5538a50c8c/docs/superpowers/plans/2026-11-28-h-a1637-public-customer-menu.md) · [Box listener](https://github.com/clintongormley/waitron/blob/c894f87f4ec4573f567fd3a1db2c6e5538a50c8c/apps/server/src/customer-menu-public.ts) · [Cloud redirect](https://github.com/waitron-io/waitron-cloud/commit/b73fee23d5a17bcf81bf2a2c28ee90e3e07ce2b0)
+
+1. In `packages/remote-access/src/public-gate.ts`, classify the raw path before
+   the first `?` without decoding or normalising. Keep Cloud availability and
+   challenge paths reserved even with queries. Admit GET and HEAD for `/`,
+   `/<address>` and `/<address>/<language>`. An address matches
+   `[a-z0-9][a-z0-9-]{0,62}` and cannot end in a hyphen. A language matches
+   `[A-Za-z0-9-]+`. Pass page queries intact for the box’s relative 302.
+   Under `/_customer-menu/`, admit flat filenames in `assets/` using letters,
+   digits, dots, underscores and hyphens, excluding `.` and `..`. Admit
+   `favicon.ico`, `favicon.svg`, `apple-touch-icon.png` and
+   `photos/v1/<64-lowercase-hex>.<jpg|png|webp>/<square|display>/<x>-<y>-<zoom>.webp`
+   with canonical decimal integers. Reject asset and photo queries in Cloud.
+   The box checks exact files and recipes.
+2. In `packages/remote-access/src/{gateway-cli,config}.ts`, wire the matcher to
+   the signed tunnel address at 8443 with the staff TLS name and Host. Reuse
+   both authority checks with private GET to
+   `http://10.79.0.3:3445/guest-menu/<signed venue ID>`. Use the gate’s
+   cancellation, a one-second deadline and `redirect:'error'`. Only 204 allows.
+   A 404 denies. Other results produce 503. Keep forwarding opt-in via
+   `GATEWAY_LIVE_GUEST_MENU=1`. Before network startup, refuse it with
+   `NODE_ENV=production`, outside test venue mode or with signed metering.
+   In `deploy/test-cloud/{runtime.mjs,compose.yaml,compose.amazon.yaml}`, wire
+   the flag only to the test gateway. Pass the existing account switch and
+   test venue mode through the LAN layout. The private authority port stays unpublished.
+3. First fail `packages/remote-access/test/public-gate.test.ts` on a page query.
+   Check all three page shapes, exact query bytes and relative 302, the asset
+   boundaries and signed venue authority. Test the eligibility reader’s answers
+   once at that reader. A 204 allows, a 404 denies, and a redirect, other failure
+   or timeout returns 503.
+   Check production refusal beside signed metering refusal. Extend
+   `deploy/test-cloud/{runtime,deployment}.test.mjs` for separate gateway opt-in
+   and private port wiring. The page-query check now expects 302. The LAN
+   render now passes the account flag to the account service. Run the focused
+   cases and `pnpm typecheck`.
+4. Use a synthetic menu to check assigned and custom names, a query redirect,
+   and the venue block on the paired LAN setup. Switch sharing off in Waitron
+   and confirm a fresh request gets 404 within one minute. Record status, elapsed
+   time and how many requests one photo-menu open uses from the 120-per-minute
+   limit per address.
+   For the [shared Amazon Test Cloud](../../test-cloud.md#configure-a-separate-https-test-name)
+   rehearsal, repeat the checks on the owner’s phone using mobile data. Before
+   enabling beyond that single-phone rehearsal, qualify upgrade, takeover,
+   outage, four phones sharing Wi-Fi, and sale and till image timing.
+   Update `docs/backlog.md` and `docs/test-cloud-service-controls.md`.
+
+Allow 65–95 product and 95–130 test lines. Dashboard work stays with A1639.
+Hosted retirement, gateway caching and production rollout are later work.
 
 ## PR 2. Retire the hosted copy
 
