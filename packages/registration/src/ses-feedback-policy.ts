@@ -86,7 +86,8 @@ export function validateSesFeedbackPolicies(config:SesFeedbackConfig,documents:u
   consumerPolicy:policy(allow(['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'],config.queueArn),
    allow(['kms:Decrypt'],key.Arn)),
   healthPolicy:policy(allow(['sqs:GetQueueAttributes'],config.dlqArn)),
-  smtpPolicy:policy(allow(['ses:SendRawEmail'],[config.identityArn,config.configurationSetArn])),
+  smtpPolicy:policy(allow(['ses:SendRawEmail'],[config.identityArn,config.configurationSetArn,
+   ...(config.venueIdentityArn?[config.venueIdentityArn]:[])])),
   key:{Arn:key.Arn,KeyState:'Enabled',KeyManager:'CUSTOMER',KeySpec:'SYMMETRIC_DEFAULT',KeyUsage:'ENCRYPT_DECRYPT',
    // In a KMS key policy, '*' denotes only the key carrying that policy. Identity
    // policies above must instead name its full ARN, never a wildcard or alias.

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
 import {createSesFeedbackQueue as create} from '../../src/ses-feedback-queue.ts';
 
-export function createSesFeedbackQueue(config){
+export function createSesFeedbackQueue(config,options){
  let delivered=false,receives=0,clock=0,visible=0,redriven=false;
  const mode=process.env.LOCAL_FEEDBACK_MODE;
  if(mode==='idle-leak')setInterval(()=>{},1000);
@@ -13,11 +13,15 @@ export function createSesFeedbackQueue(config){
    queueAgeSeconds:0,deadLetterCount,configurationRevision:config.revision,configurationDrift:false}));
  }
  sample(0);
- return create(config,{credentials:{accessKeyId:'LOCALACCESS',secretAccessKey:'local-secret'},requestHandler:{
+ const credentials=mode==='idle-test-venue'?options?.credentials:{accessKeyId:'LOCALACCESS',secretAccessKey:'local-secret'};
+ if(mode==='idle-test-venue'&&!credentials)throw Error('The command must supply its role session');
+ return create(config,{credentials,requestHandler:{
   async handle(request,{abortSignal}={}){
    const target=request.headers['x-amz-target'];let response={};
    if(target==='AmazonSQS.ReceiveMessage'){
-    process.send?.({stage:'receive'});
+    if(mode==='idle-test-venue')process.send?.({stage:'receive',roleSigned:request.headers.authorization?.includes('Credential=TRIALACCESS/')&&
+     request.headers['x-amz-security-token']==='synthetic-session'});
+    else process.send?.({stage:'receive'});
     if(mode==='poison'){
      clock+=30;
      if(!redriven&&clock>=visible){
