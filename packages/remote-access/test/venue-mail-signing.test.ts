@@ -115,6 +115,56 @@ test('only a definitive signing check changes the saved result',async t=>{
  assert.equal(f.txt.has(selector+'.mail.'+suffix),true);
 });
 
+test('confirmed SES failure follows the matching claim until SES confirms recovery',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose();
+ const outbox=new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}});
+ const read=async()=>(await f.db.pool.query(`SELECT verified,to_jsonb(s)->'ses_failed' AS failed
+  FROM venue_mail_signing s WHERE venue_id=$1`,[venueId])).rows[0];
+ const diagnostic=t.mock.method(console,'error',()=>{});
+ assert.equal(await f.run(),'verified');
+ assert.deepEqual(await read(),{verified:true,failed:false});
+ const identity=f.identities.get(domain)!,failed={...identity,verified:false,lost:true as const};
+ const watch=()=>refreshVenueMailSignings(f.db.pool,{...f.options,outbox});
+ f.identities.set(domain,{...failed,tag:randomUUID()});
+ await watch();
+ assert.deepEqual(await read(),{verified:false,failed:false});
+ f.identities.set(domain,failed);
+ await watch();
+ assert.deepEqual(await read(),{verified:false,failed:true});
+ f.alias(false);
+ assert.equal(await f.run(),'awaiting_dns');
+ assert.deepEqual(await read(),{verified:false,failed:true});
+ f.alias(true);
+ f.identities.set(domain,{...identity,verified:false,pending:true});
+ assert.equal(await f.run(),'pending');
+ assert.deepEqual(await read(),{verified:false,failed:false});
+ f.identities.set(domain,failed);
+ assert.equal(await f.run(),'held');
+ f.identities.set(domain,identity);
+ await watch();
+ assert.deepEqual(await read(),{verified:true,failed:false});
+ assert.ok(diagnostic.mock.callCount());
+});
+
+test('a delayed SES result cannot mark a different signing claim as failed',async t=>{
+ const f=await fixture();t.after(f.db.close);
+ const venueId=f.db.venues[0]!;
+ await f.choose();
+ assert.equal(await f.run(),'verified');
+ const entered=deferred(),released=deferred(),identity=f.identities.get(domain)!;
+ f.options.ses.read=async()=>{entered.resolve();await released.promise;return {...identity,verified:false,lost:true};};
+ const check=f.run();
+ try{
+  await Promise.race([entered.promise,check.then(()=>assert.fail('Check did not reach SES'))]);
+  await f.db.pool.query('UPDATE venue_mail_signing SET tag=$2 WHERE venue_id=$1',[venueId,randomUUID()]);
+ }finally{released.resolve();await check;}
+ const row=(await f.db.pool.query(`SELECT verified,to_jsonb(s)->'ses_failed' AS failed
+  FROM venue_mail_signing s WHERE venue_id=$1`,[venueId])).rows[0];
+ assert.deepEqual(row,{verified:true,failed:false});
+});
+
 test('read-only signing checks renew fresh evidence, keep it on a timeout and clear it on confirmed loss',async t=>{
  const f=await fixture();t.after(f.db.close);
  const venueId=f.db.venues[0]!,selector=await f.choose(),target=selector+'.mail.'+suffix;

@@ -9,7 +9,7 @@ import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
 import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
 export type RelayAction='email-submit'|'email-status'|'email-cancel';
-export interface RelayAdmissionConfig {mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;replayKeys:RelayKeyConfig;bounds:RelayBoundsConfig}
+export interface RelayAdmissionConfig {mode:'local-proof';testInbox?:true;grants:RelayConfig;payloadKeys:RelayKeyConfig;replayKeys:RelayKeyConfig;bounds:RelayBoundsConfig}
 interface MessageRow extends RelayPayloadBinding {binding:string;replay_key_id:string;payload:Buffer|null;state:string;status_revision:number;reason:string|null;expires_at:Date}
 function view(row:MessageRow){return {version:1,messageId:row.message_id,state:row.state,statusRevision:row.status_revision,expiresAt:row.expires_at.toISOString(),reason:row.reason};}
 /** Admission stays separately configured from the local capture worker. */

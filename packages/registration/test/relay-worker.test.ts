@@ -256,7 +256,7 @@ test('migrations 081 and 082 preserve and deliver a version 1 message already qu
  await migrate(f.pool);
  const upgraded=await ledger();
  assert.deepEqual(upgraded.slice(0,80),old);
- assert.deepEqual(upgraded.slice(80).map(row=>row.name),['081_relay_staff_notices.sql','082_relay_box_notices.sql','083_sent_report_bodies.sql','084_venue_snapshot_recovery.sql','085_address_lookup.sql','086_operator_venues.sql','087_venue_mail_sender.sql','088_venue_mail_domain.sql','089_venue_mail_signing.sql','090_venue_mail_sender_selection.sql','091_venue_mail_ses_delivery.sql']);
+ assert.deepEqual(upgraded.slice(80).map(row=>row.name),['081_relay_staff_notices.sql','082_relay_box_notices.sql','083_sent_report_bodies.sql','084_venue_snapshot_recovery.sql','085_address_lookup.sql','086_operator_venues.sql','087_venue_mail_sender.sql','088_venue_mail_domain.sql','089_venue_mail_signing.sql','090_venue_mail_sender_selection.sql','091_venue_mail_ses_delivery.sql','092_venue_mail_signing_failure.sql']);
  const after=await f.row(body.messageId);
  assert.deepEqual(after.payload,before.payload);
  assert.equal(after.binding,before.binding);

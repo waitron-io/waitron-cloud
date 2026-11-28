@@ -16,6 +16,13 @@ const csrf='A'.repeat(43),id='12345678-1234-4234-8234-123456789abc',url='https:/
 const labels={en:{open:'Remote access',title:'Staff email sender',reply:'Replies go to',defaultReply:'Replies go to your sending address by default.',saved:'Reply address saved.',reset:'Use standard sender',cleared:'Standard sender restored.',refresh:'Refresh status',address:'Sending address',saveDomain:'Save sending address',records:'DNS records',recordName:'Name',recordValue:'Target',copy:'Copy target',pdf:'Download DNS records',verified:'Verified',unknown:'Unknown'},
  es:{open:'Acceso remoto',title:'Remitente del correo del personal',reply:'Enviar respuestas a',defaultReply:'Por defecto, las respuestas van a tu dirección de envío.',saved:'Dirección de respuesta guardada.',reset:'Usar remitente habitual',cleared:'Remitente habitual restaurado.',refresh:'Actualizar estado',address:'Dirección de envío',saveDomain:'Guardar dirección de envío',records:'Registros DNS',recordName:'Nombre',recordValue:'Destino',copy:'Copiar destino',pdf:'Descargar registros DNS',verified:'Verificado',unknown:'Desconocido'}};
 
+const signingLabels={
+ en:{alias:'Email signing alias',from:'From in the test inbox',notStarted:'Signing not started',
+  waiting:'Waiting for signing',verified:'Signing verified',failed:'Signing failed',resetHelp:'Using the standard sender also clears your reply address.'},
+ es:{alias:'Alias de firma de correo',from:'Remitente en la bandeja de pruebas',notStarted:'Firma sin iniciar',
+  waiting:'Esperando la firma',verified:'Firma verificada',failed:'Error de firma',resetHelp:'Usar el remitente habitual también borra tu dirección de respuesta.'},
+};
+
 function deferred(){
  let resolve!:()=>void;
  const promise=new Promise<void>(done=>{resolve=done;});
@@ -31,14 +38,17 @@ test('a venue owner can save a reply address from Remote access',async t=>{
   page.setDefaultTimeout(3500);
   await page.context().addCookies([{name:'__Host-cloud_csrf',value:csrf,url:'https://portal.test',secure:true}]);
   try{
-   const c=labels[locale],requests:unknown[]=[],tokens:(string|null)[]=[],clears:unknown[]=[];
+   const c=labels[locale],signing=signingLabels[locale],requests:unknown[]=[],tokens:(string|null)[]=[],clears:unknown[]=[];
    let savedReplyTo:string|null=null,address:string|null=null,pdfLoads=0,dnsLimited=false,domainEnabled=true;
+   const currentSigning='not_started';
+   let checkedSigning=currentSigning,differentDnsChoice=false;
    let delayedDns:ReturnType<typeof deferred>|undefined;
    const releasePdf=deferred(),dnsStarted=deferred();
    const emailAlias={type:'CNAME',name:`${id}._domainkey.cafe.example.test`,value:`${id}.mail.cloud.example.test`};
    const remoteAlias={type:'CNAME',name:'staff.cafe.example.test',value:'staff.venue.example.test'};
    const domain=()=>({address,records:address?[emailAlias,remoteAlias]:[remoteAlias]});
-   const settings=()=>domainEnabled?{replyTo:savedReplyTo,domain:domain()}:{replyTo:savedReplyTo??address};
+   const selected=(state:string)=>({address:state==='verified'&&address?address:'relay@example.test',signing:address?state:null});
+   const settings=()=>domainEnabled?{replyTo:savedReplyTo,domain:domain(),sender:selected(currentSigning)}:{replyTo:savedReplyTo??address};
    await page.context().grantPermissions(['clipboard-read','clipboard-write']);
    await page.route('**/venue-dns-pdf.js',async route=>{
     pdfLoads++;
@@ -59,18 +69,18 @@ test('a venue owner can save a reply address from Remote access',async t=>{
     if(endpoint==='/venue-email/check-dns'){
      if(dnsLimited)return route.fulfill({status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});
      if(delayedDns){dnsStarted.resolve();await delayedDns.promise;}
-     return route.fulfill({json:{replyTo:savedReplyTo,domain:{...domain(),records:domain().records.map(record=>({...record,status:'verified'}))}}});
+     return route.fulfill({json:{...settings(),sender:selected(checkedSigning),domain:{...domain(),address:differentDnsChoice?'other@example.test':address,records:domain().records.map(record=>({...record,status:'verified'}))}}});
     }
     if(endpoint==='/venue-email/save-domain'){
      assert.deepEqual(request.postDataJSON(),{installationId:id,address:'bookings@cafe.example.test'});
      assert.equal(await request.headerValue('x-csrf-token'),csrf);
      address='bookings@cafe.example.test';
-     return route.fulfill({json:{replyTo:savedReplyTo,domain:domain()}});
+     return route.fulfill({json:settings()});
     }
     if(endpoint==='/venue-email/clear-reply'){
      clears.push(request.postDataJSON());
      savedReplyTo=null;
-     return route.fulfill({json:{replyTo:savedReplyTo,domain:domain()}});
+     return route.fulfill({json:settings()});
     }
     if(endpoint==='/venue-email/save'){
      requests.push(request.postDataJSON());
@@ -119,18 +129,34 @@ test('a venue owner can save a reply address from Remote access',async t=>{
    await list.getByText(emailAlias.name,{exact:true}).waitFor();
    await t.waitFor(async()=>assert.equal(await list.getByText(c.verified,{exact:true}).count(),2),{timeout:3000});
    assert.equal(await sender.getByText(c.defaultReply,{exact:true}).isVisible(),true);
+   await list.getByText(signing.alias,{exact:true}).waitFor();
+   const signingStatus=(label:string)=>sender.getByRole('status').filter({hasText:label});
+   await signingStatus(signing.notStarted).waitFor();
+   const fromStatus=sender.getByText(signing.from,{exact:false}).filter({hasText:'relay@example.test'});
+   await fromStatus.waitFor();
+   checkedSigning='verified';differentDnsChoice=true;
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await list.getByText(c.unknown,{exact:true}).first().waitFor();
+   assert.equal(await signingStatus(signing.notStarted).isVisible(),true);
+   assert.equal(await fromStatus.isVisible(),true);
+   checkedSigning='waiting';differentDnsChoice=false;
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await signingStatus(signing.waiting).waitFor();
    const rows=[emailAlias,remoteAlias];
    for(const [i,alias] of rows.entries()){
     await list.getByRole('button',{name:c.copy,exact:true}).nth(i).click();
     assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),alias.value);
    }
    assert.equal(pdfLoads,0);
+   checkedSigning='verified';
    delayedDns=deferred();
    await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
    await dnsStarted.promise;
    const pendingDownload=page.waitForEvent('download',{timeout:5000});
    await list.getByRole('button',{name:c.pdf,exact:true}).click();
    await t.waitFor(async()=>assert.equal(await list.getByText(c.verified,{exact:true}).count(),2),{timeout:3000});
+   await signingStatus(signing.verified).waitFor();
+   await sender.getByText(signing.from,{exact:false}).filter({hasText:'bookings@cafe.example.test'}).waitFor();
    delayedDns=undefined;
    releasePdf.resolve();
    const pdf=await readFile(await (await pendingDownload).path());
@@ -155,9 +181,26 @@ test('a venue owner can save a reply address from Remote access',async t=>{
    await sender.getByText(c.defaultReply,{exact:true}).waitFor();
    assert.deepEqual(clears,[{installationId:id}]);
    assert.equal(await list.getByText(emailAlias.name,{exact:true}).isVisible(),true);
+   await reply.fill('desk@example.test');await reply.press('Enter');await confirmation.waitFor();
+   checkedSigning='failed';
+   await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
+   await signingStatus(signing.failed).waitFor();
+   await fromStatus.waitFor();
+   await sender.getByText(signing.resetHelp,{exact:false}).waitFor();
+   if(receipts)await page.screenshot({path:`${receipts}/failed-${locale}-${colorScheme}-${width}.png`,fullPage:true});
+   await sender.getByRole('button',{name:c.reset,exact:true}).click();
+   await sender.getByRole('status').filter({hasText:c.cleared}).waitFor();
+   assert.deepEqual(requests.at(-1),{installationId:id,replyTo:''});
+   assert.equal(await reply.inputValue(),'');
+   assert.equal(await from.inputValue(),'');
+   checkedSigning='not_started';
+   await from.fill('bookings@cafe.example.test');
+   await sender.getByRole('button',{name:c.saveDomain,exact:true}).click();
+   await signingStatus(signing.notStarted).waitFor();
    domainEnabled=false;
    await page.locator('.remote-setup').getByRole('button',{name:c.refresh,exact:true}).click();
    await t.waitFor(async()=>assert.equal(await reply.inputValue(),'bookings@cafe.example.test'),{timeout:3000});
+   assert.equal(await sender.getByText(signing.from,{exact:false}).count(),0);
    await reply.fill('');await reply.press('Enter');
    await sender.getByRole('status').filter({hasText:c.cleared}).waitFor();
    assert.deepEqual(requests.at(-1),{installationId:id,replyTo:''});

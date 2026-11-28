@@ -14,6 +14,7 @@ import {createSesRelaySender,settleSesRelayReceipt,type RelaySesResult} from './
 import type {SmtpAccountMailConfig} from './smtp-mailer.ts';
 import {lockMailScope,advanceMailSuppressionRevision} from './recipient-suppression.ts';
 import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
+import {venueMailSigningJoin} from './venue-mail-sender.ts';
 export interface RelayWorkerConfig {
  mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;ses?:SesHandoffConfig;
  sesSmtp?:{smtp:SmtpAccountMailConfig;trust?:{ca?:string|Buffer}};
@@ -178,8 +179,7 @@ export class RelayWorker {
      COALESCE(v.waitron_mail_reply_to,v.waitron_mail_from) AS reply_to,
      CASE WHEN s.verified AND NOT $3::boolean AND (NOT $2::boolean OR (s.ses_identity_arn=$4
        AND s.verified_at>clock_timestamp()-interval '1 hour')) THEN v.waitron_mail_from END AS verified_from
-     FROM installations i JOIN venues v ON v.id=i.venue_id LEFT JOIN venue_mail_signing s ON s.venue_id=v.id
-      AND s.organisation_id=v.organisation_id AND s.selector=v.waitron_mail_dns_token AND s.domain=split_part(v.waitron_mail_from,'@',2)
+     FROM installations i JOIN venues v ON v.id=i.venue_id ${venueMailSigningJoin}
      WHERE i.id=$1 AND (v.waitron_mail_reply_to IS NOT NULL OR v.waitron_mail_from IS NOT NULL)`,
      [row.installation_id,this.#usesSesSmtp,row.use_waitron_sender,this.#ses?.config.venueIdentityArn??null])).rows[0];
     if(saved){

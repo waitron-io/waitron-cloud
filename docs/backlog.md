@@ -450,8 +450,9 @@ one configured venue identity. A local rehearsal with fake providers proved that
 the opt-in email worker sets up signing after an owner saves an allowed address
 and publishes the exact DNS alias. It retires signing for a cleared address or
 changed domain. Test Cloud startup wiring and provider qualification are still
-needed for live sending. Sending from each venue's own identity in a shared
-worker, rotation and portal signing status remain open.
+needed for live sending. In **Remote access**, test owners can see the signing
+status and the From address used for new staff mail in Mailpit. Sending from
+each venue's own identity in a shared worker and key rotation remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
 [Decisions and open work](backlog/venue-email.md).
 

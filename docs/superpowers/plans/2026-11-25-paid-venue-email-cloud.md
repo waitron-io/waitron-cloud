@@ -22,7 +22,7 @@ Reuse the existing staff grant and allowance. At send, apply the saved Reply-To 
 
 First [build the test setup and read-only DNS checks](2026-11-25-paid-venue-email-domain-records.md). An owner saves the sending address and can copy or download the DNS records and check the aliases. The tick confirms DNS delegation.
 
-The [signing plan](2026-11-27-paid-venue-email-signing.md) adds a test operator command to create, verify and retire signing. The [signing after owner save path](2026-11-27-paid-venue-email-signing-on-save.md) runs the same operation in the opt-in test email worker. The local rehearsal starts signing after the owner saves an address and publishes its exact alias. Key rotation and signing status in the portal remain open.
+The [signing plan](2026-11-27-paid-venue-email-signing.md) adds a test operator command to create, verify and retire signing. The [signing after owner save path](2026-11-27-paid-venue-email-signing-on-save.md) runs the same operation in the opt-in test email worker. The local rehearsal starts signing after the owner saves an address and publishes its exact alias. The [portal status slice](2026-11-28-paid-venue-email-portal.md) shows the signing state and the From address for new staff mail in Mailpit. Key rotation remains open.
 
 ## 2c. Send from the verified domain
 

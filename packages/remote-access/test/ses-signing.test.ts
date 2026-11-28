@@ -67,5 +67,6 @@ test('SES signing creates a tagged external identity and reads its exact status 
   const result=await ses.read(domain);
   assert.equal(result?.verified,false,status);
   assert.equal(Boolean(result?.lost),lost,status);
+  assert.equal(Boolean(result?.pending),status==='PENDING',status);
  }
 });

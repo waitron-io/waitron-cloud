@@ -99,9 +99,13 @@ interrupted operation. Disable the signing pass and wait for the email worker
 to exit before running the command in the same scope. The portal tick checks
 the alias. [Operator steps](../test-cloud-service-controls.md#investigate-held-venue-email-signing-cleanup)
 
-If the command reports that SES marked signing as failed, clear the saved
-sender and rerun the command to retire its old setup. Once it reports
-`retired`, save the address again and publish the new DNS alias.
+In **Remote access**, the signing status and the usual From explain what new
+staff mail will use in the test inbox. **Refresh status** checks the DNS alias
+and reads the signing worker's latest result. When signing fails, **Use
+standard sender** clears the saved sender and any custom reply address. Save
+the sender again, publish its new DNS alias and add your custom reply address
+again. If you use the operator command, run it after clearing the sender and
+wait for `retired` before saving again.
 The test Cloud email worker delivers to Mailpit from the venue’s From after
 signing is verified. When a later check confirms loss, staff mail
 returns to the Waitron sender and the same worker delivers an owner notice.

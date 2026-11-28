@@ -19,6 +19,7 @@ export function createSesSigningProvider(config:SESv2ClientConfig){
      external:dkim?.SigningAttributesOrigin==='EXTERNAL'&&dkim.SigningEnabled===true,
      verified:identity.IdentityType==='DOMAIN'&&identity.VerifiedForSendingStatus===true&&dkim?.Status==='SUCCESS',
      ...(dkim?.Status==='FAILED'?{lost:true as const}:{}),
+     ...(dkim?.Status==='PENDING'?{pending:true as const}:{}),
     };
    }catch(error){
     if(error instanceof NotFoundException)return null;
