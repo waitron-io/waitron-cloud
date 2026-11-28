@@ -40,6 +40,9 @@ test('an admitted venue identity cannot send from another domain',async()=>{
   await assert.rejects(send(content(),{...admission,senderIdentityArn},new AbortController().signal,
    {from:'office@sub.cafe.example.test',replyTo:'office@cafe.example.test'}),/delivery_configuration/);
   assert.equal(smtp.connections,0);
+  const accepted=await send(content(),{...admission,senderIdentityArn},new AbortController().signal,
+   {from:'office@cafe.example.test',replyTo:'office@cafe.example.test'});
+  assert.equal(accepted.outcome,'accepted');assert.equal(smtp.connections,1);
  }finally{await smtp.close();}
 });
 

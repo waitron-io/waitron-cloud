@@ -448,8 +448,9 @@ queues a notice for verified owners. Gmail and Mailgun verified a Stockholm
 sandbox message whose signing alias and key were in separate zones. An offline
 SES rehearsal tests signing freshness, fallback after refusal and feedback for
 one configured venue identity. Test Cloud startup wiring and provider qualification
-are still needed for live sending. Setup after the owner saves, rotation and
-portal signing status remain open.
+are still needed for live sending. Sending from each venue's own identity in a
+shared worker, setup after the owner saves, rotation and portal signing status
+remain open.
 [Cloud build plan](superpowers/plans/2026-11-25-paid-venue-email-cloud.md).
 [Decisions and open work](backlog/venue-email.md).
 

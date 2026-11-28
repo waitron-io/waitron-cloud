@@ -269,6 +269,7 @@ test('venue SMTP sends directly with fresh signing and retries as Waitron after 
     sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}},'test-venue-levels');
    assert.equal(await w.runOnce(),true);assert.equal(deliveries[0]?.from,venueIdentity?from:smtpConfig.from);
    if(venueIdentity)assert.match(deliveries[0]!.raw,/^From:.*orders@cafe\.example\.test/m);
+   else assert.match(deliveries[0]!.raw,/^From:.*accounts@mail\.example\.test/m);
    assert.match(deliveries[0]!.raw,/^Reply-To: reply@cafe\.example\.test/m);
    if(code===250){
     assert.equal((await f.row(body.messageId)).state,'accepted');assert.equal(await w.runOnce(),false);

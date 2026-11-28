@@ -187,7 +187,7 @@ export async function refreshVenueMailSignings(pool:Pool,options:SigningOptions,
   if(signal?.aborted)break;
   try{
    const result=await runVenueMailSigning(pool,venue_id,{...options,readOnly:true});
-   if(result==='held')console.error(`Venue ${venue_id} signing check held. Check the saved choice and provider settings.`);
+   if(result==='held')console.error(`Venue signing check held. Run venue-mail:signing ${venue_id} and check the provider settings.`);
   }
   catch{console.error('Venue signing check failed; the last confirmed result is retained until expiry.');}
  }

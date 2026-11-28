@@ -93,9 +93,10 @@ venues uses the Waitron sender.
 An inconclusive check keeps the previous result. After an hour without verification,
 the SES relay selects the Waitron sender. A definite SMTP 5xx refusal of a venue
 sender queues a retry using Waitron if the message can still be sent after backoff.
-Feedback is matched to the identity
-saved for that attempt. Test Cloud still uses Mailpit and needs startup wiring
-and provider qualification before real SES delivery.
+Feedback must match the identity saved for the attempt. A mismatched identity
+for a known attempt is reported as a conflict and the feedback remains unacknowledged.
+Test Cloud still uses Mailpit and needs startup wiring and provider qualification
+before real SES delivery. Serving multiple venue identities in one relay is open.
 See the [approved design](../superpowers/specs/2026-11-23-venue-email-paid-design.md#approaches-for-the-domain-step-owner-chose-2).
 
 ## Abuse limits

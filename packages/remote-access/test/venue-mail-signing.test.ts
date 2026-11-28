@@ -158,7 +158,7 @@ test('the signing watch pass checks every saved claim without setting up an uncl
  await f.db.pool.query('UPDATE venues SET waitron_mail_from=NULL,waitron_mail_dns_token=NULL WHERE id=$1',[second]);
  const diagnostic=t.mock.method(console,'error',()=>{});
  await refreshVenueMailSignings(f.db.pool,{...f.options,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}})});
- assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes(second)&&String(call.arguments[0]).includes('held')));
+ assert.ok(diagnostic.mock.calls.some(call=>String(call.arguments[0]).includes(second)&&String(call.arguments[0]).includes('venue-mail:signing')));
  assert.deepEqual(f.writes,['ses create','dns create','ses create','dns create']);
 });
 
